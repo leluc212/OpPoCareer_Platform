@@ -4,7 +4,6 @@ import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 
 /* ═══════════════════════════════════════════════════
    KEYFRAMES
@@ -51,12 +50,15 @@ const ROLES = {
     grad: 'linear-gradient(135deg, #0E3995, #2563eb, #3b82f6)',
     bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
     hero: {
-      eyebrow: 'Chào mừng ứng viên',
-      h1: ['Tìm việc', 'part-time', 'lý tưởng'],
+      eyebrow: { vi: 'Chào mừng ứng viên', en: 'Welcome Candidate' },
+      h1: { vi: ['Tìm việc', 'part-time', 'lý tưởng'], en: ['Find your', 'ideal', 'part-time job'] },
       grad: ['#93c5fd', '#c4b5fd', '#fbcfe8'],
-      sub: 'Đăng nhập để nhận gợi ý việc làm cá nhân hoá, theo dõi đơn ứng tuyển và kết nối với nhà tuyển dụng.',
-      features: ['Hàng ngàn việc làm part-time đang chờ', 'Ứng tuyển 1-click — không cần CV rườm rà', 'Theo dõi tiến trình ứng tuyển dễ dàng'],
-      stats: [{ n: '50K+', l: 'Ứng viên' }, { n: '12K+', l: 'Việc làm' }, { n: '98%', l: 'Hài lòng' }],
+      sub: { vi: 'Đăng nhập để nhận gợi ý việc làm cá nhân hoá, theo dõi đơn ứng tuyển và kết nối với nhà tuyển dụng.', en: 'Sign in to get personalized job recommendations, track your applications and connect with employers.' },
+      features: {
+        vi: ['Hàng ngàn việc làm part-time đang chờ', 'Ứng tuyển 1-click — không cần CV rườm rà', 'Theo dõi tiến trình ứng tuyển dễ dàng'],
+        en: ['Thousands of part-time jobs waiting', 'Apply with 1-click — no lengthy CV needed', 'Track your application progress easily'],
+      },
+      stats: [{ n: '50K+', l: { vi: 'Ứng viên', en: 'Candidates' } }, { n: '12K+', l: { vi: 'Việc làm', en: 'Jobs' } }, { n: '98%', l: { vi: 'Hài lòng', en: 'Satisfied' } }],
     },
   },
   employer: {
@@ -65,12 +67,15 @@ const ROLES = {
     grad: 'linear-gradient(135deg, #0E3995, #2563eb, #3b82f6)',
     bg: 'linear-gradient(135deg, #f0f4ff, #dbeafe)',
     hero: {
-      eyebrow: 'Chào mừng nhà tuyển dụng',
-      h1: ['Tuyển dụng', 'nhanh hơn', 'thông minh hơn'],
+      eyebrow: { vi: 'Chào mừng nhà tuyển dụng', en: 'Welcome Employer' },
+      h1: { vi: ['Tuyển dụng', 'nhanh hơn', 'thông minh hơn'], en: ['Hire talent', 'faster and', 'smarter'] },
       grad: ['#60a5fa', '#a5f3fc', '#bfdbfe'],
-      sub: 'Đăng nhập vào dashboard quản lý — xem hồ sơ ứng viên, đăng tin tuyển dụng và phân tích chiến dịch ngay.',
-      features: ['Quản lý tin tuyển dụng tập trung', 'AI gợi ý ứng viên phù hợp nhất', 'Báo cáo & phân tích chiến dịch chi tiết'],
-      stats: [{ n: '8K+', l: 'Doanh nghiệp' }, { n: '200K+', l: 'Hồ sơ' }, { n: '4.9⭐', l: 'Đánh giá' }],
+      sub: { vi: 'Đăng nhập vào dashboard quản lý — xem hồ sơ ứng viên, đăng tin tuyển dụng và phân tích chiến dịch ngay.', en: 'Sign in to your management dashboard — view candidate profiles, post jobs and analyze campaigns.' },
+      features: {
+        vi: ['Quản lý tin tuyển dụng tập trung', 'AI gợi ý ứng viên phù hợp nhất', 'Báo cáo & phân tích chiến dịch chi tiết'],
+        en: ['Centralized job management', 'AI suggests the best matching candidates', 'Detailed campaign reports & analytics'],
+      },
+      stats: [{ n: '8K+', l: { vi: 'Doanh nghiệp', en: 'Companies' } }, { n: '200K+', l: { vi: 'Hồ sơ', en: 'Profiles' } }, { n: '4.9⭐', l: { vi: 'Đánh giá', en: 'Rating' } }],
     },
   },
   admin: {
@@ -79,12 +84,15 @@ const ROLES = {
     grad: 'linear-gradient(135deg, #0E3995, #2563eb, #3b82f6)',
     bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
     hero: {
-      eyebrow: 'Khu vực quản trị',
-      h1: ['Quản trị', 'hệ thống', 'toàn diện'],
+      eyebrow: { vi: 'Khu vực quản trị', en: 'Admin Area' },
+      h1: { vi: ['Quản trị', 'hệ thống', 'toàn diện'], en: ['Manage the', 'system', 'completely'] },
       grad: ['#c4b5fd', '#f9a8d4', '#fde68a'],
-      sub: 'Truy cập bảng điều khiển quản trị với toàn quyền kiểm soát người dùng, phê duyệt và phân tích nền tảng.',
-      features: ['Quản lý toàn bộ người dùng & doanh nghiệp', 'Phê duyệt nhà tuyển dụng & nội dung', 'Analytics & báo cáo doanh thu nền tảng'],
-      stats: [{ n: '58K+', l: 'Users' }, { n: '8K+', l: 'Companies' }, { n: '99.9%', l: 'Uptime' }],
+      sub: { vi: 'Truy cập bảng điều khiển quản trị với toàn quyền kiểm soát người dùng, phê duyệt và phân tích nền tảng.', en: 'Access the admin dashboard with full control over users, approvals and platform analytics.' },
+      features: {
+        vi: ['Quản lý toàn bộ người dùng & doanh nghiệp', 'Phê duyệt nhà tuyển dụng & nội dung', 'Analytics & báo cáo doanh thu nền tảng'],
+        en: ['Manage all users & companies', 'Approve employers & content', 'Analytics & platform revenue reports'],
+      },
+      stats: [{ n: '58K+', l: { vi: 'Users', en: 'Users' } }, { n: '8K+', l: { vi: 'Companies', en: 'Companies' } }, { n: '99.9%', l: { vi: 'Uptime', en: 'Uptime' } }],
     },
   },
 };
@@ -557,7 +565,7 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [role, setRole] = useState('candidate');
   const [showPw, setShowPw] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
@@ -586,9 +594,9 @@ const LoginPage = () => {
   const validate = () => {
     const e = {};
     if (!form.email) e.email = t.login.requiredEmail;
-    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Email không hợp lệ';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = language === 'vi' ? 'Email không hợp lệ' : 'Invalid email';
     if (!form.password) e.password = t.login.requiredPassword;
-    else if (form.password.length < 6) e.password = 'Mật khẩu phải có ít nhất 6 ký tự';
+    else if (form.password.length < 6) e.password = language === 'vi' ? 'Mật khẩu phải có ít nhất 6 ký tự' : 'Password must be at least 6 characters';
     return e;
   };
 
@@ -647,7 +655,7 @@ const LoginPage = () => {
           console.log('Admin user detected - allowing login from any page');
           // Admin always goes to admin dashboard regardless of which login page they use
           login({ 
-            name: 'Quản Trị Viên', 
+            name: language === 'vi' ? 'Quản Trị Viên' : 'Administrator', 
             email: form.email, 
             role: 'admin', 
             approved: true 
@@ -661,13 +669,13 @@ const LoginPage = () => {
           // User is trying to login to wrong role
           await Auth.signOut();
           
-          let errorTitle = 'Đăng nhập sai vai trò';
+          let errorTitle = language === 'vi' ? 'Đăng nhập sai vai trò' : 'Wrong role login';
           let errorMessage = '';
           
           if (userRole === 'employer') {
-            errorMessage = 'Tài khoản này là Nhà tuyển dụng. Vui lòng đăng nhập tại trang Nhà tuyển dụng để tiếp tục.';
+            errorMessage = language === 'vi' ? 'Tài khoản này là Nhà tuyển dụng. Vui lòng đăng nhập tại trang Nhà tuyển dụng để tiếp tục.' : 'This account is an Employer account. Please login from the Employer page.';
           } else if (userRole === 'candidate') {
-            errorMessage = 'Tài khoản này là Ứng viên. Vui lòng đăng nhập tại trang Ứng viên để tiếp tục.';
+            errorMessage = language === 'vi' ? 'Tài khoản này là Ứng viên. Vui lòng đăng nhập tại trang Ứng viên để tiếp tục.' : 'This account is a Candidate account. Please login from the Candidate page.';
           }
           
           setErrors({ submit: errorMessage, submitTitle: errorTitle });
@@ -679,8 +687,8 @@ const LoginPage = () => {
         if (!userRole) {
           await Auth.signOut();
           setErrors({ 
-            submit: 'Tài khoản chưa được phân quyền. Vui lòng liên hệ quản trị viên để được hỗ trợ.', 
-            submitTitle: 'Chưa có quyền truy cập' 
+            submit: language === 'vi' ? 'Tài khoản chưa được phân quyền. Vui lòng liên hệ quản trị viên để được hỗ trợ.' : 'Account has no assigned role. Please contact the administrator for support.', 
+            submitTitle: language === 'vi' ? 'Chưa có quyền truy cập' : 'No access permission' 
           });
           setLoading(false);
           return;
@@ -690,7 +698,7 @@ const LoginPage = () => {
         
         // Sign in successful with correct role
         login({ 
-          name: roleToUse === 'admin' ? 'Quản Trị Viên' : form.email.split('@')[0], 
+          name: roleToUse === 'admin' ? (language === 'vi' ? 'Quản Trị Viên' : 'Administrator') : form.email.split('@')[0], 
           email: form.email, 
           role: roleToUse, 
           approved: true 
@@ -713,7 +721,7 @@ const LoginPage = () => {
         
         // If user needs to confirm sign up, redirect to OTP page
         if (result.nextStep.signInStep === 'CONFIRM_SIGN_UP') {
-          alert('Tài khoản chưa được xác thực. Vui lòng kiểm tra email để lấy mã xác thực.');
+          alert(language === 'vi' ? 'Tài khoản chưa được xác thực. Vui lòng kiểm tra email để lấy mã xác thực.' : 'Account not verified. Please check your email for the verification code.');
           navigate('/verify-otp', { state: { email: form.email, role, password: form.password } });
         } else {
           navigate('/verify-otp', { state: { email: form.email, role, password: form.password } });
@@ -722,30 +730,30 @@ const LoginPage = () => {
     } catch (err) {
       console.error('Login error:', err);
       
-      let errorTitle = 'Đăng nhập thất bại';
+      let errorTitle = language === 'vi' ? 'Đăng nhập thất bại' : 'Login failed';
       let errorMessage = '';
       
       // Handle specific errors
       if (err.name === 'UserNotFoundException' || err.message?.includes('User does not exist')) {
-        errorTitle = 'Tài khoản không tồn tại';
-        errorMessage = 'Email này chưa được đăng ký. Vui lòng kiểm tra lại hoặc tạo tài khoản mới.';
+        errorTitle = language === 'vi' ? 'Tài khoản không tồn tại' : 'Account not found';
+        errorMessage = language === 'vi' ? 'Email này chưa được đăng ký. Vui lòng kiểm tra lại hoặc tạo tài khoản mới.' : 'This email is not registered. Please check again or create a new account.';
       } else if (err.name === 'NotAuthorizedException' || err.message?.includes('Incorrect username or password')) {
-        errorTitle = 'Sai mật khẩu';
-        errorMessage = 'Mật khẩu không đúng. Vui lòng thử lại hoặc nhấn "Quên mật khẩu" để đặt lại.';
+        errorTitle = language === 'vi' ? 'Sai mật khẩu' : 'Incorrect password';
+        errorMessage = language === 'vi' ? 'Mật khẩu không đúng. Vui lòng thử lại hoặc nhấn "Quên mật khẩu" để đặt lại.' : 'Incorrect password. Please try again or click "Forgot password" to reset.';
       } else if (err.name === 'UserNotConfirmedException' || err.message?.includes('not confirmed')) {
-        errorTitle = 'Tài khoản chưa xác thực';
-        errorMessage = 'Tài khoản chưa được xác thực. Vui lòng tắt email verification trong AWS Cognito hoặc xác thực email của bạn.';
+        errorTitle = language === 'vi' ? 'Tài khoản chưa xác thực' : 'Account not verified';
+        errorMessage = language === 'vi' ? 'Tài khoản chưa được xác thực. Vui lòng tắt email verification trong AWS Cognito hoặc xác thực email của bạn.' : 'Account not verified. Please disable email verification in AWS Cognito or verify your email.';
       } else if (err.name === 'PasswordResetRequiredException') {
-        errorTitle = 'Cần đặt lại mật khẩu';
-        errorMessage = 'Bạn cần đặt lại mật khẩu. Vui lòng nhấn "Quên mật khẩu" để tiếp tục.';
+        errorTitle = language === 'vi' ? 'Cần đặt lại mật khẩu' : 'Password reset required';
+        errorMessage = language === 'vi' ? 'Bạn cần đặt lại mật khẩu. Vui lòng nhấn "Quên mật khẩu" để tiếp tục.' : 'You need to reset your password. Please click "Forgot password" to continue.';
       } else if (err.name === 'UserLambdaValidationException') {
-        errorTitle = 'Lỗi xác thực';
-        errorMessage = 'Có lỗi xảy ra khi xác thực tài khoản. Vui lòng liên hệ quản trị viên.';
+        errorTitle = language === 'vi' ? 'Lỗi xác thực' : 'Validation error';
+        errorMessage = language === 'vi' ? 'Có lỗi xảy ra khi xác thực tài khoản. Vui lòng liên hệ quản trị viên.' : 'An error occurred during account validation. Please contact the administrator.';
       } else if (err.name === 'TooManyRequestsException' || err.message?.includes('Too many requests')) {
-        errorTitle = 'Quá nhiều lần thử';
-        errorMessage = 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi vài phút rồi thử lại.';
+        errorTitle = language === 'vi' ? 'Quá nhiều lần thử' : 'Too many attempts';
+        errorMessage = language === 'vi' ? 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi vài phút rồi thử lại.' : 'Too many login attempts. Please wait a few minutes and try again.';
       } else {
-        errorMessage = err.message || 'Có lỗi xảy ra. Vui lòng thử lại sau.';
+        errorMessage = err.message || (language === 'vi' ? 'Có lỗi xảy ra. Vui lòng thử lại sau.' : 'An error occurred. Please try again later.');
       }
       
       setErrors({ submit: errorMessage, submitTitle: errorTitle });
@@ -786,21 +794,21 @@ const LoginPage = () => {
           </BrandRow>
 
           <HeroWrap>
-            <Eyebrow>{rc.hero.eyebrow}</Eyebrow>
+            <Eyebrow>{rc.hero.eyebrow[language] || rc.hero.eyebrow.vi}</Eyebrow>
             <HeroH1 $c1={rc.hero.grad[0]} $c2={rc.hero.grad[1]} $c3={rc.hero.grad[2]}>
-              {rc.hero.h1[0]}<br />
-              <span className="g">{rc.hero.h1[1]}</span><br />
-              {rc.hero.h1[2]}
+              {(rc.hero.h1[language] || rc.hero.h1.vi)[0]}<br />
+              <span className="g">{(rc.hero.h1[language] || rc.hero.h1.vi)[1]}</span><br />
+              {(rc.hero.h1[language] || rc.hero.h1.vi)[2]}
             </HeroH1>
-            <HeroSub>{rc.hero.sub}</HeroSub>
+            <HeroSub>{rc.hero.sub[language] || rc.hero.sub.vi}</HeroSub>
             <FeatureList>
-              {rc.hero.features.map((f, i) => <FItem key={i}>{f}</FItem>)}
+              {(rc.hero.features[language] || rc.hero.features.vi).map((f, i) => <FItem key={i}>{f}</FItem>)}
             </FeatureList>
             <StatsRow>
               {rc.hero.stats.map(s => (
-                <Stat key={s.l}>
+                <Stat key={s.l.vi}>
                   <div className="n">{s.n}</div>
-                  <div className="l">{s.l}</div>
+                  <div className="l">{s.l[language] || s.l.vi}</div>
                 </Stat>
               ))}
             </StatsRow>
@@ -821,7 +829,7 @@ const LoginPage = () => {
           <CardLogoRow>
             <CLogoImg src="/OpPoReview/images/logo.png" alt="Ốp Pờ" onError={e=>{e.target.style.display='none';}} />
           </CardLogoRow>
-          <CardTitle>Đăng nhập</CardTitle>
+          <CardTitle>{t.login.signIn}</CardTitle>
           <CardSub>
             {t.login.newUser}{' '}
             <Link to="/register">{t.login.createAccount}</Link>
@@ -876,7 +884,7 @@ const LoginPage = () => {
                       >
                         <ErrorIcon>!</ErrorIcon>
                         <ErrorContent>
-                          <div className="title">{errors.submitTitle || 'Đăng nhập thất bại'}</div>
+                          <div className="title">{errors.submitTitle || (language === 'vi' ? 'Đăng nhập thất bại' : 'Login failed')}</div>
                           <div className="message">{errors.submit}</div>
                         </ErrorContent>
                       </ErrorAlert>
@@ -930,7 +938,7 @@ const LoginPage = () => {
               </AnimatePresence>
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18 }}>
-                <OrDiv><span>hoặc</span></OrDiv>
+                <OrDiv><span>{language === 'vi' ? 'hoặc' : 'or'}</span></OrDiv>
                 <SocialBtn type="button" $c="#EA4335"
                   style={{
                     width: '100%',
@@ -964,8 +972,8 @@ const LoginPage = () => {
               }}>
                 <span style={{ fontSize: 20 }}>🛡️</span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#7c3aed' }}>Khu vực quản trị</div>
-                  <div style={{ fontSize: 11.5, color: '#8b5cf6', marginTop: 2 }}>Chỉ dành cho tài khoản được cấp quyền Admin</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#7c3aed' }}>{language === 'vi' ? 'Khu vực quản trị' : 'Admin Area'}</div>
+                  <div style={{ fontSize: 11.5, color: '#8b5cf6', marginTop: 2 }}>{language === 'vi' ? 'Chỉ dành cho tài khoản được cấp quyền Admin' : 'Only for accounts with Admin privileges'}</div>
                 </div>
               </div>
 
@@ -990,7 +998,7 @@ const LoginPage = () => {
                       >
                         <ErrorIcon>!</ErrorIcon>
                         <ErrorContent>
-                          <div className="title">{errors.submitTitle || 'Đăng nhập thất bại'}</div>
+                          <div className="title">{errors.submitTitle || (language === 'vi' ? 'Đăng nhập thất bại' : 'Login failed')}</div>
                           <div className="message">{errors.submit}</div>
                         </ErrorContent>
                       </ErrorAlert>
@@ -1047,21 +1055,17 @@ const LoginPage = () => {
 
           <FootRow>
             <FootNote>
-              <Link to="/">Về trang chủ</Link>
+              <Link to="/">{language === 'vi' ? 'Về trang chủ' : 'Back to Home'}</Link>
             </FootNote>
             <span style={{ color: '#d1d9e0', fontSize: 14, fontWeight: 'bold', userSelect: 'none' }}>·</span>
             <FootNote>
-              <a href="#" onClick={(e) => { e.preventDefault(); setShowModal(true); }}>Gặp sự cố?</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setShowModal(true); }}>{language === 'vi' ? 'Gặp sự cố?' : 'Having trouble?'}</a>
             </FootNote>
           </FootRow>
         </Card>
       </Right>
 
       {/* Development Modal */}
-      <UnderDevelopmentModal 
-        isOpen={showModal} 
-        onClose={() => setShowModal(false)} 
-      />
     </Root>
   );
 };

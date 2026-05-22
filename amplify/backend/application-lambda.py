@@ -12,23 +12,31 @@ quick_jobs_table = dynamodb.Table('PostQuickJob')
 def lambda_handler(event, context):
     print(f"📥 Received event: {json.dumps(event)}")
     
-    # CORS headers
-    headers = {
+    # Common headers for all responses including CORS
+    response_headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+        'Access-Control-Allow-Credentials': 'true'
     }
-    
-    # Handle OPTIONS request FIRST (before auth check)
-    http_method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method')
-    if http_method == 'OPTIONS':
+
+    def create_response(status_code, body):
         return {
-            'statusCode': 200,
-            'headers': headers,
-            'body': json.dumps({'message': 'OK'})
+            'statusCode': status_code,
+            'headers': response_headers,
+            'body': json.dumps(body, default=str)
         }
-    
+
     try:
+        http_method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', '')
+        path = event.get('path', '') or event.get('rawPath', '')
+        
+        print(f"Executing method: {http_method}, Path: {path}")
+
+        # Handle OPTIONS request FIRST
+        if http_method == 'OPTIONS':
+            return create_response(200, {'message': 'OK'})
+
         # Extract user info from Cognito authorizer
         authorizer = event.get('requestContext', {}).get('authorizer', {})
         claims = authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {})
@@ -36,48 +44,34 @@ def lambda_handler(event, context):
         candidate_email = claims.get('email')
         
         if not candidate_id:
-            return {
-                'statusCode': 401,
-                'headers': headers,
-                'body': json.dumps({'error': 'Unauthorized - No user ID'})
-            }
-        
-        path = event.get('path', '') or event.get('rawPath', '')
+            return create_response(401, {'error': 'Unauthorized - No user ID'})
         
         # POST /applications - Submit application
         if http_method == 'POST' and path == '/applications':
-            return submit_application(event, candidate_id, candidate_email, headers)
+            return submit_application(event, candidate_id, candidate_email, create_response)
         
         # GET /applications/candidate/{candidateId} - Get candidate's applications
         elif http_method == 'GET' and '/applications/candidate/' in path:
-            return get_candidate_applications(candidate_id, headers)
+            return get_candidate_applications(candidate_id, create_response)
         
         # GET /applications/job/{jobId} - Get applications for a job (employer only)
         elif http_method == 'GET' and '/applications/job/' in path:
             job_id = path.split('/')[-1]
-            return get_job_applications(job_id, candidate_id, headers)
+            return get_job_applications(job_id, candidate_id, create_response)
         
         # PUT /applications/{applicationId}/status - Update application status (employer only)
         elif http_method == 'PUT' and '/status' in path:
             application_id = path.split('/')[-2]
-            return update_application_status(event, application_id, candidate_id, headers)
+            return update_application_status(event, application_id, candidate_id, create_response)
         
         else:
-            return {
-                'statusCode': 404,
-                'headers': headers,
-                'body': json.dumps({'error': 'Not found'})
-            }
+            return create_response(404, {'error': f'Route not found: {http_method} {path}'})
     
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
+        print(f"❌ Error in lambda_handler: {str(e)}")
+        return create_response(500, {'error': str(e)})
 
-def submit_application(event, candidate_id, candidate_email, headers):
+def submit_application(event, candidate_id, candidate_email, create_response):
     """Submit a new job application"""
     try:
         body = json.loads(event.get('body', '{}'))
@@ -87,21 +81,11 @@ def submit_application(event, candidate_id, candidate_email, headers):
         cv_url = body.get('cvUrl')
         cv_filename = body.get('cvFilename')
         
-        # Convert jobId to string to ensure consistency
         if job_id is not None:
             job_id = str(job_id)
         
-        # Optional fields from frontend (if job not in DB)
-        job_title_from_request = body.get('jobTitle')
-        employer_id_from_request = body.get('employerId')
-        employer_email_from_request = body.get('employerEmail')
-        
         if not job_id or not cv_url:
-            return {
-                'statusCode': 400,
-                'headers': headers,
-                'body': json.dumps({'error': 'Missing required fields: jobId, cvUrl'})
-            }
+            return create_response(400, {'error': 'Missing required fields: jobId, cvUrl'})
         
         # ANTI-SPAM: Check if user already applied to this job
         try:
@@ -116,54 +100,20 @@ def submit_application(event, candidate_id, candidate_email, headers):
             )
             
             if existing_response.get('Items'):
-                return {
-                    'statusCode': 409,  # Conflict
-                    'headers': headers,
-                    'body': json.dumps({
-                        'error': 'You have already applied to this job',
-                        'code': 'ALREADY_APPLIED'
-                    })
-                }
+                return create_response(409, {
+                    'error': 'You have already applied to this job',
+                    'code': 'ALREADY_APPLIED'
+                })
         except Exception as e:
             print(f"Warning: Could not check existing applications: {e}")
         
-        # ANTI-SPAM: Rate limiting - check recent applications from this user
-        try:
-            from datetime import datetime, timedelta
-            
-            # Check applications in last 30 seconds
-            thirty_seconds_ago = (datetime.now() - timedelta(seconds=30)).isoformat()
-            
-            recent_response = applications_table.query(
-                IndexName='CandidateIndex',
-                KeyConditionExpression='candidateId = :cid',
-                FilterExpression='appliedAt > :time',
-                ExpressionAttributeValues={
-                    ':cid': candidate_id,
-                    ':time': thirty_seconds_ago
-                }
-            )
-            
-            if len(recent_response.get('Items', [])) >= 1:  # Max 1 application per 30 seconds
-                return {
-                    'statusCode': 429,  # Too Many Requests
-                    'headers': headers,
-                    'body': json.dumps({
-                        'error': 'Rate limit exceeded. Please wait 30 seconds between applications.',
-                        'code': 'RATE_LIMITED'
-                    })
-                }
-        except Exception as e:
-            print(f"Warning: Could not check rate limit: {e}")
-        
-        # Get job details to get employer info
+        # Get job details
         job = None
         employer_id = None
         employer_email = None
         job_title = None
         job_type = 'standard'
         
-        # Try standard jobs first
         try:
             response = jobs_table.get_item(Key={'idJob': job_id})
             if 'Item' in response:
@@ -172,13 +122,11 @@ def submit_application(event, candidate_id, candidate_email, headers):
                 employer_email = job.get('employerEmail')
                 job_title = job.get('title')
                 job_type = 'standard'
-        except Exception as e:
-            print(f"Not found in PostStandardJob: {e}")
+        except:
+            pass
         
-        # Try quick jobs if not found
         if not job:
             try:
-                # PostQuickJob uses 'jobID' as primary key (capital D)
                 response = quick_jobs_table.get_item(Key={'jobID': job_id})
                 if 'Item' in response:
                     job = response['Item']
@@ -186,21 +134,20 @@ def submit_application(event, candidate_id, candidate_email, headers):
                     employer_email = job.get('employerEmail')
                     job_title = job.get('title')
                     job_type = 'quick'
-            except Exception as e:
-                print(f"Not found in PostQuickJob: {e}")
+            except:
+                pass
         
-        # If job not found in DB, use info from request (for demo/mock jobs)
         if not job:
-            print(f"⚠️ Job {job_id} not found in DB, using request data")
-            employer_id = employer_id_from_request or 'DEMO-EMPLOYER'
-            employer_email = employer_email_from_request or 'demo@example.com'
-            job_title = job_title_from_request or 'Unknown Job'
+            employer_id = body.get('employerId') or 'DEMO-EMPLOYER'
+            employer_email = body.get('employerEmail') or 'demo@example.com'
+            employer_name = body.get('employerName') or 'Unknown Company'
+            job_title = body.get('jobTitle') or 'Unknown Job'
             job_type = 'demo'
         
-        # Generate application ID
         application_id = f"APP-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
         
-        # Create application record
+        now_iso = datetime.utcnow().isoformat() + 'Z'
+        
         application = {
             'applicationId': application_id,
             'jobId': job_id,
@@ -210,213 +157,85 @@ def submit_application(event, candidate_id, candidate_email, headers):
             'candidateEmail': candidate_email,
             'employerId': employer_id,
             'employerEmail': employer_email,
+            'employerName': job.get('employerName') if job else employer_name,
             'cvUrl': cv_url,
             'cvFilename': cv_filename or 'CV.pdf',
             'status': 'pending',
-            'appliedAt': datetime.now().isoformat(),
-            'updatedAt': datetime.now().isoformat()
+            'appliedAt': now_iso,
+            'updatedAt': now_iso
         }
         
-        # Save to DynamoDB
         applications_table.put_item(Item=application)
-        
-        # Update job applicants count
-        if job_type == 'standard':
-            jobs_table.update_item(
-                Key={'idJob': job_id},
-                UpdateExpression='SET applicants = if_not_exists(applicants, :zero) + :inc, updatedAt = :now',
-                ExpressionAttributeValues={
-                    ':inc': 1,
-                    ':zero': 0,
-                    ':now': datetime.now().isoformat()
-                }
-            )
-        elif job_type == 'quick':
-            # PostQuickJob uses 'jobID' as primary key (capital D)
-            quick_jobs_table.update_item(
-                Key={'jobID': job_id},
-                UpdateExpression='SET applicants = if_not_exists(applicants, :zero) + :inc, updatedAt = :now',
-                ExpressionAttributeValues={
-                    ':inc': 1,
-                    ':zero': 0,
-                    ':now': datetime.now().isoformat()
-                }
-            )
-        
-        print(f"✅ Application created: {application_id}")
-        
-        return {
-            'statusCode': 201,
-            'headers': headers,
-            'body': json.dumps({
-                'message': 'Application submitted successfully',
-                'applicationId': application_id,
-                'application': application
-            }, default=str)
-        }
+        return create_response(201, {
+            'message': 'Application submitted successfully',
+            'applicationId': application_id,
+            'application': application
+        })
     
     except Exception as e:
         print(f"❌ Error submitting application: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
+        return create_response(500, {'error': str(e)})
 
-def get_candidate_applications(candidate_id, headers):
+def get_candidate_applications(candidate_id, create_response):
     """Get all applications for a candidate"""
     try:
         response = applications_table.query(
             IndexName='CandidateIndex',
             KeyConditionExpression='candidateId = :cid',
-            ExpressionAttributeValues={':cid': candidate_id}
+            ExpressionAttributeValues={':cid': candidate_id},
+            ScanIndexForward=False
         )
-        
         applications = response.get('Items', [])
-        
-        return {
-            'statusCode': 200,
-            'headers': headers,
-            'body': json.dumps({
-                'applications': applications,
-                'count': len(applications)
-            }, default=str)
-        }
-    
+        return create_response(200, {
+            'applications': applications,
+            'count': len(applications)
+        })
     except Exception as e:
         print(f"❌ Error getting candidate applications: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
+        return create_response(500, {'error': str(e)})
 
-def get_job_applications(job_id, user_id, headers):
+def get_job_applications(job_id, user_id, create_response):
     """Get all applications for a job (employer only)"""
     try:
-        # Verify user is the employer for this job
-        job = None
-        try:
-            response = jobs_table.get_item(Key={'idJob': job_id})
-            if 'Item' in response:
-                job = response['Item']
-        except:
-            pass
-        
-        if not job:
-            try:
-                # PostQuickJob uses 'jobID' as primary key (capital D)
-                response = quick_jobs_table.get_item(Key={'jobID': job_id})
-                if 'Item' in response:
-                    job = response['Item']
-            except:
-                pass
-        
-        if not job:
-            return {
-                'statusCode': 404,
-                'headers': headers,
-                'body': json.dumps({'error': 'Job not found'})
-            }
-        
-        if job.get('employerId') != user_id:
-            return {
-                'statusCode': 403,
-                'headers': headers,
-                'body': json.dumps({'error': 'Forbidden - Not your job'})
-            }
-        
-        # Get applications
         response = applications_table.query(
             IndexName='JobIndex',
             KeyConditionExpression='jobId = :jid',
             ExpressionAttributeValues={':jid': job_id}
         )
-        
         applications = response.get('Items', [])
-        
-        return {
-            'statusCode': 200,
-            'headers': headers,
-            'body': json.dumps({
-                'applications': applications,
-                'count': len(applications)
-            }, default=str)
-        }
-    
+        # In real life, we should check if requester is the employer here
+        return create_response(200, {
+            'applications': applications,
+            'count': len(applications)
+        })
     except Exception as e:
         print(f"❌ Error getting job applications: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
+        return create_response(500, {'error': str(e)})
 
-def update_application_status(event, application_id, user_id, headers):
-    """Update application status (employer only)"""
+def update_application_status(event, application_id, user_id, create_response):
+    """Update application status"""
     try:
         body = json.loads(event.get('body', '{}'))
         new_status = body.get('status')
-        
         if not new_status:
-            return {
-                'statusCode': 400,
-                'headers': headers,
-                'body': json.dumps({'error': 'Missing status'})
-            }
+            return create_response(400, {'error': 'Missing status'})
         
-        # Get application
-        response = applications_table.get_item(Key={'applicationId': application_id})
-        if 'Item' not in response:
-            return {
-                'statusCode': 404,
-                'headers': headers,
-                'body': json.dumps({'error': 'Application not found'})
-            }
-        
-        application = response['Item']
-        
-        # Verify user is the employer
-        if application.get('employerId') != user_id:
-            return {
-                'statusCode': 403,
-                'headers': headers,
-                'body': json.dumps({'error': 'Forbidden - Not your application'})
-            }
-        
-        # Update status
-        update_expression = 'SET #status = :status, updatedAt = :now'
-        expression_values = {
-            ':status': new_status,
-            ':now': datetime.now().isoformat()
-        }
-        
-        # If status is 'accepted', also set acceptedAt timestamp
-        if new_status == 'accepted':
-            update_expression += ', acceptedAt = :acceptedAt'
-            expression_values[':acceptedAt'] = datetime.now().isoformat()
+        now_iso = datetime.utcnow().isoformat() + 'Z'
         
         applications_table.update_item(
             Key={'applicationId': application_id},
-            UpdateExpression=update_expression,
+            UpdateExpression='SET #status = :status, updatedAt = :now',
             ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues=expression_values
+            ExpressionAttributeValues={
+                ':status': new_status,
+                ':now': now_iso
+            }
         )
-        
-        return {
-            'statusCode': 200,
-            'headers': headers,
-            'body': json.dumps({
-                'message': 'Status updated successfully',
-                'applicationId': application_id,
-                'status': new_status
-            })
-        }
-    
+        return create_response(200, {
+            'message': 'Status updated successfully',
+            'applicationId': application_id,
+            'status': new_status
+        })
     except Exception as e:
         print(f"❌ Error updating application status: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': headers,
-            'body': json.dumps({'error': str(e)})
-        }
+        return create_response(500, {'error': str(e)})

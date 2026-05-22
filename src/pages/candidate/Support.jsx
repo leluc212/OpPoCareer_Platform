@@ -3,7 +3,6 @@ import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
-import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useLanguage } from '../../context/LanguageContext';
 import { 
   HelpCircle, 
@@ -921,11 +920,6 @@ function Support() {
           </div>
         </ReportForm>
       </Modal>
-
-      <UnderDevelopmentModal
-        isOpen={isDevModalOpen}
-        onClose={() => setIsDevModalOpen(false)}
-      />
     </DashboardLayout>
   );
 }

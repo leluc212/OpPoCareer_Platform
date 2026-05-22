@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
-import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useLanguage } from '../../context/LanguageContext';
 import { 
   Wallet as WalletIcon, 
@@ -967,11 +966,6 @@ const Wallet = () => {
           </div>
         </ContentSection>
       </WalletContainer>
-
-      <UnderDevelopmentModal
-        isOpen={isDevModalOpen}
-        onClose={() => setIsDevModalOpen(false)}
-      />
     </DashboardLayout>
   );
 };

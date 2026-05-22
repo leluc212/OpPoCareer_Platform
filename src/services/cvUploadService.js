@@ -1,5 +1,8 @@
 // CV Upload Service
-const API_BASE_URL = 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod';
+const API_BASE_URL_PROD = 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod';
+const API_BASE_URL = import.meta.env.DEV ? '/api-cv' : API_BASE_URL_PROD;
+
+import { fetchAuthSession } from 'aws-amplify/auth';
 
 /**
  * Upload CV file to S3
@@ -48,14 +51,30 @@ export const uploadCV = async (userId, file) => {
       fileContentLength: payload.fileContent.length
     });
 
-    // Upload to API
-    console.log('📤 [cvUploadService] Sending request to:', `${API_BASE_URL}/cv/upload`);
-    const response = await fetch(`${API_BASE_URL}/cv/upload`, {
+    // Upload to API - Nhắm thẳng vào Production để debug chính xác
+    const uploadUrl = API_BASE_URL_PROD + '/cv/upload';
+    console.log('📤 [cvUploadService] Sending request to:', uploadUrl);
+    
+    // Get auth token if available
+    let headers = {
+      'Content-Type': 'application/json',
+    };
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('🔑 [cvUploadService] Auth token added (with Bearer) to upload request');
+      }
+    } catch (authError) {
+      console.warn('⚠️ [cvUploadService] Could not get auth session for upload:', authError);
+    }
+
+    const response = await fetch(uploadUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
+      headers,
+      body: JSON.stringify(payload),
+      mode: 'cors'
     });
 
     console.log('📤 [cvUploadService] Response status:', response.status);
@@ -83,11 +102,24 @@ export const uploadCV = async (userId, file) => {
  */
 export const getCVInfo = async (userId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/cv/${userId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+    // Get auth token if available
+    let headers = {
+      'Content-Type': 'application/json',
+    };
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('🔑 [cvUploadService] Auth token added (with Bearer) to getCVInfo request');
       }
+    } catch (authError) {
+      console.warn('⚠️ [cvUploadService] Could not get auth session for getCVInfo:', authError);
+    }
+
+    const response = await fetch(`${API_BASE_URL_PROD}/cv/${userId}`, {
+      method: 'GET',
+      headers
     });
 
     if (!response.ok) {
@@ -132,26 +164,54 @@ export const getCVInfo = async (userId) => {
  */
 export const deleteCV = async (userId, cvId = null) => {
   try {
-    const url = cvId 
-      ? `${API_BASE_URL}/cv/${userId}/${cvId}`  // Delete specific CV
-      : `${API_BASE_URL}/cv/${userId}`;          // Delete all CVs (backward compatibility)
+    const encodedCvId = cvId ? encodeURIComponent(cvId) : null;
     
+    // Direct production hit - NOTE: This will likely fail with CORS for DELETE
+    // until CORS is enabled for DELETE method on the v56v542h8f API Gateway.
+    const url = encodedCvId 
+      ? `${API_BASE_URL_PROD}/cv/${userId}/${encodedCvId}`
+      : `${API_BASE_URL_PROD}/cv/${userId}`;
+    
+    console.log('🗑️ [cvUploadService] deleteCV called');
+    console.log('🗑️ [cvUploadService] URL:', url);
+    console.log('🗑️ [cvUploadService] method: DELETE');
+    
+    // Get auth token from Amplify
+    let headers = {};
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('🔑 [cvUploadService] Auth token added (with Bearer) to DELETE request');
+      }
+    } catch (authError) {
+      console.warn('⚠️ [cvUploadService] Could not get auth session for DELETE:', authError);
+    }
+
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      headers,
+      mode: 'cors'
     });
+
+    console.log('🗑️ [cvUploadService] Response status:', response.status);
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('❌ [cvUploadService] Error response:', error);
       throw new Error(error.error || 'Xóa CV thất bại');
     }
 
     const data = await response.json();
+    console.log('✅ [cvUploadService] Success response:', data);
     return data;
   } catch (error) {
-    console.error('Error deleting CV:', error);
+    console.error('❌ [cvUploadService] Delete error details:', error);
+    // Re-throw with more context if it's a TypeError (Network Error)
+    if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+      console.error('❌ [cvUploadService] Network error! Possible CORS issue or invalid endpoint.');
+    }
     throw error;
   }
 };

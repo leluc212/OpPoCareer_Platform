@@ -5,7 +5,6 @@ import DashboardLayout from '../../components/DashboardLayout';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Button } from '../../components/FormElements';
 import { Settings as SettingsIcon, Bell, FileText, Globe, Shield } from 'lucide-react';
 
 // ─── Page wrapper ────────────────────────────────────────────
@@ -300,6 +299,7 @@ const EmployerSettings = () => {
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
 
   return (
+    <>
     <DashboardLayout role="employer" key={language}>
       <PageContainer
         initial={{ opacity: 0, y: 16 }}
@@ -312,7 +312,7 @@ const EmployerSettings = () => {
             <PageIconBox><SettingsIcon /></PageIconBox>
             <PageTitleText>
               <h1>{t.settings.title}</h1>
-              <p>{language === 'vi' ? 'Quản lý cài đặt tài khoản và tùy chọn của bạn' : 'Manage your account settings and preferences'}</p>
+              <p>{t.settings.subtitle}</p>
             </PageTitleText>
           </PageTitleGroup>
         </PageHeader>
@@ -328,7 +328,7 @@ const EmployerSettings = () => {
             <SectionHeader $bg="#EFF6FF" $border="#BFDBFE" $iconColor="#1e40af">
               <div className="icon-box"><Globe /></div>
               <div className="section-info">
-                <h3>{language === 'vi' ? 'Tùy chỉnh hiển thị' : 'Display Settings'}</h3>
+                <h3>{t.settings.appearance}</h3>
                 <p>{language === 'vi' ? 'Ngôn ngữ và giao diện' : 'Language and appearance'}</p>
               </div>
             </SectionHeader>
@@ -342,7 +342,7 @@ const EmployerSettings = () => {
                 <LangPill $active={language === 'vi'} onClick={() => changeLanguage('vi')} whileTap={{ scale: 0.97 }}>
                   {t.settings.vietnamese}
                 </LangPill>
-                <LangPill $active={language === 'en'} onClick={() => setIsDevModalOpen(true)} whileTap={{ scale: 0.97 }}>
+                <LangPill $active={language === 'en'} onClick={() => changeLanguage('en')} whileTap={{ scale: 0.97 }}>
                   {t.settings.english}
                 </LangPill>
               </LanguageOptions>
@@ -354,7 +354,7 @@ const EmployerSettings = () => {
                 <div className="description">{t.settings.darkModeDesc}</div>
               </div>
               <Toggle>
-                <input type="checkbox" checked={isDarkMode} onChange={toggleTheme} />
+                <input type="checkbox" checked={isDarkMode} onChange={() => setIsDevModalOpen(true)} />
                 <span />
               </Toggle>
             </SettingRow>
@@ -369,8 +369,8 @@ const EmployerSettings = () => {
             <SectionHeader $bg="#FFFBEB" $border="#FDE68A" $iconColor="#F59E0B">
               <div className="icon-box"><Bell /></div>
               <div className="section-info">
-                <h3>{language === 'vi' ? 'Thông báo' : 'Notifications'}</h3>
-                <p>{language === 'vi' ? 'Quản lý thông báo nhận được' : 'Manage your notification preferences'}</p>
+                <h3>{t.settings.notifications}</h3>
+                <p>{t.settings.notificationsDesc}</p>
               </div>
             </SectionHeader>
 
@@ -417,17 +417,17 @@ const EmployerSettings = () => {
             <SectionHeader $bg="#ECFDF5" $border="#A7F3D0" $iconColor="#10B981">
               <div className="icon-box"><FileText /></div>
               <div className="section-info">
-                <h3>{language === 'vi' ? 'Chính sách & Điều khoản' : 'Policy & Terms'}</h3>
-                <p>{language === 'vi' ? 'Xem các chính sách và điều khoản sử dụng' : 'View policies and terms of service'}</p>
+                <h3>{t.settings.policyTerms}</h3>
+                <p>{t.legalPrivacy.privacyDesc}</p>
               </div>
             </SectionHeader>
 
             <PolicyButtons>
               <PolicyBtn whileTap={{ scale: 0.97 }} onClick={() => setIsDevModalOpen(true)}>
-                <FileText />{language === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service'}
+                <FileText />{t.legalPrivacy.terms}
               </PolicyBtn>
               <PolicyBtn whileTap={{ scale: 0.97 }} onClick={() => setIsDevModalOpen(true)}>
-                <Shield />{language === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy'}
+                <Shield />{t.legalPrivacy.privacy}
               </PolicyBtn>
             </PolicyButtons>
           </SettingCard>
@@ -453,11 +453,13 @@ const EmployerSettings = () => {
         </SettingsGrid>
       </PageContainer>
 
+    </DashboardLayout>
+
       <UnderDevelopmentModal
         isOpen={isDevModalOpen}
         onClose={() => setIsDevModalOpen(false)}
       />
-    </DashboardLayout>
+    </>
   );
 };
 

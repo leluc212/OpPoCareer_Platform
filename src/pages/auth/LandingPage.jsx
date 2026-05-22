@@ -4,8 +4,9 @@ import styled, { keyframes } from 'styled-components';
 import { motion, useInView } from 'framer-motion';
 import { Search, MapPin, Briefcase, Building2, Users, TrendingUp, ArrowRight, Sparkles, Globe, ChevronDown, Bookmark, FileText, ThumbsUp, Star, Upload, BookOpen, Edit3, Folder, Package, Heart, UserPlus, Shield, MessageCircle, Headphones, Moon, Sun, Clock, Mail, Send, Award, Zap, Target, Calendar, Download } from 'lucide-react';
 import { Button } from '../../components/FormElements';
-import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 
 const LandingContainer = styled.div`
   min-height: 80vh;
@@ -2651,7 +2652,7 @@ const companyLogos = [
 const LandingPage = () => {
   const navigate = useNavigate();
   const { isDarkMode, toggleTheme } = useTheme();
-  const [language, setLanguage] = useState('vi');
+  const { language, changeLanguage, t } = useLanguage();
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [location, setLocation] = useState('');
@@ -2677,18 +2678,12 @@ const LandingPage = () => {
   // Removed scroll-linked parallax transforms to improve scroll performance
   // Now using only whileInView animations which work better with scroll-snap
 
-  const fullTitle = 'Tìm việc & Tuyển Dụng Nhanh Hơn';
-  const fullSubtitle = 'Kết nối Ứng viên với cơ hội. Nền tảng tuyển dụng hiện đại.';
+  const fullTitle = language === 'vi' ? 'Tìm việc & Tuyển Dụng Nhanh Hơn' : 'Find Jobs & Hire Faster';
+  const fullSubtitle = language === 'vi' ? 'Kết nối Ứng viên với cơ hội. Nền tảng tuyển dụng hiện đại.' : 'Connect talent with opportunity. The modern recruitment platform.';
   const phoneSearchFullText = 'Ốp Pờ';
 
   const toggleLanguage = () => {
-    if (language === 'vi') {
-      // Chặn chuyển sang tiếng Anh, hiển thị modal thông báo
-      setIsDevModalOpen(true);
-    } else {
-      // Cho phép chuyển về tiếng Việt
-      setLanguage('vi');
-    }
+    changeLanguage(language === 'vi' ? 'en' : 'vi');
   };
 
   const scrollToDownload = () => {
@@ -2741,10 +2736,16 @@ const LandingPage = () => {
     };
   }, [animationKey]);
 
-  // Typewriter effect
+  // Typewriter effect - re-run when language changes
   useEffect(() => {
+    // Reset states when language changes
+    setTitleText('');
+    setSubtitleText('');
+    setShowCursor(true);
+
     let titleIndex = 0;
     let subtitleIndex = 0;
+    let subtitleInterval;
 
     // Type title first
     const titleInterval = setInterval(() => {
@@ -2754,7 +2755,7 @@ const LandingPage = () => {
       } else {
         clearInterval(titleInterval);
         // Start subtitle after title is done
-        const subtitleInterval = setInterval(() => {
+        subtitleInterval = setInterval(() => {
           if (subtitleIndex < fullSubtitle.length) {
             setSubtitleText(fullSubtitle.substring(0, subtitleIndex + 1));
             subtitleIndex++;
@@ -2768,8 +2769,9 @@ const LandingPage = () => {
 
     return () => {
       clearInterval(titleInterval);
+      if (subtitleInterval) clearInterval(subtitleInterval);
     };
-  }, []);
+  }, [language]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -2809,7 +2811,7 @@ const LandingPage = () => {
                 $isOpen={isJobDropdownOpen}
                 $isDark={isDarkMode}
               >
-                Việc làm
+                {language === 'vi' ? 'Việc làm' : 'Jobs'}
                 <ChevronDown />
               </DropdownButton>
               {isJobDropdownOpen && (
@@ -2823,55 +2825,55 @@ const LandingPage = () => {
                   <DropdownLeftColumn $isDark={isDarkMode}>
                     <DropdownSection>
                       <GreenSectionTitle>
-                        Việc làm
+                        {language === 'vi' ? 'Việc làm' : 'Jobs'}
                         <ArrowRight />
                       </GreenSectionTitle>
                       <CVTemplateItem to="/candidate/jobs" $isDark={isDarkMode}>
                         <Search />
-                        Tìm việc làm
+                        {language === 'vi' ? 'Tìm việc làm' : 'Find Jobs'}
                       </CVTemplateItem>
                       <CVTemplateItem to="/candidate/jobs?tab=saved" $isDark={isDarkMode}>
                         <Bookmark />
-                        Việc làm đã lưu
+                        {language === 'vi' ? 'Việc làm đã lưu' : 'Saved Jobs'}
                       </CVTemplateItem>
                       <CVTemplateItem to="/candidate/applications" $isDark={isDarkMode}>
                         <FileText />
-                        Việc làm đã ứng tuyển
+                        {language === 'vi' ? 'Việc làm đã ứng tuyển' : 'Applied Jobs'}
                       </CVTemplateItem>
                       <CVTemplateItem to="/candidate/jobs?recommended=true" $isDark={isDarkMode}>
                         <ThumbsUp />
-                        Việc làm phù hợp
+                        {language === 'vi' ? 'Việc làm phù hợp' : 'Recommended Jobs'}
                       </CVTemplateItem>
                     </DropdownSection>
 
                     <DropdownSection>
                       <GreenSectionTitle>
-                        Nhà tuyển dụng
+                        {language === 'vi' ? 'Nhà tuyển dụng' : 'Employers'}
                         <ArrowRight />
                       </GreenSectionTitle>
                       <CVTemplateItem to="/companies" $isDark={isDarkMode}>
                         <Building2 />
-                        Danh sách nhà tuyển dụng
+                        {language === 'vi' ? 'Danh sách nhà tuyển dụng' : 'Employer Directory'}
                       </CVTemplateItem>
                       <CVTemplateItem to="/companies/top-companies" $isDark={isDarkMode}>
                         <Star />
-                        Nhà tuyển dụng
+                        {language === 'vi' ? 'Nhà tuyển dụng' : 'Top Employers'}
                       </CVTemplateItem>
                     </DropdownSection>
                   </DropdownLeftColumn>
 
                   <DropdownRightColumn>
                     <GreenSectionTitle>
-                      Việc làm theo vị trí
+                      {language === 'vi' ? 'Việc làm theo vị trí' : 'Jobs by Position'}
                       <ArrowRight />
                     </GreenSectionTitle>
                     <JobCategoriesGrid>
-                      <JobCategoryItem to="/candidate/jobs?category=sales" $isDark={isDarkMode}>Nhân viên pha chế</JobCategoryItem>
-                      <JobCategoryItem to="/candidate/jobs?category=labor" $isDark={isDarkMode}>Nhân viên thu ngân</JobCategoryItem>
-                      <JobCategoryItem to="/candidate/jobs?category=accountant" $isDark={isDarkMode}>Nhân viên phụ bếp</JobCategoryItem>
-                      <JobCategoryItem to="/candidate/jobs?type=senior" $isDark={isDarkMode}>Nhân viên phục vụ</JobCategoryItem>
-                      <JobCategoryItem to="/candidate/jobs?category=marketing" $isDark={isDarkMode}>Nhân viên kho</JobCategoryItem>
-                      <JobCategoryItem to="/candidate/jobs?category=engineer" $isDark={isDarkMode}>Nhân viên kỹ thuật</JobCategoryItem>
+                      <JobCategoryItem to="/candidate/jobs?category=sales" $isDark={isDarkMode}>{language === 'vi' ? 'Nhân viên pha chế' : 'Barista'}</JobCategoryItem>
+                      <JobCategoryItem to="/candidate/jobs?category=labor" $isDark={isDarkMode}>{language === 'vi' ? 'Nhân viên thu ngân' : 'Cashier'}</JobCategoryItem>
+                      <JobCategoryItem to="/candidate/jobs?category=accountant" $isDark={isDarkMode}>{language === 'vi' ? 'Nhân viên phụ bếp' : 'Kitchen Assistant'}</JobCategoryItem>
+                      <JobCategoryItem to="/candidate/jobs?type=senior" $isDark={isDarkMode}>{language === 'vi' ? 'Nhân viên phục vụ' : 'Service Staff'}</JobCategoryItem>
+                      <JobCategoryItem to="/candidate/jobs?category=marketing" $isDark={isDarkMode}>{language === 'vi' ? 'Nhân viên kho' : 'Warehouse Staff'}</JobCategoryItem>
+                      <JobCategoryItem to="/candidate/jobs?category=engineer" $isDark={isDarkMode}>{language === 'vi' ? 'Nhân viên kỹ thuật' : 'Technical Staff'}</JobCategoryItem>
                     </JobCategoriesGrid>
                   </DropdownRightColumn>
                 </LargeDropdownMenu>
@@ -2887,7 +2889,7 @@ const LandingPage = () => {
                 $isOpen={isCompanyDropdownOpen}
                 $isDark={isDarkMode}
               >
-                Tạo CV
+                {language === 'vi' ? 'Tạo CV' : 'Create CV'}
                 <ChevronDown />
               </DropdownButton>
               {isCompanyDropdownOpen && (
@@ -2900,39 +2902,39 @@ const LandingPage = () => {
                   <DropdownLeftColumn>
                     <DropdownSection>
                       <GreenSectionTitle>
-                        Mẫu CV theo style
+                        {language === 'vi' ? 'Mẫu CV theo style' : 'CV Templates by Style'}
                         <ArrowRight />
                       </GreenSectionTitle>
                       <CVTemplateItem onClick={() => setIsDevModalOpen(true)}>
                         <Package />
-                        Mẫu CV Đơn giản
+                        {language === 'vi' ? 'Mẫu CV Đơn giản' : 'Simple CV Template'}
                       </CVTemplateItem>
                       <CVTemplateItem onClick={() => setIsDevModalOpen(true)}>
                         <Star />
-                        Mẫu CV Ấn tượng
+                        {language === 'vi' ? 'Mẫu CV Ấn tượng' : 'Impressive CV Template'}
                       </CVTemplateItem>
                     </DropdownSection>
 
                     <DropdownSection>
                       <GreenSectionTitle>
-                        Tạo CV bằng AI
+                        {language === 'vi' ? 'Tạo CV bằng AI' : 'Create CV with AI'}
                         <ArrowRight />
                       </GreenSectionTitle>
                       <CVTemplateItem onClick={() => setIsDevModalOpen(true)}>
                         <Briefcase />
-                        Nhân viên pha chế
+                        {language === 'vi' ? 'Nhân viên pha chế' : 'Barista'}
                       </CVTemplateItem>
                       <CVTemplateItem onClick={() => setIsDevModalOpen(true)}>
                         <Briefcase />
-                        Lập trình viên
+                        {language === 'vi' ? 'Lập trình viên' : 'Developer'}
                       </CVTemplateItem>
                       <CVTemplateItem onClick={() => setIsDevModalOpen(true)}>
                         <Briefcase />
-                        Nhân viên kế toán
+                        {language === 'vi' ? 'Nhân viên kế toán' : 'Accountant'}
                       </CVTemplateItem>
                       <CVTemplateItem onClick={() => setIsDevModalOpen(true)}>
                         <Briefcase />
-                        Chuyên viên marketing
+                        {language === 'vi' ? 'Chuyên viên marketing' : 'Marketing Specialist'}
                       </CVTemplateItem>
                     </DropdownSection>
                   </DropdownLeftColumn>
@@ -2941,19 +2943,19 @@ const LandingPage = () => {
                     <DropdownSection>
                       <DropdownItem onClick={() => setIsDevModalOpen(true)}>
                         <Folder />
-                        Quản lý CV
+                        {language === 'vi' ? 'Quản lý CV' : 'Manage CVs'}
                       </DropdownItem>
                       <DropdownItem onClick={() => setIsDevModalOpen(true)}>
                         <Upload />
-                        Tải CV lên
+                        {language === 'vi' ? 'Tải CV lên' : 'Upload CV'}
                       </DropdownItem>
                       <DropdownItem onClick={() => setIsDevModalOpen(true)}>
                         <Edit3 />
-                        Quản lý Cover Letter
+                        {language === 'vi' ? 'Quản lý Cover Letter' : 'Manage Cover Letters'}
                       </DropdownItem>
                       <DropdownItem onClick={() => setIsDevModalOpen(true)}>
                         <FileText />
-                        Mẫu Cover Letter
+                        {language === 'vi' ? 'Mẫu Cover Letter' : 'Cover Letter Templates'}
                       </DropdownItem>
                     </DropdownSection>
                   </DropdownRightColumn>
@@ -2962,7 +2964,7 @@ const LandingPage = () => {
             </DropdownContainer>
 
             <NavLinkItem to="/login?redirect=/employer/quick-jobs&role=employer">
-              Đăng tuyển
+              {language === 'vi' ? 'Đăng tuyển' : 'Post a Job'}
             </NavLinkItem>
           </NavLinks>
         </LeftSection>
@@ -2970,17 +2972,17 @@ const LandingPage = () => {
         <RightSection>
           <LanguageToggle onClick={scrollToDownload} $isDark={isDarkMode}>
             <Download />
-            Tải ứng dụng
+            {language === 'vi' ? 'Tải ứng dụng' : 'Download App'}
           </LanguageToggle>
           <LanguageToggle onClick={toggleLanguage} $isDark={isDarkMode}>
             <Globe />
             {language === 'vi' ? 'VI' : 'EN'}
           </LanguageToggle>
           <Button as={Link} to="/login" $variant="primary" $size="small">
-            Đăng Nhập
+            {t.nav.login}
           </Button>
           <Button as={Link} to="/register" $variant="primary" $size="small">
-            Đăng Ký
+            {t.nav.signUp}
           </Button>
         </RightSection>
       </Header>
@@ -3615,7 +3617,7 @@ const LandingPage = () => {
                 <Search />
                 <input
                   type="text"
-                  placeholder="Vị trí công việc hoặc công ty"
+                  placeholder={language === 'vi' ? 'Vị trí công việc hoặc công ty' : 'Job title or company'}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && navigate('/candidate/jobs', { state: { searchKeyword: searchTerm, searchLocation: location } })}
@@ -3626,7 +3628,7 @@ const LandingPage = () => {
                 <MapPin />
                 <input
                   type="text"
-                  placeholder="Địa điểm"
+                  placeholder={language === 'vi' ? 'Địa điểm' : 'Location'}
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && navigate('/candidate/jobs', { state: { searchKeyword: searchTerm, searchLocation: location } })}
@@ -3636,7 +3638,7 @@ const LandingPage = () => {
               <Button $variant="primary" onClick={() => navigate('/candidate/jobs', {
                 state: { searchKeyword: searchTerm, searchLocation: location }
               })}>
-                Tìm việc
+                {language === 'vi' ? 'Tìm việc' : 'Search Jobs'}
               </Button>
             </SearchContainer>
 
@@ -3648,7 +3650,7 @@ const LandingPage = () => {
               >
                 <StatsHeader>
                   <Calendar />
-                  Thị trường làm việc hôm nay {new Date().toLocaleDateString('vi-VN')}
+                  {language === 'vi' ? `Thị trường làm việc hôm nay ${new Date().toLocaleDateString('vi-VN')}` : `Today's Job Market ${new Date().toLocaleDateString('en-US')}`}
                 </StatsHeader>
 
                 <StatsRow>
@@ -3657,7 +3659,7 @@ const LandingPage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: 0.8 }}
                   >
-                    <StatLabel>Việc làm đang tuyển</StatLabel>
+                    <StatLabel>{language === 'vi' ? 'Việc làm đang tuyển' : 'Active Jobs'}</StatLabel>
                     <StatValue>
                       100,000
                       <TrendingUp />
@@ -3669,7 +3671,7 @@ const LandingPage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: 1 }}
                   >
-                    <StatLabel>Việc làm gấp hôm nay</StatLabel>
+                    <StatLabel>{language === 'vi' ? 'Việc làm gấp hôm nay' : 'Urgent Jobs Today'}</StatLabel>
                     <StatValue>
                       50
                       <TrendingUp />
@@ -3683,7 +3685,7 @@ const LandingPage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: 1.2 }}
                   >
-                    <StatLabel>Số lượng ứng viên</StatLabel>
+                    <StatLabel>{language === 'vi' ? 'Số lượng ứng viên' : 'Candidates'}</StatLabel>
                     <StatValue>
                       2,345
                       <Users />
@@ -3695,7 +3697,7 @@ const LandingPage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: 1.4 }}
                   >
-                    <StatLabel>Số lượng nhà tuyển dụng</StatLabel>
+                    <StatLabel>{language === 'vi' ? 'Số lượng nhà tuyển dụng' : 'Employers'}</StatLabel>
                     <StatValue>
                       42
                       <Building2 />
@@ -3744,13 +3746,17 @@ const LandingPage = () => {
               viewport={{ once: false, amount: 0.5 }}
               transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
             >
-              Những ứng viên mà nhà tuyển dụng<br />đang tìm kiếm –{' '}
+              {language === 'vi' ? (
+                <>Những ứng viên mà nhà tuyển dụng<br />đang tìm kiếm –{' '}</>
+              ) : (
+                <>The candidates employers<br />are looking for –{' '}</>
+              )}
               <span style={{
                 background: 'linear-gradient(90deg, #0284c7, #1d4ed8)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
-              }}>có thể chính là bạn.</span>
+              }}>{language === 'vi' ? 'có thể chính là bạn.' : 'could be you.'}</span>
             </CompanyBannerTitle>
 
             <LogoCarouselWrapper $isDark={isDarkMode}>
@@ -3809,9 +3815,9 @@ const LandingPage = () => {
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <CTATitle $isDark={isDarkMode}>Sẵn Sàng Tuyển Ứng viên Hàng Đầu?</CTATitle>
+            <CTATitle $isDark={isDarkMode}>{language === 'vi' ? 'Sẵn Sàng Tuyển Ứng viên Hàng Đầu?' : 'Ready to Hire Top Talent?'}</CTATitle>
             <CTAText $isDark={isDarkMode}>
-              Đăng công việc và kết nối với ứng viên chất lượng ngay hôm nay
+              {language === 'vi' ? 'Đăng công việc và kết nối với ứng viên chất lượng ngay hôm nay' : 'Post your jobs and connect with qualified candidates today'}
             </CTAText>
             <Button
               as={Link}
@@ -3827,7 +3833,7 @@ const LandingPage = () => {
                 boxShadow: '0 8px 32px rgba(255, 255, 255, 0.2)'
               }}
             >
-              Bắt Đầu Miễn Phí
+              {language === 'vi' ? 'Bắt Đầu Miễn Phí' : 'Get Started - It\'s Free'}
               <ArrowRight />
             </Button>
           </CTACard>
@@ -3849,7 +3855,7 @@ const LandingPage = () => {
                 viewport={{ once: false, amount: 0.8 }}
                 transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
               >
-                Tải ứng dụng
+                {language === 'vi' ? 'Tải ứng dụng' : 'Download the App'}
               </DownloadAppTitle>
 
               <DownloadAppSubtitle
@@ -3859,7 +3865,7 @@ const LandingPage = () => {
                 viewport={{ once: false, amount: 0.8 }}
                 transition={{ duration: 0.8, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
               >
-                để trải nghiệm các dịch vụ của chúng tôi
+                {language === 'vi' ? 'để trải nghiệm các dịch vụ của chúng tôi' : 'to experience our services'}
               </DownloadAppSubtitle>
 
               <DownloadOptions>
@@ -3902,7 +3908,7 @@ const LandingPage = () => {
                       <rect x="75" y="75" width="15" height="15" fill="black" />
                     </svg>
                   </QRCode>
-                  <QRText $isDark={isDarkMode}>Quét mã QR</QRText>
+                  <QRText $isDark={isDarkMode}>{language === 'vi' ? 'Quét mã QR' : 'Scan QR Code'}</QRText>
 
                   <DownloadAppStats>
                     <DownloadAppStatItem>
@@ -3915,7 +3921,7 @@ const LandingPage = () => {
                           <Star fill="#FFB800" strokeWidth={0} size={20} />
                         </DownloadAppStatStars>
                       </DownloadAppStatValue>
-                      <DownloadAppStatLabel $isDark={isDarkMode}>Đánh giá ứng dụng</DownloadAppStatLabel>
+                      <DownloadAppStatLabel $isDark={isDarkMode}>{language === 'vi' ? 'Đánh giá ứng dụng' : 'App Rating'}</DownloadAppStatLabel>
                     </DownloadAppStatItem>
                   </DownloadAppStats>
                 </QRCodeSection>
@@ -4039,7 +4045,7 @@ const LandingPage = () => {
                               overflow: 'hidden',
                               textOverflow: 'ellipsis'
                             }}>
-                              Ứng dụng tuyển dụng
+                              {language === 'vi' ? 'Ứng dụng tuyển dụng' : 'Recruitment App'}
                             </div>
                             <div style={{
                               fontSize: '10px',
@@ -4048,7 +4054,7 @@ const LandingPage = () => {
                               overflow: 'hidden',
                               textOverflow: 'ellipsis'
                             }}>
-                              Đã tải xuống - Giáo dục
+                              {language === 'vi' ? 'Đã tải xuống - Giáo dục' : 'Downloaded - Education'}
                             </div>
                             {/* Star Rating */}
                             <div style={{
@@ -4089,7 +4095,7 @@ const LandingPage = () => {
                               animate={{ opacity: 1 }}
                               transition={{ delay: 0.5 }}
                             >
-                              Tải về
+                              {language === 'vi' ? 'Tải về' : 'Download'}
                             </motion.div>
                           ) : (
                             <motion.div
@@ -4157,16 +4163,16 @@ const LandingPage = () => {
                 <Link to="/OpPoReview/" className="logo-link">
                   <img src="/OpPoReview/images/logo.png" alt="Ốp Pờ Logo" />
                 </Link>
-                <p>Bạn vừa bị đuổi - Đã có Ốp Pờ lo</p>
+                <p>{language === 'vi' ? 'Bạn vừa bị đuổi - Đã có Ốp Pờ lo' : 'Just got fired? Ốp Pờ has you covered'}</p>
                 <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', border: '1px solid #10b981', padding: '4px 8px', borderRadius: '4px' }}>✓ Được bảo vệ</span>
+                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', border: '1px solid #10b981', padding: '4px 8px', borderRadius: '4px' }}>{language === 'vi' ? '✓ Được bảo vệ' : '✓ Protected'}</span>
                   <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#6366f1', border: '1px solid #6366f1', padding: '4px 8px', borderRadius: '4px' }}>Google For Startups</span>
                 </div>
               </div>
               <div className="contact-info">
-                <h4>Liên hệ</h4>
-                <p>Hotline hệ thống: <strong>0379 784 509</strong></p>
-                <p>Hỗ trợ khách hàng: <strong>0563 518 922</strong></p>
+                <h4>{language === 'vi' ? 'Liên hệ' : 'Contact'}</h4>
+                <p>{language === 'vi' ? 'Hotline hệ thống:' : 'System Hotline:'} <strong>0379 784 509</strong></p>
+                <p>{language === 'vi' ? 'Hỗ trợ khách hàng:' : 'Customer Support:'} <strong>0563 518 922</strong></p>
                 <p>Email: oppohiringplatform@gmail.com</p>
               </div>
 
@@ -4174,48 +4180,48 @@ const LandingPage = () => {
 
             <FooterLinksWrap>
               <FooterLinkCol $isDark={isDarkMode}>
-                <h4>Về Ốp Pờ</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Giới thiệu</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Góc báo chí</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Tuyển dụng</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Liên hệ</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Hỏi đáp</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Chính sách bảo mật</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Điều khoản dịch vụ</a>
+                <h4>{language === 'vi' ? 'Về Ốp Pờ' : 'About Ốp Pờ'}</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Giới thiệu' : 'About Us'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Góc báo chí' : 'Press'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Tuyển dụng' : 'Careers'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Liên hệ' : 'Contact'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Hỏi đáp' : 'FAQ'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service'}</a>
               </FooterLinkCol>
 
               <FooterLinkCol $isDark={isDarkMode}>
-                <h4>Hồ sơ và CV</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Quản lý CV của bạn</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Hướng dẫn viết CV</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Review CV</a>
-                <h4 style={{ marginTop: '24px' }}>Khám phá</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Ứng dụng di động Ốp Pờ</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>AI đề xuất công việc phù hợp</a>
+                <h4>{language === 'vi' ? 'Hồ sơ và CV' : 'Profile & CV'}</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Quản lý CV của bạn' : 'Manage Your CV'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Hướng dẫn viết CV' : 'CV Writing Guide'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Review CV' : 'CV Review'}</a>
+                <h4 style={{ marginTop: '24px' }}>{language === 'vi' ? 'Khám phá' : 'Explore'}</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Ứng dụng di động Ốp Pờ' : 'Ốp Pờ Mobile App'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'AI đề xuất công việc phù hợp' : 'AI Job Recommendations'}</a>
               </FooterLinkCol>
 
               <FooterLinkCol $isDark={isDarkMode}>
-                <h4>Tìm việc nhanh - uy tín</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Việc làm tốt nhất</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Việc làm lương cao</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Việc làm quản lý</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Việc làm bán thời gian</a>
+                <h4>{language === 'vi' ? 'Tìm việc nhanh - uy tín' : 'Find Jobs Fast'}</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Việc làm tốt nhất' : 'Best Jobs'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Việc làm lương cao' : 'High Salary Jobs'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Việc làm quản lý' : 'Management Jobs'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Việc làm bán thời gian' : 'Part-time Jobs'}</a>
               </FooterLinkCol>
 
               <FooterLinkCol $isDark={isDarkMode}>
-                <h4>Quy tắc chung</h4>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Điều kiện giao dịch chung</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>Giá dịch vụ & Cách thanh toán</a>
+                <h4>{language === 'vi' ? 'Quy tắc chung' : 'General Rules'}</h4>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Điều kiện giao dịch chung' : 'General Terms'}</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); setIsDevModalOpen(true); }}>{language === 'vi' ? 'Giá dịch vụ & Cách thanh toán' : 'Pricing & Payment'}</a>
               </FooterLinkCol>
             </FooterLinksWrap>
           </FooterMain>
 
           <FooterBottom $isDark={isDarkMode}>
             <CompanyDetails $isDark={isDarkMode}>
-              <h3>Công ty Cổ phần Ốp Pờ Việt Nam</h3>
-              <p><span>📄</span> Giấy phép đăng ký kinh doanh số: 0123456789 cấp ngày 21/02/2026, thay đổi lần thứ 1 ngày 03/03/2026 tại Sở Tài chính Thành phố Hồ Chí Minh</p>
-              <p><span>📄</span> Giấy phép hoạt động dịch vụ việc làm số: 123456789/GP-LĐTBXH</p>
-              <p><span>📍</span> Trụ sở chính: Đại học FPT, Khu Công nghệ cao, Quận 9, TP Thủ Đức, TP HCM</p>
+              <h3>{language === 'vi' ? 'Công ty Cổ phần Ốp Pờ Việt Nam' : 'Ốp Pờ Vietnam JSC'}</h3>
+              <p><span>📄</span> {language === 'vi' ? 'Giấy phép đăng ký kinh doanh số: 0123456789 cấp ngày 21/02/2026, thay đổi lần thứ 1 ngày 03/03/2026 tại Sở Tài chính Thành phố Hồ Chí Minh' : 'Business Registration No: 0123456789 issued 21/02/2026, amended 03/03/2026 at Ho Chi Minh City Department of Finance'}</p>
+              <p><span>📄</span> {language === 'vi' ? 'Giấy phép hoạt động dịch vụ việc làm số: 123456789/GP-LĐTBXH' : 'Employment Service License No: 123456789/GP-LDTBXH'}</p>
+              <p><span>📍</span> {language === 'vi' ? 'Trụ sở chính: Đại học FPT, Khu Công nghệ cao, Quận 9, TP Thủ Đức, TP HCM' : 'Headquarters: FPT University, Hi-Tech Park, District 9, Thu Duc City, HCMC'}</p>
 
             </CompanyDetails>
 
@@ -4226,7 +4232,7 @@ const LandingPage = () => {
           </FooterBottom>
 
           <Copyright $isDark={isDarkMode}>
-            © {new Date().getFullYear()} Ốp Pờ Vietnam JSC. All rights reserved.
+            © {new Date().getFullYear()} Ốp Pờ Vietnam JSC. {language === 'vi' ? 'Toàn bộ quyền được bảo lưu.' : 'All rights reserved.'}
           </Copyright>
         </Footer>
       </ScrollContainer>

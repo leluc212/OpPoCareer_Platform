@@ -765,8 +765,8 @@ const Navbar = ({ showSearch = true }) => {
           {showNotifications && (
             <NotificationDropdown>
               <NotificationHeader>
-                <h3>Thông báo</h3>
-                <button onClick={handleNotificationItemClick}>Xem tất cả</button>
+                <h3>{language === 'vi' ? 'Thông báo' : 'Notifications'}</h3>
+                <button onClick={handleNotificationItemClick}>{language === 'vi' ? 'Xem tất cả' : 'View all'}</button>
               </NotificationHeader>
 
               <NotificationTabs>
@@ -774,13 +774,13 @@ const Navbar = ({ showSearch = true }) => {
                   $active={notificationTab === 'all'}
                   onClick={() => setNotificationTab('all')}
                 >
-                  Tất cả
+                  {language === 'vi' ? 'Tất cả' : 'All'}
                 </NotificationTab>
                 <NotificationTab
                   $active={notificationTab === 'unread'}
                   onClick={() => setNotificationTab('unread')}
                 >
-                  Chưa đọc
+                  {language === 'vi' ? 'Chưa đọc' : 'Unread'}
                 </NotificationTab>
               </NotificationTabs>
 
@@ -873,7 +873,7 @@ const Navbar = ({ showSearch = true }) => {
           )}
         </div>
 
-        <IconButton onClick={handleSettingsClick} title="Cài đặt">
+        <IconButton onClick={handleSettingsClick} title={language === 'vi' ? 'Cài đặt' : 'Settings'}>
           <Settings />
         </IconButton>
 
@@ -892,7 +892,7 @@ const Navbar = ({ showSearch = true }) => {
             )}
           </Avatar>
           <UserInfo>
-            <span>{user?.role === 'employer' ? (employerProfile?.companyName || 'Chưa cập nhật tên công ty') : (candidateProfile?.fullName || user?.name || 'User')}</span>
+            <span>{user?.role === 'employer' ? (employerProfile?.companyName || (language === 'vi' ? 'Chưa cập nhật tên công ty' : 'Company name not updated')) : (candidateProfile?.fullName || user?.name || 'User')}</span>
             <span>{getRoleTranslation(user?.role) || 'Role'}</span>
           </UserInfo>
         </UserMenu>

@@ -2383,7 +2383,7 @@ const CandidateProfile = () => {
                     />
                     <Upload size={32} style={{ marginBottom: '8px', color: '#6366F1' }} />
                     <div style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {kycFormData.idFrontImage ? '✓ Đã tải ảnh' : (language === 'vi' ? 'Tải ảnh mặt trước' : 'Upload front image')}
+                      {kycFormData.idFrontImage ? (language === 'vi' ? '✓ Đã tải ảnh' : '✓ Image uploaded') : (language === 'vi' ? 'Tải ảnh mặt trước' : 'Upload front image')}
                     </div>
                     {kycFormData.idFrontImage && (
                       <img src={kycFormData.idFrontImage} alt="ID Front" />
@@ -2400,7 +2400,7 @@ const CandidateProfile = () => {
                     />
                     <Upload size={32} style={{ marginBottom: '8px', color: '#6366F1' }} />
                     <div style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {kycFormData.idBackImage ? '✓ Đã tải ảnh' : (language === 'vi' ? 'Tải ảnh mặt sau' : 'Upload back image')}
+                      {kycFormData.idBackImage ? (language === 'vi' ? '✓ Đã tải ảnh' : '✓ Image uploaded') : (language === 'vi' ? 'Tải ảnh mặt sau' : 'Upload back image')}
                     </div>
                     {kycFormData.idBackImage && (
                       <img src={kycFormData.idBackImage} alt="ID Back" />

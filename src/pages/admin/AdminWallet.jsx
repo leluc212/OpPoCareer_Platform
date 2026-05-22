@@ -2,7 +2,6 @@ import { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
-import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button, Input } from '../../components/FormElements';
 import {
@@ -1018,11 +1017,6 @@ const AdminWallet = () => {
 
         </ContentSection>
       </WalletContainer>
-
-      <UnderDevelopmentModal
-        isOpen={isDevModalOpen}
-        onClose={() => setIsDevModalOpen(false)}
-      />
     </DashboardLayout>
   );
 };

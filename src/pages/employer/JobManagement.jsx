@@ -8,6 +8,7 @@ import { Edit, Trash2, Users, Clock, TrendingUp, Eye, BarChart3, Plus, Calendar,
 import { Button } from '../../components/FormElements';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
+import DynamicTranslate from '../../components/DynamicTranslate';
 
 const fadeIn = keyframes`
   from {
@@ -586,7 +587,7 @@ const JobManagement = () => {
                 <CardContent>
                   <CardHeader>
                     <JobInfo>
-                      <JobTitle>{job.title}</JobTitle>
+                      <JobTitle><DynamicTranslate text={job.title} showIndicator={false} /></JobTitle>
                       <JobMeta>
                         <MetaItem>
                           <Clock />
@@ -595,7 +596,7 @@ const JobManagement = () => {
                         {job.location && (
                           <MetaItem>
                             <MapPin />
-                            {job.location}
+                            <DynamicTranslate text={job.location} showIndicator={false} />
                           </MetaItem>
                         )}
                         {job.department && (

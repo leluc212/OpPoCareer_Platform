@@ -151,8 +151,8 @@ def create_job_post(event, user_id, headers):
             'applicants': body.get('applicants', 0),
             'views': body.get('views', 0),
             'responseRate': body.get('responseRate', 0),
-            'createdAt': body.get('createdAt', datetime.utcnow().isoformat()),
-            'updatedAt': body.get('updatedAt', datetime.utcnow().isoformat())
+            'createdAt': body.get('createdAt', datetime.utcnow().isoformat() + 'Z'),
+            'updatedAt': body.get('updatedAt', datetime.utcnow().isoformat() + 'Z')
         }
         
         # Put item in DynamoDB
@@ -332,7 +332,7 @@ def update_job_post(event, job_id, user_id, headers):
         
         # Build update expression
         update_expr = "SET updatedAt = :updatedAt"
-        expr_values = {':updatedAt': datetime.utcnow().isoformat()}
+        expr_values = {':updatedAt': datetime.utcnow().isoformat() + 'Z'}
         expr_names = {}
         
         # Add fields to update
@@ -438,7 +438,7 @@ def delete_job_post(job_id, user_id, headers):
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':status': 'deleted',
-                ':updatedAt': datetime.utcnow().isoformat()
+                ':updatedAt': datetime.utcnow().isoformat() + 'Z'
             }
         )
         

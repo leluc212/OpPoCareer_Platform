@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   TrendingUp,
   MessageSquare,
@@ -506,6 +507,7 @@ const EmptyState = styled(motion.div)`
 
 /* ═══════════════════════  COMPONENT  ════════════════════════ */
 const CandidatePosts = () => {
+  const { language } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [likedPosts, setLikedPosts] = useState(new Set([2]));
   const [savedPosts, setSavedPosts] = useState(new Set([2]));
@@ -679,9 +681,9 @@ const CandidatePosts = () => {
 
                     {/* Stats */}
                     <StatsStrip>
-                      <StatItem><Heart />{post.likes} lượt thích</StatItem>
-                      <StatItem><MessageSquare />{post.comments} bình luận</StatItem>
-                      <StatItem><Share2 />{post.shares} chia sẻ</StatItem>
+                      <StatItem><Heart />{post.likes} {language === 'vi' ? 'lượt thích' : 'likes'}</StatItem>
+                      <StatItem><MessageSquare />{post.comments} {language === 'vi' ? 'bình luận' : 'comments'}</StatItem>
+                      <StatItem><Share2 />{post.shares} {language === 'vi' ? 'chia sẻ' : 'shares'}</StatItem>
                     </StatsStrip>
 
                     <Divider />
@@ -697,7 +699,7 @@ const CandidatePosts = () => {
                           fill={isLiked ? 'currentColor' : 'none'}
                           strokeWidth={isLiked ? 0 : 2}
                         />
-                        {isLiked ? 'Đã thích' : 'Thích'}
+                        {isLiked ? (language === 'vi' ? 'Đã thích' : 'Liked') : (language === 'vi' ? 'Thích' : 'Like')}
                       </ActionBtn>
 
                       <ActionBtn>
@@ -719,7 +721,7 @@ const CandidatePosts = () => {
                           fill={isSaved ? 'currentColor' : 'none'}
                           strokeWidth={isSaved ? 0 : 2}
                         />
-                        {isSaved ? 'Đã lưu' : 'Lưu'}
+                        {isSaved ? (language === 'vi' ? 'Đã lưu' : 'Saved') : (language === 'vi' ? 'Lưu' : 'Save')}
                       </SaveBtn>
                     </ActionsBar>
                   </PostCard>

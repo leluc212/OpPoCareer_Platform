@@ -12,6 +12,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import StatusBadge from '../../components/StatusBadge';
 import { useLanguage } from '../../context/LanguageContext';
+import DynamicTranslate from '../../components/DynamicTranslate';
 import candidateProfileService from '../../services/candidateProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
@@ -966,14 +967,15 @@ const BoostTag = styled.div`
 `;
 
 const JobCardWrapper = styled(motion.div)`
-  background: ${props => props.theme.colors.bgLight};
+  background: ${props => props.$highlighted ? props.theme.colors.primary + '08' : props.theme.colors.bgLight};
   border-radius: ${props => props.theme.borderRadius.lg};
-  border: 1px solid ${props => props.theme.colors.border};
+  border: 1px solid ${props => props.$highlighted ? props.theme.colors.primary : props.theme.colors.border};
   padding: 14px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  box-shadow: ${props => props.$highlighted ? `0 0 20px ${props.theme.colors.primary}30` : 'none'};
   
   &::before {
     content: '';
@@ -983,7 +985,7 @@ const JobCardWrapper = styled(motion.div)`
     width: 4px;
     height: 100%;
     background: linear-gradient(135deg, ${props => props.theme.colors.primary}, ${props => props.theme.colors.secondary});
-    opacity: 0;
+    opacity: ${props => props.$highlighted ? 1 : 0};
     transition: opacity 0.3s ease;
   }
   
@@ -996,7 +998,18 @@ const JobCardWrapper = styled(motion.div)`
       opacity: 1;
     }
   }
+
+  /* Pulse animation for highlight */
+  ${props => props.$highlighted && `
+    animation: highlightPulse 2s ease-in-out;
+    background: ${props.theme.colors.primary}15;
+    border-color: ${props.theme.colors.primary};
+    box-shadow: 0 0 0 4px ${props.theme.colors.primary}20;
+    z-index: 10;
+  `}
 `;
+
+
 
 const JobCardHeader = styled.div`
   display: flex;
@@ -1246,8 +1259,9 @@ const translateSalary = (salaryStr, language) => {
   return salaryStr
     .replace(/triệu VND/g, 'million VND')
     .replace(/\/ca/g, '/shift')
-    .replace(/\/giờ/g, '/hour')
-    .replace(/\/tiếng/g, '/hrs');
+    .replace(/\/giờ/g, '/hr')
+    .replace(/\/tiếng/g, '/hr')
+    .replace(/Thỏa thuận/g, 'Negotiable');
 };
 
 /**
@@ -1262,53 +1276,63 @@ const translateSalary = (salaryStr, language) => {
 const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận') => {
   if (!raw && raw !== 0) return fallback;
   const str = String(raw).trim();
-  // Already has currency unit → use as-is
   if (str.includes('VNĐ') || str.includes('VND') || str.includes('đ')) return str;
-  // Pure number → format
   const num = parseInt(str.replace(/\D/g, ''), 10);
   if (isNaN(num) || num === 0) return fallback;
-  return `${num.toLocaleString('vi-VN')} VNĐ/giờ`;
+  // fallback already has language context from caller
+  const isEn = fallback === 'Negotiable';
+  return isEn ? `${num.toLocaleString('vi-VN')} VNĐ/hr` : `${num.toLocaleString('vi-VN')} VNĐ/giờ`;
 };
 
 // Calculate per-shift salary for jobs with hourly rate
-const calculateShiftSalary = (job) => {
-  // Only convert if salary is in VNĐ/giờ format
-  if (!job.salary.includes('VNĐ/giờ')) return job.salary;
+const calculateShiftSalary = (job, language = 'vi') => {
+  if (!job.salary.includes('VNĐ/giờ')) return translateSalary(job.salary, language);
 
-  // Parse original hourly rate - "28.000" means 28000 VND
   const rateMatch = job.salary.match(/([\d.]+)/);
-  if (!rateMatch) return job.salary;
+  if (!rateMatch) return translateSalary(job.salary, language);
   const originalRate = parseInt(rateMatch[1].replace(/\./g, ''));
-
-  // Min hourly rate is 28,050
   const hourlyRate = Math.max(originalRate, 28050);
 
-  // For shift jobs, parse actual hours from type like 'Ca sáng (06:00 - 14:00)'
-  let hours = 8; // default 8 hours per shift
+  let hours = 8;
   const timeMatch = job.type.match(/(\d{2}):(\d{2})\s*-\s*(\d{2}):(\d{2})/);
   if (timeMatch) {
     const startH = parseInt(timeMatch[1]);
     const endH = parseInt(timeMatch[3]);
     hours = endH - startH;
-    if (hours <= 0) hours += 24; // overnight shift
+    if (hours <= 0) hours += 24;
   }
 
   const totalSalary = hourlyRate * hours;
-
-  // Format number with dots: 224400 -> 224.400
   const formatted = totalSalary.toLocaleString('vi-VN').replace(/,/g, '.');
-
   return `${formatted} VNĐ/${hours}h`;
 };
 
 // Translate location string based on language
 const translateLocation = (locationStr, language) => {
   if (language === 'vi') return locationStr;
+  if (!locationStr) return locationStr;
   return locationStr
+    // Districts (must come before generic "Quận" replacement)
+    .replace(/Quận 1/g, 'District 1')
+    .replace(/Quận 2/g, 'District 2')
+    .replace(/Quận 3/g, 'District 3')
+    .replace(/Quận 4/g, 'District 4')
+    .replace(/Quận 5/g, 'District 5')
+    .replace(/Quận 6/g, 'District 6')
+    .replace(/Quận 7/g, 'District 7')
+    .replace(/Quận 8/g, 'District 8')
+    .replace(/Quận 9/g, 'District 9')
+    .replace(/Quận 10/g, 'District 10')
+    .replace(/Quận 11/g, 'District 11')
+    .replace(/Quận 12/g, 'District 12')
     .replace(/Quận/g, 'District')
+    // Cities & provinces
     .replace(/TP\.HCM/g, 'HCMC')
+    .replace(/TP HCM/g, 'HCMC')
     .replace(/Hà Nội/g, 'Hanoi')
     .replace(/Đà Nẵng/g, 'Da Nang')
+    .replace(/Cần Thơ/g, 'Can Tho')
+    // Districts of HCMC
     .replace(/Tân Bình/g, 'Tan Binh')
     .replace(/Tân Phú/g, 'Tan Phu')
     .replace(/Bình Tân/g, 'Binh Tan')
@@ -1316,6 +1340,13 @@ const translateLocation = (locationStr, language) => {
     .replace(/Phú Nhuận/g, 'Phu Nhuan')
     .replace(/Gò Vấp/g, 'Go Vap')
     .replace(/Thủ Đức/g, 'Thu Duc')
+    .replace(/Hóc Môn/g, 'Hoc Mon')
+    .replace(/Củ Chi/g, 'Cu Chi')
+    .replace(/Bình Chánh/g, 'Binh Chanh')
+    .replace(/Nhà Bè/g, 'Nha Be')
+    .replace(/Cần Giờ/g, 'Can Gio')
+    // Other
+    .replace(/Toàn quốc/g, 'Nationwide')
     .replace(/Toàn/g, 'All');
 };
 
@@ -1333,12 +1364,17 @@ const translateTimePosted = (timeStr, language) => {
 // Format ISO date to readable format (for DynamoDB jobs)
 const formatPostedDate = (isoDate, language) => {
   try {
+    if (!isoDate) return '---';
     // Parse ISO date - DynamoDB stores in UTC
     const date = new Date(isoDate);
     const now = new Date();
 
     // Calculate difference in milliseconds
-    const diffMs = now - date;
+    let diffMs = now - date;
+    
+    // Handle small clock drifts
+    if (diffMs < 0) diffMs = 0;
+    
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffHours / 24);
@@ -1357,15 +1393,10 @@ const formatPostedDate = (isoDate, language) => {
       return language === 'vi' ? `${weeks} tuần trước` : `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
     } else {
       // Format as date in local timezone
-      return date.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        timeZone: 'Asia/Ho_Chi_Minh'
-      });
+      return date.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US');
     }
-  } catch (e) {
-    console.error('Error formatting date:', e, isoDate);
+  } catch (error) {
+    console.error('Error formatting date:', error);
     return isoDate;
   }
 };
@@ -1452,7 +1483,7 @@ const translateJobTitle = (titleStr, language) => {
     'Thu ngân quán ăn': 'Eatery Cashier',
     'Nhân viên bếp sáng': 'Kitchen Staff',
     'Phục vụ Lẩu': 'Hot Pot Server',
-    'Nhân viên McDonald\'s': 'McDonald\'s Staff',
+    "Nhân viên McDonald's": "McDonald's Staff",
     'Pha chế Phúc Long': 'Phuc Long Barista',
     'Phục vụ Jollibee': 'Jollibee Staff',
     'Nhân viên Lotteria': 'Lotteria Staff',
@@ -1460,10 +1491,32 @@ const translateJobTitle = (titleStr, language) => {
     'Phục vụ Pizza': 'Pizza Server',
     'Giao đồ ăn': 'Food Delivery',
     'Nhân viên bếp đêm': 'Kitchen Staff',
-    'Thu ngân Highlands': 'Highlands Cashier'
+    'Thu ngân Highlands': 'Highlands Cashier',
+    // JOBS_DATA titles (Title Case variants)
+    'Nhân viên Phục Vụ Quán Cafe': 'Café Service Staff',
+    'Nhân viên Pha Chế': 'Barista',
+    'Nhân viên Phục Vụ': 'Service Staff',
+    'Phụ bếp nhà hàng': 'Kitchen Helper',
+    'Nhân viên phụ bếp': 'Kitchen Helper',
+    'Nhân viên Thu Ngân Nhà Hàng': 'Restaurant Cashier',
+    'Nhân viên Pha Chế Trà Sữa': 'Bubble Tea Barista',
+    'Nhân viên bưng bê': 'Food Runner',
+    'Nhân viên Thu Ngân Cửa Hàng': 'Store Cashier',
+    'Nhân viên Pha Chế Phúc Long': 'Phuc Long Barista',
+    'Nhân viên Phục Vụ Nhà Hàng': 'Restaurant Server',
+    'Nhân viên Thu Ngân Quán Café': 'Café Cashier',
+    'Nhân viên Thu Ngân': 'Cashier',
+    'Nhân viên Phục Vụ Quán Ăn': 'Eatery Server',
+    'Nhân viên Phục Vụ Trà Sữa': 'Bubble Tea Server',
+    'Nhân viên Phục Vụ Lẩu': 'Hot Pot Server',
+    'Nhân viên Phục Vụ Pizza': 'Pizza Server',
+    'Nhân viên Pha Chế Katinat': 'Katinat Barista',
+    'Nhân viên Thu Ngân Highlands': 'Highlands Cashier',
   };
 
-  return titleMap[cleanTitle] || cleanTitle;
+  return titleMap[cleanTitle] || 
+    Object.entries(titleMap).find(([k]) => k.toLowerCase() === cleanTitle.toLowerCase())?.[1] || 
+    cleanTitle;
 };
 
 // Generate job description based on job title and company
@@ -1585,20 +1638,19 @@ const translateJobType = (typeStr, language) => {
 
 // Jobs data - moved outside component to avoid re-creation on each render
 // Helper function to get jobs from localStorage
-const getStoredJobs = () => {
+const getStoredJobs = (language = 'vi') => {
   try {
     const storedJobs = localStorage.getItem('employerJobs');
     if (storedJobs) {
       const jobs = JSON.parse(storedJobs);
-      // Transform employer jobs to candidate job format
       return jobs
-        .filter(job => job.salaryMin || job.salaryMax) // Filter out jobs without salary
+        .filter(job => job.salaryMin || job.salaryMax)
         .map(job => ({
           id: job.id,
           title: job.title,
-          company: job.department || 'Công ty',
+          company: job.department || (language === 'vi' ? 'Công ty' : 'Company'),
           location: job.location,
-          lat: 10.7769, // Default HCM location
+          lat: 10.7769,
           lng: 106.7009,
           type: job.jobType === 'full-time' ? 'Full-time' :
             job.jobType === 'part-time' ? 'Part-time' :
@@ -1608,11 +1660,11 @@ const getStoredJobs = () => {
           salary: job.salaryMin && job.salaryMax
             ? `${job.salaryMin} - ${job.salaryMax}`
             : job.salaryMin
-              ? `Từ ${job.salaryMin}`
+              ? (language === 'vi' ? `Từ ${job.salaryMin}` : `From ${job.salaryMin}`)
               : job.salaryMax
-                ? `Tối đa ${job.salaryMax}`
-                : 'Thỏa thuận',
-          postedAt: job.posted || 'Vừa xong',
+                ? (language === 'vi' ? `Tối đa ${job.salaryMax}` : `Up to ${job.salaryMax}`)
+                : (language === 'vi' ? 'Thỏa thuận' : 'Negotiable'),
+          postedAt: job.posted || (language === 'vi' ? 'Vừa xong' : 'Just now'),
           tags: [
             job.experienceLevel === 'entry' ? 'Entry Level' :
               job.experienceLevel === 'mid' ? 'Mid Level' :
@@ -2493,7 +2545,7 @@ const JobListing = () => {
                 idJob: job.idJob,
                 employerId: job.employerId,
                 title: String(job.title || 'Untitled Job'),
-                company: String(job.employerName || job.employerEmail || 'Công ty'),
+                company: String(job.employerName || job.employerEmail || (language === 'vi' ? 'Công ty' : 'Company')),
                 location: String(job.location || ''),
                 lat: lat, // Add coordinates for location-based filtering
                 lng: lng,
@@ -2574,7 +2626,7 @@ const JobListing = () => {
                 idJob: jobId,
                 employerId: job.employerId,
                 title: String(job.title || 'Untitled Job'),
-                company: String(job.companyName || 'Công ty'),
+                company: String(job.companyName || (language === 'vi' ? 'Công ty' : 'Company')),
                 location: String(job.location || ''),
                 lat: lat, // Add coordinates for location-based filtering
                 lng: lng,
@@ -2583,7 +2635,7 @@ const JobListing = () => {
                   : `${Math.round(hourlyRate * 0.85).toLocaleString()} VNĐ/giờ`,
                 type: jobType, // Use jobType from database
                 category: 'shift', // Quick jobs are shift-based
-                tags: ['Tuyển gấp', 'Làm ngay'],
+                tags: [language === 'vi' ? 'Tuyển gấp' : 'Urgent', language === 'vi' ? 'Làm ngay' : 'Start Now'],
                 postedDate: String(job.createdAt || new Date().toISOString()),
                 postedAt: formatPostedDate(job.createdAt || new Date().toISOString(), language),
                 applicants: parseInt(job.applicants) || 0,
@@ -2617,9 +2669,9 @@ const JobListing = () => {
 
   // Merge stored jobs with default jobs data AND DynamoDB jobs AND quick jobs
   const allJobs = useMemo(() => {
-    const storedJobs = getStoredJobs();
+    const storedJobs = getStoredJobs(language);
     return [...storedJobs, ...JOBS_DATA, ...dynamoDBJobs, ...quickJobs];
-  }, [dynamoDBJobs, quickJobs]); // Re-calculate when DynamoDB jobs or quick jobs are loaded
+  }, [dynamoDBJobs, quickJobs, language]);
 
   const [quickFilter, setQuickFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
@@ -2656,6 +2708,7 @@ const JobListing = () => {
   const [errorModal, setErrorModal] = useState({ show: false, message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmitTime, setLastSubmitTime] = useState(null);
+  const [highlightedJobId, setHighlightedJobId] = useState(null);
 
   const banners = [
     { src: "/OpPoReview/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
@@ -2726,6 +2779,53 @@ const JobListing = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  // Handle selected job from Dashboard
+  useEffect(() => {
+    if (allJobs.length > 0 && location.state?.selectedJobId) {
+      const jobId = location.state.selectedJobId;
+      console.log('🎯 Dashboard selectedJobId:', jobId);
+
+      const job = allJobs.find(j =>
+        j.id === jobId ||
+        j.idJob === jobId ||
+        j.id === `dynamo-${jobId}` ||
+        j.id === `quick-${jobId}`
+      );
+
+      if (job) {
+        console.log('✅ Found job for selectedJobId:', job.title);
+        // Set category to match job's category so it shows up in the list (if not saved)
+        if (!showSavedJobsOnly) {
+          setJobCategory(job.category || 'standard');
+        }
+
+        // Highlight the job card
+        setHighlightedJobId(job.id);
+
+        // Clear highlight after 5 seconds
+        setTimeout(() => {
+          setHighlightedJobId(null);
+        }, 5000);
+
+        // Scroll to the specific job card
+        setTimeout(() => {
+          const element = document.getElementById(`job-card-${job.id}`);
+          if (element) {
+            element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          } else {
+            scrollToResults();
+          }
+        }, 600);
+      }
+
+      // Clear state so re-visiting doesn't re-open the modal
+      window.history.replaceState({ ...location.state, selectedJobId: undefined }, document.title);
+    }
+  }, [allJobs, location.state, showSavedJobsOnly]);
 
   // Scroll to results function
   const scrollToResults = () => {
@@ -2925,21 +3025,51 @@ const JobListing = () => {
       }
 
       // Submit application
+<<<<<<< HEAD
       const applicationService = (await import('../../services/applicationService')).default;
       const jobId = jobData.idJob || jobData.id;
+=======
+      const applicationService = await import('../../services/applicationService');
+      console.log('🔍 [Debug] Application Modal Job:', applyModal.job);
+      console.log('🔍 [Debug] Candidate CV List:', candidateCVList);
+      console.log('🔍 [Debug] Selected CV ID:', selectedCV);
+      console.log('🔍 [Debug] Selected CV Data:', selectedCVData);
+
+      const jobId = applyModal.job.idJob || applyModal.job.id;
+      console.log('🔍 [Debug] Calculated Job ID:', jobId);
+>>>>>>> f2576f34ca4b83112bc0970b97ceae158c018977
 
       if (!jobId) {
         setIsSubmitting(false);
         setErrorModal({
           show: true,
-          message: 'Không tìm thấy ID công việc'
+          message: language === 'vi' ? 'Không tìm thấy ID công việc' : 'Job ID not found'
         });
         return;
       }
 
+      // Important: Support both cvUrl and cvS3Key (fallback if URL is missing)
+      const finalCVUrl = selectedCVData.cvUrl || selectedCVData.cvS3Key;
+
+      if (!selectedCVData || !finalCVUrl) {
+         console.error('❌ [Debug] CV URL and S3 Key both missing!', selectedCVData);
+         setIsSubmitting(false);
+         setErrorModal({
+           show: true,
+           message: language === 'vi' ? 'Dữ liệu CV không hợp lệ. Vui lòng chọn lại CV.' : 'Invalid CV data. Please select your CV again.'
+         });
+         return;
+      }
+
+      console.log('📤 [Debug] Calling submitApplication with:', {
+        jobId,
+        cvUrl: finalCVUrl,
+        cvFileName: selectedCVData.cvFileName || 'CV.pdf'
+      });
+
       await applicationService.submitApplication(
         jobId,
-        selectedCVData.cvUrl,
+        finalCVUrl,
         selectedCVData.cvFileName || 'CV.pdf'
       );
 
@@ -3569,14 +3699,14 @@ const JobListing = () => {
                     <input type="checkbox" id="25k-30k"
                       checked={selectedSalaryRanges.includes('25k-30k')}
                       onChange={() => toggleSalaryRange('25k-30k')} />
-                    <span>25.000 – 30.000đ/giờ</span>
+                    <span>{language === 'vi' ? '25.000 – 30.000đ/giờ' : '25k – 30k/hr'}</span>
                     <small>{filterCounts['25to30k']}</small>
                   </FilterOption>
                   <FilterOption>
                     <input type="checkbox" id="30k-35k"
                       checked={selectedSalaryRanges.includes('30k-35k')}
                       onChange={() => toggleSalaryRange('30k-35k')} />
-                    <span>30.000 – 35.000đ/giờ</span>
+                    <span>{language === 'vi' ? '30.000 – 35.000đ/giờ' : '30k – 35k/hr'}</span>
                     <small>{filterCounts['30to35k']}</small>
                   </FilterOption>
                   <FilterOption>
@@ -3679,6 +3809,7 @@ const JobListing = () => {
                     delay={index * 0.05}
                     showDistance={jobCategory === 'shift' && showNearbyJobs}
                     language={language}
+                    isHighlighted={highlightedJobId === job.id}
                   />
                 ))
               ) : isLoadingDynamoJobs ? (
@@ -3806,27 +3937,27 @@ const JobListing = () => {
 
             <p className="apply-desc">
               {language === 'vi'
-                ? <>Bạn muốn gửi CV ứng tuyển vào vị trí <strong>{translateJobTitle(applyModal.job.title, language)}</strong> tại <strong>{applyModal.job.company}</strong>?</>
-                : <>Send your CV for <strong>{translateJobTitle(applyModal.job.title, language)}</strong> at <strong>{applyModal.job.company}</strong>?</>
+                ? <>Bạn muốn gửi CV ứng tuyển vào vị trí <strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /></strong> tại <strong><DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>?</>
+                : <>Send your CV for <strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /></strong> at <strong><DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>?</>
               }
             </p>
 
             <div className="apply-info-card">
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Vị trí' : 'Position'}:</span>
-                <span className="info-value">{translateJobTitle(applyModal.job.title, language)}</span>
+                <span className="info-value"><DynamicTranslate text={applyModal.job.title} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Công ty' : 'Company'}:</span>
-                <span className="info-value">{applyModal.job.company}</span>
+                <span className="info-value"><DynamicTranslate text={applyModal.job.company} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Địa điểm' : 'Location'}:</span>
-                <span className="info-value">{translateLocation(applyModal.job.location, language)}</span>
+                <span className="info-value"><DynamicTranslate text={applyModal.job.location} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Mức lương trung bình' : 'Average Salary'}:</span>
-                <span className="info-value salary">{translateSalary(applyModal.job.category === 'shift' ? calculateShiftSalary(applyModal.job) : applyModal.job.salary, language)}</span>
+                <span className="info-value salary">{translateSalary(applyModal.job.category === 'shift' ? calculateShiftSalary(applyModal.job, language) : applyModal.job.salary, language)}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Loại hình' : 'Type'}:</span>
@@ -3915,19 +4046,19 @@ const JobListing = () => {
         {detailModal && (
           <ApplyModalWrap onClick={e => e.stopPropagation()}>
             <div className="apply-emoji" style={{ fontSize: '40px' }}>💼</div>
-            <h3>{translateJobTitle(detailModal.job.title, language)}</h3>
+            <h3><DynamicTranslate text={detailModal.job.title} /></h3>
             <p className="apply-desc" style={{ marginBottom: '10px' }}>
-              <strong>{detailModal.job.company}</strong>
+              <strong><DynamicTranslate text={detailModal.job.company} showIndicator={false} /></strong>
             </p>
 
             <div className="apply-info-card" style={{ marginBottom: '15px' }}>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Địa điểm' : 'Location'}:</span>
-                <span className="info-value">{detailModal.job.location}</span>
+                <span className="info-value"><DynamicTranslate text={detailModal.job.location} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Mức lương trung bình' : 'Average Salary'}:</span>
-                <span className="info-value salary">{translateSalary(detailModal.job.category === 'shift' ? calculateShiftSalary(detailModal.job) : detailModal.job.salary, language)}</span>
+                <span className="info-value salary">{translateSalary(detailModal.job.category === 'shift' ? calculateShiftSalary(detailModal.job, language) : detailModal.job.salary, language)}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Loại hình' : 'Type'}:</span>
@@ -3977,7 +4108,7 @@ const JobListing = () => {
             <div className="apply-emoji" style={{ fontSize: '40px' }}>📋</div>
             <h3>{language === 'vi' ? 'Mô tả công việc' : 'Job Description'}</h3>
             <p className="apply-desc" style={{ marginBottom: '10px' }}>
-              <strong>{translateJobTitle(jobDescriptionModal.job.title, language)}</strong> - {jobDescriptionModal.job.company}
+              <strong><DynamicTranslate text={jobDescriptionModal.job.title} showIndicator={false} /></strong> - <DynamicTranslate text={jobDescriptionModal.job.company} showIndicator={false} />
             </p>
 
             <div style={{ marginTop: '16px', padding: '24px', background: '#f3f4f6', borderRadius: '12px', border: '1px solid #e5e7eb', height: '300px', width: '100%', overflowY: 'auto' }}>
@@ -3988,7 +4119,7 @@ const JobListing = () => {
                     <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px' }}>
                       {language === 'vi' ? 'MÔ TẢ CÔNG VIỆC' : 'JOB DESCRIPTION'}
                     </div>
-                    <div style={{ color: '#4b5563', lineHeight: '1.8' }}>{jobDescriptionModal.job.description}</div>
+                    <DynamicTranslate text={jobDescriptionModal.job.description} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
 
@@ -3998,7 +4129,7 @@ const JobListing = () => {
                     <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px' }}>
                       {language === 'vi' ? 'TRÁCH NHIỆM' : 'RESPONSIBILITIES'}
                     </div>
-                    <div style={{ color: '#4b5563', lineHeight: '1.8' }}>{jobDescriptionModal.job.responsibilities}</div>
+                    <DynamicTranslate text={jobDescriptionModal.job.responsibilities} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
 
@@ -4008,7 +4139,7 @@ const JobListing = () => {
                     <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px' }}>
                       {language === 'vi' ? 'YÊU CẦU' : 'REQUIREMENTS'}
                     </div>
-                    <div style={{ color: '#4b5563', lineHeight: '1.8' }}>{jobDescriptionModal.job.requirements}</div>
+                    <DynamicTranslate text={jobDescriptionModal.job.requirements} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
 
@@ -4215,7 +4346,7 @@ const JobListing = () => {
                   e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                 }}
               >
-                Đã hiểu
+                {language === 'vi' ? 'Đã hiểu' : 'Got It'}
               </button>
             </div>
           </div>
@@ -4243,6 +4374,24 @@ const GlobalStyles = `
       transform: translateY(0) scale(1);
     }
   }
+
+  @keyframes highlightPulse {
+    0% { 
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+      transform: scale(1);
+    }
+    30% { 
+      box-shadow: 0 0 0 20px rgba(59, 130, 246, 0);
+      transform: scale(1.02);
+    }
+    50% { 
+      transform: scale(1.02);
+    }
+    100% { 
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+      transform: scale(1);
+    }
+  }
 `;
 
 // Inject global styles
@@ -4253,13 +4402,15 @@ if (typeof document !== 'undefined') {
 }
 
 // Job Card Component
-const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language }) => {
+const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language, isHighlighted }) => {
   const getCompanyInitial = (company) => {
     return company.charAt(0).toUpperCase();
   };
 
   return (
     <JobCardWrapper
+      id={`job-card-${job.id}`}
+      $highlighted={isHighlighted}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
@@ -4272,16 +4423,16 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
         </CompanyLogo>
         <JobInfo>
           <JobTitle>
-            {translateJobTitle(job.title, language)}
+            <DynamicTranslate text={job.title} showIndicator={false} />
           </JobTitle>
           <CompanyName>
             <Building2 />
-            {job.company}
+            <DynamicTranslate text={job.company} showIndicator={false} />
           </CompanyName>
           <JobMeta>
             <MetaItem>
               <MapPin />
-              {translateLocation(job.location, language)}
+              <DynamicTranslate text={job.location} showIndicator={false} />
             </MetaItem>
             {showDistance && job.distance !== undefined && (
               <MetaItem style={{ color: '#10b981', fontWeight: '600' }}>
@@ -4311,13 +4462,13 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
       <JobCardBody>
         <JobTags>
           {job.tags.filter(tag => !tag.match(/^Ca\s+(sáng|chiều|tối|đêm|trưa)/i)).map((tag, idx) => (
-            <Tag key={idx}>{translateTag(tag, language)}</Tag>
+            <Tag key={idx}><DynamicTranslate text={tag} showIndicator={false} /></Tag>
           ))}
         </JobTags>
 
         <JobSalary>
           <span style={{ fontWeight: '500' }}>{language === 'vi' ? 'Thu nhập trung bình:' : 'Income:'}</span>
-          <span>{translateSalary(job.category === 'shift' ? calculateShiftSalary(job) : job.salary, language)}</span>
+          <span>{translateSalary(job.category === 'shift' ? calculateShiftSalary(job, language) : job.salary, language)}</span>
         </JobSalary>
       </JobCardBody>
 

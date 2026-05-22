@@ -135,13 +135,9 @@ const AdminSettings = () => {
   const { language, changeLanguage, t } = useLanguage();
   const { isDarkMode, toggleTheme } = useTheme();
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
-  
+
   const handleLanguageChange = (lang) => {
-    if (lang === 'en') {
-      setIsDevModalOpen(true);
-    } else {
-      changeLanguage(lang);
-    }
+    changeLanguage(lang);
   };
   
   const handleDarkModeToggle = () => {
@@ -149,6 +145,7 @@ const AdminSettings = () => {
   };
 
   return (
+    <>
     <DashboardLayout role="admin" showSearch={false} key={language}>
       <SettingsContainer>
         <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '32px' }}>{t.settings.title}</h1>
@@ -200,13 +197,13 @@ const AdminSettings = () => {
         </SettingsCard>
       </SettingsContainer>
       
-      <UnderDevelopmentModal 
+    </DashboardLayout>
+
+      <UnderDevelopmentModal
         isOpen={isDevModalOpen}
         onClose={() => setIsDevModalOpen(false)}
-        title="Tính Năng Đang Phát Triển"
-        message="Chức năng này đang trong quá trình phát triển và sẽ sớm được ra mắt. Cảm ơn bạn!!!"
       />
-    </DashboardLayout>
+    </>
   );
 };
 

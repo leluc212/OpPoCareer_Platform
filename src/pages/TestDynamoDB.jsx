@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import candidateProfileService from '../services/candidateProfileService';
+import { useLanguage } from '../context/LanguageContext';
 
 const Container = styled.div`
   padding: 40px;
@@ -57,6 +58,7 @@ const TestDynamoDB = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { language } = useLanguage();
 
   const loadTestProfile = async () => {
     setLoading(true);
@@ -114,30 +116,31 @@ const TestDynamoDB = () => {
 
   return (
     <Container>
-      <Title>🧪 Test DynamoDB - Tiếng Việt</Title>
+      <Title>🧪 Test DynamoDB - {language === 'vi' ? 'Tiếng Việt' : 'Vietnamese'}</Title>
       
       <Card>
-        <h3>Test Profile từ DynamoDB</h3>
-        <p>Kiểm tra xem tiếng Việt có hiển thị đúng không</p>
+        <h3>{language === 'vi' ? 'Test Profile từ DynamoDB' : 'Test Profile from DynamoDB'}</h3>
+        <p>{language === 'vi' ? 'Kiểm tra xem tiếng Việt có hiển thị đúng không' : 'Check if Vietnamese text displays correctly'}</p>
         
         <Button onClick={loadTestProfile} disabled={loading}>
-          {loading ? 'Đang tải...' : 'Load Test Profile'}
+          {loading ? (language === 'vi' ? 'Đang tải...' : 'Loading...') : 'Load Test Profile'}
         </Button>
       </Card>
 
       {error && (
         <Card style={{ background: '#fee2e2', borderLeft: '4px solid #ef4444' }}>
-          <strong>Lỗi:</strong> {error}
+          <strong>{language === 'vi' ? 'Lỗi:' : 'Error:'}</strong> {error}
           <p style={{ marginTop: 8, fontSize: 14 }}>
-            Note: Cần cấu hình CORS và credentials để test trực tiếp từ browser.
-            Trong production, sẽ dùng API Gateway + Lambda.
+            {language === 'vi'
+              ? 'Note: Cần cấu hình CORS và credentials để test trực tiếp từ browser. Trong production, sẽ dùng API Gateway + Lambda.'
+              : 'Note: CORS and credentials configuration is needed to test directly from the browser. In production, API Gateway + Lambda will be used.'}
           </p>
         </Card>
       )}
 
       {profile && (
         <Card>
-          <Title>✅ Dữ liệu từ DynamoDB</Title>
+          <Title>✅ {language === 'vi' ? 'Dữ liệu từ DynamoDB' : 'Data from DynamoDB'}</Title>
           
           <Field>
             <strong>User ID:</strong>
@@ -145,7 +148,7 @@ const TestDynamoDB = () => {
           </Field>
           
           <Field>
-            <strong>Họ và Tên:</strong>
+            <strong>{language === 'vi' ? 'Họ và Tên:' : 'Full Name:'}</strong>
             <span>{profile.fullName}</span>
           </Field>
           
@@ -155,12 +158,12 @@ const TestDynamoDB = () => {
           </Field>
           
           <Field>
-            <strong>Số điện thoại:</strong>
+            <strong>{language === 'vi' ? 'Số điện thoại:' : 'Phone:'}</strong>
             <span>{profile.phone}</span>
           </Field>
           
           <Field>
-            <strong>Địa điểm:</strong>
+            <strong>{language === 'vi' ? 'Địa điểm:' : 'Location:'}</strong>
             <span>{profile.location}</span>
           </Field>
           
@@ -170,22 +173,22 @@ const TestDynamoDB = () => {
           </Field>
           
           <Field>
-            <strong>Ngày sinh:</strong>
+            <strong>{language === 'vi' ? 'Ngày sinh:' : 'Date of Birth:'}</strong>
             <span>{new Date(profile.dateOfBirth).toLocaleDateString('vi-VN')}</span>
           </Field>
           
           <Field>
-            <strong>Chức danh:</strong>
+            <strong>{language === 'vi' ? 'Chức danh:' : 'Title:'}</strong>
             <span>{profile.title}</span>
           </Field>
           
           <Field>
-            <strong>Giới thiệu:</strong>
+            <strong>{language === 'vi' ? 'Giới thiệu:' : 'Bio:'}</strong>
             <span>{profile.bio}</span>
           </Field>
           
           <Field>
-            <strong>Kỹ năng:</strong>
+            <strong>{language === 'vi' ? 'Kỹ năng:' : 'Skills:'}</strong>
             <div style={{ marginTop: 8 }}>
               {profile.skills.map((skill, index) => (
                 <span 
@@ -208,26 +211,28 @@ const TestDynamoDB = () => {
           </Field>
           
           <Field>
-            <strong>Hoàn thành hồ sơ:</strong>
+            <strong>{language === 'vi' ? 'Hoàn thành hồ sơ:' : 'Profile Completion:'}</strong>
             <span>{profile.profileCompletion}%</span>
           </Field>
           
           <Field>
-            <strong>Trạng thái:</strong>
-            <span>{profile.isActive ? 'Đang hoạt động' : 'Không hoạt động'}</span>
+            <strong>{language === 'vi' ? 'Trạng thái:' : 'Status:'}</strong>
+            <span>{profile.isActive ? (language === 'vi' ? 'Đang hoạt động' : 'Active') : (language === 'vi' ? 'Không hoạt động' : 'Inactive')}</span>
           </Field>
         </Card>
       )}
       
       <Card style={{ background: '#f0f9ff' }}>
-        <h4>📝 Kết luận:</h4>
+        <h4>📝 {language === 'vi' ? 'Kết luận:' : 'Conclusion:'}</h4>
         <p>
-          Dữ liệu tiếng Việt trong DynamoDB hoàn toàn chính xác. 
-          AWS Console hiển thị sai do vấn đề encoding của browser.
+          {language === 'vi'
+            ? 'Dữ liệu tiếng Việt trong DynamoDB hoàn toàn chính xác. AWS Console hiển thị sai do vấn đề encoding của browser.'
+            : 'Vietnamese data in DynamoDB is completely accurate. AWS Console displays incorrectly due to browser encoding issues.'}
         </p>
         <p style={{ marginTop: 12 }}>
-          Khi sử dụng qua API (Lambda + API Gateway) hoặc trong React app,
-          tiếng Việt sẽ hiển thị hoàn toàn bình thường.
+          {language === 'vi'
+            ? 'Khi sử dụng qua API (Lambda + API Gateway) hoặc trong React app, tiếng Việt sẽ hiển thị hoàn toàn bình thường.'
+            : 'When accessed via API (Lambda + API Gateway) or in a React app, Vietnamese text will display correctly.'}
         </p>
       </Card>
     </Container>

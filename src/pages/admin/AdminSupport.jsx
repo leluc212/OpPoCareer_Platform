@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   HelpCircle, 
   ChevronDown,
@@ -165,6 +166,7 @@ const ContactValue = styled.div`
 `;
 
 const AdminSupport = () => {
+  const { language } = useLanguage();
   const [openFAQ, setOpenFAQ] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -226,11 +228,11 @@ const AdminSupport = () => {
   };
 
   return (
-    <DashboardLayout role="admin">
+    <DashboardLayout role="admin" key={language}>
       <PageContainer>
         <PageHeader>
-          <Title>Trung Tâm Hỗ Trợ</Title>
-          <Subtitle>Câu hỏi thường gặp và liên hệ hỗ trợ</Subtitle>
+          <Title>{language === 'vi' ? 'Trung Tâm Hỗ Trợ' : 'Support Center'}</Title>
+          <Subtitle>{language === 'vi' ? 'Câu hỏi thường gặp và liên hệ hỗ trợ' : 'Frequently asked questions and support contact'}</Subtitle>
         </PageHeader>
 
         <Grid>
@@ -238,7 +240,7 @@ const AdminSupport = () => {
             <Section>
               <SectionTitle>
                 <HelpCircle size={24} />
-                Câu Hỏi Thường Gặp
+                {language === 'vi' ? 'Câu Hỏi Thường Gặp' : 'Frequently Asked Questions'}
               </SectionTitle>
               <FAQList>
                 {faqs.map(faq => (
@@ -264,17 +266,17 @@ const AdminSupport = () => {
             <Section>
               <SectionTitle>
                 <Send size={24} />
-                Gửi Yêu Cầu Hỗ Trợ
+                {language === 'vi' ? 'Gửi Yêu Cầu Hỗ Trợ' : 'Submit Support Request'}
               </SectionTitle>
               <form onSubmit={handleSubmit}>
                 <FormGroup>
-                  <Label>Họ và tên</Label>
+                  <Label>{language === 'vi' ? 'Họ và tên' : 'Full Name'}</Label>
                   <Input 
                     type="text"
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    placeholder="Nhập họ và tên của bạn"
+                    placeholder={language === 'vi' ? 'Nhập họ và tên của bạn' : 'Enter your full name'}
                     required
                   />
                 </FormGroup>
@@ -292,24 +294,24 @@ const AdminSupport = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>Chủ đề</Label>
+                  <Label>{language === 'vi' ? 'Chủ đề' : 'Subject'}</Label>
                   <Input 
                     type="text"
                     name="subject"
                     value={formData.subject}
                     onChange={handleInputChange}
-                    placeholder="Vấn đề cần hỗ trợ"
+                    placeholder={language === 'vi' ? 'Vấn đề cần hỗ trợ' : 'Issue requiring support'}
                     required
                   />
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>Nội dung chi tiết</Label>
+                  <Label>{language === 'vi' ? 'Nội dung chi tiết' : 'Detailed Description'}</Label>
                   <TextArea 
                     name="message"
                     value={formData.message}
                     onChange={handleInputChange}
-                    placeholder="Mô tả chi tiết vấn đề của bạn..."
+                    placeholder={language === 'vi' ? 'Mô tả chi tiết vấn đề của bạn...' : 'Describe your issue in detail...'}
                     rows={6}
                     required
                   />
@@ -317,7 +319,7 @@ const AdminSupport = () => {
 
                 <Button type="submit" $variant="primary">
                   <Send size={18} />
-                  Gửi yêu cầu
+                  {language === 'vi' ? 'Gửi yêu cầu' : 'Submit Request'}
                 </Button>
               </form>
             </Section>
@@ -325,14 +327,14 @@ const AdminSupport = () => {
 
           <Sidebar>
             <ContactCard>
-              <ContactTitle>Thông Tin Liên Hệ</ContactTitle>
+              <ContactTitle>{language === 'vi' ? 'Thông Tin Liên Hệ' : 'Contact Information'}</ContactTitle>
               
               <ContactItem>
                 <IconWrapper>
                   <Mail size={20} />
                 </IconWrapper>
                 <ContactInfo>
-                  <ContactLabel>Email hỗ trợ</ContactLabel>
+                  <ContactLabel>{language === 'vi' ? 'Email hỗ trợ' : 'Support email'}</ContactLabel>
                   <ContactValue>admin-oppohiringplatform@gmail.com</ContactValue>
                 </ContactInfo>
               </ContactItem>
@@ -352,20 +354,20 @@ const AdminSupport = () => {
                   <Clock size={20} />
                 </IconWrapper>
                 <ContactInfo>
-                  <ContactLabel>Giờ làm việc</ContactLabel>
-                  <ContactValue>24/7 - Hỗ trợ toàn thời gian</ContactValue>
+                  <ContactLabel>{language === 'vi' ? 'Giờ làm việc' : 'Working hours'}</ContactLabel>
+                  <ContactValue>{language === 'vi' ? '24/7 - Hỗ trợ toàn thời gian' : '24/7 - Full-time support'}</ContactValue>
                 </ContactInfo>
               </ContactItem>
             </ContactCard>
 
             <ContactCard>
-              <ContactTitle>Hỗ Trợ Khẩn Cấp</ContactTitle>
+              <ContactTitle>{language === 'vi' ? 'Hỗ Trợ Khẩn Cấp' : 'Emergency Support'}</ContactTitle>
               <ContactItem>
                 <IconWrapper style={{ background: '#fee2e2', color: '#dc2626' }}>
                   <Phone size={20} />
                 </IconWrapper>
                 <ContactInfo>
-                  <ContactLabel>Hotline khẩn cấp</ContactLabel>
+                  <ContactLabel>{language === 'vi' ? 'Hotline khẩn cấp' : 'Emergency hotline'}</ContactLabel>
                   <ContactValue style={{ color: '#dc2626' }}>1900 8888</ContactValue>
                 </ContactInfo>
               </ContactItem>

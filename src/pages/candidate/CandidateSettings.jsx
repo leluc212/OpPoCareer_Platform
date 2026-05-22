@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
+
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Button } from '../../components/FormElements';
@@ -499,9 +500,8 @@ function CandidateSettings() {
     showPhone: false
   });
   
-  const [isDevModalOpen, setIsDevModalOpen] = useState(false);
-  
   const navigate = useNavigate();
+  const [isDevModalOpen, setIsDevModalOpen] = useState(false);
 
   const handleNotificationToggle = (key) => {
     setNotifications(prev => ({
@@ -520,6 +520,7 @@ function CandidateSettings() {
 
 
   return (
+    <>
     <DashboardLayout role="candidate" showSearch={false} key={language}>
       <SettingsContainer>
         <PageHeader
@@ -529,7 +530,7 @@ function CandidateSettings() {
         >
           <div className="header-content">
             <h1><SettingsIcon />{t.settings.title}</h1>
-            <p>{language === 'vi' ? 'Quản lý tài khoản, thông báo và quyền riêng tư của bạn' : 'Manage your account, notifications and privacy'}</p>
+            <p>{t.settings.subtitle}</p>
           </div>
         </PageHeader>
 
@@ -571,7 +572,7 @@ function CandidateSettings() {
                   </LanguageButton>
                   <LanguageButton 
                     $active={language === 'en'} 
-                    onClick={() => setIsDevModalOpen(true)}
+                    onClick={() => changeLanguage('en')}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
@@ -613,7 +614,7 @@ function CandidateSettings() {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="card-header">
-                <h2><Lock />{language === 'vi' ? 'Tài khoản và mật khẩu' : 'Account & Password'}</h2>
+                <h2><Lock />{t.settings.security}</h2>
               </div>
               
               <SettingItem
@@ -628,8 +629,8 @@ function CandidateSettings() {
                     <Key />
                   </div>
                   <div className="setting-info">
-                    <h3>{language === 'vi' ? 'Đổi mật khẩu' : 'Change Password'}</h3>
-                    <p>{language === 'vi' ? 'Cập nhật mật khẩu để bảo mật tài khoản' : 'Update your password to secure your account'}</p>
+                    <h3>{t.security.changePassword}</h3>
+                    <p>{t.security.changePasswordDesc}</p>
                   </div>
                 </div>
                 <ChevronRight />
@@ -647,8 +648,8 @@ function CandidateSettings() {
                     <Trash2 />
                   </div>
                   <div className="setting-info">
-                    <h3>{language === 'vi' ? 'Xóa tài khoản' : 'Delete Account'}</h3>
-                    <p>{language === 'vi' ? 'Xóa vĩnh viễn tài khoản và dữ liệu của bạn' : 'Permanently delete your account and data'}</p>
+                    <h3>{t.security.deleteAccount}</h3>
+                    <p>{t.security.deleteAccountDesc}</p>
                   </div>
                 </div>
                 <ChevronRight />
@@ -699,8 +700,8 @@ function CandidateSettings() {
                     <Bell />
                   </div>
                   <div className="setting-info">
-                    <h3>{language === 'vi' ? 'Cập nhật hồ sơ' : 'Profile Updates'}</h3>
-                    <p>{language === 'vi' ? 'Nhận thông báo khi nhà tuyển dụng xem hồ sơ của bạn' : 'Get notified when employers view your profile'}</p>
+                    <h3>{t.settings.applicationUpdates}</h3>
+                    <p>{t.settings.applicationUpdatesDesc}</p>
                   </div>
                 </div>
                 <Toggle>
@@ -828,7 +829,7 @@ function CandidateSettings() {
               transition={{ duration: 0.6, delay: 0.6 }}
             >
               <div className="card-header">
-                <h2><FileText />{language === 'vi' ? 'Chính sách & điều khoản' : 'Policy & Terms'}</h2>
+                <h2><FileText />{t.settings.policyTerms}</h2>
               </div>
               
               <PolicyItem
@@ -842,8 +843,8 @@ function CandidateSettings() {
                     <FileText />
                   </div>
                   <div className="policy-info">
-                    <h3>{language === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service'}</h3>
-                    <p>{language === 'vi' ? 'Xem điều khoản và điều kiện sử dụng dịch vụ' : 'View terms and conditions of service'}</p>
+                    <h3>{t.legalPrivacy.terms}</h3>
+                    <p>{t.legalPrivacy.termsDesc}</p>
                   </div>
                 </div>
                 <ChevronRight />
@@ -860,8 +861,8 @@ function CandidateSettings() {
                     <Shield />
                   </div>
                   <div className="policy-info">
-                    <h3>{language === 'vi' ? 'Chính sách bảo mật' : 'Privacy Policy'}</h3>
-                    <p>{language === 'vi' ? 'Tìm hiểu cách chúng tôi xử lý dữ liệu của bạn' : 'Learn how we handle your data'}</p>
+                    <h3>{t.legalPrivacy.privacy}</h3>
+                    <p>{t.legalPrivacy.privacyDesc}</p>
                   </div>
                 </div>
                 <ChevronRight />
@@ -878,8 +879,8 @@ function CandidateSettings() {
                     <FileText />
                   </div>
                   <div className="policy-info">
-                    <h3>{language === 'vi' ? 'Chính sách Cookies' : 'Cookie Policy'}</h3>
-                    <p>{language === 'vi' ? 'Quản lý cookies và thiết lập theo dõi' : 'Manage cookies and tracking settings'}</p>
+                    <h3>{t.legalPrivacy.cookies}</h3>
+                    <p>{t.legalPrivacy.cookiesDesc}</p>
                   </div>
                 </div>
                 <ChevronRight />
@@ -896,8 +897,8 @@ function CandidateSettings() {
                     <Download />
                   </div>
                   <div className="policy-info">
-                    <h3>{language === 'vi' ? 'Tải dữ liệu của bạn' : 'Download Your Data'}</h3>
-                    <p>{language === 'vi' ? 'Tải xuống bản sao dữ liệu cá nhân của bạn' : 'Download a copy of your personal data'}</p>
+                    <h3>{t.legalPrivacy.dataExport}</h3>
+                    <p>{t.legalPrivacy.dataExportDesc}</p>
                   </div>
                 </div>
                 <ChevronRight />
@@ -911,11 +912,13 @@ function CandidateSettings() {
         </ContentGrid>
       </SettingsContainer>
 
+    </DashboardLayout>
+
       <UnderDevelopmentModal
         isOpen={isDevModalOpen}
         onClose={() => setIsDevModalOpen(false)}
       />
-    </DashboardLayout>
+    </>
   );
 }
 

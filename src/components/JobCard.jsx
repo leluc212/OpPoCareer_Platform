@@ -11,19 +11,47 @@ const translateSalary = (salaryStr, language) => {
   return salaryStr
     .replace(/triệu VND/g, 'million VND')
     .replace(/\/ca/g, '/shift')
-    .replace(/\/giờ/g, '/hour');
+    .replace(/\/giờ/g, '/hr')
+    .replace(/Thỏa thuận/g, 'Negotiable');
 };
 
 // Translate location string based on language
 const translateLocation = (locationStr, language) => {
   if (language === 'vi') return locationStr;
+  if (!locationStr) return locationStr;
   return locationStr
-    .replace(/Quận/g, 'District')
     .replace(/Quận 1/g, 'District 1')
+    .replace(/Quận 2/g, 'District 2')
     .replace(/Quận 3/g, 'District 3')
+    .replace(/Quận 4/g, 'District 4')
+    .replace(/Quận 5/g, 'District 5')
+    .replace(/Quận 6/g, 'District 6')
     .replace(/Quận 7/g, 'District 7')
+    .replace(/Quận 8/g, 'District 8')
+    .replace(/Quận 9/g, 'District 9')
+    .replace(/Quận 10/g, 'District 10')
+    .replace(/Quận 11/g, 'District 11')
+    .replace(/Quận 12/g, 'District 12')
+    .replace(/Quận/g, 'District')
+    .replace(/TP\.HCM/g, 'HCMC')
+    .replace(/TP HCM/g, 'HCMC')
+    .replace(/Hà Nội/g, 'Hanoi')
+    .replace(/Đà Nẵng/g, 'Da Nang')
+    .replace(/Cần Thơ/g, 'Can Tho')
     .replace(/Tân Bình/g, 'Tan Binh')
-    .replace(/Phú Nhuận/g, 'Phu Nhuan');
+    .replace(/Tân Phú/g, 'Tan Phu')
+    .replace(/Bình Tân/g, 'Binh Tan')
+    .replace(/Bình Thạnh/g, 'Binh Thanh')
+    .replace(/Phú Nhuận/g, 'Phu Nhuan')
+    .replace(/Gò Vấp/g, 'Go Vap')
+    .replace(/Thủ Đức/g, 'Thu Duc')
+    .replace(/Hóc Môn/g, 'Hoc Mon')
+    .replace(/Củ Chi/g, 'Cu Chi')
+    .replace(/Bình Chánh/g, 'Binh Chanh')
+    .replace(/Nhà Bè/g, 'Nha Be')
+    .replace(/Cần Giờ/g, 'Can Gio')
+    .replace(/Toàn quốc/g, 'Nationwide')
+    .replace(/Toàn/g, 'All');
 };
 
 // Translate job titles

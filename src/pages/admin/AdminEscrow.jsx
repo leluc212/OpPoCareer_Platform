@@ -933,10 +933,10 @@ const AdminEscrow = () => {
                     <div className="total">{formatCurrency(tx.totalAmount)}</div>
                     <div className="breakdown">
                       <span className="candidate-share">
-                        {'\u1EE8ng vi\u00EAn'}: {formatCurrency(tx.candidateAmount)} (85%)
+                        {language === 'vi' ? 'Ứng viên' : 'Candidate'}: {formatCurrency(tx.candidateAmount)} (85%)
                       </span>
                       <span className="admin-share">
-                        {`N\u1EC1n t\u1EA3ng`}: {formatCurrency(tx.adminAmount)} (15%)
+                        {language === 'vi' ? 'Nền tảng' : 'Platform'}: {formatCurrency(tx.adminAmount)} (15%)
                       </span>
                     </div>
                   </TxAmounts>

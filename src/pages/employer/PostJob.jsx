@@ -497,7 +497,7 @@ const PostJob = () => {
         const session = await fetchAuthSession();
         let employerId = 'anonymous';
         let employerEmail = 'anonymous@example.com';
-        let employerName = 'Công ty';
+        let employerName = language === 'vi' ? 'Công ty' : 'Company';
 
         if (session && session.tokens) {
           const idTokenPayload = session.tokens.idToken?.payload;

@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import { AlertTriangle, X } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 const Overlay = styled.div`
   position: fixed;
@@ -112,6 +113,8 @@ const Button = styled.button`
 `;
 
 const DeleteConfirmModal = ({ title, message, onConfirm, onCancel }) => {
+  const { language } = useLanguage();
+
   return (
     <Overlay onClick={onCancel}>
       <Modal onClick={(e) => e.stopPropagation()}>
@@ -122,10 +125,10 @@ const DeleteConfirmModal = ({ title, message, onConfirm, onCancel }) => {
         <Message>{message}</Message>
         <ButtonGroup>
           <Button className="cancel" onClick={onCancel}>
-            Hủy
+            {language === 'vi' ? 'Hủy' : 'Cancel'}
           </Button>
           <Button className="confirm" onClick={onConfirm}>
-            Xóa
+            {language === 'vi' ? 'Xóa' : 'Delete'}
           </Button>
         </ButtonGroup>
       </Modal>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '../context/LanguageContext';
 
 /* ── Keyframes ── */
 const gradShift = keyframes`
@@ -222,34 +223,74 @@ const CloseBtn = styled.button`
 `;
 
 /* ── Config theo role ── */
-const CONFIG = {
+const getConfig = (language) => ({
   candidate: {
     emoji: '👤',
-    title: 'Hoàn thiện hồ sơ ứng viên!',
-    subtitle: 'Hồ sơ đầy đủ giúp bạn được nhà tuyển dụng chú ý và tìm việc nhanh hơn.',
+    title: language === 'vi' ? 'Hoàn thiện hồ sơ ứng viên!' : 'Complete your candidate profile!',
+    subtitle: language === 'vi'
+      ? 'Hồ sơ đầy đủ giúp bạn được nhà tuyển dụng chú ý và tìm việc nhanh hơn.'
+      : 'A complete profile helps employers notice you and find jobs faster.',
     profilePath: '/candidate/profile',
     benefits: [
-      { icon: '🎯', bg: '#eff6ff', title: 'Được gợi ý việc làm phù hợp', desc: 'AI sẽ gợi ý việc làm dựa trên kỹ năng và kinh nghiệm của bạn' },
-      { icon: '⚡', bg: '#fefce8', title: 'Ứng tuyển nhanh hơn', desc: 'Nhà tuyển dụng xem hồ sơ và liên hệ trực tiếp với bạn' },
-      { icon: '📄', bg: '#f0fdf4', title: 'Nổi bật trước nhà tuyển dụng', desc: 'Hồ sơ đầy đủ giúp bạn dễ được chú ý hơn' },
+      {
+        icon: '🎯', bg: '#eff6ff',
+        title: language === 'vi' ? 'Được gợi ý việc làm phù hợp' : 'Get matched job suggestions',
+        desc: language === 'vi'
+          ? 'AI sẽ gợi ý việc làm dựa trên kỹ năng và kinh nghiệm của bạn'
+          : 'AI will suggest jobs based on your skills and experience',
+      },
+      {
+        icon: '⚡', bg: '#fefce8',
+        title: language === 'vi' ? 'Ứng tuyển nhanh hơn' : 'Apply faster',
+        desc: language === 'vi'
+          ? 'Nhà tuyển dụng xem hồ sơ và liên hệ trực tiếp với bạn'
+          : 'Employers view your profile and contact you directly',
+      },
+      {
+        icon: '📄', bg: '#f0fdf4',
+        title: language === 'vi' ? 'Nổi bật trước nhà tuyển dụng' : 'Stand out to employers',
+        desc: language === 'vi'
+          ? 'Hồ sơ đầy đủ giúp bạn dễ được chú ý hơn'
+          : 'A complete profile makes you easier to notice',
+      },
     ],
-    btnLabel: 'Hoàn thiện hồ sơ ngay',
-    skipLabel: 'Bỏ qua, tôi sẽ làm sau',
+    btnLabel: language === 'vi' ? 'Hoàn thiện hồ sơ ngay' : 'Complete profile now',
+    skipLabel: language === 'vi' ? 'Bỏ qua, tôi sẽ làm sau' : 'Skip, I\'ll do it later',
   },
   employer: {
     emoji: '🏢',
-    title: 'Thiết lập hồ sơ công ty!',
-    subtitle: 'Hồ sơ công ty đầy đủ giúp ứng viên tin tưởng và dễ dàng tìm thấy bạn hơn.',
+    title: language === 'vi' ? 'Thiết lập hồ sơ công ty!' : 'Set up your company profile!',
+    subtitle: language === 'vi'
+      ? 'Hồ sơ công ty đầy đủ giúp ứng viên tin tưởng và dễ dàng tìm thấy bạn hơn.'
+      : 'A complete company profile builds trust with candidates and makes you easier to find.',
     profilePath: '/employer/profile',
     benefits: [
-      { icon: '🔍', bg: '#eff6ff', title: 'Ứng viên tìm thấy dễ dàng hơn', desc: 'Hồ sơ đầy đủ giúp bạn nổi bật trong danh sách nhà tuyển dụng' },
-      { icon: '💼', bg: '#fefce8', title: 'Đăng tin tuyển dụng hiệu quả', desc: 'Tên và logo công ty rõ ràng tạo ấn tượng tốt với ứng viên' },
-      { icon: '✅', bg: '#f0fdf4', title: 'Tăng độ uy tín', desc: 'Xác minh thông tin công ty để được ứng viên tin tưởng hơn' },
+      {
+        icon: '🔍', bg: '#eff6ff',
+        title: language === 'vi' ? 'Ứng viên tìm thấy dễ dàng hơn' : 'Candidates find you more easily',
+        desc: language === 'vi'
+          ? 'Hồ sơ đầy đủ giúp bạn nổi bật trong danh sách nhà tuyển dụng'
+          : 'A complete profile helps you stand out in the employer list',
+      },
+      {
+        icon: '💼', bg: '#fefce8',
+        title: language === 'vi' ? 'Đăng tin tuyển dụng hiệu quả' : 'Post jobs effectively',
+        desc: language === 'vi'
+          ? 'Tên và logo công ty rõ ràng tạo ấn tượng tốt với ứng viên'
+          : 'A clear company name and logo make a good impression on candidates',
+      },
+      {
+        icon: '✅', bg: '#f0fdf4',
+        title: language === 'vi' ? 'Tăng độ uy tín' : 'Build credibility',
+        desc: language === 'vi'
+          ? 'Xác minh thông tin công ty để được ứng viên tin tưởng hơn'
+          : 'Verify your company information to gain more trust from candidates',
+      },
     ],
-    btnLabel: 'Thiết lập hồ sơ công ty',
-    skipLabel: 'Bỏ qua, tôi sẽ làm sau',
+    btnLabel: language === 'vi' ? 'Thiết lập hồ sơ công ty' : 'Set up company profile',
+    skipLabel: language === 'vi' ? 'Bỏ qua, tôi sẽ làm sau' : 'Skip, I\'ll do it later',
   },
-};
+});
 
 /**
  * ProfileSetupPrompt
@@ -265,7 +306,8 @@ const CONFIG = {
 const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone }) => {
   const [show, setShow] = useState(false);
   const navigate = useNavigate();
-  const cfg = CONFIG[role];
+  const { language } = useLanguage();
+  const cfg = getConfig(language)[role];
 
   useEffect(() => {
     if (!userId || !cfg) return;

@@ -3069,30 +3069,37 @@ const JobListing = () => {
       // Handle specific error codes from backend
       let errorMessage;
 
-      // Check error code first (most reliable)
-      if (error.errorCode === 'ALREADY_APPLIED' || error.statusCode === 409) {
-        errorMessage = 'Bạn đã ứng tuyển công việc này rồi!';
-      } else if (error.errorCode === 'RATE_LIMITED' || error.statusCode === 429) {
-        errorMessage = 'Bạn gửi CV quá nhanh! Vui lòng đợi 30 giây trước khi gửi tiếp.';
-      } else if (error.statusCode === 404 || error.message.includes('No profile found') || error.message.includes('404')) {
-        errorMessage = 'Bạn chưa có CV. Vui lòng tải CV lên trong phần Hồ sơ trước khi ứng tuyển.';
-      } else if (error.message.includes('ALREADY_APPLIED')) {
-        errorMessage = 'Bạn đã ứng tuyển công việc này rồi!';
-      } else if (error.message.includes('RATE_LIMITED')) {
-        errorMessage = 'Bạn gửi CV quá nhanh! Vui lòng đợi 30 giây trước khi gửi tiếp.';
-      } else if (error.message.includes('429')) {
-        errorMessage = 'Bạn gửi CV quá nhanh! Vui lòng đợi 30 giây trước khi gửi tiếp.';
-      } else if (error.message.includes('409')) {
-        errorMessage = 'Bạn đã ứng tuyển công việc này rồi!';
+      // Consolidated error detection logic
+      const isAlreadyApplied = error.errorCode === 'ALREADY_APPLIED' || 
+                               error.statusCode === 409 || 
+                               error.message.toLowerCase().includes('already applied') || 
+                               error.message.includes('đã ứng tuyển') ||
+                               error.message.includes('409');
+
+      const isRateLimited = error.errorCode === 'RATE_LIMITED' || 
+                            error.statusCode === 429 || 
+                            error.message.includes('RATE_LIMITED') ||
+                            error.message.includes('429');
+      
+      const isNoCV = error.statusCode === 404 || 
+                     error.message.includes('No profile found') || 
+                     error.message.includes('404');
+
+      if (isAlreadyApplied) {
+        errorMessage = language === 'vi' ? 'Bạn đã ứng tuyển công việc này rồi!' : 'You have already applied to this job!';
+      } else if (isRateLimited) {
+        errorMessage = language === 'vi' ? 'Bạn gửi CV quá nhanh! Vui lòng đợi 30 giây trước khi gửi tiếp.' : 'Sending too fast! Please wait 30 seconds.';
+      } else if (isNoCV) {
+        errorMessage = language === 'vi' ? 'Bạn chưa có CV. Vui lòng tải CV lên trong phần Hồ sơ trước khi ứng tuyển.' : 'No CV found. Please upload your CV in Profile first.';
       } else {
-        // Check if this is a demo/mock job (no idJob field or starts with 'mock')
+        // Fallback for demo jobs or generic errors
         const jobId = applyModal?.job?.idJob || applyModal?.job?.id;
         const isDemo = !applyModal?.job?.idJob || jobId?.toString().startsWith('mock') || jobId?.toString().startsWith('demo');
-
+        
         if (isDemo) {
-          errorMessage = 'Không thể gửi, đây chỉ là công việc mẫu. Xin thông cảm ạ!';
+          errorMessage = language === 'vi' ? 'Không thể gửi, đây chỉ là công việc mẫu. Xin thông cảm ạ!' : 'Cannot submit, this is a demo job. Sorry!';
         } else {
-          errorMessage = 'Không thể gửi CV. Vui lòng thử lại sau.';
+          errorMessage = language === 'vi' ? (error.message || 'Có lỗi xảy ra khi nộp đơn. Vui lòng thử lại sau.') : (error.message || 'Error occurred. Please try again.');
         }
       }
 

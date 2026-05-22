@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -12,6 +12,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import candidateProfileService from '../../services/candidateProfileService';
 import jobPostService from '../../services/jobPostService';
+import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import {
   Briefcase,
@@ -1353,83 +1354,146 @@ const CandidateDashboard = () => {
   }, []);
 
   // Fetch jobs and applications
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoadingData(true);
-        
-        // Fetch all active jobs
-        const jobs = await jobPostService.getAllActiveJobs();
-        setAllActiveJobs(jobs);
-        
-        // For recommendations, take the latest 5
-        const recommended = [...jobs].sort((a, b) => 
-          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-        ).slice(0, 5);
-        
-        setRealRecommendedJobs(recommended.map(job => ({
-          id: job.idJob || job.id,
-          title: job.title,
-          company: job.employerName || 'Company',
-          location: job.location,
-          type: job.jobType === 'full-time' ? 'Toàn thời gian' : 'Bán thời gian',
-          salary: formatSalary(job.salary),
+  const fetchData = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) setIsLoadingData(true);
+      
+      // Fetch all active jobs (Standard + Quick)
+      const [standardJobs, quickJobs] = await Promise.all([
+        jobPostService.getAllActiveJobs().catch(() => []),
+        quickJobService.getAllActiveQuickJobs().catch(() => [])
+      ]);
+
+      // Merge and transform for recommendations
+      const allJobs = [...standardJobs, ...quickJobs];
+      setAllActiveJobs(allJobs);
+      
+      // For recommendations
+      const recommended = [...allJobs].sort((a, b) => 
+        new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      ).slice(0, 5);
+      
+      setRealRecommendedJobs(recommended.map(job => {
+        const isQuick = job.jobType === 'quick' || !!(job.jobID && !job.idJob);
+        return {
+          id: job.idJob || job.jobID || job.id,
+          title: job.title || 'Untitled',
+          company: job.employerName || job.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
+          location: job.location || '',
+          type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (job.jobType === 'full-time' ? 'Toàn thời gian' : 'Bán thời gian'),
+          salary: formatSalary(job.salary || job.totalSalary),
           postedAt: formatRelativeTime(job.createdAt),
           tags: typeof job.tags === 'string' ? job.tags.split(',').map(t => t.trim()) : (job.tags || [])
-        })));
+        };
+      }));
 
-        // Fetch user's applications
-        const apps = await applicationService.getMyCandidateApplications();
-        
-        const mappedApps = apps
-          .map(app => {
-            const job = jobs.find(j => (j.idJob || j.id) === app.jobId);
-            
-            return {
-              id: app.applicationId || app.id,
-              jobId: app.jobId,
-              title: job?.title || app.jobTitle || '---',
-              company: job?.employerName || app.employerName || '---',
-              appliedDate: formatRelativeTime(app.appliedAt || app.createdAt),
-              status: mapStatus(app.status),
-              urgent: job?.isUrgent || app.jobType === 'quick' || false
-            };
-          })
-          .filter(app => app.id && app.company !== '---')
-          .slice(0, 5);
-          
-        setRealApplications(mappedApps);
-
-        // Find current job (latest accepted application)
-        const acceptedApp = apps
-          .filter(app => app.status === 'accepted')
-          .sort((a, b) => new Date(b.appliedAt || b.createdAt || 0) - new Date(a.appliedAt || a.createdAt || 0))[0];
-
-        if (acceptedApp) {
-          const job = jobs.find(j => (j.idJob || j.id) === acceptedApp.jobId);
-          if (job) {
-            setCurrentJob({
-              jobId: job.idJob || job.id,
-              title: job.title,
-              company: job.employerName || '---',
-              location: job.location,
-              salary: formatSalary(job.salary),
-              workHours: job.workHours || '---',
-              startDate: new Date(acceptedApp.appliedAt || acceptedApp.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US'),
-              status: 'active'
-            });
+      // Fetch user's applications
+      const apps = await applicationService.getMyCandidateApplications();
+      
+      // Find IDs of jobs not in our active lists
+      const missingJobIds = [...new Set(apps.map(app => app.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
+      
+      // Fetch missing jobs individually to ensure "real data" even for inactive jobs
+      let additionalJobs = [];
+      if (missingJobIds.length > 0) {
+        console.log('🔍 Fetching missing jobs for applications:', missingJobIds);
+        const jobResults = await Promise.all(missingJobIds.map(async (id) => {
+          try {
+            // Try standard job service first, then quick job service
+            const standard = await jobPostService.getJobById(id);
+            if (standard) return standard;
+            return await quickJobService.getQuickJob(id);
+          } catch (e) {
+            return null;
           }
-        }
-
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setIsLoadingData(false);
+        }));
+        additionalJobs = jobResults.filter(Boolean);
       }
-    };
 
-    fetchData();
+      const finalAllJobs = [...allJobs, ...additionalJobs];
+      
+      const mappedApps = apps
+        .sort((a, b) => new Date(b.appliedAt || b.createdAt || 0) - new Date(a.appliedAt || a.createdAt || 0))
+        .map(app => {
+          const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === app.jobId);
+          
+          return {
+            id: app.applicationId || app.id,
+            jobId: app.jobId,
+            title: job?.title || app.jobTitle || '---',
+            company: job?.employerName || job?.companyName || app.employerName || '---',
+            appliedDate: formatRelativeTime(app.appliedAt || app.createdAt),
+            status: mapStatus(app.status),
+            urgent: job?.isUrgent || app.jobType === 'quick' || !!job?.jobID || false,
+            isValid: !!job // Flag if we found the actual job record
+          };
+        })
+        // Only show applications where we have a valid, resolved job record
+        // and avoid "Unknown" placeholders
+        .filter(app => 
+          app.id && 
+          app.isValid && 
+          app.title !== '---' && 
+          app.company !== '---' &&
+          !app.title.includes('Unknown') &&
+          !app.company.includes('Unknown') &&
+          !app.company.includes('không xác định')
+        )
+        .slice(0, 5);
+        
+      setRealApplications(mappedApps);
+
+      // Find current job (latest accepted application)
+      const acceptedApp = apps
+        .filter(app => app.status === 'accepted')
+        .sort((a, b) => new Date(b.appliedAt || b.createdAt || 0) - new Date(a.appliedAt || a.createdAt || 0))[0];
+
+      if (acceptedApp) {
+        const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === acceptedApp.jobId);
+        
+        // Only set current job if it's a valid job with real details
+        const isJobValid = job && 
+                          job.title && 
+                          !job.title.includes('Unknown') && 
+                          job.employerName && 
+                          !job.employerName.includes('Unknown') &&
+                          !job.employerName.includes('không xác định');
+
+        if (isJobValid) {
+          setCurrentJob({
+            jobId: job.idJob || job.id || job.jobID,
+            title: job.title,
+            company: job.employerName || job.companyName || '---',
+            location: job.location || '',
+            salary: formatSalary(job.salary || job.totalSalary),
+            workHours: job.workHours || '---',
+            startDate: new Date(acceptedApp.appliedAt || acceptedApp.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US'),
+            status: 'active'
+          });
+        } else {
+          setCurrentJob(null);
+        }
+      } else {
+        setCurrentJob(null);
+      }
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      if (showLoading) setIsLoadingData(false);
+    }
   }, [language]);
+
+  useEffect(() => {
+    fetchData();
+    
+    // Implement real-time feel with periodic refresh (every 30 seconds)
+    const interval = setInterval(() => {
+      fetchData(false); // Background refresh
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   // Helper: Format salary
   const formatSalary = (salary) => {
@@ -1781,7 +1845,7 @@ const CandidateDashboard = () => {
           >
             <CurrentJobHeader>
               <Briefcase />
-              <h2>{language === 'vi' ? 'Công Việc Tuyển Gấp Hiện Tại' : 'Current Shift Job'}</h2>
+              <h2>{language === 'vi' ? 'Công Việc Hiện Tại' : 'Current Job Details'}</h2>
             </CurrentJobHeader>
             {currentJob ? (
               <CurrentJobCard
@@ -2100,7 +2164,7 @@ const CandidateDashboard = () => {
                     >
                       <ApplicationHeader>
                         <ApplicationInfo>
-                          <h4><DynamicTranslate text={app.title} showIndicator={false} /> {app.urgent && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: '#FEE2E2', color: '#EF4444', borderRadius: '20px', fontSize: '10px', fontWeight: 700, marginLeft: '6px', border: '1px solid #FECACA' }}>● {language === 'vi' ? 'Tuyển Gấp' : 'Urgent'}</span>}</h4>
+                          <h4><DynamicTranslate text={app.title} showIndicator={false} /></h4>
                           <p><DynamicTranslate text={app.company} showIndicator={false} /></p>
                         </ApplicationInfo>
                         <StatusBadge status={app.status} />

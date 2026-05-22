@@ -13,6 +13,7 @@ import { initializeMultipleSampleCVs } from '../../utils/sampleCVGenerator';
 import jobPostService from '../../services/jobPostService';
 import applicationService from '../../services/applicationService';
 import CVPreviewModal from '../../components/CVPreviewModal';
+import DynamicTranslate from '../../components/DynamicTranslate';
 
 /**
  * Format salary from DynamoDB — prevents double-appending VNĐ/h.
@@ -1759,7 +1760,7 @@ const ApplicationRow = React.memo(({
             <MarkedBadge><Star />{language === 'vi' ? 'Đã đánh dấu' : 'Marked'}</MarkedBadge>
           )}
         </div>
-        <div className="position">{app.job}</div>
+        <div className="position"><DynamicTranslate text={app.job} showIndicator={false} /></div>
       </CandidateInfo>
 
       <MetaChip><Clock />{app.applied}</MetaChip>
@@ -2643,7 +2644,7 @@ const Applications = () => {
                       <JobPostHeader>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                            <JobPostTitle style={{ margin: 0, flex: 1 }}>{post.title}</JobPostTitle>
+                            <JobPostTitle><DynamicTranslate text={post.title} showIndicator={false} /></JobPostTitle>
                             <JobStatusBadge $status={post.status}>
                               {post.status === 'active'
                                 ? (language === 'vi' ? 'Đang tuyển' : 'Active')
@@ -2652,7 +2653,7 @@ const Applications = () => {
                           </div>
                           <JobPostMeta>
                             <div className="meta-item">
-                              <MapPin />{post.location}
+                              <MapPin /> <DynamicTranslate text={post.location} showIndicator={false} />
                             </div>
                             <div className="meta-item">
                               <Wallet size={15} style={{ strokeWidth: 1.5 }} />{post.salary}

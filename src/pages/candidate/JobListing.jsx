@@ -12,6 +12,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import StatusBadge from '../../components/StatusBadge';
 import { useLanguage } from '../../context/LanguageContext';
+import DynamicTranslate from '../../components/DynamicTranslate';
 import candidateProfileService from '../../services/candidateProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
@@ -966,14 +967,15 @@ const BoostTag = styled.div`
 `;
 
 const JobCardWrapper = styled(motion.div)`
-  background: ${props => props.theme.colors.bgLight};
+  background: ${props => props.$highlighted ? props.theme.colors.primary + '08' : props.theme.colors.bgLight};
   border-radius: ${props => props.theme.borderRadius.lg};
-  border: 1px solid ${props => props.theme.colors.border};
+  border: 1px solid ${props => props.$highlighted ? props.theme.colors.primary : props.theme.colors.border};
   padding: 14px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  box-shadow: ${props => props.$highlighted ? `0 0 20px ${props.theme.colors.primary}30` : 'none'};
   
   &::before {
     content: '';
@@ -983,7 +985,7 @@ const JobCardWrapper = styled(motion.div)`
     width: 4px;
     height: 100%;
     background: linear-gradient(135deg, ${props => props.theme.colors.primary}, ${props => props.theme.colors.secondary});
-    opacity: 0;
+    opacity: ${props => props.$highlighted ? 1 : 0};
     transition: opacity 0.3s ease;
   }
   
@@ -996,7 +998,18 @@ const JobCardWrapper = styled(motion.div)`
       opacity: 1;
     }
   }
+
+  /* Pulse animation for highlight */
+  ${props => props.$highlighted && `
+    animation: highlightPulse 2s ease-in-out;
+    background: ${props.theme.colors.primary}15;
+    border-color: ${props.theme.colors.primary};
+    box-shadow: 0 0 0 4px ${props.theme.colors.primary}20;
+    z-index: 10;
+  `}
 `;
+
+
 
 const JobCardHeader = styled.div`
   display: flex;
@@ -1351,12 +1364,17 @@ const translateTimePosted = (timeStr, language) => {
 // Format ISO date to readable format (for DynamoDB jobs)
 const formatPostedDate = (isoDate, language) => {
   try {
+    if (!isoDate) return '---';
     // Parse ISO date - DynamoDB stores in UTC
     const date = new Date(isoDate);
     const now = new Date();
 
     // Calculate difference in milliseconds
-    const diffMs = now - date;
+    let diffMs = now - date;
+    
+    // Handle small clock drifts
+    if (diffMs < 0) diffMs = 0;
+    
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffHours / 24);
@@ -1375,15 +1393,10 @@ const formatPostedDate = (isoDate, language) => {
       return language === 'vi' ? `${weeks} tuần trước` : `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
     } else {
       // Format as date in local timezone
-      return date.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        timeZone: 'Asia/Ho_Chi_Minh'
-      });
+      return date.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US');
     }
-  } catch (e) {
-    console.error('Error formatting date:', e, isoDate);
+  } catch (error) {
+    console.error('Error formatting date:', error);
     return isoDate;
   }
 };
@@ -2693,6 +2706,7 @@ const JobListing = () => {
   const [errorModal, setErrorModal] = useState({ show: false, message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmitTime, setLastSubmitTime] = useState(null);
+  const [highlightedJobId, setHighlightedJobId] = useState(null);
 
   const banners = [
     { src: "/OpPoReview/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
@@ -2763,6 +2777,53 @@ const JobListing = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  // Handle selected job from Dashboard
+  useEffect(() => {
+    if (allJobs.length > 0 && location.state?.selectedJobId) {
+      const jobId = location.state.selectedJobId;
+      console.log('🎯 Dashboard selectedJobId:', jobId);
+
+      const job = allJobs.find(j =>
+        j.id === jobId ||
+        j.idJob === jobId ||
+        j.id === `dynamo-${jobId}` ||
+        j.id === `quick-${jobId}`
+      );
+
+      if (job) {
+        console.log('✅ Found job for selectedJobId:', job.title);
+        // Set category to match job's category so it shows up in the list (if not saved)
+        if (!showSavedJobsOnly) {
+          setJobCategory(job.category || 'standard');
+        }
+
+        // Highlight the job card
+        setHighlightedJobId(job.id);
+
+        // Clear highlight after 5 seconds
+        setTimeout(() => {
+          setHighlightedJobId(null);
+        }, 5000);
+
+        // Scroll to the specific job card
+        setTimeout(() => {
+          const element = document.getElementById(`job-card-${job.id}`);
+          if (element) {
+            element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          } else {
+            scrollToResults();
+          }
+        }, 600);
+      }
+
+      // Clear state so re-visiting doesn't re-open the modal
+      window.history.replaceState({ ...location.state, selectedJobId: undefined }, document.title);
+    }
+  }, [allJobs, location.state, showSavedJobsOnly]);
 
   // Scroll to results function
   const scrollToResults = () => {
@@ -2951,21 +3012,46 @@ const JobListing = () => {
       }
 
       // Submit application
-      const applicationService = (await import('../../services/applicationService')).default;
+      const applicationService = await import('../../services/applicationService');
+      console.log('🔍 [Debug] Application Modal Job:', applyModal.job);
+      console.log('🔍 [Debug] Candidate CV List:', candidateCVList);
+      console.log('🔍 [Debug] Selected CV ID:', selectedCV);
+      console.log('🔍 [Debug] Selected CV Data:', selectedCVData);
+
       const jobId = applyModal.job.idJob || applyModal.job.id;
+      console.log('🔍 [Debug] Calculated Job ID:', jobId);
 
       if (!jobId) {
         setIsSubmitting(false);
         setErrorModal({
           show: true,
-          message: 'Không tìm thấy ID công việc'
+          message: language === 'vi' ? 'Không tìm thấy ID công việc' : 'Job ID not found'
         });
         return;
       }
 
+      // Important: Support both cvUrl and cvS3Key (fallback if URL is missing)
+      const finalCVUrl = selectedCVData.cvUrl || selectedCVData.cvS3Key;
+
+      if (!selectedCVData || !finalCVUrl) {
+         console.error('❌ [Debug] CV URL and S3 Key both missing!', selectedCVData);
+         setIsSubmitting(false);
+         setErrorModal({
+           show: true,
+           message: language === 'vi' ? 'Dữ liệu CV không hợp lệ. Vui lòng chọn lại CV.' : 'Invalid CV data. Please select your CV again.'
+         });
+         return;
+      }
+
+      console.log('📤 [Debug] Calling submitApplication with:', {
+        jobId,
+        cvUrl: finalCVUrl,
+        cvFileName: selectedCVData.cvFileName || 'CV.pdf'
+      });
+
       await applicationService.submitApplication(
         jobId,
-        selectedCVData.cvUrl,
+        finalCVUrl,
         selectedCVData.cvFileName || 'CV.pdf'
       );
 
@@ -3570,14 +3656,14 @@ const JobListing = () => {
                     <input type="checkbox" id="25k-30k"
                       checked={selectedSalaryRanges.includes('25k-30k')}
                       onChange={() => toggleSalaryRange('25k-30k')} />
-                    <span>25.000 – 30.000đ/giờ</span>
+                    <span>{language === 'vi' ? '25.000 – 30.000đ/giờ' : '25k – 30k/hr'}</span>
                     <small>{filterCounts['25to30k']}</small>
                   </FilterOption>
                   <FilterOption>
                     <input type="checkbox" id="30k-35k"
                       checked={selectedSalaryRanges.includes('30k-35k')}
                       onChange={() => toggleSalaryRange('30k-35k')} />
-                    <span>30.000 – 35.000đ/giờ</span>
+                    <span>{language === 'vi' ? '30.000 – 35.000đ/giờ' : '30k – 35k/hr'}</span>
                     <small>{filterCounts['30to35k']}</small>
                   </FilterOption>
                   <FilterOption>
@@ -3680,6 +3766,7 @@ const JobListing = () => {
                     delay={index * 0.05}
                     showDistance={jobCategory === 'shift' && showNearbyJobs}
                     language={language}
+                    isHighlighted={highlightedJobId === job.id}
                   />
                 ))
               ) : isLoadingDynamoJobs ? (
@@ -3807,23 +3894,23 @@ const JobListing = () => {
 
             <p className="apply-desc">
               {language === 'vi'
-                ? <>Bạn muốn gửi CV ứng tuyển vào vị trí <strong>{translateJobTitle(applyModal.job.title, language)}</strong> tại <strong>{applyModal.job.company}</strong>?</>
-                : <>Send your CV for <strong>{translateJobTitle(applyModal.job.title, language)}</strong> at <strong>{applyModal.job.company}</strong>?</>
+                ? <>Bạn muốn gửi CV ứng tuyển vào vị trí <strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /></strong> tại <strong><DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>?</>
+                : <>Send your CV for <strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /></strong> at <strong><DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>?</>
               }
             </p>
 
             <div className="apply-info-card">
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Vị trí' : 'Position'}:</span>
-                <span className="info-value">{translateJobTitle(applyModal.job.title, language)}</span>
+                <span className="info-value"><DynamicTranslate text={applyModal.job.title} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Công ty' : 'Company'}:</span>
-                <span className="info-value">{applyModal.job.company}</span>
+                <span className="info-value"><DynamicTranslate text={applyModal.job.company} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Địa điểm' : 'Location'}:</span>
-                <span className="info-value">{translateLocation(applyModal.job.location, language)}</span>
+                <span className="info-value"><DynamicTranslate text={applyModal.job.location} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Mức lương trung bình' : 'Average Salary'}:</span>
@@ -3916,15 +4003,15 @@ const JobListing = () => {
         {detailModal && (
           <ApplyModalWrap onClick={e => e.stopPropagation()}>
             <div className="apply-emoji" style={{ fontSize: '40px' }}>💼</div>
-            <h3>{translateJobTitle(detailModal.job.title, language)}</h3>
+            <h3><DynamicTranslate text={detailModal.job.title} /></h3>
             <p className="apply-desc" style={{ marginBottom: '10px' }}>
-              <strong>{detailModal.job.company}</strong>
+              <strong><DynamicTranslate text={detailModal.job.company} showIndicator={false} /></strong>
             </p>
 
             <div className="apply-info-card" style={{ marginBottom: '15px' }}>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Địa điểm' : 'Location'}:</span>
-                <span className="info-value">{detailModal.job.location}</span>
+                <span className="info-value"><DynamicTranslate text={detailModal.job.location} /></span>
               </div>
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Mức lương trung bình' : 'Average Salary'}:</span>
@@ -3978,7 +4065,7 @@ const JobListing = () => {
             <div className="apply-emoji" style={{ fontSize: '40px' }}>📋</div>
             <h3>{language === 'vi' ? 'Mô tả công việc' : 'Job Description'}</h3>
             <p className="apply-desc" style={{ marginBottom: '10px' }}>
-              <strong>{translateJobTitle(jobDescriptionModal.job.title, language)}</strong> - {jobDescriptionModal.job.company}
+              <strong><DynamicTranslate text={jobDescriptionModal.job.title} showIndicator={false} /></strong> - <DynamicTranslate text={jobDescriptionModal.job.company} showIndicator={false} />
             </p>
 
             <div style={{ marginTop: '16px', padding: '24px', background: '#f3f4f6', borderRadius: '12px', border: '1px solid #e5e7eb', height: '300px', width: '100%', overflowY: 'auto' }}>
@@ -3989,7 +4076,7 @@ const JobListing = () => {
                     <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px' }}>
                       {language === 'vi' ? 'MÔ TẢ CÔNG VIỆC' : 'JOB DESCRIPTION'}
                     </div>
-                    <div style={{ color: '#4b5563', lineHeight: '1.8' }}>{jobDescriptionModal.job.description}</div>
+                    <DynamicTranslate text={jobDescriptionModal.job.description} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
 
@@ -3999,7 +4086,7 @@ const JobListing = () => {
                     <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px' }}>
                       {language === 'vi' ? 'TRÁCH NHIỆM' : 'RESPONSIBILITIES'}
                     </div>
-                    <div style={{ color: '#4b5563', lineHeight: '1.8' }}>{jobDescriptionModal.job.responsibilities}</div>
+                    <DynamicTranslate text={jobDescriptionModal.job.responsibilities} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
 
@@ -4009,7 +4096,7 @@ const JobListing = () => {
                     <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px' }}>
                       {language === 'vi' ? 'YÊU CẦU' : 'REQUIREMENTS'}
                     </div>
-                    <div style={{ color: '#4b5563', lineHeight: '1.8' }}>{jobDescriptionModal.job.requirements}</div>
+                    <DynamicTranslate text={jobDescriptionModal.job.requirements} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
 
@@ -4244,6 +4331,24 @@ const GlobalStyles = `
       transform: translateY(0) scale(1);
     }
   }
+
+  @keyframes highlightPulse {
+    0% { 
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+      transform: scale(1);
+    }
+    30% { 
+      box-shadow: 0 0 0 20px rgba(59, 130, 246, 0);
+      transform: scale(1.02);
+    }
+    50% { 
+      transform: scale(1.02);
+    }
+    100% { 
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+      transform: scale(1);
+    }
+  }
 `;
 
 // Inject global styles
@@ -4254,13 +4359,15 @@ if (typeof document !== 'undefined') {
 }
 
 // Job Card Component
-const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language }) => {
+const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language, isHighlighted }) => {
   const getCompanyInitial = (company) => {
     return company.charAt(0).toUpperCase();
   };
 
   return (
     <JobCardWrapper
+      id={`job-card-${job.id}`}
+      $highlighted={isHighlighted}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
@@ -4273,16 +4380,16 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
         </CompanyLogo>
         <JobInfo>
           <JobTitle>
-            {translateJobTitle(job.title, language)}
+            <DynamicTranslate text={job.title} showIndicator={false} />
           </JobTitle>
           <CompanyName>
             <Building2 />
-            {job.company}
+            <DynamicTranslate text={job.company} showIndicator={false} />
           </CompanyName>
           <JobMeta>
             <MetaItem>
               <MapPin />
-              {translateLocation(job.location, language)}
+              <DynamicTranslate text={job.location} showIndicator={false} />
             </MetaItem>
             {showDistance && job.distance !== undefined && (
               <MetaItem style={{ color: '#10b981', fontWeight: '600' }}>
@@ -4312,7 +4419,7 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
       <JobCardBody>
         <JobTags>
           {job.tags.filter(tag => !tag.match(/^Ca\s+(sáng|chiều|tối|đêm|trưa)/i)).map((tag, idx) => (
-            <Tag key={idx}>{translateTag(tag, language)}</Tag>
+            <Tag key={idx}><DynamicTranslate text={tag} showIndicator={false} /></Tag>
           ))}
         </JobTags>
 

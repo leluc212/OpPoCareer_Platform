@@ -25,6 +25,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-jobs/, ''),
         secure: true
+      },
+      '/api-cv': {
+        target: 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-cv/, ''),
+        secure: true
       }
     }
   },

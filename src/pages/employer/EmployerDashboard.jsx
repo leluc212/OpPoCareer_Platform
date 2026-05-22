@@ -12,6 +12,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCompanyProfileCompletion } from '../../hooks/useCompanyProfileCompletion';
 import employerProfileService from '../../services/employerProfileService';
+import DynamicTranslate from '../../components/DynamicTranslate';
 import {
   Briefcase,
   Users,
@@ -672,7 +673,7 @@ const EmployerDashboard = () => {
                 <ApplicationHeader>
                   <CandidateInfo>
                     <h4>{app.candidate}</h4>
-                    <p>{app.job}</p>
+                    <p><DynamicTranslate text={app.job} showIndicator={false} /></p>
                   </CandidateInfo>
                   <ViewProfileButton onClick={() => navigate('/employer/standard-jobs', { state: { candidateId: app.id } })}>
                     <Eye />

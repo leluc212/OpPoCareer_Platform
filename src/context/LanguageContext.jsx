@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { translations } from '../locales/translations';
+import { translationService } from '../services/translationService';
 
 const LanguageContext = createContext();
 
@@ -26,6 +27,13 @@ export const LanguageProvider = ({ children }) => {
     setLanguage(lang);
   };
 
+  const translateText = useCallback(async (text, forceSourceLang = 'vi') => {
+    if (language === forceSourceLang) {
+      return { translatedText: text, type: 'original' };
+    }
+    return await translationService.translate(text, language, forceSourceLang);
+  }, [language]);
+
   const t = translations[language] || translations.vi;
 
   const value = {
@@ -33,7 +41,8 @@ export const LanguageProvider = ({ children }) => {
     changeLanguage,
     isVietnamese: language === 'vi',
     isEnglish: language === 'en',
-    t, // Add translations
+    t,
+    translateText, // Function for dynamic content
   };
 
   return (

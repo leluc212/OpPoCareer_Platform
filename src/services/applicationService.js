@@ -16,7 +16,7 @@ async function getAuthHeaders() {
     
     return {
       'Content-Type': 'application/json',
-      'Authorization': idToken
+      'Authorization': `Bearer ${idToken}`
     };
   } catch (error) {
     console.error('Error getting auth headers:', error);

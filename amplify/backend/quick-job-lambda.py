@@ -191,8 +191,8 @@ def create_quick_job(body_str, user_id, headers):
             'applicants': body.get('applicants', 0),
             'views': body.get('views', 0),
             'workDate': body.get('workDate', ''),  # Work date
-            'createdAt': body.get('createdAt', datetime.utcnow().isoformat()),
-            'updatedAt': body.get('updatedAt', datetime.utcnow().isoformat())
+            'createdAt': body.get('createdAt', datetime.utcnow().isoformat() + 'Z'),
+            'updatedAt': body.get('updatedAt', datetime.utcnow().isoformat() + 'Z')
         }
         
         # Put item in DynamoDB
@@ -371,7 +371,7 @@ def update_quick_job(body_str, job_id, user_id, headers):
         
         # Build update expression
         update_expr = "SET updatedAt = :updatedAt"
-        expr_values = {':updatedAt': datetime.utcnow().isoformat()}
+        expr_values = {':updatedAt': datetime.utcnow().isoformat() + 'Z'}
         expr_names = {}
         
         # Add fields to update
@@ -470,7 +470,7 @@ def delete_quick_job(job_id, user_id, headers):
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':status': 'deleted',
-                ':updatedAt': datetime.utcnow().isoformat()
+                ':updatedAt': datetime.utcnow().isoformat() + 'Z'
             }
         )
         

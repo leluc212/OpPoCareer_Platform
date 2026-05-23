@@ -719,6 +719,23 @@ const ActivityIcon = styled.div`
   }
 `;
 
+const RecentList = styled.div`
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: ${props => props.theme.colors.border};
+    border-radius: 8px;
+  }
+`;
+
 const ActivityContent = styled.div`
   flex: 1;
   
@@ -1439,7 +1456,7 @@ const CandidateDashboard = () => {
           !app.company.includes('Unknown') &&
           !app.company.includes('không xác định')
         )
-        .slice(0, 5);
+        .slice(0, 20);
         
       setRealApplications(mappedApps);
 
@@ -2153,34 +2170,36 @@ const CandidateDashboard = () => {
                     {language === 'vi' ? 'Đang tải dữ liệu...' : 'Loading data...'}
                   </div>
                 ) : realApplications.length > 0 ? (
-                  realApplications.map((app, index) => (
-                    <ApplicationCard
-                      key={app.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 + index * 0.08 }}
-                      whileHover={{ scale: 1.01 }}
-                      onClick={() => navigate('/candidate/jobs', { state: { selectedJobId: app.jobId } })}
-                    >
-                      <ApplicationHeader>
-                        <ApplicationInfo>
-                          <h4><DynamicTranslate text={app.title} showIndicator={false} /></h4>
-                          <p><DynamicTranslate text={app.company} showIndicator={false} /></p>
-                        </ApplicationInfo>
-                        <StatusBadge status={app.status} />
-                      </ApplicationHeader>
-                      <ApplicationMeta>
-                        <span>
-                          <Clock />
-                          {translatePostedAt(app.appliedDate)}
-                        </span>
-                        <span>
-                          <Eye />
-                          {language === 'vi' ? 'Xem chi tiết' : 'View details'}
-                        </span>
-                      </ApplicationMeta>
-                    </ApplicationCard>
-                  ))
+                  <RecentList>
+                    {realApplications.map((app, index) => (
+                      <ApplicationCard
+                        key={app.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 + index * 0.08 }}
+                        whileHover={{ scale: 1.01 }}
+                        onClick={() => navigate('/candidate/jobs', { state: { selectedJobId: app.jobId } })}
+                      >
+                        <ApplicationHeader>
+                          <ApplicationInfo>
+                            <h4><DynamicTranslate text={app.title} showIndicator={false} /></h4>
+                            <p><DynamicTranslate text={app.company} showIndicator={false} /></p>
+                          </ApplicationInfo>
+                          <StatusBadge status={app.status} />
+                        </ApplicationHeader>
+                        <ApplicationMeta>
+                          <span>
+                            <Clock />
+                            {translatePostedAt(app.appliedDate)}
+                          </span>
+                          <span>
+                            <Eye />
+                            {language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                          </span>
+                        </ApplicationMeta>
+                      </ApplicationCard>
+                    ))}
+                  </RecentList>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6B7280', fontSize: '14px', border: '1px dashed #E5E7EB', borderRadius: '12px' }}>
                     {language === 'vi' ? 'Chưa có đơn ứng tuyển nào.' : 'No applications yet.'}

@@ -494,7 +494,17 @@ const Navbar = ({ showSearch = true }) => {
 
   useEffect(() => {
     const loadNotifications = async () => {
-      if (!user) {
+      let effectiveUser = user;
+      if (!effectiveUser) {
+        try {
+          const storedUser = localStorage.getItem('user');
+          effectiveUser = storedUser ? JSON.parse(storedUser) : null;
+        } catch (error) {
+          console.error('❌ [Navbar] Failed to parse stored user:', error);
+        }
+      }
+
+      if (!effectiveUser) {
         console.log('⚠️ No user, skipping notification load');
         return;
       }
@@ -503,13 +513,13 @@ const Navbar = ({ showSearch = true }) => {
         // CRITICAL FIX: Ensure we use UUID from Cognito, not email
         let userId;
         
-        if (user.role === 'admin') {
+        if (effectiveUser.role === 'admin') {
           userId = 'admin';
         } else {
-          userId = user.userId || user.id;
+          userId = effectiveUser.userId || effectiveUser.id;
           
           // If userId looks like an email, fetch the real UUID from Cognito
-          if (userId && userId.includes('@')) {
+          if (!userId || userId.includes('@')) {
             console.warn('⚠️ [Navbar] userId is email, fetching UUID from Cognito...');
             try {
               const { fetchAuthSession } = await import('aws-amplify/auth');
@@ -520,7 +530,7 @@ const Navbar = ({ showSearch = true }) => {
                 userId = uuidFromToken;
                 
                 // Update user object in localStorage
-                const updatedUser = { ...user, userId: uuidFromToken };
+                const updatedUser = { ...effectiveUser, userId: uuidFromToken };
                 localStorage.setItem('user', JSON.stringify(updatedUser));
               }
             } catch (cognitoError) {
@@ -529,13 +539,18 @@ const Navbar = ({ showSearch = true }) => {
           }
         }
         
-        console.log('🔔 Loading notifications for:', { userId, role: user.role, userObject: user });
+        if (!userId || !effectiveUser.role) {
+          console.log('⚠️ [Navbar] Missing userId or role, skipping notification load');
+          return;
+        }
+
+        console.log('🔔 Loading notifications for:', { userId, role: effectiveUser.role, userObject: effectiveUser });
         
-        const notifs = await getNotifications(userId, user.role);
+        const notifs = await getNotifications(userId, effectiveUser.role);
         console.log('📥 Received notifications:', notifs);
         console.log('📊 Notifications count:', notifs?.length || 0);
         
-        const count = await getUnreadCount(userId, user.role);
+        const count = await getUnreadCount(userId, effectiveUser.role);
         console.log('📬 Unread count:', count);
         
         setRealNotifications(notifs || []);

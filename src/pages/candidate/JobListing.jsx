@@ -2543,6 +2543,7 @@ const JobListing = () => {
               return {
                 id: `dynamo-${job.idJob}`,
                 idJob: job.idJob,
+                employerId: job.employerId,
                 title: String(job.title || 'Untitled Job'),
                 company: String(job.employerName || job.employerEmail || (language === 'vi' ? 'Công ty' : 'Company')),
                 location: String(job.location || ''),
@@ -2623,6 +2624,7 @@ const JobListing = () => {
               return {
                 id: `quick-${jobId}`,
                 idJob: jobId,
+                employerId: job.employerId,
                 title: String(job.title || 'Untitled Job'),
                 company: String(job.companyName || (language === 'vi' ? 'Công ty' : 'Company')),
                 location: String(job.location || ''),
@@ -3011,6 +3013,17 @@ const JobListing = () => {
         throw new Error('CV không tồn tại');
       }
 
+      const jobData = applyModal?.job;
+      const isDatabaseJob = jobData?.isFromDynamoDB || jobData?.isQuickJob;
+      if (!isDatabaseJob) {
+        setIsSubmitting(false);
+        setErrorModal({
+          show: true,
+          message: 'Chỉ hỗ trợ ứng tuyển cho công việc từ cơ sở dữ liệu.'
+        });
+        return;
+      }
+
       // Submit application
       const applicationService = await import('../../services/applicationService');
       console.log('🔍 [Debug] Application Modal Job:', applyModal.job);
@@ -3054,6 +3067,31 @@ const JobListing = () => {
         finalCVUrl,
         selectedCVData.cvFileName || 'CV.pdf'
       );
+
+      try {
+        const { createEmployerApplicationNotification } = await import('../../services/notificationService');
+        const session = await fetchAuthSession();
+        const candidateId = session.tokens?.idToken?.payload?.sub;
+        const candidateEmail = session.tokens?.idToken?.payload?.email;
+        const candidateName = candidateProfile?.fullName || candidateEmail || 'Ứng viên';
+        const employerId = jobData?.employerId;
+
+        if (employerId) {
+          await createEmployerApplicationNotification({
+            employerId,
+            candidateId,
+            candidateName,
+            jobTitle: jobData?.title,
+            companyName: jobData?.company,
+            jobId,
+            isQuickJob: jobData?.isQuickJob
+          });
+        } else {
+          console.warn('⚠️ [JobListing] Missing employerId, skipping application notification');
+        }
+      } catch (notificationError) {
+        console.error('❌ [JobListing] Failed to create application notification:', notificationError);
+      }
 
       // Update last submit time
       setLastSubmitTime(now);

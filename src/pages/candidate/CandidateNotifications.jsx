@@ -1,19 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import RelativeTime from '../../components/RelativeTime';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
+import { getNotifications, markAsRead, deleteNotification } from '../../services/notificationService';
 import {
   Bell,
   Briefcase,
   CheckCircle,
+  AlertCircle,
   Eye,
   Clock,
   X,
   TrendingUp,
-  Award,
-  Filter,
   Inbox,
   Mail
 } from 'lucide-react';
@@ -400,120 +401,99 @@ const ActivityItem = styled.div`
 
 function CandidateNotifications() {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const [filter, setFilter] = useState('all');
 
-  // Generate realistic timestamps for demo data
-  const getNotificationsData = () => {
-    const now = Date.now();
-    return [
-      {
-        id: 1,
-        type: 'application',
-        icon: Eye,
-        color: '#1e40af',
-        // Quick job (system-internal) notification — do not show "Quick Job" label or mention interviews
-        isQuickJob: true,
-        title: language === 'vi' ? 'Nhà tuyển dụng đã xem hồ sơ' : 'Employer viewed your application',
-        message: language === 'vi'
-          ? 'Highlands Coffee đã xem hồ sơ ứng tuyển của bạn.'
-          : 'Highlands Coffee viewed your application.',
-        createdAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-        unread: true
-      },
-      {
-        id: 2,
-        type: 'success',
-        icon: CheckCircle,
-        color: '#10B981',
-        // Quick job (system-internal) notification (accepted)
-        isQuickJob: true,
-        title: language === 'vi' ? 'Hồ sơ được chấp nhận' : 'Application accepted',
-        message: language === 'vi'
-          ? 'Hồ sơ của bạn tại Katinat Q8 đã được chấp nhận. Nhà tuyển dụng sẽ liên hệ.'
-          : 'Your application at Katinat Q8 has been accepted. Employer will contact you.',
-        createdAt: new Date(now - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-        unread: false
-      },
-      {
-        id: 3,
-        type: 'application',
-        icon: Briefcase,
-        color: '#1e40af',
-        isQuickJob: false,
-        title: language === 'vi' ? 'Công việc phù hợp với bạn' : 'Jobs matching your profile',
-        message: language === 'vi'
-          ? 'Có 5 công việc phù hợp với kỹ năng của bạn tại Quận 1 và Quận 3.'
-          : '5 new jobs match your skills in District 1 and District 3.',
-        createdAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(), // 3 hours ago
-        unread: true
-      },
-      {
-        id: 4,
-        type: 'success',
-        icon: CheckCircle,
-        color: '#10B981',
-        isQuickJob: false,
-        title: language === 'vi' ? 'Hồ sơ ứng tuyển được duyệt' : 'Application approved',
-        message: language === 'vi'
-          ? 'The Coffee House đã duyệt hồ sơ ứng tuyển ca tối của bạn. Liên hệ nhà tuyển dụng để xác nhận.'
-          : 'The Coffee House approved your application. Contact the employer to confirm.',
-        createdAt: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-        unread: false
-      },
-      {
-        id: 5,
-        type: 'success',
-        icon: Award,
-        color: '#10B981',
-        title: language === 'vi' ? 'Chúc mừng! Hồ sơ hoàn thiện 100%' : 'Congratulations! Profile 100% complete',
-        message: language === 'vi'
-          ? 'Bạn đã hoàn thiện hồ sơ với đầy đủ thông tin, kỹ năng và kinh nghiệm. Cơ hội được tuyển dụng tăng 70%!'
-          : 'You completed your profile with full information, skills and experience. Your hiring chances increased by 70%!',
-        createdAt: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-        unread: false
-      },
-      {
-        id: 6,
-        type: 'application',
-        icon: TrendingUp,
-        color: '#F59E0B',
-        title: language === 'vi' ? 'Hồ sơ của bạn đang được quan tâm!' : 'Your profile is getting attention!',
-        message: language === 'vi'
-          ? 'Có 8 nhà tuyển dụng đã xem hồ sơ của bạn trong tuần này. Hãy cập nhật thêm kỹ năng và kinh nghiệm để tăng cơ hội được tuyển!'
-          : '8 employers viewed your profile this week. Update your skills and experience to increase your hiring chances!',
-        createdAt: new Date(now - 5 * 60 * 60 * 1000).toISOString(), // 5 hours ago
-        unread: true
-      }
-    ];
+  const getIconForType = (type) => {
+    switch (type) {
+      case 'success':
+        return CheckCircle;
+      case 'application':
+        return Briefcase;
+      case 'system':
+        return AlertCircle;
+      default:
+        return Bell;
+    }
   };
 
-  const [notifications, setNotifications] = useState(getNotificationsData());
+  const getColorForType = (type) => {
+    switch (type) {
+      case 'success':
+        return '#10B981';
+      case 'application':
+        return '#1e40af';
+      case 'system':
+        return '#ef4444';
+      default:
+        return '#1e40af';
+    }
+  };
+
+  const [notifications, setNotifications] = useState([]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!user) return;
+
+    let userId = user.userId || user.id || user.email;
+    if (!userId || userId.includes('@')) {
+      try {
+        const { fetchAuthSession } = await import('aws-amplify/auth');
+        const session = await fetchAuthSession();
+        if (session && session.tokens) {
+          userId = session.tokens.idToken.payload.sub;
+        }
+      } catch (error) {
+        console.error('❌ [CandidateNotifications] Failed to get UUID from Cognito:', error);
+      }
+    }
+
+    if (!userId) return;
+
+    try {
+      const notifs = await getNotifications(userId, 'candidate');
+      const mapped = (notifs || []).map(notif => ({
+        id: notif.notificationId,
+        type: notif.type || 'system',
+        icon: getIconForType(notif.type),
+        color: notif.color || getColorForType(notif.type),
+        isQuickJob: notif.data?.isQuickJob ?? true,
+        title: language === 'vi' ? notif.title : (notif.titleEn || notif.title),
+        message: language === 'vi' ? notif.message : (notif.messageEn || notif.message),
+        createdAt: notif.createdAt,
+        unread: !notif.read,
+        actionUrl: notif.actionUrl
+      }));
+
+      setNotifications(mapped);
+    } catch (error) {
+      console.error('❌ [CandidateNotifications] Error loading notifications:', error);
+    }
+  }, [user, language]);
 
   useEffect(() => {
-    setNotifications(getNotificationsData());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]);
+    loadNotifications();
+  }, [loadNotifications]);
 
-  const handleRemoveNotification = (id) => {
+  const handleRemoveNotification = async (id) => {
     setNotifications(notifications.filter(n => n.id !== id));
+    await deleteNotification(id);
   };
 
-  const handleMarkAsRead = (id) => {
+  const handleMarkAsRead = async (id) => {
     setNotifications(notifications.map(n =>
       n.id === id ? { ...n, unread: false } : n
     ));
+    await markAsRead(id);
   };
 
-  // Only show quick job notifications
-  const quickJobNotifications = notifications.filter(n => n.isQuickJob);
-  
   const filteredNotifications = filter === 'all'
-    ? quickJobNotifications
+    ? notifications
     : filter === 'unread'
-      ? quickJobNotifications.filter(n => n.unread)
-      : quickJobNotifications.filter(n => n.type === filter);
+      ? notifications.filter(n => n.unread)
+      : notifications.filter(n => n.type === filter);
 
-  const unreadCount = quickJobNotifications.filter(n => n.unread).length;
+  const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
     <DashboardLayout role="candidate" showSearch={false} key={language}>
@@ -645,7 +625,7 @@ function CandidateNotifications() {
                     <span className="stat-label">{language === 'vi' ? 'Thông báo hôm nay' : 'Today\'s notifications'}</span>
                     <Bell />
                   </div>
-                  <div className="stat-value">{quickJobNotifications.filter(n => {
+                  <div className="stat-value">{notifications.filter(n => {
                     const notifTime = new Date(n.createdAt).getTime();
                     const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
                     return notifTime > dayAgo;
@@ -657,7 +637,7 @@ function CandidateNotifications() {
                     <span className="stat-label">{language === 'vi' ? 'Lượt xem hồ sơ' : 'Profile views'}</span>
                     <Eye />
                   </div>
-                  <div className="stat-value">{quickJobNotifications.filter(n => n.type === 'application' && (n.title.includes('xem') || n.title.includes('viewed'))).length}</div>
+                  <div className="stat-value">{notifications.filter(n => n.type === 'application' && (n.title.includes('xem') || n.title.includes('viewed'))).length}</div>
                 </StatItem>
 
                 <StatItem $color="#10B981">
@@ -665,7 +645,7 @@ function CandidateNotifications() {
                     <span className="stat-label">{language === 'vi' ? 'Hồ sơ được chấp nhận' : 'Accepted applications'}</span>
                     <CheckCircle />
                   </div>
-                  <div className="stat-value">{quickJobNotifications.filter(n => n.type === 'success' && n.title.includes(language === 'vi' ? 'chấp nhận' : 'accepted')).length}</div>
+                  <div className="stat-value">{notifications.filter(n => n.type === 'success' && n.title.includes(language === 'vi' ? 'chấp nhận' : 'accepted')).length}</div>
                 </StatItem>
               </QuickStats>
             </Card>

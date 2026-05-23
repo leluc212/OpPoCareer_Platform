@@ -215,6 +215,157 @@ export const createPackageApprovedNotification = async (subscription, employerId
 };
 
 /**
+ * Create notification when candidate applies for a job
+ * @param {object} payload - Application notification data
+ */
+export const createEmployerApplicationNotification = async (payload) => {
+  const {
+    employerId,
+    candidateId,
+    candidateName,
+    jobTitle,
+    companyName,
+    jobId,
+    isQuickJob
+  } = payload;
+
+  if (!employerId) {
+    const error = new Error('❌ CRITICAL: employerId is required but was not provided!');
+    console.error(error);
+    throw error;
+  }
+
+  const safeCandidateName = candidateName || 'Ứng viên';
+  const safeJobTitle = jobTitle || 'vị trí mới';
+  const safeCompanyName = companyName || 'công ty của bạn';
+
+  const notification = {
+    type: 'application',
+    title: 'Ứng viên mới ứng tuyển',
+    titleEn: 'New application received',
+    message: `${safeCandidateName} đã ứng tuyển vào vị trí ${safeJobTitle} tại ${safeCompanyName}.`,
+    messageEn: `${safeCandidateName} applied for ${safeJobTitle} at ${safeCompanyName}.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: candidateId || 'candidate',
+    senderName: safeCandidateName,
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      candidateId: candidateId || null,
+      candidateName: safeCandidateName,
+      isQuickJob: !!isQuickJob
+    },
+    icon: 'user-plus',
+    color: '#3b82f6',
+    actionUrl: isQuickJob ? '/employer/quick-jobs' : '/employer/standard-jobs',
+    actionText: 'Xem hồ sơ',
+    actionTextEn: 'View applications'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when employer accepts candidate CV (quick job)
+ * @param {object} payload - Candidate notification data
+ */
+export const createCandidateCvAcceptedNotification = async (payload) => {
+  const {
+    candidateId,
+    jobTitle,
+    companyName,
+    jobId,
+    employerId
+  } = payload;
+
+  if (!candidateId) {
+    const error = new Error('❌ CRITICAL: candidateId is required but was not provided!');
+    console.error(error);
+    throw error;
+  }
+
+  const safeJobTitle = jobTitle || 'công việc tuyển gấp';
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'success',
+    title: 'CV của bạn đã được chấp nhận',
+    titleEn: 'Your CV has been accepted',
+    message: `CV của bạn đã được ${safeCompanyName} chấp nhận cho vị trí ${safeJobTitle}. Bạn có thể nhắn tin cho Nhà tuyển dụng ngay ở phần bong bóng chat bên phải dưới màn hình.`,
+    messageEn: `Your CV was accepted by ${safeCompanyName} for the ${safeJobTitle} position. You can message the employer using the chat bubble at the bottom right of the screen.`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: employerId || 'employer',
+    senderName: safeCompanyName,
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      employerId: employerId || null,
+      isQuickJob: true
+    },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '',
+    actionText: 'Xem chi tiết',
+    actionTextEn: 'View details'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when employer rejects candidate CV (quick job)
+ * @param {object} payload - Candidate notification data
+ */
+export const createCandidateCvRejectedNotification = async (payload) => {
+  const {
+    candidateId,
+    jobTitle,
+    companyName,
+    jobId,
+    employerId
+  } = payload;
+
+  if (!candidateId) {
+    const error = new Error('❌ CRITICAL: candidateId is required but was not provided!');
+    console.error(error);
+    throw error;
+  }
+
+  const safeJobTitle = jobTitle || 'công việc tuyển gấp';
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'system',
+    title: 'CV của bạn chưa được chấp nhận',
+    titleEn: 'Your CV was not accepted',
+    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} chưa được chấp nhận. Bạn có thể cập nhật hồ sơ và tiếp tục ứng tuyển các công việc phù hợp khác.`,
+    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} was not accepted. You can update your profile and apply for other suitable jobs.`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: employerId || 'employer',
+    senderName: safeCompanyName,
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      employerId: employerId || null,
+      isQuickJob: true
+    },
+    icon: 'alert-circle',
+    color: '#ef4444',
+    actionUrl: '',
+    actionText: 'Xem chi tiết',
+    actionTextEn: 'View details'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
  * Save notification to API
  */
 const saveNotification = async (notification) => {
@@ -430,6 +581,9 @@ export default {
   getUnreadCount,
   createPackagePurchaseRequestNotification,
   createPackageApprovedNotification,
+  createEmployerApplicationNotification,
+  createCandidateCvAcceptedNotification,
+  createCandidateCvRejectedNotification,
   markAsRead,
   markAllAsRead,
   deleteNotification,

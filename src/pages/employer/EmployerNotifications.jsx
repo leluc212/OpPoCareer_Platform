@@ -593,7 +593,17 @@ const EmployerNotifications = () => {
   };
 
   const loadNotifications = useCallback(async () => {
-    if (!user) {
+    let effectiveUser = user;
+    if (!effectiveUser) {
+      try {
+        const storedUser = localStorage.getItem('user');
+        effectiveUser = storedUser ? JSON.parse(storedUser) : null;
+      } catch (error) {
+        console.error('❌ [EmployerNotifications] Failed to parse stored user:', error);
+      }
+    }
+
+    if (!effectiveUser) {
       console.log('⚠️ [EmployerNotifications] No user, skipping notification load');
       setLoading(false);
       return;
@@ -601,10 +611,10 @@ const EmployerNotifications = () => {
     
     try {
       // CRITICAL FIX: Ensure we use UUID from Cognito, not email
-      let userId = user.userId || user.id;
+      let userId = effectiveUser.userId || effectiveUser.id;
       
       // If userId looks like an email, fetch the real UUID from Cognito
-      if (userId && userId.includes('@')) {
+      if (!userId || userId.includes('@')) {
         console.warn('⚠️ [EmployerNotifications] userId is email, fetching UUID from Cognito...');
         try {
           const { fetchAuthSession } = await import('aws-amplify/auth');
@@ -615,7 +625,7 @@ const EmployerNotifications = () => {
             userId = uuidFromToken;
             
             // Update user object in AuthContext and localStorage
-            const updatedUser = { ...user, userId: uuidFromToken };
+            const updatedUser = { ...effectiveUser, userId: uuidFromToken };
             localStorage.setItem('user', JSON.stringify(updatedUser));
           }
         } catch (cognitoError) {
@@ -623,7 +633,12 @@ const EmployerNotifications = () => {
         }
       }
       
-      const role = user.role;
+      const role = effectiveUser.role;
+      if (!userId || !role) {
+        console.log('⚠️ [EmployerNotifications] Missing userId or role, skipping notification load');
+        setLoading(false);
+        return;
+      }
       console.log('🔔 [EmployerNotifications] Loading notifications for:', { userId, role });
       
       const notifs = await getNotifications(userId, role);
@@ -728,18 +743,29 @@ const EmployerNotifications = () => {
   const handleGoToApplications = (notification) => {
     setSelectedNotification(null);
     if (notification.type === 'application') {
-      if (notification.isQuickJob) {
-        navigate('/employer/quick-jobs', { state: { fromNotifications: true } });
-      } else {
-        navigate('/employer/standard-jobs', { state: { fromNotifications: true } });
-      }
+      const targetPath = notification.isQuickJob ? '/employer/quick-jobs' : '/employer/standard-jobs';
+      navigate(targetPath, {
+        state: {
+          fromNotifications: true,
+          jobId: notification?.data?.jobId || notification?.data?.idJob || null,
+          staffTab: notification.isQuickJob ? 'pending_confirm' : undefined
+        }
+      });
     } else {
       navigate('/employer/dashboard');
     }
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const handleMarkAllAsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id).filter(Boolean);
+    if (unreadIds.length === 0) {
+      return;
+    }
+
+    await Promise.allSettled(unreadIds.map(id => markAsRead(id)));
+    await loadNotifications();
   };
 
   const handleDelete = (id) => {
@@ -812,6 +838,11 @@ const EmployerNotifications = () => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, delay: index * 0.05 }}
+                onClick={() =>
+                  (notification.type === 'application'
+                    ? handleGoToApplications(notification)
+                    : handleOpenDetail(notification))
+                }
               >
                 <NotificationIcon $type={notification.type}>
                   <notification.icon />
@@ -851,7 +882,10 @@ const EmployerNotifications = () => {
 
                 <NotificationActions>
                   <IconButton
-                    onClick={() => handleOpenDetail(notification)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleOpenDetail(notification);
+                    }}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
@@ -860,7 +894,10 @@ const EmployerNotifications = () => {
                   </IconButton>
                   <IconButton
                     $variant="danger"
-                    onClick={() => handleDelete(notification.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDelete(notification.id);
+                    }}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     title={language === 'vi' ? 'Xóa' : 'Delete'}
@@ -925,7 +962,7 @@ const EmployerNotifications = () => {
                 <ModalInfoRow>
                   <div className="icon-box"><FileText /></div>
                   <div className="info">
-                    <div className="label">{language === 'vi' ? 'Vị trí tuyển dụng' : 'Job Position'}</div>
+                    <div className="label">{language === 'vi' ? 'Tên gói' : 'Package Name'}</div>
                     <div className="value">{selectedNotification.jobTitle}</div>
                   </div>
                 </ModalInfoRow>

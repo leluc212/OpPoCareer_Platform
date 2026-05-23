@@ -10,6 +10,7 @@ import Modal from '../../components/Modal';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
+import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
 // Helper: tính số giờ từ chuỗi shift "HH:MM - HH:MM"
@@ -114,8 +115,8 @@ const pulseAnimation = `
       transform: scale(1);
     }
     50% {
-      opacity: 0.85;
-      transform: scale(1.02);
+      opacity: 0.7;
+      transform: scale(1.03);
     }
   }
 `;
@@ -124,7 +125,6 @@ const pulseAnimation = `
 const PageContainer = styled(motion.div)`
   ${pulseAnimation}
 `;
-
 // ─── Page header (đồng nhất Applications) ─────────────────
 const PageHeader = styled.div`
   margin-bottom: 28px;
@@ -2236,6 +2236,7 @@ const HRManagement = () => {
   useEffect(() => {
     if (location.state?.fromNotifications) {
       setActiveSection('hr');
+      setStaffTabFilter(location.state?.staffTab || 'pending_confirm');
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, navigate, location.pathname]);
@@ -2423,6 +2424,7 @@ const HRManagement = () => {
             jobSalary: job.salary,
             jobShift: job.shift,
             jobWorkDate: job.deadline,
+            companyName: job.companyName,
             jobType: 'quick'
           }));
 
@@ -2574,6 +2576,7 @@ const HRManagement = () => {
           applicationId: app.applicationId,
           name: app.candidateEmail?.split('@')[0] || 'Unknown', // Use email prefix as name
           position: app.jobTitle,
+          companyName: app.companyName,
           location: app.jobLocation || 'N/A',
           phone: '***-***-****', // Hidden until confirmed
           email: '***@***.***', // Hidden until confirmed
@@ -2600,6 +2603,22 @@ const HRManagement = () => {
     // Keep mock staff for demo purposes, but add real applications
     return [...hrStaff, ...staffFromApplications];
   }, [hrStaff, staffFromApplications]);
+
+  const staffTabCounts = useMemo(() => {
+    const counts = {
+      working: 0,
+      pending_confirm: 0,
+      pending_change: 0
+    };
+
+    allStaff.forEach(staff => {
+      if (staff.status === 'active') counts.working += 1;
+      if (staff.status === 'pending_confirmation') counts.pending_confirm += 1;
+      if (staff.status === 'pending_change') counts.pending_change += 1;
+    });
+
+    return counts;
+  }, [allStaff]);
 
   // Mock wallet connection status - in real app, get from user context or API
   const [isWalletConnected] = useState(() => {
@@ -2732,6 +2751,24 @@ const HRManagement = () => {
           : app
       ));
 
+      if (staff.candidateId) {
+        try {
+          const employerId = user?.userId || user?.id || user?.email || null;
+          const rawCompanyName = staff.companyName || user?.companyName || user?.company || user?.name || '';
+          const companyName = rawCompanyName && !rawCompanyName.includes('@') ? rawCompanyName : 'Nhà tuyển dụng';
+
+          await createCandidateCvAcceptedNotification({
+            candidateId: staff.candidateId,
+            jobTitle: staff.position,
+            companyName,
+            jobId: staff.jobId,
+            employerId
+          });
+        } catch (notifyError) {
+          console.error('❌ Error sending candidate accepted notification:', notifyError);
+        }
+      }
+
       // Show success message
       console.log('✅ Application accepted successfully at:', newConfirmedAt);
     } catch (error) {
@@ -2760,8 +2797,26 @@ const HRManagement = () => {
       // Update application status to 'rejected' via API
       await applicationService.updateApplicationStatus(rejectStaff.applicationId, 'rejected');
 
-      // Reload applications from DynamoDB
-      await loadApplicationsFromDynamoDB();
+      if (rejectStaff.candidateId) {
+        try {
+          const employerId = user?.userId || user?.id || user?.email || null;
+          const rawCompanyName = rejectStaff.companyName || user?.companyName || user?.company || user?.name || '';
+          const companyName = rawCompanyName && !rawCompanyName.includes('@') ? rawCompanyName : 'Nhà tuyển dụng';
+
+          await createCandidateCvRejectedNotification({
+            candidateId: rejectStaff.candidateId,
+            jobTitle: rejectStaff.position,
+            companyName,
+            jobId: rejectStaff.jobId,
+            employerId
+          });
+        } catch (notifyError) {
+          console.error('❌ Error sending candidate rejected notification:', notifyError);
+        }
+      }
+
+      // Reload applications from Quick Jobs
+      await loadApplicationsFromQuickJobs();
 
       // Show success message
       console.log('✅ Application rejected successfully');
@@ -3079,7 +3134,9 @@ const HRManagement = () => {
                   $color={tab.color}
                   onClick={() => setStaffTabFilter(tab.key)}
                 >
-                  {tab.label}
+                  {tab.key === 'pending_confirm' && staffTabCounts.pending_confirm > 0
+                    ? `${tab.label} (${staffTabCounts.pending_confirm})`
+                    : tab.label}
                 </StaffTabButton>
               ))}
             </StaffTabBar>

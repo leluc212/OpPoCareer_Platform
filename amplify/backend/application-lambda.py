@@ -166,6 +166,40 @@ def submit_application(event, candidate_id, candidate_email, create_response):
         }
         
         applications_table.put_item(Item=application)
+
+        # Update job stats (applicants + responseRate) if this is a real job
+        try:
+            if job and job_type in ['standard', 'quick']:
+                now_iso = datetime.utcnow().isoformat() + 'Z'
+                current_applicants = int(job.get('applicants', 0) or 0)
+                current_views = int(job.get('views', 0) or 0)
+                new_applicants = current_applicants + 1
+                response_rate = int(round((new_applicants / current_views) * 100)) if current_views else 0
+
+                if job_type == 'standard':
+                    jobs_table.update_item(
+                        Key={'idJob': job_id},
+                        UpdateExpression='SET applicants = :app, responseRate = :rr, updatedAt = :updated',
+                        ExpressionAttributeValues={
+                            ':app': new_applicants,
+                            ':rr': response_rate,
+                            ':updated': now_iso
+                        }
+                    )
+                else:
+                    # Quick jobs table uses jobID as the key
+                    quick_jobs_table.update_item(
+                        Key={'jobID': job_id},
+                        UpdateExpression='SET applicants = :app, responseRate = :rr, updatedAt = :updated',
+                        ExpressionAttributeValues={
+                            ':app': new_applicants,
+                            ':rr': response_rate,
+                            ':updated': now_iso
+                        }
+                    )
+        except Exception as stats_error:
+            print(f"⚠️ Warning: Failed to update job stats: {str(stats_error)}")
+
         return create_response(201, {
             'message': 'Application submitted successfully',
             'applicationId': application_id,

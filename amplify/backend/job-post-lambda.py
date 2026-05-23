@@ -467,13 +467,31 @@ def delete_job_post(job_id, user_id, headers):
 def increment_views(job_id, headers):
     """Increment view count for a job post"""
     try:
+        response = table.get_item(Key={'idJob': job_id})
+        if 'Item' not in response:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Job post not found'
+                })
+            }
+
+        item = response['Item']
+        current_views = int(item.get('views', 0) or 0)
+        current_applicants = int(item.get('applicants', 0) or 0)
+        new_views = current_views + 1
+        response_rate = int(round((current_applicants / new_views) * 100)) if new_views else 0
+
         table.update_item(
             Key={'idJob': job_id},
-            UpdateExpression='SET #views = if_not_exists(#views, :zero) + :inc',
+            UpdateExpression='SET #views = :views, responseRate = :rr, updatedAt = :updated',
             ExpressionAttributeNames={'#views': 'views'},
             ExpressionAttributeValues={
-                ':inc': 1,
-                ':zero': 0
+                ':views': new_views,
+                ':rr': response_rate,
+                ':updated': datetime.utcnow().isoformat() + 'Z'
             }
         )
         

@@ -2402,6 +2402,24 @@ const HRManagement = () => {
     }
   };
 
+  useEffect(() => {
+    const refreshJobs = () => {
+      loadQuickJobsFromDynamoDB();
+    };
+
+    const handleFocus = () => {
+      refreshJobs();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    const intervalId = setInterval(refreshJobs, 20000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(intervalId);
+    };
+  }, []);
+
   const loadApplicationsFromQuickJobs = async () => {
     try {
       setLoadingApplications(true);

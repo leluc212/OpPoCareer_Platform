@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { motion } from 'framer-motion';
@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import RelativeTime from '../../components/RelativeTime';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { getNotifications, markAsRead, markAllAsRead, deleteNotification } from '../../services/notificationService';
+import { getNotifications, markAsRead, markAllAsRead, setNotificationDeleted } from '../../services/notificationService';
 import {
   Bell,
   BellOff,
@@ -427,6 +427,49 @@ const LoadingState = styled(motion.div)`
   }
 `;
 
+const UndoToastWrap = styled(motion.div)`
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 10000;
+  display: flex;
+  justify-content: flex-end;
+`;
+
+const UndoToast = styled.div`
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+`;
+
+const UndoMessage = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+`;
+
+const UndoButton = styled.button`
+  background: #e2e8f0;
+  color: #0f172a;
+  border: none;
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+  }
+`;
+
 const ModalOverlay = styled(motion.div)`
   position: fixed;
   inset: 0;
@@ -579,6 +622,8 @@ const EmployerNotifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [undoInfo, setUndoInfo] = useState(null);
+  const undoTimerRef = useRef(null);
 
   // Helper function to get icon for notification type
   const getIconForType = (type) => {
@@ -711,6 +756,12 @@ const EmployerNotifications = () => {
     };
   }, [loadNotifications]); // Dependency: loadNotifications (which depends on user and language)
 
+  useEffect(() => () => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+    }
+  }, []);
+
   const tabs = [
     { id: 'all', label: language === 'vi' ? 'Tất cả' : 'All', count: notifications.length },
     { id: 'unread', label: language === 'vi' ? 'Chưa đọc' : 'Unread', count: notifications.filter(n => !n.read).length },
@@ -768,8 +819,56 @@ const EmployerNotifications = () => {
     await loadNotifications();
   };
 
-  const handleDelete = (id) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+  const handleDelete = async (notification, index) => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+    }
+
+    setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    setUndoInfo({ notification, index });
+
+    undoTimerRef.current = setTimeout(() => {
+      setUndoInfo(null);
+      undoTimerRef.current = null;
+    }, 5000);
+
+    const success = await setNotificationDeleted(notification.id, true);
+    if (!success) {
+      if (undoTimerRef.current) {
+        clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = null;
+      }
+      setUndoInfo(null);
+      setNotifications(prev => {
+        if (prev.some(n => n.id === notification.id)) return prev;
+        const next = [...prev];
+        const safeIndex = Math.min(index, next.length);
+        next.splice(safeIndex, 0, notification);
+        return next;
+      });
+    }
+  };
+
+  const handleUndoDelete = async () => {
+    if (!undoInfo) return;
+
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+
+    const { notification, index } = undoInfo;
+    setUndoInfo(null);
+
+    setNotifications(prev => {
+      if (prev.some(n => n.id === notification.id)) return prev;
+      const next = [...prev];
+      const safeIndex = Math.min(index, next.length);
+      next.splice(safeIndex, 0, notification);
+      return next;
+    });
+
+    await setNotificationDeleted(notification.id, false);
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -896,7 +995,7 @@ const EmployerNotifications = () => {
                     $variant="danger"
                     onClick={(event) => {
                       event.stopPropagation();
-                      handleDelete(notification.id);
+                      handleDelete(notification, index);
                     }}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
@@ -962,7 +1061,7 @@ const EmployerNotifications = () => {
                 <ModalInfoRow>
                   <div className="icon-box"><FileText /></div>
                   <div className="info">
-                    <div className="label">{language === 'vi' ? 'Tên gói' : 'Package Name'}</div>
+                    <div className="label">{language === 'vi' ? 'Vị trí ứng tuyển' : 'Job Title'}</div>
                     <div className="value">{selectedNotification.jobTitle}</div>
                   </div>
                 </ModalInfoRow>
@@ -1009,6 +1108,24 @@ const EmployerNotifications = () => {
             </ModalFooter>
           </ModalBox>
         </ModalOverlay>
+      )}
+
+      {undoInfo && (
+        <UndoToastWrap
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.2 }}
+        >
+          <UndoToast>
+            <UndoMessage>
+              {language === 'vi' ? 'Thông báo đã được xóa' : 'Notification deleted'}
+            </UndoMessage>
+            <UndoButton onClick={handleUndoDelete}>
+              {language === 'vi' ? 'Hoàn tác' : 'Undo'}
+            </UndoButton>
+          </UndoToast>
+        </UndoToastWrap>
       )}
     </DashboardLayout>
   );

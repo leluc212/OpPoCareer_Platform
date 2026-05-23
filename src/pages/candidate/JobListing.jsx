@@ -2510,6 +2510,7 @@ const JobListing = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const resultsRef = useRef(null);
+  const viewedJobIdsRef = useRef(new Set());
   const [savedJobs, setSavedJobs] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -2922,10 +2923,44 @@ const JobListing = () => {
     );
   };
 
+  const recordJobView = async (job) => {
+    if (!job || (!job.isFromDynamoDB && !job.isQuickJob)) return;
+
+    const jobId = job.idJob || job.id;
+    if (!jobId) return;
+
+    if (viewedJobIdsRef.current.has(jobId)) return;
+    viewedJobIdsRef.current.add(jobId);
+
+    if (job.isFromDynamoDB) {
+      setDynamoDBJobs(prev => prev.map(j =>
+        j.idJob === job.idJob ? { ...j, views: (j.views || 0) + 1 } : j
+      ));
+    }
+
+    if (job.isQuickJob) {
+      setQuickJobs(prev => prev.map(j =>
+        j.idJob === job.idJob ? { ...j, views: (j.views || 0) + 1 } : j
+      ));
+    }
+
+    try {
+      if (job.isQuickJob) {
+        await quickJobService.incrementViews(job.idJob);
+      } else {
+        await jobPostService.incrementViews(job.idJob);
+      }
+    } catch (error) {
+      console.error('Error incrementing job views:', error);
+      viewedJobIdsRef.current.delete(jobId);
+    }
+  };
+
   const handleJobClick = (jobId) => {
-    // Disabled: Don't show detail modal when clicking on job card
-    // const job = allJobs.find(j => j.id === jobId);
-    // if (job) setDetailModal({ job });
+    const job = allJobs.find(j => j.id === jobId);
+    if (job) {
+      recordJobView(job);
+    }
   };
 
   const handleApplyJob = (job) => {
@@ -4005,6 +4040,7 @@ const JobListing = () => {
               <button
                 className="btn-info"
                 onClick={() => {
+                  recordJobView(applyModal.job);
                   setJobDescriptionModal({ job: applyModal.job });
                 }}
                 style={{

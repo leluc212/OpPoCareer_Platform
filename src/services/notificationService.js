@@ -552,6 +552,30 @@ export const deleteNotification = async (notificationId) => {
 };
 
 /**
+ * Soft delete/restore a notification (inactive flag)
+ */
+export const setNotificationDeleted = async (notificationId, deleted) => {
+  try {
+    const response = await fetch(`${API_ENDPOINT}/notifications/${notificationId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ deleted: !!deleted })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update notification deleted status');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error updating notification deleted status:', error);
+    return false;
+  }
+};
+
+/**
  * Clear all notifications for a user
  */
 export const clearAllNotifications = async (userId, role) => {
@@ -587,5 +611,6 @@ export default {
   markAsRead,
   markAllAsRead,
   deleteNotification,
+  setNotificationDeleted,
   clearAllNotifications
 };

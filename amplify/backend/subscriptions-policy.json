@@ -13,7 +13,9 @@
       ],
       "Resource": [
         "arn:aws:dynamodb:ap-southeast-1:726911960757:table/PackageSubscriptions",
-        "arn:aws:dynamodb:ap-southeast-1:726911960757:table/PackageSubscriptions/index/*"
+        "arn:aws:dynamodb:ap-southeast-1:726911960757:table/PackageSubscriptions/index/*",
+        "arn:aws:dynamodb:ap-southeast-1:726911960757:table/Notifications",
+        "arn:aws:dynamodb:ap-southeast-1:726911960757:table/Notifications/index/*"
       ]
     }
   ]

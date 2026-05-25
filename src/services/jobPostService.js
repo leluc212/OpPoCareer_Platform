@@ -455,6 +455,26 @@ class JobPostService {
       throw error;
     }
   }
+
+  /**
+   * Get all job posts (admin view)
+   */
+  async getAllJobPosts() {
+    console.log('🚀 getAllJobPosts() called');
+    try {
+      const result = await this.makeRequest('/jobs');
+
+      if (result.success && result.data) {
+        console.log('✅ All job posts loaded from DynamoDB:', result.data.length, 'jobs');
+        return result.data;
+      }
+
+      return [];
+    } catch (error) {
+      console.error('❌ Error fetching all job posts:', error);
+      return this.getAllActiveJobs();
+    }
+  }
 }
 
 // Export singleton instance

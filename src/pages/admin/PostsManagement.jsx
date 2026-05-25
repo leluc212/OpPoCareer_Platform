@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import Modal from '../../components/Modal';
 import { useLanguage } from '../../context/LanguageContext';
-import { jobPosts } from '../../data/jobPosts';
+import jobPostService from '../../services/jobPostService';
+import quickJobService from '../../services/quickJobService';
 import { 
   Briefcase, 
   Zap, 
@@ -14,12 +15,8 @@ import {
   Eye,
   CheckCircle,
   Ban,
-  Trash2,
   Clock,
-  AlertTriangle,
-  XCircle,
   BarChart3,
-  PieChart as PieChartIcon,
   Mail,
   Phone,
   Building2,
@@ -500,228 +497,163 @@ const PostsManagement = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [standardJobs, setStandardJobs] = useState([]);
+  const [urgentJobs, setUrgentJobs] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const itemsPerPage = 20;
 
-  // Sample candidate names from CandidatesManagement (100 candidates)
-  const candidatePool = [
-    { name: 'Nguyễn Văn An', email: 'nguyen.an.01@gmail.com', phone: '0901234567' },
-    { name: 'Trần Thị Bình', email: 'tran.binh.02@gmail.com', phone: '0902345678' },
-    { name: 'Lê Minh Cường', email: 'le.cuong.03@gmail.com', phone: '0903456789' },
-    { name: 'Phạm Hoàng Dũng', email: 'pham.dung.04@gmail.com', phone: '0904567890' },
-    { name: 'Hoàng Ngọc Lan', email: 'hoang.lan.05@gmail.com', phone: '0905678901' },
-    { name: 'Đỗ Văn Hùng', email: 'do.hung.06@gmail.com', phone: '0906789012' },
-    { name: 'Bùi Thị Hương', email: 'bui.huong.07@gmail.com', phone: '0907890123' },
-    { name: 'Vũ Tuấn Kiệt', email: 'vu.kiet.08@gmail.com', phone: '0908901234' },
-    { name: 'Đặng Thanh Mai', email: 'dang.mai.09@gmail.com', phone: '0909012345' },
-    { name: 'Ngô Văn Nam', email: 'ngo.nam.10@gmail.com', phone: '0910123456' },
-    { name: 'Hồ Thị Nga', email: 'ho.nga.11@gmail.com', phone: '0911234567' },
-    { name: 'Phan Đức Phúc', email: 'phan.phuc.12@gmail.com', phone: '0912345678' },
-    { name: 'Huỳnh Phương Thảo', email: 'huynh.thao.13@gmail.com', phone: '0913456789' },
-    { name: 'Nguyễn Văn Tuấn', email: 'nguyen.tuan.14@gmail.com', phone: '0914567890' },
-    { name: 'Trần Thanh Tú', email: 'tran.tu.15@gmail.com', phone: '0915678901' },
-    { name: 'Lê Thị Vân', email: 'le.van.16@gmail.com', phone: '0916789012' },
-    { name: 'Phạm Văn Vinh', email: 'pham.vinh.17@gmail.com', phone: '0917890123' },
-    { name: 'Hoàng Minh Vũ', email: 'hoang.vu.18@gmail.com', phone: '0918901234' },
-    { name: 'Đỗ Thị Yến', email: 'do.yen.19@gmail.com', phone: '0919012345' },
-    { name: 'Bùi Văn Chung', email: 'bui.chung.20@gmail.com', phone: '0920123456' },
-    { name: 'Nguyễn Thị Duyên', email: 'nguyen.duyen.21@gmail.com', phone: '0921234567' },
-    { name: 'Trần Văn Giang', email: 'tran.giang.22@gmail.com', phone: '0922345678' },
-    { name: 'Lê Thanh Hải', email: 'le.hai.23@gmail.com', phone: '0923456789' },
-    { name: 'Phạm Thị Hồng', email: 'pham.hong.24@gmail.com', phone: '0924567890' },
-    { name: 'Hoàng Văn Huy', email: 'hoang.huy.25@gmail.com', phone: '0925678901' },
-    { name: 'Đặng Thị Kim', email: 'dang.kim.26@gmail.com', phone: '0926789012' },
-    { name: 'Ngô Thanh Lâm', email: 'ngo.lam.27@gmail.com', phone: '0927890123' },
-    { name: 'Hồ Văn Lộc', email: 'ho.loc.28@gmail.com', phone: '0928901234' },
-    { name: 'Phan Thị Ly', email: 'phan.ly.29@gmail.com', phone: '0929012345' },
-    { name: 'Huỳnh Minh Nhật', email: 'huynh.nhat.30@gmail.com', phone: '0930123456' },
-    { name: 'Nguyễn Thị Oanh', email: 'nguyen.oanh.31@gmail.com', phone: '0931234567' },
-    { name: 'Trần Văn Phong', email: 'tran.phong.32@gmail.com', phone: '0932345678' },
-    { name: 'Lê Thị Quyên', email: 'le.quyen.33@gmail.com', phone: '0933456789' },
-    { name: 'Phạm Văn Sang', email: 'pham.sang.34@gmail.com', phone: '0934567890' },
-    { name: 'Hoàng Thị Tâm', email: 'hoang.tam.35@gmail.com', phone: '0935678901' },
-    { name: 'Đỗ Minh Thắng', email: 'do.thang.36@gmail.com', phone: '0936789012' },
-    { name: 'Bùi Thị Thu', email: 'bui.thu.37@gmail.com', phone: '0937890123' },
-    { name: 'Vũ Văn Tiến', email: 'vu.tien.38@gmail.com', phone: '0938901234' },
-    { name: 'Đặng Thanh Tùng', email: 'dang.tung.39@gmail.com', phone: '0939012345' },
-    { name: 'Ngô Thị Tuyết', email: 'ngo.tuyet.40@gmail.com', phone: '0940123456' },
-    { name: 'Hồ Văn Uyên', email: 'ho.uyen.41@gmail.com', phone: '0941234567' },
-    { name: 'Phan Minh Việt', email: 'phan.viet.42@gmail.com', phone: '0942345678' },
-    { name: 'Huỳnh Thị Xoan', email: 'huynh.xoan.43@gmail.com', phone: '0943456789' },
-    { name: 'Nguyễn Văn Ý', email: 'nguyen.y.44@gmail.com', phone: '0944567890' },
-    { name: 'Trần Thanh Ân', email: 'tran.an.45@gmail.com', phone: '0945678901' },
-    { name: 'Lê Thị Bích', email: 'le.bich.46@gmail.com', phone: '0946789012' },
-    { name: 'Phạm Văn Cảnh', email: 'pham.canh.47@gmail.com', phone: '0947890123' },
-    { name: 'Hoàng Minh Danh', email: 'hoang.danh.48@gmail.com', phone: '0948901234' },
-    { name: 'Đỗ Thị Đào', email: 'do.dao.49@gmail.com', phone: '0949012345' },
-    { name: 'Bùi Văn Đạt', email: 'bui.dat.50@gmail.com', phone: '0950123456' },
-    { name: 'Nguyễn Thị Diệp', email: 'nguyen.diep.51@gmail.com', phone: '0951234567' },
-    { name: 'Trần Văn Đông', email: 'tran.dong.52@gmail.com', phone: '0952345678' },
-    { name: 'Lê Thị Hà', email: 'le.ha.53@gmail.com', phone: '0953456789' },
-    { name: 'Phạm Văn Hiếu', email: 'pham.hieu.54@gmail.com', phone: '0954567890' },
-    { name: 'Hoàng Thị Hoa', email: 'hoang.hoa.55@gmail.com', phone: '0955678901' },
-    { name: 'Đặng Văn Hùng', email: 'dang.hung.56@gmail.com', phone: '0956789012' },
-    { name: 'Ngô Thị Huyền', email: 'ngo.huyen.57@gmail.com', phone: '0957890123' },
-    { name: 'Hồ Văn Khang', email: 'ho.khang.58@gmail.com', phone: '0958901234' },
-    { name: 'Phan Thị Lan', email: 'phan.lan.59@gmail.com', phone: '0959012345' },
-    { name: 'Huỳnh Minh Long', email: 'huynh.long.60@gmail.com', phone: '0960123456' },
-    { name: 'Nguyễn Thị Minh', email: 'nguyen.minh.61@gmail.com', phone: '0961234567' },
-    { name: 'Trần Văn Nam', email: 'tran.nam.62@gmail.com', phone: '0962345678' },
-    { name: 'Lê Thị Ngọc', email: 'le.ngoc.63@gmail.com', phone: '0963456789' },
-    { name: 'Phạm Văn Nghĩa', email: 'pham.nghia.64@gmail.com', phone: '0964567890' },
-    { name: 'Hoàng Thị Nhung', email: 'hoang.nhung.65@gmail.com', phone: '0965678901' },
-    { name: 'Đặng Văn Phong', email: 'dang.phong.66@gmail.com', phone: '0966789012' },
-    { name: 'Ngô Thị Phương', email: 'ngo.phuong.67@gmail.com', phone: '0967890123' },
-    { name: 'Hồ Văn Quân', email: 'ho.quan.68@gmail.com', phone: '0968901234' },
-    { name: 'Phan Thị Quý', email: 'phan.quy.69@gmail.com', phone: '0969012345' },
-    { name: 'Huỳnh Minh Sơn', email: 'huynh.son.70@gmail.com', phone: '0970123456' },
-    { name: 'Nguyễn Thị Tâm', email: 'nguyen.tam.71@gmail.com', phone: '0971234567' },
-    { name: 'Trần Văn Thành', email: 'tran.thanh.72@gmail.com', phone: '0972345678' },
-    { name: 'Lê Thị Thúy', email: 'le.thuy.73@gmail.com', phone: '0973456789' },
-    { name: 'Phạm Văn Trí', email: 'pham.tri.74@gmail.com', phone: '0974567890' },
-    { name: 'Hoàng Thị Trúc', email: 'hoang.truc.75@gmail.com', phone: '0975678901' },
-    { name: 'Đặng Văn Tú', email: 'dang.tu.76@gmail.com', phone: '0976789012' },
-    { name: 'Ngô Thị Tú Anh', email: 'ngo.tuanh.77@gmail.com', phone: '0977890123' },
-    { name: 'Hồ Văn Tùng', email: 'ho.tung.78@gmail.com', phone: '0978901234' },
-    { name: 'Phan Thị Tươi', email: 'phan.tuoi.79@gmail.com', phone: '0979012345' },
-    { name: 'Huỳnh Minh Vĩnh', email: 'huynh.vinh.80@gmail.com', phone: '0980123456' },
-    { name: 'Nguyễn Thị Xuân', email: 'nguyen.xuan.81@gmail.com', phone: '0981234567' },
-    { name: 'Trần Văn Ý', email: 'tran.y.82@gmail.com', phone: '0982345678' },
-    { name: 'Lê Thị Ánh', email: 'le.anh.83@gmail.com', phone: '0983456789' },
-    { name: 'Phạm Văn Bằng', email: 'pham.bang.84@gmail.com', phone: '0984567890' },
-    { name: 'Hoàng Thị Cẩm', email: 'hoang.cam.85@gmail.com', phone: '0985678901' },
-    { name: 'Đặng Văn Dũng', email: 'dang.dung.86@gmail.com', phone: '0986789012' },
-    { name: 'Ngô Thị Duyên', email: 'ngo.duyen.87@gmail.com', phone: '0987890123' },
-    { name: 'Hồ Văn Giang', email: 'ho.giang.88@gmail.com', phone: '0988901234' },
-    { name: 'Phan Thị Hạnh', email: 'phan.hanh.89@gmail.com', phone: '0989012345' },
-    { name: 'Huỳnh Minh Hậu', email: 'huynh.hau.90@gmail.com', phone: '0990123456' },
-    { name: 'Nguyễn Thị Hiền', email: 'nguyen.hien.91@gmail.com', phone: '0991234567' },
-    { name: 'Trần Văn Hòa', email: 'tran.hoa.92@gmail.com', phone: '0992345678' },
-    { name: 'Lê Thị Huệ', email: 'le.hue.93@gmail.com', phone: '0993456789' },
-    { name: 'Phạm Văn Hưng', email: 'pham.hung.94@gmail.com', phone: '0994567890' },
-    { name: 'Hoàng Thị Khuyên', email: 'hoang.khuyen.95@gmail.com', phone: '0995678901' },
-    { name: 'Đặng Văn Lợi', email: 'dang.loi.96@gmail.com', phone: '0996789012' },
-    { name: 'Ngô Thị Mai', email: 'ngo.mai.97@gmail.com', phone: '0997890123' },
-    { name: 'Hồ Văn Minh', email: 'ho.minh.98@gmail.com', phone: '0998901234' },
-    { name: 'Phan Thị Mỹ', email: 'phan.my.99@gmail.com', phone: '0999012345' },
-    { name: 'Huỳnh Minh Nhân', email: 'huynh.nhan.100@gmail.com', phone: '0990012346' },
-  ];
-
-  // Generate random candidates for each job
-  const generateCandidates = (jobId, numApplications) => {
-    const candidates = [];
-    // Show 50-70% of applications as candidates (realistic conversion rate)
-    // Min 15 candidates, max 80 candidates
-    const conversionRate = 0.5 + Math.random() * 0.2; // 50-70%
-    const numToShow = Math.min(Math.max(15, Math.floor(numApplications * conversionRate)), 80);
-    const usedIndices = new Set();
-    
-    for (let i = 0; i < numToShow; i++) {
-      let randomIndex;
-      do {
-        randomIndex = Math.floor(Math.random() * candidatePool.length);
-      } while (usedIndices.has(randomIndex));
-      
-      usedIndices.add(randomIndex);
-      const candidate = candidatePool[randomIndex];
-      
-      // Random date between 05/03 and 08/03
-      const day = 5 + Math.floor(Math.random() * 4);
-      
-      // Status distribution: 40% approved, 40% pending, 20% rejected
-      let status;
-      const rand = Math.random();
-      if (rand < 0.4) status = 'approved';
-      else if (rand < 0.8) status = 'pending';
-      else status = 'rejected';
-      
-      candidates.push({
-        name: candidate.name,
-        email: candidate.email,
-        phone: candidate.phone,
-        appliedDate: '0' + day + '/03/2026',
-        status: status
-      });
-    }
-    
-    return candidates;
+  const normalizeStatus = (status) => {
+    if (!status) return 'pending';
+    if (status === 'active') return 'approved';
+    if (status === 'closed') return 'rejected';
+    if (status === 'paused') return 'warning';
+    return status;
   };
 
-  // Transform jobPosts data into posts with applications
-  const transformJobToPost = (job, isUrgent = false) => {
-    // For long-term jobs, set end date to 3-6 months from post date
-    let endDate = job.workDate;
-    if (!isUrgent) {
-      const postDateParts = job.workDate.split('/');
-      const postDay = parseInt(postDateParts[0]);
-      const postMonth = parseInt(postDateParts[1]);
-      const postYear = parseInt(postDateParts[2]);
-      
-      // Add 3-6 months randomly
-      const monthsToAdd = 3 + Math.floor(Math.random() * 4); // 3-6 months
-      let endMonth = postMonth + monthsToAdd;
-      let endYear = postYear;
-      
-      if (endMonth > 12) {
-        endYear += Math.floor(endMonth / 12);
-        endMonth = endMonth % 12;
-        if (endMonth === 0) {
-          endMonth = 12;
-          endYear -= 1;
-        }
-      }
-      
-      // Use same day or last day of month if day doesn't exist
-      let endDay = postDay;
-      const daysInMonth = new Date(endYear, endMonth, 0).getDate();
-      if (endDay > daysInMonth) {
-        endDay = daysInMonth;
-      }
-      
-      endDate = String(endDay).padStart(2, '0') + '/' + String(endMonth).padStart(2, '0') + '/' + endYear;
-    }
-    
-    // Remove shift prefix from title (Ca Trưa -, Ca Tối -, Ca Sáng -, Ca Chiều -)
-    let cleanTitle = job.title;
-    const shiftPrefixes = ['Ca Trưa - ', 'Ca Tối - ', 'Ca Sáng - ', 'Ca Chiều - ', 'Ca Tối- ', 'Ca Trưa- ', 'Ca Sáng- ', 'Ca Chiều- '];
-    for (const prefix of shiftPrefixes) {
-      if (cleanTitle.startsWith(prefix)) {
-        cleanTitle = cleanTitle.substring(prefix.length);
-        break;
+  const formatDate = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const parseDateValue = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value === 'string' && value.includes('/')) {
+      const parts = value.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const date = new Date(year, month, day);
+        if (!Number.isNaN(date.getTime())) return date;
       }
     }
-    
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const formatSalary = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) return value;
+    return `${numeric.toLocaleString('vi-VN')} VND`;
+  };
+
+  const mapStandardJob = (job) => {
+    const applications = Number(job.applicants ?? job.views ?? 0);
+    const cvSent = Number.isFinite(Number(job.cvSent)) ? Number(job.cvSent) : Math.floor(applications * 0.7);
+    const reach = Number(job.views ?? job.reach ?? 0);
+    const employerName = job.companyName || job.employerName || job.company || job.employerEmail || job.employerId || 'N/A';
+
     return {
-      id: job.id,
-      title: cleanTitle,
-      employer: job.company,
-      employerType: job.companyType,
-      employerEmail: 'hr@' + job.company.toLowerCase().replace(/\s+/g, '') + '.vn',
-      employerPhone: '090' + String(job.id).padStart(7, '0'),
-      postDate: job.workDate,
-      endDate: endDate,
-      shift: job.shift,
-      salary: job.salary,
-      applications: job.views,
-      cvSent: Math.floor(job.views * 0.7),
-      status: job.urgent ? 'ai-approved' : (job.featured ? 'approved' : 'pending'),
-      aiApproved: job.urgent || job.featured,
-      location: job.location,
-      tags: job.tags,
-      candidates: generateCandidates(job.id, job.views)
+      id: job.idJob || job.id || job.jobId,
+      title: job.title || '',
+      employer: employerName,
+      company: employerName,
+      employerType: job.companyType || '',
+      employerEmail: job.employerEmail || 'N/A',
+      employerPhone: job.employerPhone || '',
+      createdAtRaw: job.createdAt || job.updatedAt || '',
+      postDate: formatDate(job.createdAt) || job.postDate || '',
+      endDate: formatDate(job.endDate) || formatDate(job.expiryDate) || '',
+      shift: job.workHours || job.shift || '',
+      workTime: job.workHours || job.workTime || '',
+      workDate: job.workDate || job.workDays || '',
+      salary: formatSalary(job.salary) || job.salary || '',
+      applications: Number.isNaN(applications) ? 0 : applications,
+      cvSent: Number.isNaN(cvSent) ? 0 : cvSent,
+      reach: Number.isNaN(reach) ? 0 : reach,
+      status: normalizeStatus(job.status),
+      aiApproved: job.aiApproved || false,
+      location: job.location || '',
+      tags: job.tags || [],
+      candidates: job.candidates || [],
+      description: job.description || '',
+      requirements: job.requirements || '',
+      benefits: job.benefits || ''
     };
   };
 
-  // Dữ liệu việc làm Công việc Tiêu chuẩn (standard jobs)
-  const longtermJobs = jobPosts
-    .filter(job => job.category === 'standard')
-    .map(job => transformJobToPost(job, false));
+  const mapQuickJob = (job) => {
+    const applications = Number(job.applicants ?? job.views ?? 0);
+    const cvSent = Number.isFinite(Number(job.cvSent)) ? Number(job.cvSent) : Math.floor(applications * 0.7);
+    const reach = Number(job.views ?? job.reach ?? 0);
+    const employerName = job.companyName || job.employerName || job.company || job.employerEmail || job.employerId || 'N/A';
+    const workTime = job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : job.workTime || '';
+    const salaryValue = job.totalSalary ?? job.hourlyRate ?? job.salary;
 
-  // Dữ liệu việc làm Công việc Tuyển gấp (urgent jobs)
-  const urgentJobs = jobPosts
-    .filter(job => job.category === 'urgent')
-    .map(job => transformJobToPost(job, true));
+    return {
+      id: job.idJob || job.id || job.jobId,
+      title: job.title || '',
+      employer: employerName,
+      company: employerName,
+      employerType: job.companyType || '',
+      employerEmail: job.employerEmail || 'N/A',
+      employerPhone: job.employerPhone || '',
+      createdAtRaw: job.createdAt || job.updatedAt || '',
+      postDate: formatDate(job.createdAt) || job.postDate || '',
+      endDate: formatDate(job.endDate) || formatDate(job.expiryDate) || '',
+      shift: job.shift || '',
+      workTime: workTime,
+      workDate: job.workDate || '',
+      salary: formatSalary(salaryValue) || salaryValue || '',
+      applications: Number.isNaN(applications) ? 0 : applications,
+      cvSent: Number.isNaN(cvSent) ? 0 : cvSent,
+      reach: Number.isNaN(reach) ? 0 : reach,
+      status: normalizeStatus(job.status),
+      aiApproved: job.aiApproved || false,
+      location: job.location || '',
+      tags: job.tags || [],
+      candidates: job.candidates || [],
+      description: job.description || '',
+      requirements: job.requirements || '',
+      benefits: job.benefits || ''
+    };
+  };
 
-  const currentJobs = activeTab === 'longterm' ? longtermJobs : urgentJobs;
+  useEffect(() => {
+    let isActive = true;
+
+    const loadPosts = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [standardResponse, urgentResponse] = await Promise.all([
+          jobPostService.getAllJobPosts ? jobPostService.getAllJobPosts() : jobPostService.getAllActiveJobs(),
+          quickJobService.getAllQuickJobs ? quickJobService.getAllQuickJobs() : quickJobService.getAllActiveQuickJobs()
+        ]);
+
+        if (!isActive) return;
+
+        const standardList = Array.isArray(standardResponse) ? standardResponse : standardResponse?.data || [];
+        const urgentList = Array.isArray(urgentResponse) ? urgentResponse : urgentResponse?.data || [];
+
+        setStandardJobs(standardList.map(mapStandardJob));
+        setUrgentJobs(urgentList.map(mapQuickJob));
+      } catch (err) {
+        if (!isActive) return;
+        setLoadError(err?.message || 'Failed to load posts');
+        setStandardJobs([]);
+        setUrgentJobs([]);
+      } finally {
+        if (isActive) setIsLoading(false);
+      }
+    };
+
+    loadPosts();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const currentJobs = activeTab === 'longterm' ? standardJobs : urgentJobs;
 
   const getStatusText = (status) => {
     if (status === 'ai-approved') return language === 'vi' ? 'AI Tự động duyệt' : 'AI Auto-approved';
@@ -796,28 +728,74 @@ const PostsManagement = () => {
   const totalApplications = currentJobs.reduce((sum, job) => sum + job.applications, 0);
   const totalCVSent = currentJobs.reduce((sum, job) => sum + job.cvSent, 0);
 
+  const getJobDate = (job) => parseDateValue(job.createdAtRaw) || parseDateValue(job.postDate) || parseDateValue(job.workDate);
+
+  const buildMonthlyData = (jobs) => {
+    const now = new Date();
+    const results = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const month = date.getMonth();
+      const year = date.getFullYear();
+      const label = language === 'vi'
+        ? `T${month + 1}`
+        : date.toLocaleString('en-US', { month: 'short' });
+
+      const periodStart = new Date(year, month, 1);
+      const periodEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      const periodJobs = jobs.filter((job) => {
+        const jobDate = getJobDate(job);
+        return jobDate && jobDate >= periodStart && jobDate <= periodEnd;
+      });
+
+      const posts = periodJobs.length;
+      const reach = periodJobs.reduce((sum, job) => sum + (job.reach || 0), 0);
+
+      results.push({ period: label, posts, reach });
+    }
+    return results;
+  };
+
+  const buildQuarterlyData = (jobs) => {
+    const now = new Date();
+    const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+    const results = [];
+
+    for (let i = 3; i >= 0; i -= 1) {
+      const quarterOffset = currentQuarter - i;
+      const yearOffset = Math.floor((quarterOffset - 1) / 4);
+      const quarter = ((quarterOffset - 1 + 4) % 4) + 1;
+      const year = now.getFullYear() + yearOffset;
+      const startMonth = (quarter - 1) * 3;
+      const periodStart = new Date(year, startMonth, 1);
+      const periodEnd = new Date(year, startMonth + 3, 0, 23, 59, 59, 999);
+
+      const periodJobs = jobs.filter((job) => {
+        const jobDate = getJobDate(job);
+        return jobDate && jobDate >= periodStart && jobDate <= periodEnd;
+      });
+
+      const posts = periodJobs.length;
+      const reach = periodJobs.reduce((sum, job) => sum + (job.reach || 0), 0);
+
+      results.push({ period: `Q${quarter}`, posts, reach });
+    }
+
+    return results;
+  };
+
   // Dữ liệu biểu đồ theo tháng - Tổng bài đăng và Tổng lượt tiếp cận
   const [chartView, setChartView] = useState('month'); // 'month' or 'quarter'
-  
-  const monthlyData = [
-    { period: language === 'vi' ? 'T1' : 'Jan', posts: 45, reach: 3250 },
-    { period: language === 'vi' ? 'T2' : 'Feb', posts: 52, reach: 4180 },
-    { period: language === 'vi' ? 'T3' : 'Mar', posts: 48, reach: 3820 },
-    { period: language === 'vi' ? 'T4' : 'Apr', posts: 58, reach: 4650 },
-    { period: language === 'vi' ? 'T5' : 'May', posts: 65, reach: 5290 },
-    { period: language === 'vi' ? 'T6' : 'Jun', posts: 72, reach: 6100 },
-  ];
 
-  const quarterlyData = [
-    { period: 'Q1', posts: 145, reach: 11250 },
-    { period: 'Q2', posts: 195, reach: 15640 },
-    { period: 'Q3', posts: 220, reach: 18380 },
-    { period: 'Q4', posts: 185, reach: 14250 },
-  ];
+  const chartData = useMemo(() => {
+    if (chartView === 'month') {
+      return buildMonthlyData(currentJobs);
+    }
+    return buildQuarterlyData(currentJobs);
+  }, [chartView, currentJobs, language]);
 
-  const chartData = chartView === 'month' ? monthlyData : quarterlyData;
-  const maxPosts = Math.max(...chartData.map(d => d.posts));
-  const maxReach = Math.max(...chartData.map(d => d.reach));
+  const maxPosts = Math.max(1, ...chartData.map(d => d.posts));
+  const maxReach = Math.max(1, ...chartData.map(d => d.reach));
 
   // Dữ liệu cho biểu đồ tròn
   const pieData = [
@@ -878,7 +856,7 @@ const PostsManagement = () => {
               fontSize: '12px',
               fontWeight: '600'
             }}>
-              {longtermJobs.length}
+              {standardJobs.length}
             </span>
           </Tab>
           <Tab 
@@ -1120,6 +1098,18 @@ const PostsManagement = () => {
             </div>
           </ChartCard>
         </ChartsContainer>
+
+        {isLoading && (
+          <div style={{ marginBottom: '16px', color: '#64748b', fontWeight: 600 }}>
+            {language === 'vi' ? 'Đang tải dữ liệu bài đăng...' : 'Loading job posts...'}
+          </div>
+        )}
+
+        {loadError && (
+          <div style={{ marginBottom: '16px', color: '#dc2626', fontWeight: 600 }}>
+            {language === 'vi' ? `Không tải được dữ liệu: ${loadError}` : `Failed to load data: ${loadError}`}
+          </div>
+        )}
 
         <TableFilter 
           searchValue={searchTerm}

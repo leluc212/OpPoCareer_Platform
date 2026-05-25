@@ -1,13 +1,20 @@
 import json
 import boto3
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import uuid
+from boto3.dynamodb.conditions import Key, Attr
+from botocore.exceptions import ClientError
 
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
 table_name = os.environ.get('TABLE_NAME', 'PackageSubscriptions')
 table = dynamodb.Table(table_name)
+notifications_table_name = os.environ.get('NOTIFICATIONS_TABLE', 'Notifications')
+notifications_table = dynamodb.Table(notifications_table_name)
+
+VN_TZ = timezone(timedelta(hours=7))
 
 # Helper function to convert Decimal to int/float for JSON serialization
 def decimal_default(obj):
@@ -29,6 +36,29 @@ def lambda_handler(event, context):
         'Access-Control-Max-Age': '3600',
         'Content-Type': 'application/json; charset=utf-8'
     }
+
+    # Scheduled EventBridge trigger
+    if event.get('source') == 'aws.events' or event.get('detail-type') == 'Scheduled Event':
+        try:
+            expired_count = process_expired_subscriptions()
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': True,
+                    'expiredCount': expired_count
+                })
+            }
+        except Exception as e:
+            print(f"Error processing expired subscriptions: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': f'Error processing expired subscriptions: {str(e)}'
+                })
+            }
     
     # Check if this is API Gateway v2 format (HTTP API)
     is_v2 = 'requestContext' in event and 'http' in event.get('requestContext', {})
@@ -111,21 +141,243 @@ def generate_subscription_id():
     random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"SUB-{date_str}-{random_str}"
 
-def calculate_expiry_date(duration):
-    """Calculate expiry date based on duration"""
-    now = datetime.now()
-    
+def get_vn_now():
+    return datetime.now(VN_TZ)
+
+def calculate_expiry_datetime(duration, start_dt):
+    """Calculate expiry datetime based on duration"""
     if '24h' in duration or '24 h' in duration:
-        expiry = now + timedelta(days=1)
+        expiry = start_dt + timedelta(hours=24)
     elif '7' in duration:
-        expiry = now + timedelta(days=7)
+        expiry = start_dt + timedelta(days=7)
     elif '30' in duration or 'tháng' in duration or 'month' in duration:
-        expiry = now + timedelta(days=30)
+        expiry = start_dt + timedelta(days=30)
     else:
         # Default to 7 days
-        expiry = now + timedelta(days=7)
-    
-    return expiry.strftime('%Y-%m-%d')
+        expiry = start_dt + timedelta(days=7)
+
+    return expiry
+
+def format_vn_date(dt):
+    return dt.strftime('%Y-%m-%d')
+
+def format_vn_datetime(dt):
+    vn_dt = dt.astimezone(VN_TZ) if dt.tzinfo else dt.replace(tzinfo=VN_TZ)
+    return vn_dt.strftime('%H:%M %d/%m/%Y')
+
+def format_expiry_time(subscription):
+    expiry_dt = parse_expiry_datetime(subscription)
+    if expiry_dt:
+        return format_vn_datetime(expiry_dt)
+
+    return subscription.get('expiryDateTime') or subscription.get('expiryDate', '')
+
+def parse_expiry_datetime(item):
+    expiry_dt = item.get('expiryDateTime')
+    if expiry_dt:
+        try:
+            return datetime.fromisoformat(expiry_dt)
+        except ValueError:
+            return None
+
+    expiry_date = item.get('expiryDate')
+    if not expiry_date:
+        return None
+
+    try:
+        base_date = datetime.strptime(expiry_date, '%Y-%m-%d')
+        return base_date.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=VN_TZ)
+    except ValueError:
+        return None
+
+def create_notification(notification):
+    notifications_table.put_item(Item=notification)
+
+def build_expiry_notification(recipient_id, recipient_role, subscription, now_dt):
+    package_name = subscription.get('packageName', 'Gói dịch vụ')
+    duration = subscription.get('duration', '')
+    company_name = subscription.get('companyName', '')
+    expiry_time = format_expiry_time(subscription)
+
+    if recipient_role == 'admin':
+        title = 'Gói dịch vụ đã hết hạn'
+        message = f"{company_name} - {package_name} ({duration}) đã hết hạn lúc {expiry_time}."
+        action_url = '/admin/packages'
+        action_text = 'Xem gói'
+    else:
+        title = 'Gói dịch vụ đã hết hạn'
+        message = f"Gói {package_name} ({duration}) đã hết hạn lúc {expiry_time}. Vui lòng gia hạn nếu cần."
+        action_url = '/employer/packages'
+        action_text = 'Xem gói'
+
+    notification_id = f"NOTIF-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8]}"
+
+    return {
+        'notificationId': notification_id,
+        'type': 'package_expired',
+        'title': title,
+        'titleEn': title,
+        'message': message,
+        'messageEn': message,
+        'recipientId': recipient_id,
+        'recipientRole': recipient_role,
+        'senderId': 'system',
+        'senderName': 'System',
+        'data': {
+            'subscriptionId': subscription.get('subscriptionId'),
+            'packageName': package_name,
+            'duration': duration,
+            'expiryDateTime': subscription.get('expiryDateTime'),
+            'expiryDate': subscription.get('expiryDate')
+        },
+        'read': False,
+        'deleted': False,
+        'createdAt': now_dt.isoformat(),
+        'updatedAt': now_dt.isoformat(),
+        'icon': 'bell',
+        'color': '#ef4444',
+        'actionUrl': action_url,
+        'actionText': action_text,
+        'actionTextEn': action_text
+    }
+
+def build_pre_expiry_notification(recipient_id, recipient_role, subscription, now_dt, expiry_dt):
+    package_name = subscription.get('packageName', 'Gói dịch vụ')
+    duration = subscription.get('duration', '')
+    company_name = subscription.get('companyName', '')
+    expiry_time = format_vn_datetime(expiry_dt)
+
+    title = 'Gói dịch vụ sắp hết hạn'
+
+    if recipient_role == 'admin':
+        message = (
+            f"{company_name} - {package_name} ({duration}) sẽ hết hạn lúc {expiry_time}."
+        )
+        action_url = '/admin/packages'
+        action_text = 'Xem gói'
+        action_text_en = 'View package'
+    else:
+        message = (
+            f"Gói {package_name} ({duration}) sẽ hết hạn lúc {expiry_time}. "
+            "Vui lòng gia hạn để tránh gián đoạn."
+        )
+        action_url = '/employer/packages'
+        action_text = 'Gia hạn ngay'
+        action_text_en = 'Renew now'
+
+    notification_id = f"NOTIF-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8]}"
+
+    return {
+        'notificationId': notification_id,
+        'type': 'package_expiring',
+        'title': title,
+        'titleEn': title,
+        'message': message,
+        'messageEn': message,
+        'recipientId': recipient_id,
+        'recipientRole': recipient_role,
+        'senderId': 'system',
+        'senderName': 'System',
+        'data': {
+            'subscriptionId': subscription.get('subscriptionId'),
+            'packageName': package_name,
+            'duration': duration,
+            'expiryDateTime': subscription.get('expiryDateTime'),
+            'expiryDate': subscription.get('expiryDate')
+        },
+        'read': False,
+        'deleted': False,
+        'createdAt': now_dt.isoformat(),
+        'updatedAt': now_dt.isoformat(),
+        'icon': 'bell',
+        'color': '#f59e0b',
+        'actionUrl': action_url,
+        'actionText': action_text,
+        'actionTextEn': action_text_en
+    }
+
+def process_expired_subscriptions():
+    now_dt = get_vn_now()
+    expired_count = 0
+    pre_expiry_hours = 3
+
+    statuses = ['active', 'locked']
+    subscriptions = []
+
+    for status in statuses:
+        try:
+            response = table.query(
+                IndexName='StatusIndex',
+                KeyConditionExpression=Key('status').eq(status)
+            )
+            subscriptions.extend(response.get('Items', []))
+        except ClientError as error:
+            if error.response.get('Error', {}).get('Code') != 'ValidationException':
+                raise
+
+            response = table.scan(
+                FilterExpression=Attr('status').eq(status)
+            )
+            subscriptions.extend(response.get('Items', []))
+
+    for subscription in subscriptions:
+        expiry_dt = parse_expiry_datetime(subscription)
+        if not expiry_dt:
+            continue
+
+        if expiry_dt <= now_dt:
+            table.update_item(
+                Key={'subscriptionId': subscription['subscriptionId']},
+                UpdateExpression="SET #status = :status, updatedAt = :updatedAt, expiredAt = :expiredAt",
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': 'expired',
+                    ':updatedAt': now_dt.isoformat(),
+                    ':expiredAt': now_dt.isoformat()
+                }
+            )
+
+            expired_count += 1
+
+            admin_notification = build_expiry_notification('admin', 'admin', subscription, now_dt)
+            create_notification(admin_notification)
+
+            employer_id = subscription.get('employerId')
+            if employer_id:
+                employer_notification = build_expiry_notification(employer_id, 'employer', subscription, now_dt)
+                create_notification(employer_notification)
+            continue
+
+        pre_expiry_at = expiry_dt - timedelta(hours=pre_expiry_hours)
+        if pre_expiry_at <= now_dt < expiry_dt and not subscription.get('preExpiryNotifiedAt'):
+            employer_id = subscription.get('employerId')
+            admin_notification = build_pre_expiry_notification('admin', 'admin', subscription, now_dt, expiry_dt)
+            try:
+                create_notification(admin_notification)
+                if employer_id:
+                    employer_notification = build_pre_expiry_notification(
+                        employer_id,
+                        'employer',
+                        subscription,
+                        now_dt,
+                        expiry_dt
+                    )
+                    create_notification(employer_notification)
+
+                table.update_item(
+                    Key={'subscriptionId': subscription['subscriptionId']},
+                    UpdateExpression='SET preExpiryNotifiedAt = :notifiedAt, updatedAt = :updatedAt',
+                    ExpressionAttributeValues={
+                        ':notifiedAt': now_dt.isoformat(),
+                        ':updatedAt': now_dt.isoformat()
+                    },
+                    ConditionExpression='attribute_not_exists(preExpiryNotifiedAt)'
+                )
+            except ClientError as error:
+                if error.response.get('Error', {}).get('Code') != 'ConditionalCheckFailedException':
+                    raise
+
+    return expired_count
 
 def get_package_price(package_name, duration):
     """Get package price based on name and duration"""
@@ -164,8 +416,9 @@ def create_subscription(body_str, headers):
         # Calculate price
         price = get_package_price(body['packageName'], body['duration'])
         
-        # Calculate expiry date
-        expiry_date = calculate_expiry_date(body['duration'])
+        now_dt = get_vn_now()
+        expiry_dt = calculate_expiry_datetime(body['duration'], now_dt)
+        expiry_date = format_vn_date(expiry_dt)
         
         # Create item
         item = {
@@ -175,12 +428,14 @@ def create_subscription(body_str, headers):
             'packageName': body['packageName'],
             'duration': body['duration'],
             'price': Decimal(str(price)),
-            'purchaseDate': datetime.now().strftime('%Y-%m-%d'),
+            'purchaseDate': format_vn_date(now_dt),
+            'purchaseDateTime': now_dt.isoformat(),
             'expiryDate': expiry_date,
+            'expiryDateTime': expiry_dt.isoformat(),
             'status': 'pending',  # pending, active, expired
             'approvalStatus': 'pending',  # pending, approved, rejected
-            'createdAt': datetime.now().isoformat(),
-            'updatedAt': datetime.now().isoformat()
+            'createdAt': now_dt.isoformat(),
+            'updatedAt': now_dt.isoformat()
         }
         
         # Put item in DynamoDB
@@ -325,13 +580,14 @@ def update_subscription(body_str, subscription_id, headers):
         # Parse update data
         body = json.loads(body_str) if isinstance(body_str, str) else body_str
         
+        now_dt = get_vn_now()
         # Build update expression
         update_expr = "SET updatedAt = :updatedAt"
-        expr_values = {':updatedAt': datetime.now().isoformat()}
+        expr_values = {':updatedAt': now_dt.isoformat()}
         expr_names = {}
         
         # Add fields to update
-        updatable_fields = ['status', 'approvalStatus', 'purchaseDate', 'expiryDate']
+        updatable_fields = ['status', 'approvalStatus', 'purchaseDate', 'expiryDate', 'purchaseDateTime', 'expiryDateTime']
         
         for field in updatable_fields:
             if field in body:
@@ -347,17 +603,25 @@ def update_subscription(body_str, subscription_id, headers):
         
         # If approving, set dates
         if body.get('approvalStatus') == 'approved' or body.get('status') == 'active':
+            existing_item = response['Item']
+            duration = existing_item.get('duration', '7 ngày')
+            expiry_dt = calculate_expiry_datetime(duration, now_dt)
+
             if 'purchaseDate' not in body:
                 update_expr += ", purchaseDate = :purchaseDate"
-                expr_values[':purchaseDate'] = datetime.now().strftime('%Y-%m-%d')
-            
+                expr_values[':purchaseDate'] = format_vn_date(now_dt)
+
+            if 'purchaseDateTime' not in body:
+                update_expr += ", purchaseDateTime = :purchaseDateTime"
+                expr_values[':purchaseDateTime'] = now_dt.isoformat()
+
             if 'expiryDate' not in body:
-                # Get duration from existing item
-                existing_item = response['Item']
-                duration = existing_item.get('duration', '7 ngày')
-                expiry_date = calculate_expiry_date(duration)
                 update_expr += ", expiryDate = :expiryDate"
-                expr_values[':expiryDate'] = expiry_date
+                expr_values[':expiryDate'] = format_vn_date(expiry_dt)
+
+            if 'expiryDateTime' not in body:
+                update_expr += ", expiryDateTime = :expiryDateTime"
+                expr_values[':expiryDateTime'] = expiry_dt.isoformat()
         
         # Update item
         update_params = {

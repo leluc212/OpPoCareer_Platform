@@ -16,6 +16,8 @@ import {
   XCircle,
   AlertCircle,
   Eye,
+  Lock,
+  Unlock,
   BarChart3,
   PieChart as PieChartIcon,
   Users,
@@ -319,12 +321,14 @@ const StatusBadge = styled.span`
   font-weight: 600;
   background: ${props => {
     if (props.$status === 'active') return '#dcfce7';
+    if (props.$status === 'locked') return '#fee2e2';
     if (props.$status === 'expired') return '#fee2e2';
     if (props.$status === 'expiring') return '#fef3c7';
     return '#f3f4f6';
   }};
   color: ${props => {
     if (props.$status === 'active') return '#15803d';
+    if (props.$status === 'locked') return '#dc2626';
     if (props.$status === 'expired') return '#dc2626';
     if (props.$status === 'expiring') return '#ca8a04';
     return '#6b7280';
@@ -628,6 +632,20 @@ const ModalButton = styled(motion.button)`
   }
 `;
 
+const ConfirmModalHeader = styled(ModalHeader)`
+  background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+`;
+
+const ConfirmIconWrapper = styled(SuccessIconWrapper)`
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
+`;
+
+const ConfirmButton = styled(ModalButton)`
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+`;
+
 const PackagesManagement = () => {
   const { language } = useLanguage();
   const [searchTerm, setSearchTerm] = useState('');
@@ -636,12 +654,27 @@ const PackagesManagement = () => {
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved'
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [approvedPackageInfo, setApprovedPackageInfo] = useState(null);
+  const [showLockConfirm, setShowLockConfirm] = useState(false);
+  const [lockTarget, setLockTarget] = useState(null);
   const itemsPerPage = 20;
 
   // Dữ liệu gói dịch vụ đã mua - Load từ API
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   // Load subscriptions from API
   useEffect(() => {
@@ -663,7 +696,9 @@ const PackagesManagement = () => {
           employer: item.companyName,
           package: item.packageName,
           purchaseDate: item.purchaseDate,
+          purchaseDateTime: item.purchaseDateTime,
           expiryDate: item.expiryDate,
+          expiryDateTime: item.expiryDateTime,
           status: item.status,
           price: typeof item.price === 'number' ? item.price : parseFloat(item.price),
           duration: item.duration,
@@ -709,6 +744,7 @@ const PackagesManagement = () => {
 
   const getStatusText = (status) => {
     if (status === 'active') return language === 'vi' ? 'Đang hoạt động' : 'Active';
+    if (status === 'locked') return language === 'vi' ? 'Bị khóa' : 'Locked';
     if (status === 'expired') return language === 'vi' ? 'Đã hết hạn' : 'Expired';
     if (status === 'expiring') return language === 'vi' ? 'Sắp hết hạn' : 'Expiring Soon';
     return status;
@@ -720,6 +756,7 @@ const PackagesManagement = () => {
     { value: 'Spotlight Banner', label: 'Spotlight Banner' },
     { value: 'Top Spotlight', label: 'Top Spotlight' },
     { value: 'active', label: language === 'vi' ? 'Đang hoạt động' : 'Active' },
+    { value: 'locked', label: language === 'vi' ? 'Bị khóa' : 'Locked' },
     { value: 'expiring', label: language === 'vi' ? 'Sắp hết hạn' : 'Expiring' },
     { value: 'expired', label: language === 'vi' ? 'Đã hết hạn' : 'Expired' },
   ];
@@ -731,7 +768,7 @@ const PackagesManagement = () => {
       // "Đã duyệt" = gói đã có status (active, expiring, expired)
       const matchesTab = activeTab === 'pending' 
         ? (purchase.approvalStatus === 'pending' || purchase.status === 'pending')
-        : (purchase.status === 'active' || purchase.status === 'expiring' || purchase.status === 'expired');
+        : (purchase.status === 'active' || purchase.status === 'expiring' || purchase.status === 'expired' || purchase.status === 'locked');
       
       const matchesSearch = searchTerm === '' || 
         purchase.employer.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -845,7 +882,8 @@ const PackagesManagement = () => {
         employer: purchase.employer,
         package: purchase.package,
         duration: purchase.duration,
-        expiryDate: updatedSubscription.expiryDate || updatedSubscription.data?.expiryDate
+        expiryDate: updatedSubscription.expiryDate || updatedSubscription.data?.expiryDate,
+        expiryDateTime: updatedSubscription.expiryDateTime || updatedSubscription.data?.expiryDateTime
       });
       setShowSuccessModal(true);
       
@@ -857,7 +895,9 @@ const PackagesManagement = () => {
               status: updatedSubscription.status || updatedSubscription.data?.status || 'active',
               approvalStatus: updatedSubscription.approvalStatus || updatedSubscription.data?.approvalStatus || 'approved',
               purchaseDate: updatedSubscription.purchaseDate || updatedSubscription.data?.purchaseDate || p.purchaseDate,
-              expiryDate: updatedSubscription.expiryDate || updatedSubscription.data?.expiryDate || p.expiryDate
+              purchaseDateTime: updatedSubscription.purchaseDateTime || updatedSubscription.data?.purchaseDateTime || p.purchaseDateTime,
+              expiryDate: updatedSubscription.expiryDate || updatedSubscription.data?.expiryDate || p.expiryDate,
+              expiryDateTime: updatedSubscription.expiryDateTime || updatedSubscription.data?.expiryDateTime || p.expiryDateTime
             }
           : p
       ));
@@ -868,6 +908,75 @@ const PackagesManagement = () => {
       console.error('Error stack:', error.stack);
       alert('Có lỗi xảy ra: ' + error.message);
     }
+  };
+
+  const handleLockPackage = async (purchaseId) => {
+    try {
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+      const response = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'locked' })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to lock subscription');
+      }
+
+      const updatedSubscription = await response.json();
+
+      setPurchases(prev => prev.map(p =>
+        p.id === purchaseId
+          ? {
+              ...p,
+              status: updatedSubscription.status || updatedSubscription.data?.status || 'locked',
+              approvalStatus: updatedSubscription.approvalStatus || updatedSubscription.data?.approvalStatus || p.approvalStatus
+            }
+          : p
+      ));
+    } catch (error) {
+      console.error('❌ Error locking subscription:', error);
+      alert('Có lỗi xảy ra: ' + error.message);
+    }
+  };
+
+  const handleUnlockPackage = async (purchaseId) => {
+    try {
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+      const response = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'active' })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to unlock subscription');
+      }
+
+      const updatedSubscription = await response.json();
+
+      setPurchases(prev => prev.map(p =>
+        p.id === purchaseId
+          ? {
+              ...p,
+              status: updatedSubscription.status || updatedSubscription.data?.status || 'active',
+              approvalStatus: updatedSubscription.approvalStatus || updatedSubscription.data?.approvalStatus || p.approvalStatus
+            }
+          : p
+      ));
+    } catch (error) {
+      console.error('❌ Error unlocking subscription:', error);
+      alert('Có lỗi xảy ra: ' + error.message);
+    }
+  };
+
+  const openLockConfirm = (purchase) => {
+    setLockTarget(purchase);
+    setShowLockConfirm(true);
   };
 
   const stats = {
@@ -1108,13 +1217,13 @@ const PackagesManagement = () => {
                     <td>
                       <DateText>
                         <Calendar size={14} style={{ display: 'inline', marginRight: '4px' }} />
-                        {purchase.purchaseDate}
+                        {formatDateTime(purchase.purchaseDateTime || purchase.purchaseDate)}
                       </DateText>
                     </td>
                     <td>
                       <DateText>
                         <Clock size={14} style={{ display: 'inline', marginRight: '4px' }} />
-                        {purchase.expiryDate}
+                        {formatDateTime(purchase.expiryDateTime || purchase.expiryDate)}
                       </DateText>
                     </td>
                     <td>
@@ -1142,6 +1251,22 @@ const PackagesManagement = () => {
                         <IconButton title={language === 'vi' ? 'Xem chi tiết' : 'View details'}>
                           <Eye size={16} />
                         </IconButton>
+                        {activeTab === 'approved' && purchase.status === 'active' && (
+                          <IconButton
+                            title={language === 'vi' ? 'Khóa dịch vụ' : 'Lock service'}
+                            onClick={() => openLockConfirm(purchase)}
+                          >
+                            <Lock size={16} />
+                          </IconButton>
+                        )}
+                          {activeTab === 'approved' && purchase.status === 'locked' && (
+                            <IconButton
+                              title={language === 'vi' ? 'Mở khóa dịch vụ' : 'Unlock service'}
+                              onClick={() => handleUnlockPackage(purchase.id)}
+                            >
+                              <Unlock size={16} />
+                            </IconButton>
+                          )}
                       </ActionButtons>
                     </td>
                   </tr>
@@ -1287,7 +1412,9 @@ const PackagesManagement = () => {
                     <div className="label">
                       {language === 'vi' ? 'Hết hạn' : 'Expiry Date'}
                     </div>
-                    <div className="value">{approvedPackageInfo.expiryDate}</div>
+                    <div className="value">
+                      {formatDateTime(approvedPackageInfo.expiryDateTime || approvedPackageInfo.expiryDate)}
+                    </div>
                   </InfoContent>
                 </InfoRow>
               </ModalBody>
@@ -1301,6 +1428,87 @@ const PackagesManagement = () => {
                   <Send />
                   {language === 'vi' ? 'Hoàn tất' : 'Done'}
                 </ModalButton>
+              </ModalFooter>
+            </ModalBox>
+          </ModalOverlay>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showLockConfirm && lockTarget && (
+          <ModalOverlay
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowLockConfirm(false)}
+          >
+            <ModalBox
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ConfirmModalHeader>
+                <ModalCloseBtn onClick={() => setShowLockConfirm(false)}>
+                  <X />
+                </ModalCloseBtn>
+                <ConfirmIconWrapper
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                >
+                  <Lock />
+                </ConfirmIconWrapper>
+                <ModalTitle>
+                  {language === 'vi' ? 'Xác nhận khóa dịch vụ?' : 'Confirm lock service?'}
+                </ModalTitle>
+                <ModalSubtitle>
+                  {language === 'vi'
+                    ? 'Gói dịch vụ sẽ chuyển sang trạng thái bị khóa'
+                    : 'This package will be moved to locked status'}
+                </ModalSubtitle>
+              </ConfirmModalHeader>
+
+              <ModalBody>
+                <InfoRow>
+                  <InfoIcon>
+                    <Users />
+                  </InfoIcon>
+                  <InfoContent>
+                    <div className="label">{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</div>
+                    <div className="value">{lockTarget.employer}</div>
+                  </InfoContent>
+                </InfoRow>
+                <InfoRow>
+                  <InfoIcon>
+                    <Package />
+                  </InfoIcon>
+                  <InfoContent>
+                    <div className="label">{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</div>
+                    <div className="value">{lockTarget.package}</div>
+                  </InfoContent>
+                </InfoRow>
+              </ModalBody>
+
+              <ModalFooter style={{ gap: '12px' }}>
+                <ModalButton
+                  onClick={() => setShowLockConfirm(false)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {language === 'vi' ? 'Hủy' : 'Cancel'}
+                </ModalButton>
+                <ConfirmButton
+                  onClick={async () => {
+                    await handleLockPackage(lockTarget.id);
+                    setShowLockConfirm(false);
+                    setLockTarget(null);
+                  }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {language === 'vi' ? 'Khóa' : 'Lock'}
+                </ConfirmButton>
               </ModalFooter>
             </ModalBox>
           </ModalOverlay>

@@ -393,6 +393,26 @@ class QuickJobService {
       return [];
     }
   }
+
+  /**
+   * Get all quick job posts (admin view)
+   */
+  async getAllQuickJobs() {
+    console.log('🚀 getAllQuickJobs() called');
+    try {
+      const result = await this.makeRequest('/quick-jobs');
+
+      if (result.success && result.data) {
+        console.log('✅ All quick jobs loaded from DynamoDB:', result.data.length, 'jobs');
+        return result.data;
+      }
+
+      return [];
+    } catch (error) {
+      console.error('❌ Error fetching all quick jobs:', error);
+      return this.getAllActiveQuickJobs();
+    }
+  }
 }
 
 // Export singleton instance

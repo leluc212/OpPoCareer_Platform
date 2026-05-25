@@ -15,6 +15,8 @@ import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import { getJobApplications } from '../../services/applicationService';
+import { getNotifications } from '../../services/notificationService';
+import { formatRelativeTime } from '../../hooks/useRelativeTime';
 import DynamicTranslate from '../../components/DynamicTranslate';
 import {
   Briefcase,
@@ -34,7 +36,11 @@ import {
   Award,
   Zap,
   ArrowUpRight,
-  Download
+  Download,
+  Sparkles,
+  UserPlus,
+  Settings,
+  Bell
 } from 'lucide-react';
 
 const fadeIn = keyframes`
@@ -497,6 +503,13 @@ const EmployerDashboard = () => {
     applicationsList: []
   });
   const [recentApplications, setRecentApplications] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    responseRate: '0%',
+    avgHiringTime: '0 ngày',
+    companyRating: '0/5',
+    growth: '+0%'
+  });
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   useEffect(() => {
@@ -518,12 +531,14 @@ const EmployerDashboard = () => {
           totalViewsCount += (job.views || 0);
         });
 
-        // Fetch applications for standard jobs
+        // Fetch applications for ALL standard jobs
         const appsPromises = allStandard.map(job => 
           getJobApplications(job.idJob || job.id).catch(() => [])
         );
         const appsResults = await Promise.all(appsPromises);
-        let allApplications = appsResults.flat().filter(app => {
+        const rawAllApplications = appsResults.flat();
+        
+        let allApplications = rawAllApplications.filter(app => {
           // Consider it valid if it has a name OR an email that isn't 'Unknown'
           const hasIdentify = app.fullName?.trim() || app.candidateName?.trim() || (app.candidateEmail && app.candidateEmail !== 'Unknown');
           // Only show actionable applications
@@ -557,6 +572,82 @@ const EmployerDashboard = () => {
         
         setRecentApplications(recentAppsList);
 
+        // Fetch Recent Activities from Notifications
+        try {
+          const notifications = await getNotifications(user.userId || user.id, 'employer');
+          const mappedActivities = notifications.slice(0, 5).map(notif => {
+            let IconComp = Bell; // Fallback icon
+            let iconColor = '#3b82f6'; // Fallback color
+
+            switch (notif.type) {
+              case 'application':
+                IconComp = UserPlus;
+                iconColor = '#3b82f6';
+                break;
+              case 'package_approved':
+                IconComp = CheckCircle;
+                iconColor = '#10b981';
+                break;
+              case 'package_purchase_request':
+                IconComp = Briefcase;
+                iconColor = '#8B5CF6';
+                break;
+              case 'success':
+                IconComp = CheckCircle;
+                iconColor = '#10b981';
+                break;
+              case 'system':
+                IconComp = Settings;
+                iconColor = '#6b7280';
+                break;
+              default:
+                IconComp = Bell;
+                iconColor = '#3b82f6';
+            }
+
+            return {
+              title: language === 'vi' ? notif.title : notif.titleEn,
+              time: formatRelativeTime(notif.createdAt, language),
+              icon: IconComp,
+              color: iconColor
+            };
+          });
+          setRecentActivities(mappedActivities);
+        } catch (notifError) {
+          console.error("Error fetching activities for dashboard:", notifError);
+        }
+
+        // Calculate Performance Metrics
+        const totalApps = rawAllApplications.length;
+        const respondedApps = rawAllApplications.filter(app => app.status && app.status !== 'pending').length;
+        const responseRateVal = totalApps > 0 ? Math.round((respondedApps / totalApps) * 100) : 0;
+        
+        const acceptedApps = rawAllApplications.filter(app => app.status === 'accepted' || app.status === 'completed');
+        
+        // Calculate Avg Hiring Time (from creation to acceptance)
+        let totalHiringDays = 0;
+        let countForHiringTime = 0;
+        
+        acceptedApps.forEach(app => {
+          if (app.createdAt && (app.updatedAt || app.acceptedAt)) {
+            const start = new Date(app.createdAt);
+            const end = new Date(app.updatedAt || app.acceptedAt);
+            const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0) {
+              totalHiringDays += diffDays;
+              countForHiringTime++;
+            }
+          }
+        });
+        
+        const avgHiringDays = countForHiringTime > 0 ? Math.round(totalHiringDays / countForHiringTime) : 0;
+
+        setPerformanceMetrics({
+          responseRate: `${responseRateVal}%`,
+          avgHiringTime: language === 'vi' ? `${avgHiringDays || 0} ngày` : `${avgHiringDays || 0} days`,
+          companyRating: employerProfile?.rating ? `${employerProfile.rating}/5` : '4.8/5', // Fallback to 4.8 if no rating
+          growth: '+32%' // Hardcoded for now until we have historical comparisons
+        });
 
       } catch (error) {
         console.error("Error fetching dashboard stats:", error);
@@ -567,18 +658,12 @@ const EmployerDashboard = () => {
     fetchStats();
   }, [user]);
 
-  const activities = [
+  const activities = recentActivities.length > 0 ? recentActivities : [
     {
-      title: language === 'vi' ? 'Tin "Nhân viên Pha chế" đã được duyệt' : 'Job "Barista" approved',
-      time: language === 'vi' ? '5 giờ trước' : '5 hours ago',
-      icon: CheckCircle,
-      color: '#10B981'
-    },
-    {
-      title: language === 'vi' ? 'Báo cáo tuần đã sẵn sàng xem' : 'Weekly report is ready',
-      time: language === 'vi' ? '2 ngày trước' : '2 days ago',
-      icon: BarChart3,
-      color: '#8B5CF6'
+      title: language === 'vi' ? 'Chào mừng bạn quay lại!' : 'Welcome back!',
+      time: language === 'vi' ? 'Vừa xong' : 'Just now',
+      icon: Sparkles,
+      color: '#F59E0B'
     }
   ];
 
@@ -660,6 +745,7 @@ const EmployerDashboard = () => {
             icon={Briefcase}
             color="#1e40af"
             positive
+            onClick={() => navigate('/employer/standard-jobs', { state: { section: 'posts' } })}
           />
           <StatsCard
             title={language === 'vi' ? 'Tổng hồ sơ ứng tuyển' : 'Total Applications'}
@@ -669,6 +755,7 @@ const EmployerDashboard = () => {
             icon={Users}
             color="#F59E0B"
             positive
+            onClick={() => navigate('/employer/standard-jobs', { state: { section: 'applications' } })}
           />
           <StatsCard
             title={language === 'vi' ? 'Tổng lượt tiếp cận' : 'Total Views'}
@@ -703,7 +790,7 @@ const EmployerDashboard = () => {
                 <Briefcase />
                 {language === 'vi' ? 'Công việc tiêu chuẩn' : 'Standard Jobs'}
               </h2>
-              <a onClick={() => navigate('/employer/standard-jobs')} style={{ cursor: 'pointer' }}>
+              <a onClick={() => navigate('/employer/standard-jobs', { state: { section: 'applications' } })} style={{ cursor: 'pointer' }}>
                 {language === 'vi' ? 'Xem tất cả' : 'View all'}
                 <ArrowUpRight />
               </a>
@@ -723,7 +810,7 @@ const EmployerDashboard = () => {
                       <h4>{app.candidate}</h4>
                       <p><DynamicTranslate text={app.job} showIndicator={false} /></p>
                     </CandidateInfo>
-                    <ViewProfileButton onClick={() => navigate('/employer/standard-jobs', { state: { candidateId: app.id } })}>
+                    <ViewProfileButton onClick={() => navigate('/employer/standard-jobs', { state: { candidateId: app.id, section: 'applications' } })}>
                       <Eye />
                       {language === 'vi' ? 'Xem hồ sơ' : 'View Profile'}
                     </ViewProfileButton>
@@ -838,7 +925,7 @@ const EmployerDashboard = () => {
               <PerformanceIcon $color="#1e40af">
                 <Target />
               </PerformanceIcon>
-              <PerformanceValue>85%</PerformanceValue>
+              <PerformanceValue>{performanceMetrics.responseRate}</PerformanceValue>
               <PerformanceLabel>{language === 'vi' ? 'Tỷ Lệ Phản Hồi' : 'Response Rate'}</PerformanceLabel>
             </PerformanceCard>
 
@@ -849,7 +936,7 @@ const EmployerDashboard = () => {
               <PerformanceIcon $color="#10B981">
                 <Award />
               </PerformanceIcon>
-              <PerformanceValue>4.8/5</PerformanceValue>
+              <PerformanceValue>{performanceMetrics.companyRating}</PerformanceValue>
               <PerformanceLabel>{language === 'vi' ? 'Đánh Giá Công Ty' : 'Company Rating'}</PerformanceLabel>
             </PerformanceCard>
 
@@ -860,7 +947,7 @@ const EmployerDashboard = () => {
               <PerformanceIcon $color="#F59E0B">
                 <Zap />
               </PerformanceIcon>
-              <PerformanceValue>{language === 'vi' ? '12 ngày' : '12 days'}</PerformanceValue>
+              <PerformanceValue>{performanceMetrics.avgHiringTime}</PerformanceValue>
               <PerformanceLabel>{language === 'vi' ? 'Thời gian trung bình' : 'Avg Hiring Time'}</PerformanceLabel>
             </PerformanceCard>
 
@@ -871,7 +958,7 @@ const EmployerDashboard = () => {
               <PerformanceIcon $color="#1e40af">
                 <TrendingUp />
               </PerformanceIcon>
-              <PerformanceValue>+32%</PerformanceValue>
+              <PerformanceValue>{performanceMetrics.growth}</PerformanceValue>
               <PerformanceLabel>{language === 'vi' ? 'Tăng Trưởng Tháng Này' : 'Growth This Month'}</PerformanceLabel>
             </PerformanceCard>
           </PerformanceGrid>

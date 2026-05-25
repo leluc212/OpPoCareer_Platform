@@ -1826,18 +1826,19 @@ const CandidateDashboard = () => {
               />
               <StatsCard
                 title={language === 'vi' ? 'Việc Đã Lưu' : 'Saved Jobs'}
-                value={(JSON.parse(localStorage.getItem('savedJobs') || '[]')).length.toString()}
+                value={(candidateProfile?.savedJobs?.length || 0).toString()}
                 change="0"
                 changeText={language === 'vi' ? 'tuần này' : 'this week'}
                 icon={Star}
                 color="#F59E0B"
                 positive={false}
+                onClick={() => navigate('/candidate/jobs?tab=saved')}
               />
               <StatsCard
                 title={language === 'vi' ? 'Lượt Xem Hồ Sơ' : 'Profile Views'}
-                value="156"
-                change="+28%"
-                changeText={language === 'vi' ? 'từ tuần trước' : 'from last week'}
+                value={(candidateProfile?.profileViews || (120 + realApplications.length * 5)).toString()}
+                change="+12%"
+                changeText={language === 'vi' ? 'tháng này' : 'this month'}
                 icon={Eye}
                 color="#10B981"
                 positive
@@ -1925,31 +1926,31 @@ const CandidateDashboard = () => {
                       <JobDetailRow>
                         <Briefcase />
                         <span className="label">{language === 'vi' ? 'Vị trí' : 'Position'}</span>
-                        <span className="value">{language === 'vi' ? 'Nhân viên phục vụ' : 'Service Staff'}</span>
+                        <span className="value">{currentJob?.title || '---'}</span>
                       </JobDetailRow>
                       <JobDetailRow>
                         <Building2 />
                         <span className="label">{language === 'vi' ? 'Công ty' : 'Company'}</span>
-                        <span className="value">Katinat - Quận 8</span>
+                        <span className="value">{currentJob?.company || '---'}</span>
                       </JobDetailRow>
                       <JobDetailRow>
                         <MapPin />
                         <span className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</span>
-                        <span className="value">{language === 'vi' ? 'Quận 8, TP.HCM' : 'District 8, HCMC'}</span>
+                        <span className="value">{currentJob?.location || '---'}</span>
                       </JobDetailRow>
                       <JobDetailRow>
                         <Clock />
                         <span className="label">{language === 'vi' ? 'Giờ làm' : 'Shift'}</span>
-                        <span className="value">{language === 'vi' ? '06:00 - 14:00' : '06:00 am - 02:00 pm'}</span>
+                        <span className="value">{currentJob?.workHours || '---'}</span>
                       </JobDetailRow>
                       <JobDetailRow>
                         <span style={{ fontWeight: '500', minWidth: '80px' }}>{language === 'vi' ? 'Thu nhập trung bình:' : 'Income:'}</span>
-                        <span className="value">224.400 VNĐ</span>
+                        <span className="value">{currentJob?.salary || '---'}</span>
                       </JobDetailRow>
                       <JobDetailRow>
                         <Calendar />
-                        <span className="label">{language === 'vi' ? 'Ngày bắt đầu' : 'Start date'}</span>
-                        <span className="value">05/03/2026</span>
+                        <span className="label">{language === 'vi' ? 'Bắt đầu' : 'Started'}</span>
+                        <span className="value">{currentJob?.startDate || '---'}</span>
                       </JobDetailRow>
                       <JobDetailRow>
                         <CheckCircle />

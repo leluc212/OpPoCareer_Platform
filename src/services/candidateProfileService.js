@@ -8,15 +8,32 @@ const API_BASE_URL = import.meta.env.DEV
   ? '/api'  // Use Vite proxy in development to avoid CORS
   : (import.meta.env.VITE_API_URL || 'https://xyp4wkszi7.execute-api.ap-southeast-1.amazonaws.com/prod');
 
+const CANDIDATE_LIST_API_URL = import.meta.env.VITE_CANDIDATE_API_URL || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+
 /**
  * Get authentication token from Amplify
  */
 const getAuthToken = async () => {
   try {
     const session = await fetchAuthSession();
-    return session.tokens?.idToken?.toString();
+    
+    if (!session || !session.tokens) {
+      console.warn('⚠️ No session or tokens available');
+      return null;
+    }
+    
+    const idToken = session.tokens.idToken;
+    if (!idToken) {
+      console.warn('⚠️ No ID token in session');
+      return null;
+    }
+    
+    let tokenString = typeof idToken === 'string' ? idToken : idToken.toString();
+    tokenString = tokenString.trim().replace(/[\r\n\t]/g, '');
+    
+    return tokenString;
   } catch (error) {
-    console.error('Error getting auth token:', error);
+    console.error('❌ Error getting auth token:', error);
     return null;
   }
 };
@@ -53,14 +70,17 @@ class CandidateProfileService {
   /**
    * Make authenticated API request
    */
-  async makeRequest(endpoint, options = {}) {
+  async makeRequest(endpoint, options = {}, useListApi = false) {
     try {
-      const token = await getAuthToken();
+      const baseUrl = useListApi ? CANDIDATE_LIST_API_URL : API_BASE_URL;
+      const token = useListApi ? null : await getAuthToken(); // Don't send token to public list API
       
       // Decode token to get userId for logging
-      const tokenPayload = token ? decodeToken(token) : null;
-      if (tokenPayload) {
-        console.log('🔑 Request with userId from token:', tokenPayload.sub);
+      if (token && !useListApi) {
+        const tokenPayload = decodeToken(token);
+        if (tokenPayload) {
+          console.log('🔑 Request with userId from token:', tokenPayload.sub);
+        }
       }
       
       const headers = {
@@ -69,7 +89,9 @@ class CandidateProfileService {
         ...options.headers
       };
 
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      console.log(`📤 ${useListApi ? 'CANDIDATE_LIST' : 'PROFILE'} request: ${options.method || 'GET'} ${baseUrl}${endpoint}`);
+      
+      const response = await fetch(`${baseUrl}${endpoint}`, {
         ...options,
         headers,
         mode: 'cors' // Explicitly set CORS mode
@@ -236,7 +258,7 @@ class CandidateProfileService {
       // Add profile completion calculation
       const payload = {
         ...allowedUpdates,
-        profileCompletion: this.calculateCompletion(allowedUpdates)
+        profileCompletion: this.calculateCompletion(updates)
       };
 
       const result = await this.makeRequest(`/profile/${userId}`, {
@@ -285,6 +307,32 @@ class CandidateProfileService {
   }
 
   /**
+   * Toggle a job in the saved jobs list
+   * @param {string} jobId - ID of the job to save/unsave
+   */
+  async toggleSavedJob(jobId) {
+    try {
+      const profile = await this.getMyProfile();
+      if (!profile) {
+        throw new Error('Candidate profile not found. Please create a profile first.');
+      }
+
+      const savedJobs = Array.isArray(profile.savedJobs) ? profile.savedJobs : [];
+      const updatedSavedJobs = savedJobs.includes(jobId)
+        ? savedJobs.filter(id => id !== jobId)
+        : [...savedJobs, jobId];
+
+      console.log(`🔄 Toggling job ${jobId}. New list:`, updatedSavedJobs);
+      
+      const result = await this.updateProfile({ savedJobs: updatedSavedJobs });
+      return result.savedJobs || [];
+    } catch (error) {
+      console.error('❌ Error toggling saved job:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Calculate profile completion percentage
    */
   calculateCompletion(profileData) {
@@ -309,6 +357,39 @@ class CandidateProfileService {
     if (profileData.skills?.length >= 3) completion += 5;
     
     return completion;
+  }
+
+  /**
+   * Get all candidate profiles (Admin/Batch operation)
+   */
+  async getAllCandidates(limit = 100) {
+    try {
+      console.log('🔍 Listing all candidates from public API...');
+      
+      // Use the candidates API (sd7ds72m8g) which is public
+      const response = await fetch(`${CANDIDATE_LIST_API_URL}/candidates`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (Array.isArray(data)) {
+        return data; // Return raw data, the dashboard handles transformation if needed
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('❌ Error listing all candidates:', error);
+      return [];
+    }
   }
 }
 

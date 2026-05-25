@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { initializeMultipleSampleCVs } from '../../utils/sampleCVGenerator';
 import jobPostService from '../../services/jobPostService';
 import applicationService from '../../services/applicationService';
+import candidateProfileService from '../../services/candidateProfileService';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
@@ -1318,14 +1319,14 @@ const StarRating = ({ rating }) => (
 );
 
 // Profile Detail Modal Component
-const ProfileDetailModal = React.memo(({ candidate, onClose }) => {
+const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
   const { language } = useLanguage();
   const [showCVPreview, setShowCVPreview] = useState(false);
 
   const initials = candidate.candidate
     .split(' ')
-    .map(n => n[0])
     .slice(0, 2)
+    .map(n => n[0])
     .join('')
     .toUpperCase();
 
@@ -1342,51 +1343,20 @@ const ProfileDetailModal = React.memo(({ candidate, onClose }) => {
     return savedFeedback ? JSON.parse(savedFeedback) : { note: '', date: null };
   });
 
-  const handleCVView = () => {
-    if (hasCV) {
-      setShowCVPreview(true);
-    }
-  };
-
   const handleCVDownload = () => {
     if (!hasCV) return;
-
-    // Open CV in new tab for download
     window.open(candidate.cvUrl, '_blank');
-  };
-
-  const handleSaveFeedback = () => {
-    const updatedFeedback = {
-      ...feedback,
-      date: new Date().toISOString()
-    };
-    localStorage.setItem(`feedback_${candidate.id}`, JSON.stringify(updatedFeedback));
-    setFeedback(updatedFeedback);
-    alert(language === 'vi' ? 'Đã lưu ghi chú!' : 'Note saved!');
-  };
-
-  const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
   };
 
   return (
     <>
-      {/* COMMENTED OUT - Profile Header */}
-      {/* <ProfileHeader>
+      <ProfileHeader>
         <ProfileAvatarRow>
-          <ProfileAvatar>{initials}</ProfileAvatar>
+          <ProfileAvatar>
+            {candidate.profileImage ? (
+              <img src={candidate.profileImage} alt={candidate.candidate} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : initials}
+          </ProfileAvatar>
           <ProfileHeaderInfo>
             <h2>{candidate.candidate}</h2>
             <ProfileJobBadge>
@@ -1406,115 +1376,104 @@ const ProfileDetailModal = React.memo(({ candidate, onClose }) => {
             )}
           </ProfileHeaderInfo>
         </ProfileAvatarRow>
-      </ProfileHeader> */}
+      </ProfileHeader>
 
       <ProfileContent>
         <ProfileInner>
-          {/* COMMENTED OUT - Contact Info */}
-          {/* <ProfileSection>
-            <h3><FileText /> {language === 'vi' ? 'Thông tin liên hệ' : 'Contact'}</h3>
-            <InfoGrid>
-              <InfoCard>
-                <InfoIconBox><Mail /></InfoIconBox>
-                <InfoItem>
-                  <div className="label">{language === 'vi' ? 'Email' : 'Email'}</div>
-                  <div className="value">{candidate.email}</div>
-                </InfoItem>
-              </InfoCard>
-              <InfoCard>
-                <InfoIconBox><Phone /></InfoIconBox>
-                <InfoItem>
-                  <div className="label">{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
-                  <div className="value">{candidate.phone}</div>
-                </InfoItem>
-              </InfoCard>
-              <InfoCard>
-                <InfoIconBox><MapPin /></InfoIconBox>
-                <InfoItem>
-                  <div className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</div>
-                  <div className="value">{candidate.location}</div>
-                </InfoItem>
-              </InfoCard>
-              <InfoCard>
-                <InfoIconBox><Calendar /></InfoIconBox>
-                <InfoItem>
-                  <div className="label">{language === 'vi' ? 'Thời gian ứng tuyển' : 'Applied'}</div>
-                  <div className="value">{candidate.applied}</div>
-                </InfoItem>
-              </InfoCard>
-            </InfoGrid>
-          </ProfileSection> */}
+          {isLoading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                style={{ display: 'inline-block', marginBottom: '12px' }}
+              >
+                <Clock size={24} />
+              </motion.div>
+              <p style={{ fontSize: '14px', fontWeight: '500' }}>
+                {language === 'vi' ? 'Đang tải thông tin chi tiết...' : 'Loading candidate details...'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Contact Info */}
+              <ProfileSection>
+                <h3><FileText /> {language === 'vi' ? 'Thông tin liên hệ' : 'Contact'}</h3>
+                <InfoGrid>
+                  <InfoCard>
+                    <InfoIconBox><Mail /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Email' : 'Email'}</div>
+                      <div className="value">{candidate.candidateEmail || candidate.email}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><Phone /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
+                      <div className="value">{candidate.phone && candidate.phone !== '-' ? candidate.phone : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><MapPin /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</div>
+                      <div className="value">{candidate.location && candidate.location !== '-' ? candidate.location : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><Calendar /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Thời gian ứng tuyển' : 'Applied'}</div>
+                      <div className="value">{candidate.applied}</div>
+                    </InfoItem>
+                  </InfoCard>
+                </InfoGrid>
+              </ProfileSection>
 
-          {/* COMMENTED OUT - Education & Experience */}
-          {/* <ProfileSection>
-            <h3><Award /> {language === 'vi' ? 'Học vấn & Kinh nghiệm' : 'Education & Experience'}</h3>
-            <InfoGrid>
-              <InfoCard>
-                <InfoIconBox><Award /></InfoIconBox>
-                <InfoItem>
-                  <div className="label">{language === 'vi' ? 'Trình độ học vấn' : 'Education'}</div>
-                  <div className="value">{candidate.education}</div>
-                </InfoItem>
-              </InfoCard>
-              <InfoCard>
-                <InfoIconBox><Briefcase /></InfoIconBox>
-                <InfoItem>
-                  <div className="label">{language === 'vi' ? 'Kinh nghiệm' : 'Experience'}</div>
-                  <div className="value">{candidate.experience}</div>
-                </InfoItem>
-              </InfoCard>
-            </InfoGrid>
-          </ProfileSection> */}
+              {/* Education & Experience */}
+              <ProfileSection>
+                <h3><Award /> {language === 'vi' ? 'Học vấn & Kinh nghiệm' : 'Education & Experience'}</h3>
+                <InfoGrid>
+                  <InfoCard>
+                    <InfoIconBox><Award /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Trình độ học vấn' : 'Education'}</div>
+                      <div className="value">{candidate.education && candidate.education !== '-' ? candidate.education : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><Briefcase /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Kinh nghiệm' : 'Experience'}</div>
+                      <div className="value">{candidate.experience && candidate.experience !== '-' ? candidate.experience : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                </InfoGrid>
+              </ProfileSection>
 
-          {/* COMMENTED OUT - Skills */}
-          {/* <ProfileSection>
-            <h3><Star /> {language === 'vi' ? 'Kỹ năng' : 'Skills'}</h3>
-            <SkillsWrap>
-              {candidate.skills.map((skill, index) => (
-                <SkillTag key={index}>{skill}</SkillTag>
-              ))}
-            </SkillsWrap>
-          </ProfileSection> */}
+              {/* Skills */}
+              {(candidate.skills && candidate.skills.length > 0) && (
+                <ProfileSection>
+                  <h3><Star /> {language === 'vi' ? 'Kỹ năng' : 'Skills'}</h3>
+                  <SkillsWrap>
+                    {candidate.skills.map((skill, index) => (
+                      <SkillTag key={index}>{skill}</SkillTag>
+                    ))}
+                  </SkillsWrap>
+                </ProfileSection>
+              )}
 
-          {/* COMMENTED OUT - Reviews */}
-          {/* <ProfileSection>
-            <h3><Star /> {language === 'vi' ? 'Lịch sử & Đánh giá' : 'History & Reviews'}</h3>
-            {candidate.reviews && candidate.reviews.length > 0 ? (
-              <ReviewList>
-                {candidate.reviews.map(review => (
-                  <ReviewCard key={review.id}>
-                    <ReviewHeader>
-                      <ReviewEmployerInfo>
-                        <div className="employer-name">{review.employer}</div>
-                        <div className="position-date">
-                          <Briefcase size={11} />
-                          {review.position}
-                          <span>·</span>
-                          <Calendar size={11} />
-                          {review.date}
-                        </div>
-                      </ReviewEmployerInfo>
-                      <StarRating rating={review.rating} />
-                    </ReviewHeader>
-                    <ReviewComment>"{review.comment}"</ReviewComment>
-                  </ReviewCard>
-                ))}
-              </ReviewList>
-            ) : (
-              <EmptyReviews>
-                <div className="icon">📋</div>
-                <p>{language === 'vi' ? 'Chưa có đánh giá nào từ nhà tuyển dụng.' : 'No employer reviews yet.'}</p>
-              </EmptyReviews>
-            )}
-          </ProfileSection> */}
+              {/* Bio */}
+              {(candidate.bio && candidate.bio !== '-') && (
+                <ProfileSection>
+                  <h3><FileText /> {language === 'vi' ? 'Giới thiệu bản thân' : 'About'}</h3>
+                  <BioText>{candidate.bio}</BioText>
+                </ProfileSection>
+              )}
+            </>
+          )}
 
-          {/* COMMENTED OUT - Bio */}
-          {/* <ProfileSection>
-            <h3><FileText /> {language === 'vi' ? 'Giới thiệu bản thân' : 'About'}</h3>
-            <BioText>{candidate.bio}</BioText>
-          </ProfileSection> */}
-
-          {/* ONLY SHOW CV SECTION */}
+          {/* CV SECTION - Always visible regardless of loading if candidate.cvUrl is already in basic info */}
           <ProfileSection>
             <h3><FileText /> {language === 'vi' ? 'Hồ sơ CV' : 'CV Document'}</h3>
             {hasCV ? (
@@ -1896,7 +1855,7 @@ const Applications = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeSection, setActiveSection] = useState('posts');
+  const [activeSection, setActiveSection] = useState(location.state?.section || 'posts');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState([]);
   const [timeFilter, setTimeFilter] = useState('all');
@@ -1919,6 +1878,7 @@ const Applications = () => {
   const [selectedCV, setSelectedCV] = useState(null);
   const [postTimeFilter, setPostTimeFilter] = useState('all'); // 'all' | 'today' | 'week' | 'month'
   const [postSearchTerm, setPostSearchTerm] = useState('');
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
 
   // Mock wallet connection status - in real app, get from user context or API
   const [isWalletConnected] = useState(() => {
@@ -2005,6 +1965,32 @@ const Applications = () => {
   useEffect(() => {
     setApplications([]);
   }, [language]);
+
+  // Update activeSection and handle auto-modal if state changes externally
+  useEffect(() => {
+    // 1. Handle section change
+    if (location.state?.section && location.state.section !== activeSection) {
+      setActiveSection(location.state.section);
+    }
+
+    // 2. Handle auto-opening profile modal
+    if (location.state?.candidateId && (applications.length > 0 || realApplications.length > 0)) {
+      const targetId = location.state.candidateId;
+      const transformedApp = applications.find(a => a.id === targetId);
+      
+      if (transformedApp && !selectedCandidate) {
+        console.log('🎯 Auto-opening profile for candidate:', targetId);
+        handleViewProfile(transformedApp);
+        
+        // Clear candidateId from state to prevent re-opening on language switch etc
+        // but keep section state
+        navigate(location.pathname, { 
+          replace: true, 
+          state: { ...location.state, candidateId: null } 
+        });
+      }
+    }
+  }, [location.state, applications, realApplications]);
 
   // Load real applications from DynamoDB when switching to applications tab
   useEffect(() => {
@@ -2243,12 +2229,45 @@ const Applications = () => {
     ));
   }, []);
 
-  const handleViewProfile = useCallback((candidate) => {
-    setSelectedCandidate(candidate);
+  const handleViewProfile = useCallback(async (app) => {
+    // Set basic info from application immediately
+    setSelectedCandidate(app);
+    
+    // Then try to fetch full profile
+    if (app.candidateId) {
+      setIsFetchingProfile(true);
+      try {
+        console.log('🔍 Fetching full profile for candidate:', app.candidateId);
+        const profile = await candidateProfileService.getProfile(app.candidateId);
+        
+        if (profile) {
+          console.log('✅ Full profile loaded:', profile);
+          // Merge profile info into selectedCandidate
+          setSelectedCandidate(prev => ({
+            ...prev,
+            ...profile,
+            // Keep app-specific fields
+            candidate: profile.fullName || prev.candidate,
+            phone: profile.phone || prev.phone,
+            location: profile.location || prev.location,
+            education: profile.education || prev.education,
+            experience: profile.experience || prev.experience,
+            skills: profile.skills || prev.skills,
+            bio: profile.bio || prev.bio,
+            profileImage: profile.profileImage || prev.profileImage
+          }));
+        }
+      } catch (error) {
+        console.error('❌ Error fetching candidate profile:', error);
+      } finally {
+        setIsFetchingProfile(false);
+      }
+    }
   }, []);
 
   const handleCloseProfile = useCallback(() => {
     setSelectedCandidate(null);
+    setIsFetchingProfile(false);
   }, []);
 
   // Open delete confirmation modal
@@ -2667,6 +2686,7 @@ const Applications = () => {
           <ProfileDetailModal
             candidate={selectedCandidate}
             onClose={handleCloseProfile}
+            isLoading={isFetchingProfile}
           />
         </Modal>
       )}

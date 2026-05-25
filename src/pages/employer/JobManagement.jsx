@@ -506,14 +506,30 @@ const JobManagement = () => {
     }
   };
 
-  const handleDelete = (jobId) => {
-    // Remove from localStorage
-    const savedJobs = JSON.parse(localStorage.getItem('employerJobs') || '[]');
-    const updatedJobs = savedJobs.filter(job => job.id !== jobId);
-    localStorage.setItem('employerJobs', JSON.stringify(updatedJobs));
+  const handleDelete = async (jobId) => {
+    const confirmDelete = window.confirm(
+      language === 'vi' 
+        ? 'Bạn có chắc chắn muốn xóa tin tuyển dụng này?' 
+        : 'Are you sure you want to delete this job posting?'
+    );
     
-    // Update state
-    setJobs(getJobs());
+    if (!confirmDelete) return;
+
+    try {
+      await jobPostService.deleteJobPost(jobId);
+      
+      // Update state by filtering out the deleted job
+      setJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
+      
+      console.log('✅ Job deleted successfully');
+    } catch (error) {
+      console.error('❌ Failed to delete job:', error);
+      alert(
+        language === 'vi' 
+          ? 'Xóa tin tuyển dụng thất bại. Vui lòng thử lại.' 
+          : 'Failed to delete job posting. Please try again.'
+      );
+    }
   };
 
   return (

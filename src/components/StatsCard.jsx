@@ -116,7 +116,7 @@ const ChangeText = styled.span`
   font-weight: 500;
 `;
 
-const StatsCard = ({ title, value, change, changeText, icon: Icon, color, positive = true }) => {
+const StatsCard = ({ title, value, change, changeText, icon: Icon, color, positive = true, onClick }) => {
   return (
     <CardWrapper
       $color={color}
@@ -125,6 +125,7 @@ const StatsCard = ({ title, value, change, changeText, icon: Icon, color, positi
       transition={{ duration: 0.4 }}
       whileHover={{ x: 4 }}
       whileTap={{ scale: 0.98 }}
+      onClick={onClick}
     >
       {Icon && (
         <IconWrapper 

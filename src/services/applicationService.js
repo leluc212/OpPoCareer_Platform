@@ -1,6 +1,8 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-const API_ENDPOINT = 'https://l1636ie205.execute-api.ap-southeast-1.amazonaws.com';
+const API_BASE_URL = import.meta.env.DEV 
+  ? '/api-applications' 
+  : (import.meta.env.VITE_APPLICATIONS_API_URL || 'https://l1636ie205.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 /**
  * Get authenticated headers with JWT token
@@ -37,7 +39,7 @@ export async function submitApplication(jobId, cvUrl, cvFilename) {
     
     const headers = await getAuthHeaders();
     
-    const response = await fetch(`${API_ENDPOINT}/applications`, {
+    const response = await fetch(`${API_BASE_URL}/applications`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -87,7 +89,7 @@ export async function getMyCandidateApplications() {
     
     const headers = await getAuthHeaders();
     
-    const response = await fetch(`${API_ENDPOINT}/applications/candidate/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/applications/candidate/${userId}`, {
       method: 'GET',
       headers
     });
@@ -117,7 +119,7 @@ export async function getJobApplications(jobId) {
     
     const headers = await getAuthHeaders();
     
-    const response = await fetch(`${API_ENDPOINT}/applications/job/${jobId}`, {
+    const response = await fetch(`${API_BASE_URL}/applications/job/${jobId}`, {
       method: 'GET',
       headers
     });
@@ -148,7 +150,7 @@ export async function updateApplicationStatus(applicationId, status) {
     
     const headers = await getAuthHeaders();
     
-    const response = await fetch(`${API_ENDPOINT}/applications/${applicationId}/status`, {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/status`, {
       method: 'PUT',
       headers,
       body: JSON.stringify({ status })
@@ -168,11 +170,43 @@ export async function updateApplicationStatus(applicationId, status) {
   }
 }
 
+/**
+ * Get all applications (admin only)
+ * @returns {Promise<Array>} List of all applications
+ */
+export async function getAllApplications() {
+  try {
+    console.log('📥 Loading all system applications...');
+    
+    // Admin needs auth token
+    const headers = await getAuthHeaders();
+    
+    const response = await fetch(`${API_BASE_URL}/applications`, {
+      method: 'GET',
+      headers
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get all applications');
+    }
+    
+    const data = await response.json();
+    console.log('✅ Loaded all applications:', data);
+    return data.applications || [];
+  } catch (error) {
+    console.warn('⚠️ Admin applications fetch failed - likely endpoint not implemented yet:', error);
+    // Return empty array as fallback instead of crashing
+    return [];
+  }
+}
+
 const applicationService = {
   submitApplication,
   getMyCandidateApplications,
   getJobApplications,
-  updateApplicationStatus
+  updateApplicationStatus,
+  getAllApplications
 };
 
 export default applicationService;

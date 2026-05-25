@@ -50,6 +50,10 @@ def lambda_handler(event, context):
         if http_method == 'POST' and path == '/applications':
             return submit_application(event, candidate_id, candidate_email, create_response)
         
+        # GET /applications - Get all applications (Admin)
+        elif http_method == 'GET' and (path == '/applications' or path == '/applications/'):
+            return get_all_applications(create_response)
+        
         # GET /applications/candidate/{candidateId} - Get candidate's applications
         elif http_method == 'GET' and '/applications/candidate/' in path:
             return get_candidate_applications(candidate_id, create_response)
@@ -272,4 +276,22 @@ def update_application_status(event, application_id, user_id, create_response):
         })
     except Exception as e:
         print(f"❌ Error updating application status: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+def get_all_applications(create_response):
+    """Get all applications for admin"""
+    try:
+        print("🔍 Scanning all applications...")
+        # For simplicity in admin dashboard, we scan the whole table
+        # In a high-traffic app, we'd use pagination
+        response = applications_table.scan()
+        applications = response.get('Items', [])
+        
+        return create_response(200, {
+            'success': True,
+            'applications': applications,
+            'count': len(applications)
+        })
+    except Exception as e:
+        print(f"❌ Error getting all applications: {str(e)}")
         return create_response(500, {'error': str(e)})

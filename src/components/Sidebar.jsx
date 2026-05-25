@@ -363,7 +363,12 @@ const Sidebar = ({ role, onHoverChange }) => {
       sessionStorage.setItem('sidebarScrollPos', navRef.current.scrollTop.toString());
     }
     
-    navigate(path);
+    // special case for applications section
+    if (path === '/employer/standard-jobs') {
+      navigate(path, { state: { section: 'applications' } });
+    } else {
+      navigate(path);
+    }
   };
   
   const candidateLinks = [

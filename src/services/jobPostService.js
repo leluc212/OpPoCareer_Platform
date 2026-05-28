@@ -164,7 +164,8 @@ class JobPostService {
         responsibilities: jobData.responsibilities || '',
         requirements: jobData.requirements || '',
         benefits: jobData.benefits || '',
-        status: 'active',
+        // New posts should require admin moderation; set to 'pending' by default
+        status: 'pending',
         applicants: 0,
         views: 0,
         responseRate: 0,
@@ -201,7 +202,8 @@ class JobPostService {
           idJob: jobId,
           ...jobData,
           applicants: 0,
-          status: 'active',
+          // fallback offline mode should also mark as pending for manual moderation
+          status: 'pending',
           views: 0,
           responseRate: 0,
           createdAt: new Date().toISOString(),

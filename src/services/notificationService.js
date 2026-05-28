@@ -366,6 +366,80 @@ export const createCandidateCvRejectedNotification = async (payload) => {
 };
 
 /**
+ * Create notification when admin approves a job post (employer notification)
+ * @param {string} employerId
+ * @param {object} job - job data (title, companyName, jobId)
+ */
+export const createJobApprovedNotification = async (employerId, job) => {
+  if (!employerId) {
+    const error = new Error('employerId is required');
+    console.error(error);
+    throw error;
+  }
+
+  const notification = {
+    type: 'job_approved',
+    title: 'Bài đăng đã được phê duyệt',
+    titleEn: 'Job post approved',
+    message: `${job.companyName || job.employer || 'Nhà tuyển dụng'}: Bài "${job.title || 'công việc'}" đã được duyệt và đang hiển thị.`,
+    messageEn: `Your job "${job.title || 'job post'}" has been approved and is now visible.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      jobId: job.id || job.jobID || job.idJob || null,
+      title: job.title || '',
+      companyName: job.companyName || job.employer || ''
+    },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Xem bài',
+    actionTextEn: 'View post'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when admin rejects a job post (employer notification)
+ * @param {string} employerId
+ * @param {object} job - job data (title, companyName, jobId)
+ */
+export const createJobRejectedNotification = async (employerId, job) => {
+  if (!employerId) {
+    const error = new Error('employerId is required');
+    console.error(error);
+    throw error;
+  }
+
+  const notification = {
+    type: 'job_rejected',
+    title: 'Bài đăng đã bị từ chối',
+    titleEn: 'Job post rejected',
+    message: `${job.companyName || job.employer || 'Nhà tuyển dụng'}: Bài "${job.title || 'công việc'}" đã bị từ chối bởi admin.`,
+    messageEn: `Your job "${job.title || 'job post'}" has been rejected by admin.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      jobId: job.id || job.jobID || job.idJob || null,
+      title: job.title || '',
+      companyName: job.companyName || job.employer || ''
+    },
+    icon: 'alert-circle',
+    color: '#ef4444',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Xem bài',
+    actionTextEn: 'View post'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
  * Save notification to API
  */
 const saveNotification = async (notification) => {
@@ -608,6 +682,8 @@ export default {
   createEmployerApplicationNotification,
   createCandidateCvAcceptedNotification,
   createCandidateCvRejectedNotification,
+  createJobApprovedNotification,
+  createJobRejectedNotification,
   markAsRead,
   markAllAsRead,
   deleteNotification,

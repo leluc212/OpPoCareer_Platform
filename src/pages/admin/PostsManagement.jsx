@@ -6,6 +6,8 @@ import Modal from '../../components/Modal';
 import { useLanguage } from '../../context/LanguageContext';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
+import { Button } from '../../components/FormElements';
+import notificationService from '../../services/notificationService';
 import { 
   Briefcase, 
   Zap, 
@@ -295,11 +297,13 @@ const IconButton = styled.button`
   border-radius: ${props => props.theme.borderRadius.md};
   background: ${props => props.$variant === 'danger' ? '#fee2e2' : props.$variant === 'success' ? '#dcfce7' : '#e0e7ff'};
   color: ${props => props.$variant === 'danger' ? '#dc2626' : props.$variant === 'success' ? '#15803d' : '#4338ca'};
-  cursor: pointer;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: ${props => props.disabled ? 0.45 : 1};
+  pointer-events: ${props => props.disabled ? 'none' : 'auto'};
   
   &:hover {
     transform: scale(1.1);
@@ -491,7 +495,7 @@ const PageEllipsis = styled.span`
 
 const PostsManagement = () => {
   const { language } = useLanguage();
-  const [activeTab, setActiveTab] = useState('longterm');
+  const [activeTab, setActiveTab] = useState('urgent');
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -503,12 +507,36 @@ const PostsManagement = () => {
   const [loadError, setLoadError] = useState('');
   const itemsPerPage = 20;
 
+  const sortJobsForModeration = (jobs) => {
+    const statusPriority = {
+      pending: 0,
+      'ai-approved': 1,
+      approved: 2,
+      warning: 3,
+      rejected: 4
+    };
+
+    return [...jobs].sort((a, b) => {
+      const aPriority = statusPriority[a.status] ?? 99;
+      const bPriority = statusPriority[b.status] ?? 99;
+
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+
+      const aTime = new Date(a.createdAtRaw || a.postDate || 0).getTime();
+      const bTime = new Date(b.createdAtRaw || b.postDate || 0).getTime();
+      return bTime - aTime;
+    });
+  };
+
   const normalizeStatus = (status) => {
-    if (!status) return 'pending';
-    if (status === 'active') return 'approved';
-    if (status === 'closed') return 'rejected';
-    if (status === 'paused') return 'warning';
-    return status;
+    const normalized = typeof status === 'string' ? status.trim().toLowerCase() : '';
+    if (!normalized) return 'pending';
+    if (normalized === 'active') return 'approved';
+    if (normalized === 'closed' || normalized === 'deleted' || normalized === 'rejected') return 'rejected';
+    if (normalized === 'paused' || normalized === 'warning') return 'warning';
+    return normalized;
   };
 
   const formatDate = (value) => {
@@ -552,7 +580,8 @@ const PostsManagement = () => {
     const employerName = job.companyName || job.employerName || job.company || job.employerEmail || job.employerId || 'N/A';
 
     return {
-      id: job.idJob || job.id || job.jobId,
+      id: job.idJob || job.jobID || job.id || job.jobId,
+      employerId: job.employerId || job.employer || job.companyId || job.company || job.employerEmail || null,
       title: job.title || '',
       employer: employerName,
       company: employerName,
@@ -576,7 +605,8 @@ const PostsManagement = () => {
       candidates: job.candidates || [],
       description: job.description || '',
       requirements: job.requirements || '',
-      benefits: job.benefits || ''
+      benefits: job.benefits || '',
+      jobSource: 'standard'
     };
   };
 
@@ -589,7 +619,8 @@ const PostsManagement = () => {
     const salaryValue = job.totalSalary ?? job.hourlyRate ?? job.salary;
 
     return {
-      id: job.idJob || job.id || job.jobId,
+      id: job.jobID || job.idJob || job.id || job.jobId,
+      employerId: job.employerId || job.employer || job.companyId || job.company || job.employerEmail || null,
       title: job.title || '',
       employer: employerName,
       company: employerName,
@@ -613,45 +644,130 @@ const PostsManagement = () => {
       candidates: job.candidates || [],
       description: job.description || '',
       requirements: job.requirements || '',
-      benefits: job.benefits || ''
+      benefits: job.benefits || '',
+      jobSource: 'urgent'
     };
   };
 
+  const refreshPosts = async () => {
+    setIsLoading(true);
+    setLoadError('');
+
+    try {
+      const [standardResponse, urgentResponse] = await Promise.all([
+        jobPostService.getAllJobPosts ? jobPostService.getAllJobPosts() : jobPostService.getAllActiveJobs(),
+        quickJobService.getAllQuickJobs ? quickJobService.getAllQuickJobs() : quickJobService.getAllActiveQuickJobs()
+      ]);
+
+      const standardList = Array.isArray(standardResponse) ? standardResponse : standardResponse?.data || [];
+      const urgentList = Array.isArray(urgentResponse) ? urgentResponse : urgentResponse?.data || [];
+
+      setStandardJobs(sortJobsForModeration(standardList.map(mapStandardJob)));
+      setUrgentJobs(sortJobsForModeration(urgentList.map(mapQuickJob)));
+    } catch (err) {
+      setLoadError(err?.message || 'Failed to load posts');
+      setStandardJobs([]);
+      setUrgentJobs([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let isActive = true;
+    refreshPosts();
+  }, [language]);
 
-    const loadPosts = async () => {
-      setIsLoading(true);
-      setLoadError('');
-      try {
-        const [standardResponse, urgentResponse] = await Promise.all([
-          jobPostService.getAllJobPosts ? jobPostService.getAllJobPosts() : jobPostService.getAllActiveJobs(),
-          quickJobService.getAllQuickJobs ? quickJobService.getAllQuickJobs() : quickJobService.getAllActiveQuickJobs()
-        ]);
+  // Removed auto-switch-to-urgent behavior to allow viewing Standard Jobs
 
-        if (!isActive) return;
+  const handleModerationAction = async (job, action) => {
+    // Deprecated - now use confirm flow
+    console.warn('handleModerationAction should not be called directly; use requestModerationAction');
+  };
 
-        const standardList = Array.isArray(standardResponse) ? standardResponse : standardResponse?.data || [];
-        const urgentList = Array.isArray(urgentResponse) ? urgentResponse : urgentResponse?.data || [];
+  // Confirmation modal state
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmJob, setConfirmJob] = useState(null);
+  const [confirmAction, setConfirmAction] = useState('');
+  const [confirmMessage, setConfirmMessage] = useState('');
 
-        setStandardJobs(standardList.map(mapStandardJob));
-        setUrgentJobs(urgentList.map(mapQuickJob));
-      } catch (err) {
-        if (!isActive) return;
-        setLoadError(err?.message || 'Failed to load posts');
-        setStandardJobs([]);
-        setUrgentJobs([]);
-      } finally {
-        if (isActive) setIsLoading(false);
+  const requestModerationAction = (job, action) => {
+    console.log('🔔 requestModerationAction called', { job, action });
+    // Build message by action
+    const title = action === 'approve'
+      ? (language === 'vi' ? 'Xác nhận duyệt bài' : 'Confirm approve')
+      : (language === 'vi' ? 'Xác nhận từ chối bài' : 'Confirm reject');
+
+    const msg = action === 'approve'
+      ? (language === 'vi'
+          ? 'Bạn có chắc muốn duyệt bài này? Sau khi duyệt, bài sẽ hiển thị cho người tìm việc. Bạn vẫn có thể từ chối/xóa sau này.'
+          : 'Are you sure you want to approve this post? It will be visible to candidates. You can still reject/delete later.')
+      : (language === 'vi'
+          ? 'Bạn có chắc muốn từ chối bài này? Sau khi từ chối, trạng thái sẽ là "Đã từ chối".'
+          : 'Are you sure you want to reject this post? It will be marked as rejected.');
+
+    setConfirmJob(job);
+    setConfirmAction(action);
+    setConfirmMessage(msg);
+    setConfirmModalOpen(true);
+  };
+
+  const performModerationAction = async () => {
+    console.log('🔔 performModerationAction executing', { confirmJob, confirmAction });
+    const job = confirmJob;
+    const action = confirmAction;
+    setConfirmModalOpen(false);
+    if (!job) return;
+
+    const jobId = job?.id || job?.jobID || job?.idJob || job?.jobId;
+    if (!jobId) return;
+
+    try {
+      if (job.jobSource === 'urgent') {
+        if (action === 'approve') {
+          // Set backend status to 'active' (frontend maps to 'approved')
+          await quickJobService.updateJobStatus(jobId, 'active');
+          // Notify employer
+          try {
+            const recipient = job.employerId || job.employerEmail || job.employer || null;
+            if (recipient) await notificationService.createJobApprovedNotification(recipient, job);
+          } catch (e) {
+            console.error('Failed to send approval notification:', e);
+          }
+        } else {
+          // Soft-delete / mark deleted so it shows as rejected
+          await quickJobService.updateJobStatus(jobId, 'deleted');
+          try {
+            const recipient = job.employerId || job.employerEmail || job.employer || null;
+            if (recipient) await notificationService.createJobRejectedNotification(recipient, job);
+          } catch (e) {
+            console.error('Failed to send rejection notification:', e);
+          }
+        }
+      } else {
+        if (action === 'approve') {
+          await jobPostService.updateJobStatus(jobId, 'active');
+          try {
+            const recipient = job.employerId || job.employerEmail || job.employer || null;
+            if (recipient) await notificationService.createJobApprovedNotification(recipient, job);
+          } catch (e) {
+            console.error('Failed to send approval notification:', e);
+          }
+        } else {
+          await jobPostService.updateJobStatus(jobId, 'deleted');
+          try {
+            const recipient = job.employerId || job.employerEmail || job.employer || null;
+            if (recipient) await notificationService.createJobRejectedNotification(recipient, job);
+          } catch (e) {
+            console.error('Failed to send rejection notification:', e);
+          }
+        }
       }
-    };
 
-    loadPosts();
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
+      await refreshPosts();
+    } catch (error) {
+      setLoadError(error?.message || 'Failed to update post status');
+    }
+  };
 
   const currentJobs = activeTab === 'longterm' ? standardJobs : urgentJobs;
 
@@ -1135,7 +1251,7 @@ const PostsManagement = () => {
             </thead>
             <tbody>
               {currentJobs_paginated.map((job) => (
-                <tr key={job.id}>
+                <tr key={job.id || `${job.jobSource}-${job.title}-${job.postDate}-${job.employer}`}>
                   <td style={{ fontWeight: 600 }}>{job.title}</td>
                   <td>{job.employer}</td>
                   <td>
@@ -1165,15 +1281,28 @@ const PostsManagement = () => {
                   <td>
                     <ActionButtons>
                       <IconButton 
+                        type="button"
                         onClick={() => handleViewDetails(job)}
                         title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
                       >
                         <Eye size={16} />
                       </IconButton>
-                      <IconButton $variant="success" title={language === 'vi' ? 'Phê duyệt' : 'Approve'}>
+                      <IconButton
+                        type="button"
+                        $variant="success"
+                        title={language === 'vi' ? 'Phê duyệt' : 'Approve'}
+                        onClick={() => requestModerationAction(job, 'approve')}
+                        disabled={job.status !== 'pending'}
+                      >
                         <CheckCircle size={16} />
                       </IconButton>
-                      <IconButton $variant="danger" title={language === 'vi' ? 'Từ chối' : 'Reject'}>
+                      <IconButton
+                        type="button"
+                        $variant="danger"
+                        title={language === 'vi' ? 'Từ chối' : 'Reject'}
+                        onClick={() => requestModerationAction(job, 'reject')}
+                        disabled={job.status === 'rejected'}
+                      >
                         <Ban size={16} />
                       </IconButton>
                     </ActionButtons>
@@ -1280,7 +1409,7 @@ const PostsManagement = () => {
           </PaginationContainer>
         )}
 
-        {showDetailModal && selectedJob && (
+        {showDetailModal && selectedJob && ( <>
           <Modal
             isOpen={showDetailModal}
             onClose={() => setShowDetailModal(false)}
@@ -1466,9 +1595,30 @@ const PostsManagement = () => {
                   )}
                 </CandidateList>
               </DetailSection>
-            </DetailModal>
+              </DetailModal>
           </Modal>
-        )}
+
+          
+        </> )}
+        {/* Confirmation modal for approve/reject actions (global) */}
+        <Modal
+          isOpen={confirmModalOpen}
+          onClose={() => setConfirmModalOpen(false)}
+          title={confirmAction === 'approve' ? (language === 'vi' ? 'Xác nhận duyệt' : 'Confirm approve') : (language === 'vi' ? 'Xác nhận từ chối' : 'Confirm reject')}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ marginBottom: 16 }}>{confirmMessage}</p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+              <Button variant="secondary" onClick={() => setConfirmModalOpen(false)}>
+                {language === 'vi' ? 'Hủy' : 'Cancel'}
+              </Button>
+              <Button variant="danger" onClick={performModerationAction}>
+                {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
       </PageContainer>
     </DashboardLayout>
   );

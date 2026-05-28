@@ -410,7 +410,7 @@ class QuickJobService {
       return [];
     } catch (error) {
       console.error('❌ Error fetching all quick jobs:', error);
-      return this.getAllActiveQuickJobs();
+      throw error;
     }
   }
 }

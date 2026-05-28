@@ -146,7 +146,8 @@ def create_job_post(event, user_id, headers):
             'responsibilities': body.get('responsibilities', ''),
             'requirements': body.get('requirements', ''),
             'benefits': body.get('benefits', ''),
-            'status': body.get('status', 'active'),
+            # Default to 'pending' so Admin must manually approve standard jobs
+            'status': body.get('status', 'pending'),
             'category': 'standard',  # Always set to 'standard' for PostStandardJob
             'applicants': body.get('applicants', 0),
             'views': body.get('views', 0),

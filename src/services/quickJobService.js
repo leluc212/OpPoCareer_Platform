@@ -407,11 +407,11 @@ class QuickJobService {
       }
 
       return [];
-    } catch (error) {
+        } catch (error) {
       console.error('❌ Error fetching all quick jobs from /quick-jobs:', error);
       // Fallback to active jobs if base endpoint fails
       return this.getAllActiveQuickJobs();
-    }
+        }
   }
 }
 

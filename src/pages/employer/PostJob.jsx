@@ -543,7 +543,8 @@ const PostJob = () => {
           employerEmail: employerEmail,
           employerName: employerName,
           ...formData,
-          status: 'active',
+          // Require admin moderation for standard jobs
+          status: 'pending',
           applicants: 0,
           views: 0,
           responseRate: 0,

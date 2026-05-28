@@ -644,7 +644,7 @@ const PostQuickJob = () => {
         requirements: formData.requirements || '',
         contactPhone: formData.contactPhone || '',
         companyName: companyName,  // Add company name here
-        status: 'active',  // Set to 'active' so it appears in candidate job listings
+        status: 'pending',  // Created by employer -> require admin approval
         workDate: formData.workDate || '' // Store work date in workDate attribute
       };
 

@@ -1787,7 +1787,7 @@ const EmployerWallet = () => {
                     ) : (
                       <QRContainer>
                         <QRCodeImage
-                          src={`https://img.vietqr.io/image/MB-0563518922-compact.png?amount=${parsedDepositAmount}&addInfo=OPPOWALLET%20${walletCode}&accountName=OPPO%20HIRING%20PLATFORM`}
+                          src={`https://img.vietqr.io/image/MB-0777799991702-compact.png?amount=${parsedDepositAmount}&addInfo=OPPOWALLET%20${walletCode}&accountName=NGUYEN%20THI%20THUY%20DUNG`}
                           alt="VietQR Transfer Code"
                         />
                         <PollingStatus>
@@ -1802,15 +1802,15 @@ const EmployerWallet = () => {
                           <DetailRow>
                             <span className="label">{language === 'vi' ? 'Số tài khoản' : 'Account No.'}</span>
                             <span className="value">
-                              0563518922
-                              <CopyButton onClick={() => handleCopyText('0563518922', 'account')}>
+                              0777799991702
+                              <CopyButton onClick={() => handleCopyText('0777799991702', 'account')}>
                                 {copiedText === 'account' ? <><Check size={11} /> {language === 'vi' ? 'Đã chép' : 'Copied'}</> : <><Copy size={11} /> {language === 'vi' ? 'Sao chép' : 'Copy'}</>}
                               </CopyButton>
                             </span>
                           </DetailRow>
                           <DetailRow>
                             <span className="label">{language === 'vi' ? 'Tên thụ hưởng' : 'Account Name'}</span>
-                            <span className="value">OPPO HIRING PLATFORM</span>
+                            <span className="value">NGUYEN THI THUY DUNG</span>
                           </DetailRow>
                           <DetailRow>
                             <span className="label">{language === 'vi' ? 'Số tiền' : 'Amount'}</span>

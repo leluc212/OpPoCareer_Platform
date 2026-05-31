@@ -37,10 +37,13 @@ const orbPulse = keyframes`
 const PageContainer = styled(motion.div)`
   position: relative;
   overflow: hidden;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
 `;
 
 /* decorative orbs behind everything */
-const OrbBlue  = styled.div`
+const OrbBlue = styled.div`
   position: fixed; pointer-events: none; z-index: 0;
   width: 500px; height: 500px; border-radius: 50%;
   background: radial-gradient(circle, #1e40af33 0%, transparent 70%);
@@ -62,7 +65,7 @@ const PageHeader = styled.div`
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 36px;
+  margin-bottom: 12px;
 `;
 const PageIconBox = styled(motion.div)`
   width: 52px; height: 52px; border-radius: 15px;
@@ -72,18 +75,18 @@ const PageIconBox = styled(motion.div)`
   svg { width: 22px; height: 22px; color: #1e40af; }
 `;
 const PageTitleText = styled.div`
-  h1 { font-size: 26px; font-weight: 800; color: ${p => p.theme.colors.text}; letter-spacing: -0.5px; margin-bottom: 4px; }
-  p  { font-size: 13.5px; color: ${p => p.theme.colors.textLight}; font-weight: 500; }
+  h1 { font-size: 22px; font-weight: 800; color: ${p => p.theme.colors.text}; letter-spacing: -0.5px; margin-bottom: 2px; }
+  p  { font-size: 13px; color: ${p => p.theme.colors.textLight}; font-weight: 500; }
 `;
 
 // ─── Pricing grid (equal-height cards) ───────────────────────
 const PricingGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 16px;
   align-items: stretch;
-  margin-bottom: 28px;
-  padding-top: 22px;
+  margin-bottom: 12px;
+  padding-top: 10px;
 
   @media (max-width: 1200px) {
     grid-template-columns: repeat(2, 1fr);
@@ -103,9 +106,9 @@ const glowAnim = keyframes`
 
 const PricingCard = styled(motion.div)`
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1.5px solid ${p => p.$featured ? 'transparent' : '#E8EFFF'};
-  padding: 32px 24px 26px;
+  padding: 24px 20px 20px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -141,28 +144,28 @@ const PopularBadge = styled(motion.div)`
 `;
 
 const PlanIconWrap = styled(motion.div)`
-  width: 72px; height: 72px;
-  margin: 8px auto 18px;
-  border-radius: 20px;
+  width: 48px; height: 48px;
+  margin: 6px auto 14px;
+  border-radius: 14px;
   background: ${p => p.$bg};
   border: 1.5px solid ${p => p.$border};
   display: flex; align-items: center; justify-content: center;
   animation: ${floatY} ${p => p.$dur || '4s'} ease-in-out infinite;
-  svg { width: 32px; height: 32px; color: ${p => p.$c}; }
+  svg { width: 22px; height: 22px; color: ${p => p.$c}; }
 `;
 
 const PlanName = styled.h3`
-  font-size: 21px; font-weight: 800; text-align: center;
-  color: ${p => p.theme.colors.text}; letter-spacing: -0.3px; margin-bottom: 18px;
+  font-size: 17px; font-weight: 800; text-align: center;
+  color: ${p => p.theme.colors.text}; letter-spacing: -0.3px; margin-bottom: 8px;
 `;
 
 const PriceBox = styled.div`
   background: #F8FAFC;
   border: 1.5px solid #F1F5F9;
-  border-radius: 16px;
-  padding: 18px 14px 14px;
+  border-radius: 12px;
+  padding: 10px;
   text-align: center;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
   position: relative;
   overflow: hidden;
 
@@ -179,10 +182,10 @@ const PriceOption = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: white;
   border-radius: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   position: relative;
   z-index: 1;
   cursor: pointer;
@@ -225,28 +228,28 @@ const PricePer = styled.div`
 /* push button to bottom */
 const Features = styled.ul`
   flex: 1;
-  display: flex; flex-direction: column; gap: 7px;
-  margin: 0 0 22px; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 0 0 16px; padding: 0; list-style: none;
 `;
 
 const FeatureItem = styled(motion.li)`
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13.5px; font-weight: 500; color: ${p => p.theme.colors.text};
-  padding: 6px 8px 6px 6px; border-radius: 9px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 500; color: ${p => p.theme.colors.text};
+  padding: 4px; border-radius: 6px;
   transition: background 0.15s ease, transform 0.15s ease;
   &:hover { background: #F8FAFC; transform: translateX(3px); }
 
   .chk {
-    width: 22px; height: 22px; border-radius: 7px;
+    width: 18px; height: 18px; border-radius: 5px;
     background: #ECFDF5; border: 1px solid #6EE7B7;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    svg { width: 12px; height: 12px; color: #10B981; animation: ${checkBounce} 0.35s ease both; }
+    svg { width: 10px; height: 10px; color: #10B981; animation: ${checkBounce} 0.35s ease both; }
   }
 `;
 
 const Btn = styled(motion.button)`
-  width: 100%; padding: 14px; border-radius: 12px;
-  font-size: 14.5px; font-weight: 700; cursor: pointer;
+  width: 100%; padding: 10px; border-radius: 10px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   border: none; position: relative; overflow: hidden; flex-shrink: 0;
   svg { width: 16px; height: 16px; }
@@ -690,11 +693,11 @@ const Subscription = () => {
     // Parse price from string (e.g., "495,000 VND" -> 495000)
     const priceString = selectedDuration.amount.replace(/[^0-9]/g, '');
     const packagePrice = parseInt(priceString);
-    
+
     // Get wallet balance
     const walletData = JSON.parse(localStorage.getItem('employer_wallet') || '{"balance": 0}');
     const currentBalance = walletData.balance || 0;
-    
+
     // Get employerId from Cognito session
     let employerId = 'unknown';
     try {
@@ -707,7 +710,7 @@ const Subscription = () => {
     } catch (error) {
       console.error('Error getting Cognito session:', error);
     }
-    
+
     // Get companyName from DynamoDB
     let companyName = 'Unknown Company';
     try {
@@ -721,12 +724,12 @@ const Subscription = () => {
       const employerProfile = JSON.parse(localStorage.getItem('employerProfile') || '{}');
       companyName = employerProfile.companyName || 'Unknown Company';
     }
-    
+
     console.log('Package price:', packagePrice);
     console.log('Current balance:', currentBalance);
     console.log('Employer ID:', employerId);
     console.log('Company Name:', companyName);
-    
+
     // Check if balance is sufficient
     if (currentBalance < packagePrice) {
       // Show insufficient balance modal
@@ -734,14 +737,14 @@ const Subscription = () => {
       setShowInsufficientBalanceModal(true);
       return;
     }
-    
+
     // Deduct from wallet
     const newBalance = currentBalance - packagePrice;
     walletData.balance = newBalance;
     localStorage.setItem('employer_wallet', JSON.stringify(walletData));
-    
+
     console.log('New balance after purchase:', newBalance);
-    
+
     // Create purchase record and send to API
     console.log('🚀 Starting purchase process...');
     console.log('   Package:', selectedPackage.packageName);
@@ -749,27 +752,27 @@ const Subscription = () => {
     console.log('   Price:', packagePrice);
     console.log('   Employer:', employerId);
     console.log('   Company:', companyName);
-    
+
     // Generate subscription ID first (in case API fails)
     const subscriptionId = `SUB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     console.log('   Subscription ID:', subscriptionId);
-    
+
     try {
       const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
       console.log('📡 Subscription API:', API_ENDPOINT);
-      
+
       const purchaseData = {
         employerId: employerId,
         companyName: companyName,
         packageName: selectedPackage.packageName,
         duration: selectedDuration.duration
       };
-      
+
       console.log('📤 Sending purchase to subscription API...');
-      
+
       let subscriptionCreated = false;
       let apiSubscriptionId = subscriptionId;
-      
+
       try {
         const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
           method: 'POST',
@@ -778,7 +781,7 @@ const Subscription = () => {
           },
           body: JSON.stringify(purchaseData)
         });
-        
+
         if (response.ok) {
           const result = await response.json();
           console.log('✅ Subscription created via API:', result);
@@ -792,7 +795,7 @@ const Subscription = () => {
         console.warn('⚠️ Subscription API failed:', apiError.message);
         console.warn('   Will still create notification with local subscription ID');
       }
-      
+
       // ALWAYS create notification for admin (even if subscription API fails)
       console.log('');
       console.log('📤 Creating notification for admin...');
@@ -800,7 +803,7 @@ const Subscription = () => {
       console.log('   Environment check:');
       console.log('   - VITE_NOTIFICATIONS_API:', import.meta.env.VITE_NOTIFICATIONS_API);
       console.log('   - typeof:', typeof import.meta.env.VITE_NOTIFICATIONS_API);
-      
+
       // Verify API endpoint is available
       if (!import.meta.env.VITE_NOTIFICATIONS_API) {
         console.error('❌ CRITICAL: VITE_NOTIFICATIONS_API is undefined!');
@@ -808,7 +811,7 @@ const Subscription = () => {
         alert('Lỗi: Không thể kết nối đến hệ thống thông báo. Vui lòng liên hệ admin.');
         return;
       }
-      
+
       try {
         const notificationData = {
           subscriptionId: apiSubscriptionId,
@@ -818,17 +821,17 @@ const Subscription = () => {
           duration: selectedDuration.duration,
           price: packagePrice
         };
-        
+
         console.log('📦 Notification data:', notificationData);
         console.log('📤 Calling createPackagePurchaseRequestNotification...');
-        
+
         const notificationResult = await createPackagePurchaseRequestNotification(notificationData);
-        
+
         console.log('✅ Notification function returned!');
         console.log('   Result:', notificationResult);
         console.log('   Result type:', typeof notificationResult);
         console.log('   Result.success:', notificationResult?.success);
-        
+
         if (notificationResult && notificationResult.success) {
           console.log('✅ Notification ID:', notificationResult.data?.notificationId);
           console.log('✅ Notification saved to DynamoDB!');
@@ -839,49 +842,49 @@ const Subscription = () => {
           // Don't block the purchase flow, but log the error
           console.warn('⚠️ Continuing with purchase despite notification error');
         }
-        
+
         // Trigger a storage event to update navbar immediately
         console.log('📡 Dispatching storage event to update navbar...');
         window.dispatchEvent(new Event('storage'));
         console.log('✅ Storage event dispatched');
-        
+
       } catch (notifError) {
         console.error('❌ CRITICAL ERROR: Failed to create notification!');
         console.error('   Error type:', notifError.constructor.name);
         console.error('   Error:', notifError);
         console.error('   Message:', notifError.message);
         console.error('   Stack:', notifError.stack);
-        
+
         // Log additional debugging info
         if (notifError.response) {
           console.error('   Response status:', notifError.response.status);
           console.error('   Response data:', notifError.response.data);
         }
-        
+
         // Show alert to user but don't block the purchase
         console.warn('⚠️ Showing alert to user about notification error');
         alert('Cảnh báo: Đơn hàng đã được tạo nhưng thông báo cho admin có thể bị lỗi. Vui lòng liên hệ admin để xác nhận.');
       }
-      
+
       // Show success modal
       console.log('✅ Purchase process completed!');
       setShowConfirmModal(false);
       setShowSuccessModal(true);
-      
+
       // Auto close after 3 seconds
       setTimeout(() => {
         setShowSuccessModal(false);
         setSelectedPackage(null);
         setSelectedDuration(null);
       }, 3000);
-      
+
     } catch (error) {
       console.error('❌ Error in purchase process:', error);
       console.error('   Message:', error.message);
       console.error('   Stack:', error.stack);
-      
+
       alert(vi ? 'Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.' : 'Error creating order. Please try again.');
-      
+
       // Refund the balance
       walletData.balance = currentBalance;
       localStorage.setItem('employer_wallet', JSON.stringify(walletData));
@@ -889,10 +892,10 @@ const Subscription = () => {
   };
 
   const faqs = [
-    { Icon: CreditCard, q: vi ? 'Các phương thức thanh toán nào được chấp nhận?' : 'Which payment methods are accepted?',    a: vi ? 'Chúng tôi chấp nhận thẻ tín dụng, thẻ ghi nợ, chuyển khoản ngân hàng và ví điện tử. Tất cả giao dịch đều được bảo mật SSL 256-bit.' : 'We accept credit cards, debit cards, bank transfers, and e-wallets. All transactions use 256-bit SSL security.' },
-    { Icon: Shield,     q: vi ? 'Gói dịch vụ có tự động gia hạn không?' : 'Do packages auto-renew?',                    a: vi ? 'Không. Gói boost/banner là dịch vụ một lần, không tự động gia hạn. Bạn có thể mua lại khi cần.' : 'No. Boost/banner packages are one-time services with no auto-renewal. You can purchase again when needed.' },
-    { Icon: Clock,      q: vi ? 'Khi nào tin tuyển dụng bắt đầu hiện thị sau khi mua?' : 'When does the post start showing after purchase?',                    a: vi ? 'Ngay lập tức. Tin tuyển dụng sẽ được đẩy lên và hiển thị nổi bật trong vòng 1-2 phút sau khi thanh toán thành công.' : 'Immediately. Your job post will be boosted and featured within 1-2 minutes after successful payment.' },
-    { Icon: HelpCircle, q: vi ? 'Có thể mua nhiều gói cùng lúc không?' : 'Can I buy multiple packages at once?',                            a: vi ? 'Có. Bạn có thể mua nhiều gói khác nhau cho cùng một tin hoặc áp dụng cho nhiều tin khác nhau. Tất cả đều hoạt động đồng thời.' : 'Yes. You can purchase multiple packages for the same post or apply them to different posts. All will work simultaneously.' },
+    { Icon: CreditCard, q: vi ? 'Các phương thức thanh toán nào được chấp nhận?' : 'Which payment methods are accepted?', a: vi ? 'Chúng tôi chấp nhận thẻ tín dụng, thẻ ghi nợ, chuyển khoản ngân hàng và ví điện tử. Tất cả giao dịch đều được bảo mật SSL 256-bit.' : 'We accept credit cards, debit cards, bank transfers, and e-wallets. All transactions use 256-bit SSL security.' },
+    { Icon: Shield, q: vi ? 'Gói dịch vụ có tự động gia hạn không?' : 'Do packages auto-renew?', a: vi ? 'Không. Gói boost/banner là dịch vụ một lần, không tự động gia hạn. Bạn có thể mua lại khi cần.' : 'No. Boost/banner packages are one-time services with no auto-renewal. You can purchase again when needed.' },
+    { Icon: Clock, q: vi ? 'Khi nào tin tuyển dụng bắt đầu hiện thị sau khi mua?' : 'When does the post start showing after purchase?', a: vi ? 'Ngay lập tức. Tin tuyển dụng sẽ được đẩy lên và hiển thị nổi bật trong vòng 1-2 phút sau khi thanh toán thành công.' : 'Immediately. Your job post will be boosted and featured within 1-2 minutes after successful payment.' },
+    { Icon: HelpCircle, q: vi ? 'Có thể mua nhiều gói cùng lúc không?' : 'Can I buy multiple packages at once?', a: vi ? 'Có. Bạn có thể mua nhiều gói khác nhau cho cùng một tin hoặc áp dụng cho nhiều tin khác nhau. Tất cả đều hoạt động đồng thời.' : 'Yes. You can purchase multiple packages for the same post or apply them to different posts. All will work simultaneously.' },
   ];
 
   const buildCard = (plan, i) => (
@@ -944,7 +947,7 @@ const Subscription = () => {
         <PriceBox>
           {plan.prices ? (
             plan.prices.map((priceOption, pi) => (
-              <PriceOption 
+              <PriceOption
                 key={pi}
                 $color={plan.color}
                 onClick={() => handleSelectPackage(plan, priceOption)}
@@ -985,7 +988,7 @@ const Subscription = () => {
         viewport={{ once: true }}
         transition={{ delay: i * 0.1 + 0.45 }}
       >
-        <Btn 
+        <Btn
           whileTap={{ scale: 0.97 }}
           onClick={() => handleClickPackageButton(plan)}
         >
@@ -1020,122 +1023,6 @@ const Subscription = () => {
             {plans.map((plan, i) => buildCard(plan, i))}
           </PricingGrid>
 
-          {/* Comparison */}
-          <SectionCard
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.1 }}
-            transition={{ duration: 0.32 }}
-          >
-            <SectionHead><h2>{vi ? 'So Sánh Chi Tiết Các Gói' : 'Detailed Package Comparison'}</h2></SectionHead>
-            <CompTable>
-              <thead>
-                <tr>
-                  <th style={{ width: '18%', textAlign: 'left' }}>{vi ? 'Tên Gói' : 'Package Name'}</th>
-                  <th style={{ width: '10%', textAlign: 'center' }}>{vi ? 'Giá 24h' : '24h Price'}</th>
-                  <th style={{ width: '10%', textAlign: 'center' }}>{vi ? 'Giá 5 Ngày' : '5 Days Price'}</th>
-                  <th style={{ width: '10%', textAlign: 'center' }}>{vi ? 'Giá 7 Ngày' : '7 Days Price'}</th>
-                  <th style={{ width: '22%', textAlign: 'left' }}>{vi ? 'Điểm nổi bật' : 'Highlights'}</th>
-                  <th style={{ width: '30%', textAlign: 'left' }}>{vi ? 'Chi tiết' : 'Details'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* 1. Hot Search */}
-                <tr>
-                  <td style={{ fontWeight: '700', color: '#1e40af', textAlign: 'left' }}>
-                    1. Hot Search<br/><span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: '500' }}>(Ưu tiên tìm kiếm)</span>
-                  </td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#1e40af' }}>19.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#1e40af' }}>79.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#1e40af' }}>99.000đ</td>
-                  <td style={{ textAlign: 'left', fontSize: '13px', lineHeight: '1.5' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
-                      <li>Lên Top tìm kiếm theo ngành nghề/khu vực</li>
-                      <li>Tăng lượt click & ứng tuyển</li>
-                      <li>Ưu tiên hiển thị trước đối thủ</li>
-                    </ul>
-                  </td>
-                  <td style={{ textAlign: 'left', fontSize: '12.5px', lineHeight: '1.6', color: '#475569' }}>
-                    Khi ứng viên dùng thanh tìm kiếm để gõ từ khóa (ví dụ: pha chế, phục vụ) hoặc dùng bộ lọc (quận, huyện), tin tuyển dụng của quán sẽ luôn được ghim ở các vị trí đầu tiên của danh sách kết quả.
-                  </td>
-                </tr>
-
-                {/* 2. Quick Boost */}
-                <tr>
-                  <td style={{ fontWeight: '700', color: '#10B981', textAlign: 'left' }}>
-                    2. Quick Boost<br/><span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: '500' }}>(Đẩy tin bảng tin chung)</span>
-                  </td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#10B981' }}>29.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#10B981' }}>99.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#10B981' }}>149.000đ</td>
-                  <td style={{ textAlign: 'left', fontSize: '13px', lineHeight: '1.5' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
-                      <li>Tự động đẩy tin lên đầu bảng tin</li>
-                      <li>Không lo bài đăng bị trôi</li>
-                      <li>Gắn tag nổi bật [Tuyển Gấp]</li>
-                    </ul>
-                  </td>
-                  <td style={{ textAlign: 'left', fontSize: '12.5px', lineHeight: '1.6', color: '#475569' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px', listStyleType: 'square' }}>
-                      <li>Tác động vào Bảng tin chung (Home Feed) - nơi hiển thị tất cả các tin mới đăng.</li>
-                      <li>Hệ thống sẽ tự động cập nhật lại thời gian đăng bài (Auto-bump) cứ mỗi 3 tiếng/lần. Việc này giúp tin của quán luôn được đẩy ngược lên Top đầu bảng tin chung, không bị các tin của quán khác đè xuống dưới.</li>
-                      <li>Tiêu đề job tự động đính kèm một nhãn chữ (Text tag) dạng [Tuyển gấp] ở ngay phía trước.</li>
-                    </ul>
-                  </td>
-                </tr>
-
-                {/* 3. Spotlight */}
-                <tr>
-                  <td style={{ fontWeight: '700', color: '#F59E0B', textAlign: 'left' }}>
-                    3. Spotlight<br/><span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: '500' }}>(1 Banner Tĩnh)</span>
-                  </td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#F59E0B' }}>39.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#F59E0B' }}>129.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#F59E0B' }}>199.000đ</td>
-                  <td style={{ textAlign: 'left', fontSize: '13px', lineHeight: '1.5' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
-                      <li>Hiển thị Banner riêng tại Trang chủ</li>
-                      <li>Tăng nhận diện thương hiệu tuyển dụng</li>
-                      <li>Click banner → vào thẳng job</li>
-                    </ul>
-                  </td>
-                  <td style={{ textAlign: 'left', fontSize: '12.5px', lineHeight: '1.6', color: '#475569' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px', listStyleType: 'square' }}>
-                      <li>Chủ quán cung cấp 01 hình ảnh Banner tĩnh (định dạng JPG/PNG thông thường).</li>
-                      <li>Vị trí: Đặt tại ô Banner cố định nằm ở khu vực giữa Trang chủ.</li>
-                      <li>Hiển thị xoay vòng, mỗi nhà tuyển dụng xuất hiện 5 giây.</li>
-                      <li>Khi ứng viên bấm vào Banner này, hệ thống sẽ tự động chuyển hướng (Redirect) thẳng về bài đăng tuyển dụng chi tiết của quán.</li>
-                    </ul>
-                  </td>
-                </tr>
-
-                {/* 4. Top Spotlight */}
-                <tr>
-                  <td style={{ fontWeight: '700', color: '#DC2626', textAlign: 'left' }}>
-                    4. Top Spotlight<br/><span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: '500' }}>(2 Banner Động + Tĩnh)</span>
-                  </td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>59.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>249.000đ</td>
-                  <td style={{ textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>349.000đ</td>
-                  <td style={{ textAlign: 'left', fontSize: '13px', lineHeight: '1.5' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px' }}>
-                      <li>Sở hữu Hero Banner nổi bật nhất</li>
-                      <li>Banner động + Banner tĩnh Premium</li>
-                      <li>Thu hút tối đa lượt xem & ứng tuyển</li>
-                    </ul>
-                  </td>
-                  <td style={{ textAlign: 'left', fontSize: '12.5px', lineHeight: '1.6', color: '#475569' }}>
-                    <ul style={{ margin: 0, paddingLeft: '16px', listStyleType: 'square' }}>
-                      <li>01 Banner Động: Dạng ảnh GIF hoặc Slide chạy lướt qua, đặt ở vị trí Banner lớn nhất (Hero Banner) nằm ngay trên cùng của Trang chủ.</li>
-                      <li>01 Banner Tĩnh: Đặt ở đầu trang chuyên mục dành riêng cho việc làm ngành F&B.</li>
-                      <li>Cả 2 banner đều cài link dẫn trực tiếp về bài đăng tuyển dụng của quán khi ứng viên click vào.</li>
-                    </ul>
-                  </td>
-                </tr>
-              </tbody>
-            </CompTable>
-          </SectionCard>
-
         </Inner>
 
         {/* Duration Selection Modal */}
@@ -1156,14 +1043,14 @@ const Subscription = () => {
                     <p>{selectedPackage.subtitle}</p>
                   </div>
                 </PackageInfo>
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: '16px', 
-                  marginTop: '20px', 
-                  padding: '20px', 
-                  background: '#F8FAFC', 
-                  borderRadius: '16px', 
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  marginTop: '20px',
+                  padding: '20px',
+                  background: '#F8FAFC',
+                  borderRadius: '16px',
                   border: '1.5px dashed #E2E8F0',
                   textAlign: 'left'
                 }}>
@@ -1223,7 +1110,7 @@ const Subscription = () => {
                   </DetailRow>
                 </PurchaseDetails>
                 <InfoNote>
-                  {vi 
+                  {vi
                     ? '⏳ Yêu cầu mua gói sẽ được gửi đến admin để duyệt. Bạn sẽ nhận được thông báo khi gói được kích hoạt.'
                     : '⏳ Purchase request will be sent to admin for approval. You will be notified when the package is activated.'}
                 </InfoNote>
@@ -1259,7 +1146,7 @@ const Subscription = () => {
                 {vi ? 'Thanh toán thành công!' : 'Payment Successful!'}
               </SuccessTitle>
               <SuccessMessage>
-                {vi 
+                {vi
                   ? 'Yêu cầu mua gói của bạn đã được gửi đến admin. Bạn sẽ nhận được thông báo khi gói được kích hoạt.'
                   : 'Your package purchase request has been sent to admin. You will be notified when the package is activated.'}
               </SuccessMessage>
@@ -1290,7 +1177,7 @@ const Subscription = () => {
                 {vi ? 'Số dư không đủ!' : 'Insufficient Balance!'}
               </ErrorTitle>
               <ErrorMessage>
-                {vi 
+                {vi
                   ? `Bạn cần ${selectedDuration.amount} để mua gói này. Vui lòng nạp thêm tiền vào ví.`
                   : `You need ${selectedDuration.amount} to purchase this package. Please top up your wallet.`}
               </ErrorMessage>

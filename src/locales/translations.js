@@ -510,7 +510,7 @@ export const translations = {
       newMessageTitle: 'Tin nhắn mới',
       newMessageMessage: 'Bạn có tin nhắn mới từ Hồng Trà Ngô Gia',
       newMessageTime: '5 giờ trước',
-      applicationAcceptedTitle: 'Hồ sơ được chấp nhận',
+      applicationAcceptedTitle: 'CV được chấp nhận',
       applicationAcceptedMessage: 'Hồ sơ Nhân viên tại Highlands của bạn đã được chấp nhận',
       applicationAcceptedTime: '1 ngày trước',
     },

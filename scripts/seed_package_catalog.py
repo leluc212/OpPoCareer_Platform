@@ -23,11 +23,13 @@ def load_seed(path):
 
 def to_dynamo_item(obj):
     # Convert numbers to Decimal for DynamoDB
+    if isinstance(obj, bool):
+        return obj
     if isinstance(obj, dict):
         return {k: to_dynamo_item(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [to_dynamo_item(v) for v in obj]
-    if isinstance(obj, int) or isinstance(obj, float):
+    if isinstance(obj, (int, float)):
         return Decimal(str(obj))
     return obj
 

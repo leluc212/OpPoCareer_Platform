@@ -34,7 +34,6 @@ import EmployerDirectory from './pages/candidate/EmployerDirectory';
 import PublicJobListing from './pages/candidate/PublicJobListing';
 import AboutPage from './pages/auth/AboutPage';
 import CVTemplates from './pages/auth/CVTemplates';
-import Support from './pages/candidate/Support';
 import Wallet from './pages/candidate/Wallet';
 import Availability from './pages/candidate/Availability';
 import CandidatePosts from './pages/candidate/CandidatePosts';

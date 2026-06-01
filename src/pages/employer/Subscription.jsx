@@ -4,10 +4,10 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import employerProfileService from '../../services/employerProfileService';
-import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, Clock, CheckCircle } from 'lucide-react';
+import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, Clock, CheckCircle, Mail, Phone } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { createPackagePurchaseRequestNotification } from '../../services/notificationService';
-import { useAuth } from '../../context/AuthContext';
+import { getDefaultPackageCatalog, getPackageCatalog, getWallet } from '../../services/packageCatalogService';
 
 // ─── Animations ───────────────────────────────────────────────
 const rotateBorder = keyframes`
@@ -37,10 +37,13 @@ const orbPulse = keyframes`
 const PageContainer = styled(motion.div)`
   position: relative;
   overflow: hidden;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
 `;
 
 /* decorative orbs behind everything */
-const OrbBlue  = styled.div`
+const OrbBlue = styled.div`
   position: fixed; pointer-events: none; z-index: 0;
   width: 500px; height: 500px; border-radius: 50%;
   background: radial-gradient(circle, #1e40af33 0%, transparent 70%);
@@ -62,7 +65,7 @@ const PageHeader = styled.div`
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 36px;
+  margin-bottom: 12px;
 `;
 const PageIconBox = styled(motion.div)`
   width: 52px; height: 52px; border-radius: 15px;
@@ -72,18 +75,18 @@ const PageIconBox = styled(motion.div)`
   svg { width: 22px; height: 22px; color: #1e40af; }
 `;
 const PageTitleText = styled.div`
-  h1 { font-size: 26px; font-weight: 800; color: ${p => p.theme.colors.text}; letter-spacing: -0.5px; margin-bottom: 4px; }
-  p  { font-size: 13.5px; color: ${p => p.theme.colors.textLight}; font-weight: 500; }
+  h1 { font-size: 22px; font-weight: 800; color: ${p => p.theme.colors.text}; letter-spacing: -0.5px; margin-bottom: 2px; }
+  p  { font-size: 13px; color: ${p => p.theme.colors.textLight}; font-weight: 500; }
 `;
 
 // ─── Pricing grid (equal-height cards) ───────────────────────
 const PricingGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 16px;
   align-items: stretch;
-  margin-bottom: 28px;
-  padding-top: 22px;
+  margin-bottom: 12px;
+  padding-top: 10px;
 
   @media (max-width: 1200px) {
     grid-template-columns: repeat(2, 1fr);
@@ -103,9 +106,9 @@ const glowAnim = keyframes`
 
 const PricingCard = styled(motion.div)`
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1.5px solid ${p => p.$featured ? 'transparent' : '#E8EFFF'};
-  padding: 32px 24px 26px;
+  padding: 24px 20px 20px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -141,28 +144,28 @@ const PopularBadge = styled(motion.div)`
 `;
 
 const PlanIconWrap = styled(motion.div)`
-  width: 72px; height: 72px;
-  margin: 8px auto 18px;
-  border-radius: 20px;
+  width: 48px; height: 48px;
+  margin: 6px auto 14px;
+  border-radius: 14px;
   background: ${p => p.$bg};
   border: 1.5px solid ${p => p.$border};
   display: flex; align-items: center; justify-content: center;
   animation: ${floatY} ${p => p.$dur || '4s'} ease-in-out infinite;
-  svg { width: 32px; height: 32px; color: ${p => p.$c}; }
+  svg { width: 22px; height: 22px; color: ${p => p.$c}; }
 `;
 
 const PlanName = styled.h3`
-  font-size: 21px; font-weight: 800; text-align: center;
-  color: ${p => p.theme.colors.text}; letter-spacing: -0.3px; margin-bottom: 18px;
+  font-size: 17px; font-weight: 800; text-align: center;
+  color: ${p => p.theme.colors.text}; letter-spacing: -0.3px; margin-bottom: 8px;
 `;
 
 const PriceBox = styled.div`
   background: #F8FAFC;
   border: 1.5px solid #F1F5F9;
-  border-radius: 16px;
-  padding: 18px 14px 14px;
+  border-radius: 12px;
+  padding: 10px;
   text-align: center;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
   position: relative;
   overflow: hidden;
 
@@ -179,10 +182,10 @@ const PriceOption = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: white;
   border-radius: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   position: relative;
   z-index: 1;
   cursor: pointer;
@@ -225,28 +228,28 @@ const PricePer = styled.div`
 /* push button to bottom */
 const Features = styled.ul`
   flex: 1;
-  display: flex; flex-direction: column; gap: 7px;
-  margin: 0 0 22px; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 0 0 16px; padding: 0; list-style: none;
 `;
 
 const FeatureItem = styled(motion.li)`
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13.5px; font-weight: 500; color: ${p => p.theme.colors.text};
-  padding: 6px 8px 6px 6px; border-radius: 9px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 500; color: ${p => p.theme.colors.text};
+  padding: 4px; border-radius: 6px;
   transition: background 0.15s ease, transform 0.15s ease;
   &:hover { background: #F8FAFC; transform: translateX(3px); }
 
   .chk {
-    width: 22px; height: 22px; border-radius: 7px;
+    width: 18px; height: 18px; border-radius: 5px;
     background: #ECFDF5; border: 1px solid #6EE7B7;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    svg { width: 12px; height: 12px; color: #10B981; animation: ${checkBounce} 0.35s ease both; }
+    svg { width: 10px; height: 10px; color: #10B981; animation: ${checkBounce} 0.35s ease both; }
   }
 `;
 
 const Btn = styled(motion.button)`
-  width: 100%; padding: 14px; border-radius: 12px;
-  font-size: 14.5px; font-weight: 700; cursor: pointer;
+  width: 100%; padding: 10px; border-radius: 10px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   border: none; position: relative; overflow: hidden; flex-shrink: 0;
   svg { width: 16px; height: 16px; }
@@ -601,12 +604,19 @@ const ErrorMessage = styled.p`
   margin-bottom: 28px;
 `;
 
+const PACKAGE_ICONS = {
+  star: Star,
+  zap: Zap,
+  rocket: Rocket,
+  sparkles: Sparkles
+};
+
 // ─── Component ────────────────────────────────────────────────
 const Subscription = () => {
   const { language: lang } = useLanguage();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const vi = lang === 'vi';
+  const [packageCatalog, setPackageCatalog] = React.useState(getDefaultPackageCatalog());
   const [selectedPackage, setSelectedPackage] = React.useState(null);
   const [selectedDuration, setSelectedDuration] = React.useState(null);
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
@@ -614,10 +624,58 @@ const Subscription = () => {
   const [showSuccessModal, setShowSuccessModal] = React.useState(false);
   const [showInsufficientBalanceModal, setShowInsufficientBalanceModal] = React.useState(false);
 
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const loadPackageCatalog = async () => {
+      try {
+        const catalog = await getPackageCatalog();
+        if (isMounted) {
+          setPackageCatalog(catalog);
+        }
+      } catch (error) {
+        console.error('Error loading package catalog:', error);
+        if (isMounted) {
+          setPackageCatalog(getDefaultPackageCatalog());
+        }
+      }
+    };
+
+    loadPackageCatalog();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const plans = React.useMemo(() => (
+    packageCatalog.map((item) => {
+      const iconKey = item.iconKey || 'sparkles';
+      const IconComponent = PACKAGE_ICONS[iconKey] || Sparkles;
+
+      return {
+        packageId: item.packageId,
+        packageName: item.packageName,
+        name: vi ? `${item.order}. ${item.packageName}` : `${item.order}. ${item.packageName}`,
+        subtitle: vi ? item.subtitle.vi : item.subtitle.en,
+        prices: item.prices.map((priceOption) => ({
+          duration: priceOption.duration,
+          amount: `${Number(priceOption.amount || 0).toLocaleString('vi-VN')} VND`
+        })),
+        Icon: IconComponent,
+        color: item.color,
+        bg: item.bg,
+        bd: item.bd,
+        dur: item.dur,
+        featured: item.featured,
+        feats: vi ? item.features.vi : item.features.en
+      };
+    })
+  ), [packageCatalog, vi]);
+
   const handleSelectPackage = (plan, priceOption) => {
     setSelectedPackage(plan);
-    setSelectedDuration(priceOption);
-    setShowConfirmModal(true);
+    setShowDurationModal(true);
   };
 
   const handleClickPackageButton = (plan) => {
@@ -632,123 +690,213 @@ const Subscription = () => {
   };
 
   const handleConfirmPurchase = async () => {
-    setShowConfirmModal(false);
+    // Parse price from string (e.g., "495,000 VND" -> 495000)
+    const priceString = selectedDuration.amount.replace(/[^0-9]/g, '');
+    const packagePrice = parseInt(priceString);
 
-    // Gửi notification cho admin
+    // Get employerId from Cognito session
+    let employerId = 'unknown';
     try {
-      let employerId = user?.username || 'unknown';
-      let companyName = 'Unknown Company';
-      try {
-        const profile = await employerProfileService.getMyProfile();
-        companyName = profile?.companyName || profile?.businessName || companyName;
-      } catch (_) {}
-      const amount = parseInt((selectedDuration?.amount || '0').replace(/[^0-9]/g, ''));
-      await createPackagePurchaseRequestNotification({
-        subscriptionId: `sub_${Date.now()}`,
-        employerId,
-        companyName,
-        packageName: selectedPackage?.name || '',
-        duration: selectedDuration?.duration || '',
-        price: amount,
-      });
-    } catch (err) {
-      console.warn('Notification error:', err.message);
+      const { fetchAuthSession } = await import('aws-amplify/auth');
+      const session = await fetchAuthSession();
+      if (session && session.tokens) {
+        const idTokenPayload = session.tokens.idToken?.payload;
+        employerId = idTokenPayload?.sub || 'unknown';
+      }
+    } catch (error) {
+      console.error('Error getting Cognito session:', error);
     }
 
-    setShowSuccessModal(true);
-    setTimeout(() => {
-      setShowSuccessModal(false);
-      setSelectedPackage(null);
-      setSelectedDuration(null);
-    }, 3000);
-  };
-  const plans = [
-    {
-      name:    vi ? 'Quick Boost' : 'Quick Boost',
-      subtitle: vi ? 'Gói Boost' : 'Boost Package',
-      prices: [
-        { duration: vi ? '24h' : '24h', amount: '29,000 VND' },
-        { duration: vi ? '7 ngày' : '7 days', amount: '145,000 VND' }
-      ],
-      Icon: Zap,
-      color: '#10B981', bg: '#ECFDF5', bd: '#A7F3D0', dur: '4.2s',
-      feats: [
-        vi ? 'Đẩy tin lên đầu trang' : 'Push post to top',
-        vi ? 'Hiển thị nổi bật' : 'Featured display',
-        vi ? 'Tăng lượt xem 3x' : '3x more views',
-        vi ? 'Báo cáo chi tiết' : 'Detailed reports',
-      ]
-    },
-    {
-      name:     vi ? 'Hot Search' : 'Hot Search',
-      subtitle: vi ? 'Tìm kiếm hot' : 'Hot Search',
-      prices: [
-        { duration: vi ? '24h' : '24h', amount: '49,000 VND' },
-        { duration: vi ? '7 ngày' : '7 days', amount: '245,000 VND' }
-      ],
-      Icon: Star,
-      color: '#1e40af', bg: '#EFF6FF', bd: '#BFDBFE', dur: '3.6s',
-      featured: true,
-      feats: [
-        vi ? 'Ưu tiên kết quả tìm kiếm' : 'Priority in search results',
-        vi ? 'Hiển thị với badge đặc biệt' : 'Special badge display',
-        vi ? 'Tăng lượt xem 5x' : '5x more views',
-        vi ? 'Thông báo cho ứng viên phù hợp' : 'Notify matching candidates',
-        vi ? 'Phân tích nâng cao' : 'Advanced analytics',
-      ]
-    },
-    {
-      name:    vi ? 'Spotlight Banner' : 'Spotlight Banner',
-      subtitle: vi ? 'Banner Nổi bật 1' : 'Featured Banner 1',
-      prices: [
-        { duration: vi ? '24h' : '24h', amount: '99,000 VND' },
-        { duration: vi ? '7 ngày' : '7 days', amount: '495,000 VND' }
-      ],
-      Icon: Rocket,
-      color: '#F59E0B', bg: '#FFFBEB', bd: '#FDE68A', dur: '5s',
-      feats: [
-        vi ? 'Hiển thị banner trang chủ' : 'Homepage banner display',
-        vi ? 'Vị trí nổi bật nhất' : 'Top spotlight position',
-        vi ? 'Tăng lượt xem 10x' : '10x more views',
-        vi ? 'Tiếp cận tối đa ứng viên' : 'Maximum candidate reach',
-        vi ? 'Thống kê chi tiết theo giờ' : 'Hourly detailed stats',
-      ]
-    },
-    {
-      name:    vi ? 'Top Spotlight' : 'Top Spotlight',
-      subtitle: vi ? 'Banner Nổi bật 2' : 'Featured Banner 2',
-      prices: [
-        { duration: vi ? '24h' : '24h', amount: '149,000 VND' },
-        { duration: vi ? '7 ngày' : '7 days', amount: '745,000 VND' }
-      ],
-      Icon: Sparkles,
-      color: '#DC2626', bg: '#FEE2E2', bd: '#FECACA', dur: '4.5s',
-      feats: [
-        vi ? 'Banner siêu nổi bật đa nền tảng' : 'Super spotlight multi-platform banner',
-        vi ? 'Hiển thị tất cả các trang' : 'Display on all pages',
-        vi ? 'Tăng lượt xem 15x' : '15x more views',
-      ]
-    },
-  ];
+    // Get wallet balance from database
+    let currentBalance = 0;
+    try {
+      const wallet = await getWallet(employerId);
+      currentBalance = wallet.walletBalance || 0;
+    } catch (error) {
+      console.error('Error getting wallet balance from database:', error);
+      alert(vi ? 'Không thể tải thông tin ví từ máy chủ. Vui lòng thử lại.' : 'Failed to fetch wallet information from server. Please try again.');
+      return;
+    }
 
-  const compareRows = [
-    [vi ? 'Giá 24h' : '24h Price', '29,000', '49,000', '99,000', '149,000'],
-    [vi ? 'Giá 7 ngày' : '7 days Price', '145,000', '245,000', '495,000', '745,000'],
-    [vi ? 'Tăng lượt xem' : 'Views boost', '3x', '5x', '10x', '15x'],
-    [vi ? 'Đẩy tin lên đầu' : 'Push to top', true, false, false, false],
-    [vi ? 'Ưu tiên tìm kiếm' : 'Priority search', false, true, false, false],
-    [vi ? 'Badge đặc biệt' : 'Special badge', false, true, false, false],
-    [vi ? 'Thông báo ứng viên' : 'Notify candidates', false, true, false, false],
-    [vi ? 'Banner trang chủ' : 'Homepage banner', false, false, true, true],
-    [vi ? 'Hiển thị đa trang' : 'Multi-page display', false, false, false, true],
-    [vi ? 'Phân tích' : 'Analytics', vi ? 'Cơ bản' : 'Basic', vi ? 'Nâng cao' : 'Advanced', vi ? 'Theo giờ' : 'Hourly', vi ? 'Theo giờ' : 'Hourly'],
-  ];
+    // Get companyName from DynamoDB
+    let companyName = 'Unknown Company';
+    try {
+      const profile = await employerProfileService.getMyProfile();
+      if (profile && (profile.companyName || profile.businessName)) {
+        companyName = profile.companyName || profile.businessName;
+      }
+    } catch (error) {
+      console.error('Error getting employer profile:', error);
+      // Fallback to localStorage if API fails
+      const employerProfile = JSON.parse(localStorage.getItem('employerProfile') || '{}');
+      companyName = employerProfile.companyName || 'Unknown Company';
+    }
+
+    console.log('Package price:', packagePrice);
+    console.log('Current balance:', currentBalance);
+    console.log('Employer ID:', employerId);
+    console.log('Company Name:', companyName);
+
+    // Check if balance is sufficient
+    if (currentBalance < packagePrice) {
+      // Show insufficient balance modal
+      setShowConfirmModal(false);
+      setShowInsufficientBalanceModal(true);
+      return;
+    }
+
+    console.log('New balance after purchase:', currentBalance - packagePrice);
+
+    // Create purchase record and send to API
+    console.log('🚀 Starting purchase process...');
+    console.log('   Package:', selectedPackage.packageName);
+    console.log('   Duration:', selectedDuration.duration);
+    console.log('   Price:', packagePrice);
+    console.log('   Employer:', employerId);
+    console.log('   Company:', companyName);
+
+    // Generate subscription ID first (in case API fails)
+    const subscriptionId = `SUB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('   Subscription ID:', subscriptionId);
+
+    try {
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+      console.log('📡 Subscription API:', API_ENDPOINT);
+
+      const purchaseData = {
+        employerId: employerId,
+        companyName: companyName,
+        packageName: selectedPackage.packageName,
+        duration: selectedDuration.duration
+      };
+
+      console.log('📤 Sending purchase to subscription API...');
+
+      let subscriptionCreated = false;
+      let apiSubscriptionId = subscriptionId;
+
+      try {
+        const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8'
+          },
+          body: JSON.stringify(purchaseData)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('✅ Subscription created via API:', result);
+          apiSubscriptionId = result.data?.subscriptionId || subscriptionId;
+          subscriptionCreated = true;
+        } else {
+          const errorMsg = await response.json().catch(() => ({}));
+          console.warn('⚠️ Subscription API returned error:', response.status);
+          alert(errorMsg.message || 'Thanh toán gói thất bại. Vui lòng kiểm tra lại số dư ví.');
+          return;
+        }
+      } catch (apiError) {
+        console.error('⚠️ Subscription API failed:', apiError.message);
+        alert(vi ? 'Kết nối đến hệ thống thanh toán bị lỗi. Vui lòng thử lại.' : 'Connection to payment system failed. Please try again.');
+        return;
+      }
+
+      // ALWAYS create notification for admin (even if subscription API fails)
+      console.log('');
+      console.log('📤 Creating notification for admin...');
+      console.log('   This is CRITICAL - notification must be created!');
+      console.log('   Environment check:');
+      console.log('   - VITE_NOTIFICATIONS_API:', import.meta.env.VITE_NOTIFICATIONS_API);
+      console.log('   - typeof:', typeof import.meta.env.VITE_NOTIFICATIONS_API);
+
+      // Verify API endpoint is available
+      if (!import.meta.env.VITE_NOTIFICATIONS_API) {
+        console.error('❌ CRITICAL: VITE_NOTIFICATIONS_API is undefined!');
+        console.error('   All env vars:', import.meta.env);
+        alert('Lỗi: Không thể kết nối đến hệ thống thông báo. Vui lòng liên hệ admin.');
+        return;
+      }
+
+      try {
+        const notificationData = {
+          subscriptionId: apiSubscriptionId,
+          employerId: employerId,
+          companyName: companyName,
+          packageName: selectedPackage.packageName,
+          duration: selectedDuration.duration,
+          price: packagePrice
+        };
+
+        console.log('📦 Notification data:', notificationData);
+        console.log('📤 Calling createPackagePurchaseRequestNotification...');
+
+        const notificationResult = await createPackagePurchaseRequestNotification(notificationData);
+
+        console.log('✅ Notification function returned!');
+        console.log('   Result:', notificationResult);
+        console.log('   Result type:', typeof notificationResult);
+        console.log('   Result.success:', notificationResult?.success);
+
+        if (notificationResult && notificationResult.success) {
+          console.log('✅ Notification ID:', notificationResult.data?.notificationId);
+          console.log('✅ Notification saved to DynamoDB!');
+          console.log('✅ Admin will see this notification in their dashboard');
+        } else {
+          console.error('❌ Notification API returned success=false');
+          console.error('   Full response:', JSON.stringify(notificationResult, null, 2));
+          // Don't block the purchase flow, but log the error
+          console.warn('⚠️ Continuing with purchase despite notification error');
+        }
+
+        // Trigger a storage event to update navbar immediately
+        console.log('📡 Dispatching storage event to update navbar...');
+        window.dispatchEvent(new Event('storage'));
+        console.log('✅ Storage event dispatched');
+
+      } catch (notifError) {
+        console.error('❌ CRITICAL ERROR: Failed to create notification!');
+        console.error('   Error type:', notifError.constructor.name);
+        console.error('   Error:', notifError);
+        console.error('   Message:', notifError.message);
+        console.error('   Stack:', notifError.stack);
+
+        // Log additional debugging info
+        if (notifError.response) {
+          console.error('   Response status:', notifError.response.status);
+          console.error('   Response data:', notifError.response.data);
+        }
+
+        // Show alert to user but don't block the purchase
+        console.warn('⚠️ Showing alert to user about notification error');
+        alert('Cảnh báo: Đơn hàng đã được tạo nhưng thông báo cho admin có thể bị lỗi. Vui lòng liên hệ admin để xác nhận.');
+      }
+
+      // Show success modal
+      console.log('✅ Purchase process completed!');
+      setShowConfirmModal(false);
+      setShowSuccessModal(true);
+
+      // Auto close after 3 seconds
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        setSelectedPackage(null);
+        setSelectedDuration(null);
+      }, 3000);
+
+    } catch (error) {
+      console.error('❌ Error in purchase process:', error);
+      console.error('   Message:', error.message);
+      console.error('   Stack:', error.stack);
+
+      alert(vi ? 'Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.' : 'Error creating order. Please try again.');
+    }
+  };
 
   const faqs = [
-    { Icon: CreditCard, q: vi ? 'Các phương thức thanh toán nào được chấp nhận?' : 'Which payment methods are accepted?',    a: vi ? 'Chúng tôi chấp nhận thẻ tín dụng, thẻ ghi nợ, chuyển khoản ngân hàng và ví điện tử. Tất cả giao dịch đều được bảo mật SSL 256-bit.' : 'We accept credit cards, debit cards, bank transfers, and e-wallets. All transactions use 256-bit SSL security.' },
-    { Icon: Shield,     q: vi ? 'Gói dịch vụ có tự động gia hạn không?' : 'Do packages auto-renew?',                    a: vi ? 'Không. Gói boost/banner là dịch vụ một lần, không tự động gia hạn. Bạn có thể mua lại khi cần.' : 'No. Boost/banner packages are one-time services with no auto-renewal. You can purchase again when needed.' },
-    { Icon: Clock,      q: vi ? 'Khi nào tin tuyển dụng bắt đầu hiện thị sau khi mua?' : 'When does the post start showing after purchase?',                    a: vi ? 'Ngay lập tức. Tin tuyển dụng sẽ được đẩy lên và hiển thị nổi bật trong vòng 1-2 phút sau khi thanh toán thành công.' : 'Immediately. Your job post will be boosted and featured within 1-2 minutes after successful payment.' },
-    { Icon: HelpCircle, q: vi ? 'Có thể mua nhiều gói cùng lúc không?' : 'Can I buy multiple packages at once?',                            a: vi ? 'Có. Bạn có thể mua nhiều gói khác nhau cho cùng một tin hoặc áp dụng cho nhiều tin khác nhau. Tất cả đều hoạt động đồng thời.' : 'Yes. You can purchase multiple packages for the same post or apply them to different posts. All will work simultaneously.' },
+    { Icon: CreditCard, q: vi ? 'Các phương thức thanh toán nào được chấp nhận?' : 'Which payment methods are accepted?', a: vi ? 'Chúng tôi chấp nhận thẻ tín dụng, thẻ ghi nợ, chuyển khoản ngân hàng và ví điện tử. Tất cả giao dịch đều được bảo mật SSL 256-bit.' : 'We accept credit cards, debit cards, bank transfers, and e-wallets. All transactions use 256-bit SSL security.' },
+    { Icon: Shield, q: vi ? 'Gói dịch vụ có tự động gia hạn không?' : 'Do packages auto-renew?', a: vi ? 'Không. Gói boost/banner là dịch vụ một lần, không tự động gia hạn. Bạn có thể mua lại khi cần.' : 'No. Boost/banner packages are one-time services with no auto-renewal. You can purchase again when needed.' },
+    { Icon: Clock, q: vi ? 'Khi nào tin tuyển dụng bắt đầu hiện thị sau khi mua?' : 'When does the post start showing after purchase?', a: vi ? 'Ngay lập tức. Tin tuyển dụng sẽ được đẩy lên và hiển thị nổi bật trong vòng 1-2 phút sau khi thanh toán thành công.' : 'Immediately. Your job post will be boosted and featured within 1-2 minutes after successful payment.' },
+    { Icon: HelpCircle, q: vi ? 'Có thể mua nhiều gói cùng lúc không?' : 'Can I buy multiple packages at once?', a: vi ? 'Có. Bạn có thể mua nhiều gói khác nhau cho cùng một tin hoặc áp dụng cho nhiều tin khác nhau. Tất cả đều hoạt động đồng thời.' : 'Yes. You can purchase multiple packages for the same post or apply them to different posts. All will work simultaneously.' },
   ];
 
   const buildCard = (plan, i) => (
@@ -800,7 +948,7 @@ const Subscription = () => {
         <PriceBox>
           {plan.prices ? (
             plan.prices.map((priceOption, pi) => (
-              <PriceOption 
+              <PriceOption
                 key={pi}
                 $color={plan.color}
                 onClick={() => handleSelectPackage(plan, priceOption)}
@@ -841,13 +989,11 @@ const Subscription = () => {
         viewport={{ once: true }}
         transition={{ delay: i * 0.1 + 0.45 }}
       >
-        <Btn 
-          $primary={plan.featured} 
+        <Btn
           whileTap={{ scale: 0.97 }}
           onClick={() => handleClickPackageButton(plan)}
         >
-          {plan.featured && <Sparkles />}
-          {plan.featured ? (vi ? 'Bắt Đầu Ngay' : 'Start Now') : (vi ? 'Chọn Gói' : 'Select Plan')}
+          {vi ? 'Chọn Gói' : 'Select Plan'}
         </Btn>
       </motion.div>
     </PricingCard>
@@ -878,62 +1024,6 @@ const Subscription = () => {
             {plans.map((plan, i) => buildCard(plan, i))}
           </PricingGrid>
 
-          {/* Comparison */}
-          <SectionCard
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.1 }}
-            transition={{ duration: 0.32 }}
-          >
-            <SectionHead><h2>{vi ? 'So Sánh Chi Tiết Các Gói' : 'Detailed Package Comparison'}</h2></SectionHead>
-            <CompTable>
-              <thead>
-                <tr>
-                  <th>{vi ? 'Tính Năng' : 'Feature'}</th>
-                  <th style={{ color: '#10B981' }}>Quick Boost</th>
-                  <th style={{ color: '#1e40af' }}>Hot Search</th>
-                  <th style={{ color: '#F59E0B' }}>Spotlight Banner</th>
-                  <th style={{ color: '#DC2626' }}>Top Spotlight</th>
-                </tr>
-              </thead>
-              <tbody>
-                {compareRows.map(([label, ...vals], ri) => (
-                  <tr key={ri}>
-                    <td>{label}</td>
-                    {vals.map((v, vi2) => (
-                      <td key={vi2}>
-                        {typeof v === 'boolean'
-                          ? v ? <Check style={{ color: '#10B981' }} /> : <X style={{ color: '#EF4444' }} />
-                          : v}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </CompTable>
-          </SectionCard>
-
-          {/* FAQ */}
-          <SectionCard
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.1 }}
-            transition={{ duration: 0.32 }}
-          >
-            <SectionHead><h2>{vi ? 'Câu Hỏi Thường Gặp' : 'FAQ'}</h2></SectionHead>
-            {faqs.map(({ Icon, q, a }, i) => (
-              <FAQItem
-                key={i}
-                initial={{ opacity: 0, x: -14 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.09, duration: 0.24 }}
-              >
-                <h3><Icon />{q}</h3>
-                <p>{a}</p>
-              </FAQItem>
-            ))}
-          </SectionCard>
         </Inner>
 
         {/* Duration Selection Modal */}
@@ -941,7 +1031,7 @@ const Subscription = () => {
           <ModalOverlay onClick={() => setShowDurationModal(false)}>
             <ModalContent onClick={(e) => e.stopPropagation()}>
               <ModalHeader>
-                <h3>{vi ? 'Chọn thời hạn gói' : 'Select Package Duration'}</h3>
+                <h3>{vi ? 'Thông tin liên hệ mua gói' : 'Contact to Purchase'}</h3>
                 <CloseButton onClick={() => setShowDurationModal(false)}>
                   <X />
                 </CloseButton>
@@ -954,18 +1044,39 @@ const Subscription = () => {
                     <p>{selectedPackage.subtitle}</p>
                   </div>
                 </PackageInfo>
-                <DurationOptions>
-                  {selectedPackage.prices.map((priceOption, idx) => (
-                    <DurationOptionCard 
-                      key={idx}
-                      $color={selectedPackage.color}
-                      onClick={() => handleSelectDuration(priceOption)}
-                    >
-                      <DurationLabel>{priceOption.duration}</DurationLabel>
-                      <DurationPrice $color={selectedPackage.color}>{priceOption.amount}</DurationPrice>
-                    </DurationOptionCard>
-                  ))}
-                </DurationOptions>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  marginTop: '20px',
+                  padding: '20px',
+                  background: '#F8FAFC',
+                  borderRadius: '16px',
+                  border: '1.5px dashed #E2E8F0',
+                  textAlign: 'left'
+                }}>
+                  <div style={{ fontWeight: '700', color: '#1e40af', fontSize: '15px', lineHeight: '1.5', marginBottom: '4px' }}>
+                    {vi ? 'Liên hệ để biết thêm thông tin chi tiết' : 'Contact for more details'}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14.5px', color: '#475569' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Mail size={16} style={{ color: '#1e40af' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Email</div>
+                      <strong style={{ color: '#1e293b' }}>oppohiringplatform@gmail.com</strong>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14.5px', color: '#475569' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Phone size={16} style={{ color: '#10B981' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{vi ? 'Số điện thoại' : 'Phone'}</div>
+                      <strong style={{ color: '#1e293b' }}>0563 518 922</strong>
+                    </div>
+                  </div>
+                </div>
               </ModalBody>
             </ModalContent>
           </ModalOverlay>
@@ -1000,7 +1111,7 @@ const Subscription = () => {
                   </DetailRow>
                 </PurchaseDetails>
                 <InfoNote>
-                  {vi 
+                  {vi
                     ? '⏳ Yêu cầu mua gói sẽ được gửi đến admin để duyệt. Bạn sẽ nhận được thông báo khi gói được kích hoạt.'
                     : '⏳ Purchase request will be sent to admin for approval. You will be notified when the package is activated.'}
                 </InfoNote>
@@ -1036,7 +1147,7 @@ const Subscription = () => {
                 {vi ? 'Thanh toán thành công!' : 'Payment Successful!'}
               </SuccessTitle>
               <SuccessMessage>
-                {vi 
+                {vi
                   ? 'Yêu cầu mua gói của bạn đã được gửi đến admin. Bạn sẽ nhận được thông báo khi gói được kích hoạt.'
                   : 'Your package purchase request has been sent to admin. You will be notified when the package is activated.'}
               </SuccessMessage>
@@ -1067,7 +1178,7 @@ const Subscription = () => {
                 {vi ? 'Số dư không đủ!' : 'Insufficient Balance!'}
               </ErrorTitle>
               <ErrorMessage>
-                {vi 
+                {vi
                   ? `Bạn cần ${selectedDuration.amount} để mua gói này. Vui lòng nạp thêm tiền vào ví.`
                   : `You need ${selectedDuration.amount} to purchase this package. Please top up your wallet.`}
               </ErrorMessage>

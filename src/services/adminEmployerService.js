@@ -11,21 +11,21 @@ const API_BASE_URL = import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x3
 const getAuthToken = async () => {
   try {
     const session = await fetchAuthSession();
-    
+
     if (!session || !session.tokens) {
       console.warn('⚠️ No session or tokens available');
       return null;
     }
-    
+
     const idToken = session.tokens.idToken;
     if (!idToken) {
       console.warn('⚠️ No ID token in session');
       return null;
     }
-    
+
     let tokenString = typeof idToken === 'string' ? idToken : idToken.toString();
     tokenString = tokenString.trim().replace(/[\r\n\t]/g, '');
-    
+
     return tokenString;
   } catch (error) {
     console.error('❌ Error getting auth token:', error);
@@ -49,11 +49,11 @@ class AdminEmployerService {
   async makeRequest(endpoint, options = {}) {
     try {
       const token = await getAuthToken();
-      
+
       if (!token) {
         throw new Error('Authentication required - no valid token');
       }
-      
+
       const cleanToken = token.trim().replace(/[\r\n\t]/g, '');
 
       const headers = {
@@ -71,7 +71,7 @@ class AdminEmployerService {
       }
 
       console.log(`📤 Admin request: ${options.method || 'GET'} ${API_BASE_URL}${endpoint}`);
-      
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers,
@@ -102,9 +102,9 @@ class AdminEmployerService {
   async getAllEmployers() {
     try {
       console.log('🔍 Fetching all employer profiles from DynamoDB...');
-      
+
       const result = await this.makeRequest('/admin/employers');
-      
+
       if (result.success && result.data) {
         console.log(`✅ Loaded ${result.data.length} employer profiles from DynamoDB`);
         return result.data;
@@ -123,7 +123,7 @@ class AdminEmployerService {
   async approveEmployer(userId) {
     try {
       console.log(`✅ Approving employer: ${userId}`);
-      
+
       const result = await this.makeRequest(`/admin/employers/${userId}/approve`, {
         method: 'POST',
         body: JSON.stringify({
@@ -131,7 +131,7 @@ class AdminEmployerService {
           approvedAt: new Date().toISOString()
         })
       });
-      
+
       if (result.success) {
         console.log('✅ Employer approved successfully');
         return result.data;
@@ -150,7 +150,7 @@ class AdminEmployerService {
   async rejectEmployer(userId, reason = '') {
     try {
       console.log(`❌ Rejecting employer: ${userId}`);
-      
+
       const result = await this.makeRequest(`/admin/employers/${userId}/reject`, {
         method: 'POST',
         body: JSON.stringify({
@@ -159,7 +159,7 @@ class AdminEmployerService {
           rejectionReason: reason
         })
       });
-      
+
       if (result.success) {
         console.log('✅ Employer rejected successfully');
         return result.data;
@@ -178,7 +178,7 @@ class AdminEmployerService {
   async updateVerificationStatus(userId, isVerified) {
     try {
       console.log(`🔐 Updating verification status for ${userId}: ${isVerified}`);
-      
+
       const result = await this.makeRequest(`/admin/employers/${userId}/verify`, {
         method: 'POST',
         body: JSON.stringify({
@@ -186,7 +186,7 @@ class AdminEmployerService {
           verifiedAt: isVerified ? new Date().toISOString() : null
         })
       });
-      
+
       if (result.success) {
         console.log('✅ Verification status updated');
         return result.data;

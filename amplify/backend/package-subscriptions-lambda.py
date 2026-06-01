@@ -18,6 +18,8 @@ notifications_table_name = os.environ.get('NOTIFICATIONS_TABLE', 'Notifications'
 notifications_table = dynamodb.Table(notifications_table_name)
 employer_profile_table_name = os.environ.get('EMPLOYER_PROFILE_TABLE', 'EmployerProfiles')
 employer_profile_table = dynamodb.Table(employer_profile_table_name)
+withdrawal_requests_table_name = os.environ.get('WITHDRAWAL_REQUESTS_TABLE', 'WithdrawalRequests')
+withdrawal_requests_table = dynamodb.Table(withdrawal_requests_table_name)
 
 VN_TZ = timezone(timedelta(hours=7))
 
@@ -126,6 +128,13 @@ def lambda_handler(event, context):
         elif http_method == 'DELETE' and '/subscriptions/' in path:
             subscription_id = path_parameters.get('subscriptionId')
             return delete_subscription(subscription_id, headers)
+
+        elif http_method == 'GET' and path == '/wallet/withdrawals':
+            return get_all_withdrawals(headers)
+
+        elif http_method == 'PUT' and '/wallet/withdrawals/' in path:
+            request_id = path_parameters.get('requestId')
+            return update_withdrawal_status(request_id, body, headers)
 
         elif http_method == 'GET' and '/wallet/' in path:
             employer_id = path_parameters.get('employerId')
@@ -894,6 +903,8 @@ def withdraw_wallet(body_str, headers):
         bank_name = body.get('bankName')
         account_number = body.get('accountNumber')
         account_name = body.get('accountName')
+        company_name = body.get('companyName', 'N/A')
+        company_logo = body.get('companyLogo', '')
         
         if not employer_id or amount <= 0 or not bank_name or not account_number or not account_name:
             return {
@@ -940,6 +951,7 @@ def withdraw_wallet(body_str, headers):
         transactions = wallet_info.get('walletTransactions', [])
         transactions.insert(0, transaction)
         
+        # Deduct wallet balance
         employer_profile_table.update_item(
             Key={'userId': employer_id},
             UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
@@ -950,6 +962,24 @@ def withdraw_wallet(body_str, headers):
             }
         )
         
+        # Create request record in database
+        request_id = f"REQ-WITHDRAW-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+        withdrawal_item = {
+            'requestId': request_id,
+            'employerId': employer_id,
+            'companyName': company_name,
+            'companyLogo': company_logo,
+            'amount': amount,
+            'bankName': bank_name,
+            'accountNumber': account_number,
+            'accountName': account_name,
+            'status': 'pending',
+            'transactionId': txn_id,
+            'createdAt': now_dt.isoformat(),
+            'updatedAt': now_dt.isoformat()
+        }
+        withdrawal_requests_table.put_item(Item=withdrawal_item)
+        
         return {
             'statusCode': 200,
             'headers': headers,
@@ -957,6 +987,7 @@ def withdraw_wallet(body_str, headers):
                 'success': True,
                 'message': 'Rút tiền thành công',
                 'data': {
+                    'requestId': request_id,
                     'walletBalance': new_balance,
                     'walletTransactions': transactions
                 }
@@ -971,6 +1002,148 @@ def withdraw_wallet(body_str, headers):
             'body': json.dumps({
                 'success': False,
                 'message': f'Error processing withdrawal: {str(e)}'
+            })
+        }
+
+def get_all_withdrawals(headers):
+    try:
+        response = withdrawal_requests_table.scan()
+        items = response.get('Items', [])
+        
+        # Sort items by createdAt descending
+        items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+        
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'data': items
+            }, default=decimal_default)
+        }
+    except Exception as e:
+        print(f"Error in get_all_withdrawals: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'success': False,
+                'message': f'Error getting withdrawals: {str(e)}'
+            })
+        }
+
+def update_withdrawal_status(request_id, body_str, headers):
+    try:
+        body = json.loads(body_str) if isinstance(body_str, str) else body_str
+        new_status = body.get('status')
+        
+        if not request_id or new_status not in ['approved', 'rejected']:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Missing requestId or invalid status'
+                })
+            }
+            
+        # Get existing request
+        response = withdrawal_requests_table.get_item(Key={'requestId': request_id})
+        if 'Item' not in response:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Withdrawal request not found'
+                })
+            }
+            
+        request_item = response['Item']
+        current_status = request_item.get('status')
+        
+        if current_status != 'pending':
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Yêu cầu rút tiền này đã được xử lý trước đó.'
+                })
+            }
+            
+        employer_id = request_item.get('employerId')
+        amount = request_item.get('amount')
+        
+        now_dt = get_vn_now()
+        
+        if new_status == 'rejected':
+            # Refund the money to employer's wallet
+            wallet_info = get_or_create_wallet(employer_id)
+            balance = wallet_info.get('walletBalance', Decimal('0'))
+            new_balance = balance + amount
+            
+            # Create credit refund transaction
+            refund_txn_id = f"TXN-REFUND-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+            refund_txn = {
+                'transactionId': refund_txn_id,
+                'type': 'credit',
+                'amount': amount,
+                'description': f"Hoàn tiền rút tiền bị từ chối (Mã YC: {request_id})",
+                'timestamp': now_dt.isoformat(),
+                'status': 'completed',
+                'paymentDetails': {
+                    'requestId': request_id,
+                    'bankName': request_item.get('bankName'),
+                    'accountNumber': request_item.get('accountNumber')
+                }
+            }
+            
+            transactions = wallet_info.get('walletTransactions', [])
+            transactions.insert(0, refund_txn)
+            
+            # Update Employer Profile
+            employer_profile_table.update_item(
+                Key={'userId': employer_id},
+                UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
+                ExpressionAttributeValues={
+                    ':bal': new_balance,
+                    ':txs': transactions,
+                    ':updatedAt': now_dt.isoformat()
+                }
+            )
+            
+        # Update status in WithdrawalRequests table
+        withdrawal_requests_table.update_item(
+            Key={'requestId': request_id},
+            UpdateExpression="SET #st = :status, updatedAt = :updatedAt",
+            ExpressionAttributeNames={'#st': 'status'},
+            ExpressionAttributeValues={
+                ':status': new_status,
+                ':updatedAt': now_dt.isoformat()
+            }
+        )
+        
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'message': 'Cập nhật trạng thái rút tiền thành công',
+                'data': {
+                    'requestId': request_id,
+                    'status': new_status
+                }
+            })
+        }
+    except Exception as e:
+        print(f"Error in update_withdrawal_status: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'success': False,
+                'message': f'Error updating withdrawal status: {str(e)}'
             })
         }
 

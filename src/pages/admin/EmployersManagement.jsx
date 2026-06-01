@@ -20,6 +20,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
+import { getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
 
 const PageContainer = styled.div``;
 
@@ -372,6 +373,14 @@ const ApproveButton = styled.button`
   }
 `;
 
+const RejectButton = styled(ApproveButton)`
+  background: #ef4444;
+  &:hover {
+    background: #dc2626;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  }
+`;
+
 const TabsContainer = styled.div`
   display: flex;
   gap: 8px;
@@ -497,14 +506,72 @@ const EmployersManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved'
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved' or 'withdrawals'
   const itemsPerPage = 20;
 
   const [employers, setEmployers] = useState([]);
+  const [withdrawRequests, setWithdrawRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const loadWithdrawRequests = async () => {
+    try {
+      const data = await getWithdrawalRequests();
+      const mapped = (data || []).map(item => ({
+        ...item,
+        id: item.requestId || item.id
+      }));
+      setWithdrawRequests(mapped);
+    } catch (e) {
+      console.error('Error loading withdraw requests:', e);
+      try {
+        const stored = localStorage.getItem('admin_withdraw_requests');
+        if (stored) {
+          setWithdrawRequests(JSON.parse(stored));
+        }
+      } catch (_) {}
+    }
+  };
+
+  const handleApproveWithdrawal = async (requestId) => {
+    try {
+      await updateWithdrawalStatus(requestId, 'approved');
+      setWithdrawRequests(prev => 
+        prev.map(req => 
+          req.id === requestId ? { ...req, status: 'approved' } : req
+        )
+      );
+      try {
+        const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
+        const updated = stored.map(req => req.id === requestId ? { ...req, status: 'approved' } : req);
+        localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
+      } catch (_) {}
+    } catch (err) {
+      console.error('Error approving withdrawal:', err);
+      alert(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền' : 'Failed to approve withdrawal');
+    }
+  };
+
+  const handleRejectWithdrawal = async (requestId) => {
+    try {
+      await updateWithdrawalStatus(requestId, 'rejected');
+      setWithdrawRequests(prev => 
+        prev.map(req => 
+          req.id === requestId ? { ...req, status: 'rejected' } : req
+        )
+      );
+      try {
+        const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
+        const updated = stored.map(req => req.id === requestId ? { ...req, status: 'rejected' } : req);
+        localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
+      } catch (_) {}
+    } catch (err) {
+      console.error('Error rejecting withdrawal:', err);
+      alert(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền' : 'Failed to reject withdrawal');
+    }
+  };
 
   // Load employers from DynamoDB via API
   const loadEmployers = async () => {
@@ -550,12 +617,21 @@ const EmployersManagement = () => {
   // Initial load
   useEffect(() => {
     loadEmployers();
+    loadWithdrawRequests();
   }, []);
+
+  // Reload withdraw requests when tab changes to withdrawals
+  useEffect(() => {
+    if (activeTab === 'withdrawals') {
+      loadWithdrawRequests();
+    }
+  }, [activeTab]);
 
   // Refresh data
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadEmployers();
+    loadWithdrawRequests();
   };
 
   const getStatusText = (status) => {
@@ -614,16 +690,31 @@ const EmployersManagement = () => {
     });
   }, [employers, searchTerm, filters, activeTab]);
 
+  const filteredWithdrawRequests = useMemo(() => {
+    return withdrawRequests.filter(req => {
+      const matchesSearch = searchTerm === '' || 
+        req.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        req.bankName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        req.accountNumber.includes(searchTerm);
+      return matchesSearch;
+    });
+  }, [withdrawRequests, searchTerm]);
+
   // Pagination
-  const totalPages = Math.ceil(filteredEmployers.length / itemsPerPage);
+  const totalPages = activeTab === 'withdrawals'
+    ? Math.ceil(filteredWithdrawRequests.length / itemsPerPage)
+    : Math.ceil(filteredEmployers.length / itemsPerPage);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
+  
   const currentEmployers = filteredEmployers.slice(startIndex, endIndex);
+  const currentWithdrawRequests = filteredWithdrawRequests.slice(startIndex, endIndex);
 
-  // Reset to page 1 when search or filters change
+  // Reset to page 1 when search, filters or tab change
   useMemo(() => {
     setCurrentPage(1);
-  }, [searchTerm, filters]);
+  }, [searchTerm, filters, activeTab]);
 
   const handleFilterToggle = (filterValue) => {
     setFilters(prev => 
@@ -717,6 +808,13 @@ const EmployersManagement = () => {
                 <CheckCircle size={18} style={{ marginRight: '8px' }} />
                 {language === 'vi' ? 'Đã duyệt' : 'Approved'}
               </Tab>
+              <Tab 
+                $active={activeTab === 'withdrawals'}
+                onClick={() => setActiveTab('withdrawals')}
+              >
+                <TrendingUp size={18} style={{ marginRight: '8px' }} />
+                {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
+              </Tab>
             </TabsContainer>
 
             <FilterSection>
@@ -740,120 +838,222 @@ const EmployersManagement = () => {
             </FilterSection>
 
             <TableWrapper>
-              <Table>
-                <thead>
-                  <tr>
-                    <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
-                    <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
-                    <th>{language === 'vi' ? 'Ngành' : 'Industry'}</th>
-                    <th>{language === 'vi' ? 'Quy mô' : 'Size'}</th>
-                    <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
-                    <th>{language === 'vi' ? 'Xác minh' : 'Verified'}</th>
-                    <th>{language === 'vi' ? 'Ngày tham gia' : 'Joined'}</th>
-                    <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentEmployers.map((employer, index) => {
-                    const colorScheme = getColorScheme(index);
-                    const initials = getCompanyInitials(employer.companyName);
-                    
-                    return (
-                      <tr key={employer.id}>
-                        <td>
-                          <CompanyInfo>
-                            <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
-                              {employer.companyLogo ? (
-                                <img src={employer.companyLogo} alt={employer.companyName} />
-                              ) : (
-                                initials
-                              )}
-                            </CompanyLogo>
-                            <CompanyDetails>
-                              <CompanyName>{employer.companyName}</CompanyName>
-                              <CompanyMeta>
-                                <Building2 size={12} />
-                                {employer.foundedYear !== 'N/A' ? `Thành lập ${employer.foundedYear}` : 'Chưa cập nhật'}
-                              </CompanyMeta>
-                            </CompanyDetails>
-                          </CompanyInfo>
-                        </td>
-                        <td>
-                          <div style={{ fontSize: '13px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                              <Mail size={12} />
-                              {employer.email}
-                            </div>
-                            {employer.phone !== 'N/A' && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
-                                <Phone size={12} />
-                                {employer.phone}
+              {activeTab === 'withdrawals' ? (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</th>
+                      <th>{language === 'vi' ? 'Số tiền rút' : 'Withdraw Amount'}</th>
+                      <th>{language === 'vi' ? 'Thông tin thụ hưởng' : 'Beneficiary Details'}</th>
+                      <th>{language === 'vi' ? 'Ngày yêu cầu' : 'Requested Date'}</th>
+                      <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentWithdrawRequests.map((req, index) => {
+                      const colorScheme = getColorScheme(index);
+                      const initials = getCompanyInitials(req.companyName);
+                      
+                      return (
+                        <tr key={req.id}>
+                          <td>
+                            <CompanyInfo>
+                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                {req.companyLogo ? (
+                                  <img src={req.companyLogo} alt={req.companyName} />
+                                ) : (
+                                  initials
+                                )}
+                              </CompanyLogo>
+                              <CompanyDetails>
+                                <CompanyName>{req.companyName}</CompanyName>
+                                <CompanyMeta>
+                                  <Building2 size={12} />
+                                  ID: {req.employerId}
+                                </CompanyMeta>
+                              </CompanyDetails>
+                            </CompanyInfo>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 800, color: '#b45309', fontSize: '15px' }}>
+                              -{req.amount.toLocaleString('vi-VN')} VND
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                              <div><strong>NH:</strong> {req.bankName}</div>
+                              <div><strong>STK:</strong> {req.accountNumber}</div>
+                              <div style={{ textTransform: 'uppercase', color: '#64748B', fontWeight: 600 }}>
+                                <strong>Tên:</strong> {req.accountName}
                               </div>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 600 }}>{employer.industry}</span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Users size={14} />
-                            {employer.companySize}
-                          </div>
-                        </td>
-                        <td>
-                          {activeTab === 'pending' ? (
-                            <ApproveButton onClick={() => handleApprove(employer.id)}>
-                              <CheckCircle size={16} />
-                              {language === 'vi' ? 'Duyệt' : 'Approve'}
-                            </ApproveButton>
-                          ) : (
-                            <StatusBadge $status={employer.approvalStatus}>
-                              {employer.approvalStatus === 'approved' && <CheckCircle size={12} />}
-                              {employer.approvalStatus === 'pending' && <Clock size={12} />}
-                              {employer.approvalStatus === 'rejected' && <XCircle size={12} />}
-                              {getStatusText(employer.approvalStatus)}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Calendar size={12} />
+                              {new Date(req.createdAt).toLocaleDateString('vi-VN')}
+                            </div>
+                          </td>
+                          <td>
+                            <StatusBadge $status={req.status}>
+                              {req.status === 'approved' && <CheckCircle size={12} />}
+                              {req.status === 'pending' && <Clock size={12} />}
+                              {req.status === 'rejected' && <XCircle size={12} />}
+                              {getStatusText(req.status)}
                             </StatusBadge>
-                          )}
-                        </td>
-                        <td>
-                          <VerifiedBadge $verified={employer.isVerified}>
-                            {employer.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                            {employer.isVerified 
-                              ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
-                              : (language === 'vi' ? 'Chưa xác minh' : 'Not Verified')
-                            }
-                          </VerifiedBadge>
-                        </td>
-                        <td>
-                          <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Calendar size={12} />
-                            {employer.createdAt ? new Date(employer.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
-                          </div>
-                        </td>
-                        <td>
-                          <ActionButtons>
-                            <IconButton 
-                              title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
-                              onClick={() => navigate(`/admin/employers/${employer.id}`)}
-                            >
-                              <Eye size={16} />
-                            </IconButton>
-                          </ActionButtons>
+                          </td>
+                          <td>
+                            {req.status === 'pending' ? (
+                              <ActionButtons>
+                                <ApproveButton onClick={() => handleApproveWithdrawal(req.id)}>
+                                  <CheckCircle size={16} />
+                                  {language === 'vi' ? 'Duyệt' : 'Approve'}
+                                </ApproveButton>
+                                <RejectButton onClick={() => handleRejectWithdrawal(req.id)}>
+                                  <XCircle size={16} />
+                                  {language === 'vi' ? 'Từ chối' : 'Reject'}
+                                </RejectButton>
+                              </ActionButtons>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
+                                {language === 'vi' ? 'Đã xử lý' : 'Processed'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {currentWithdrawRequests.length === 0 && (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                          {language === 'vi' ? 'Không tìm thấy yêu cầu rút tiền nào' : 'No withdrawal requests found'}
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
+                    )}
+                  </tbody>
+                </Table>
+              ) : (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
+                      <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
+                      <th>{language === 'vi' ? 'Ngành' : 'Industry'}</th>
+                      <th>{language === 'vi' ? 'Quy mô' : 'Size'}</th>
+                      <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                      <th>{language === 'vi' ? 'Xác minh' : 'Verified'}</th>
+                      <th>{language === 'vi' ? 'Ngày tham gia' : 'Joined'}</th>
+                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentEmployers.map((employer, index) => {
+                      const colorScheme = getColorScheme(index);
+                      const initials = getCompanyInitials(employer.companyName);
+                      
+                      return (
+                        <tr key={employer.id}>
+                          <td>
+                            <CompanyInfo>
+                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                {employer.companyLogo ? (
+                                  <img src={employer.companyLogo} alt={employer.companyName} />
+                                ) : (
+                                  initials
+                                )}
+                              </CompanyLogo>
+                              <CompanyDetails>
+                                <CompanyName>{employer.companyName}</CompanyName>
+                                <CompanyMeta>
+                                  <Building2 size={12} />
+                                  {employer.foundedYear !== 'N/A' ? `Thành lập ${employer.foundedYear}` : 'Chưa cập nhật'}
+                                </CompanyMeta>
+                              </CompanyDetails>
+                            </CompanyInfo>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                                <Mail size={12} />
+                                {employer.email}
+                              </div>
+                              {employer.phone !== 'N/A' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                                  <Phone size={12} />
+                                  {employer.phone}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 600 }}>{employer.industry}</span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Users size={14} />
+                              {employer.companySize}
+                            </div>
+                          </td>
+                          <td>
+                            {activeTab === 'pending' ? (
+                              <ApproveButton onClick={() => handleApprove(employer.id)}>
+                                <CheckCircle size={16} />
+                                {language === 'vi' ? 'Duyệt' : 'Approve'}
+                              </ApproveButton>
+                            ) : (
+                              <StatusBadge $status={employer.approvalStatus}>
+                                {employer.approvalStatus === 'approved' && <CheckCircle size={12} />}
+                                {employer.approvalStatus === 'pending' && <Clock size={12} />}
+                                {employer.approvalStatus === 'rejected' && <XCircle size={12} />}
+                                {getStatusText(employer.approvalStatus)}
+                              </StatusBadge>
+                            )}
+                          </td>
+                          <td>
+                            <VerifiedBadge $verified={employer.isVerified}>
+                              {employer.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                              {employer.isVerified 
+                                ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
+                                : (language === 'vi' ? 'Chưa xác minh' : 'Not Verified')
+                              }
+                            </VerifiedBadge>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Calendar size={12} />
+                              {employer.createdAt ? new Date(employer.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
+                            </div>
+                          </td>
+                          <td>
+                            <ActionButtons>
+                              <IconButton 
+                                title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                                onClick={() => navigate(`/admin/employers/${employer.id}`)}
+                              >
+                                <Eye size={16} />
+                              </IconButton>
+                            </ActionButtons>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              )}
             </TableWrapper>
 
             <PaginationContainer>
               <PaginationInfo>
-                {language === 'vi' 
-                  ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} nhà tuyển dụng`
-                  : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} employers`
-                }
+                {activeTab === 'withdrawals' ? (
+                  language === 'vi' 
+                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} trong tổng số ${filteredWithdrawRequests.length} yêu cầu rút tiền`
+                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} of ${filteredWithdrawRequests.length} withdrawal requests`
+                ) : (
+                  language === 'vi' 
+                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} nhà tuyển dụng`
+                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} employers`
+                )}
               </PaginationInfo>
               <PaginationButtons>
                 <PageButton 

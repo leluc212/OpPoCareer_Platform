@@ -199,9 +199,17 @@ const ActionButton = styled(motion.button)`
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 32px;
+  
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const StatCard = styled(motion.div)`
@@ -324,12 +332,8 @@ const StatCard = styled(motion.div)`
 
 const ContentSection = styled.div`
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1fr;
   gap: 24px;
-  
-  @media (max-width: 1200px) {
-    grid-template-columns: 1fr;
-  }
 `;
 
 const Card = styled(motion.div)`
@@ -657,14 +661,6 @@ const Wallet = () => {
       color: 'primary',
       change: '+12',
       positive: true
-    },
-    {
-      label: language === 'vi' ? 'Hóa Đơn' : 'Invoices',
-      value: '8',
-      icon: FileText,
-      color: 'warning',
-      change: '+3',
-      positive: true
     }
   ];
 
@@ -912,50 +908,7 @@ const Wallet = () => {
             </Card>
           </div>
 
-          <div>
-            <Card
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <div className="card-header">
-                <h2>
-                  <Receipt />
-                  {language === 'vi' ? 'Hóa Đơn Điện Tử' : 'Electronic Invoices'}
-                </h2>
-              </div>
 
-              {receipts.map((receipt, index) => (
-                <ReceiptCard
-                  key={receipt.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 + index * 0.05 }}
-                  whileHover={{ scale: 1.02 }}
-                >
-                  <div className="receipt-header">
-                    <h4>
-                      <FileText />
-                      {receipt.title}
-                    </h4>
-                    <Download className="download-btn" style={{ width: '18px', height: '18px' }} />
-                  </div>
-                  <div className="receipt-info">
-                    <span>{receipt.date}</span>
-                    <span className="amount">{receipt.amount}</span>
-                  </div>
-                </ReceiptCard>
-              ))}
-
-              <Button
-                $variant="ghost"
-                $fullWidth
-                style={{ marginTop: '16px' }}
-              >
-                {language === 'vi' ? 'Xem Tất Cả Hóa Đơn' : 'View All Invoices'}
-              </Button>
-            </Card>
-          </div>
         </ContentSection>
       </WalletContainer>
     </DashboardLayout>

@@ -154,7 +154,7 @@ export const getWallet = async (employerId) => {
   return payload?.data || payload;
 };
 
-export const withdrawWallet = async (employerId, amount, bankName, accountNumber, accountName) => {
+export const withdrawWallet = async (employerId, amount, bankName, accountNumber, accountName, companyName = '', companyLogo = '') => {
   const base = API_ENDPOINT || (import.meta.env.DEV ? DEV_PROXY_BASE : null);
   if (!base) {
     throw new Error('API endpoint is not configured');
@@ -171,13 +171,56 @@ export const withdrawWallet = async (employerId, amount, bankName, accountNumber
       amount,
       bankName,
       accountNumber,
-      accountName
+      accountName,
+      companyName,
+      companyLogo
     })
   });
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
     throw new Error(errorBody.message || 'Failed to process withdrawal');
+  }
+
+  const payload = await response.json();
+  return payload?.data || payload;
+};
+
+export const getWithdrawalRequests = async () => {
+  const base = API_ENDPOINT || (import.meta.env.DEV ? DEV_PROXY_BASE : null);
+  if (!base) {
+    throw new Error('API endpoint is not configured');
+  }
+
+  const url = `${base.replace(/\/$/, '')}/wallet/withdrawals`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || 'Failed to fetch withdrawal requests');
+  }
+
+  const payload = await response.json();
+  return payload?.data || payload;
+};
+
+export const updateWithdrawalStatus = async (requestId, status) => {
+  const base = API_ENDPOINT || (import.meta.env.DEV ? DEV_PROXY_BASE : null);
+  if (!base) {
+    throw new Error('API endpoint is not configured');
+  }
+
+  const url = `${base.replace(/\/$/, '')}/wallet/withdrawals/${encodeURIComponent(requestId)}`;
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ status })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || 'Failed to update withdrawal status');
   }
 
   const payload = await response.json();

@@ -7,7 +7,6 @@ import employerProfileService from '../../services/employerProfileService';
 import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, Clock, CheckCircle } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { createPackagePurchaseRequestNotification } from '../../services/notificationService';
-import PaymentModal from '../../components/PaymentModal';
 import { useAuth } from '../../context/AuthContext';
 
 // ─── Animations ───────────────────────────────────────────────
@@ -614,7 +613,6 @@ const Subscription = () => {
   const [showDurationModal, setShowDurationModal] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = React.useState(false);
   const [showInsufficientBalanceModal, setShowInsufficientBalanceModal] = React.useState(false);
-  const [showPaymentModal, setShowPaymentModal] = React.useState(false);
 
   const handleSelectPackage = (plan, priceOption) => {
     setSelectedPackage(plan);
@@ -634,33 +632,7 @@ const Subscription = () => {
   };
 
   const handleConfirmPurchase = async () => {
-    // Chuyển sang thanh toán QR thay vì trừ wallet
     setShowConfirmModal(false);
-    setShowPaymentModal(true);
-  };
-
-  const handlePaymentSuccess = async (paymentId) => {
-    setShowPaymentModal(false);
-
-    // Cộng tiền vào ví localStorage
-    const amount = parseInt((selectedDuration?.amount || '0').replace(/[^0-9]/g, ''));
-    if (amount > 0) {
-      const walletData = JSON.parse(localStorage.getItem('employer_wallet') || '{"balance":0,"transactions":[]}');
-      walletData.balance = (walletData.balance || 0) + amount;
-      if (!Array.isArray(walletData.transactions)) walletData.transactions = [];
-      walletData.transactions.unshift({
-        id: paymentId,
-        type: 'deposit',
-        amount,
-        description: `Nạp tiền qua VietQR — ${selectedPackage?.name || ''} ${selectedDuration?.duration || ''}`,
-        date: new Date().toISOString(),
-        status: 'completed',
-      });
-      localStorage.setItem('employer_wallet', JSON.stringify(walletData));
-      window.dispatchEvent(new Event('storage'));
-    }
-
-    setShowSuccessModal(true);
 
     // Gửi notification cho admin
     try {
@@ -670,8 +642,9 @@ const Subscription = () => {
         const profile = await employerProfileService.getMyProfile();
         companyName = profile?.companyName || profile?.businessName || companyName;
       } catch (_) {}
+      const amount = parseInt((selectedDuration?.amount || '0').replace(/[^0-9]/g, ''));
       await createPackagePurchaseRequestNotification({
-        subscriptionId: paymentId,
+        subscriptionId: `sub_${Date.now()}`,
         employerId,
         companyName,
         packageName: selectedPackage?.name || '',
@@ -682,6 +655,7 @@ const Subscription = () => {
       console.warn('Notification error:', err.message);
     }
 
+    setShowSuccessModal(true);
     setTimeout(() => {
       setShowSuccessModal(false);
       setSelectedPackage(null);
@@ -1112,20 +1086,6 @@ const Subscription = () => {
           </ModalOverlay>
         )}
       </PageContainer>
-
-      {/* Payment Modal — VietQR */}
-      {selectedPackage && selectedDuration && (
-        <PaymentModal
-          isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
-          onSuccess={handlePaymentSuccess}
-          userId={user?.username || 'unknown'}
-          packageId={selectedPackage.name?.toLowerCase().replace(/\s+/g, '-') || 'pkg'}
-          amount={parseInt((selectedDuration.amount || '0').replace(/[^0-9]/g, ''))}
-          packageName={selectedPackage.name}
-          duration={selectedDuration.duration}
-        />
-      )}
     </DashboardLayout>
   );
 };

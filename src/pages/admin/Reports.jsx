@@ -916,7 +916,9 @@ const Reports = () => {
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đơn vị' : 'Unit'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Thời hạn' : 'Duration'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đã bán' : 'Sold'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Đã kích hoạt' : 'Active'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</TableHeaderCell>
                     </TableHeaderRow>
                   </thead>
                   <tbody>
@@ -930,20 +932,15 @@ const Reports = () => {
                           {service.price}
                         </TableCell>
                         <TableCell $align="center" style={{ color: '#6b7280', fontSize: '13px' }}>VNĐ</TableCell>
-                        <TableCell $align="center">{service.duration}</TableCell>
+                        <TableCell $align="center">{String(service.duration || '').replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim()}</TableCell>
                         <TableCell $align="center" style={{ fontWeight: 700 }}>{service.totalCount}</TableCell>
-                        <TableCell $align="center">
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                            {service.pendingCount > 0 && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}: {service.pendingCount}</span>}
-                            {service.activeCount > 0 && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đã kích hoạt' : 'Active'}: {service.activeCount}</span>}
-                            {service.expiredCount > 0 && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}: {service.expiredCount}</span>}
-                            {service.pendingCount === 0 && service.activeCount === 0 && service.expiredCount === 0 && <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>}
-                          </div>
-                        </TableCell>
+                        <TableCell $align="center">{service.pendingCount > 0 ? service.pendingCount : '—'}</TableCell>
+                        <TableCell $align="center">{service.activeCount > 0 ? service.activeCount : '—'}</TableCell>
+                        <TableCell $align="center">{service.expiredCount > 0 ? service.expiredCount : '—'}</TableCell>
                       </TableRow>
                     )) : (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>
                           {language === 'vi' ? 'chưa có' : 'no data'}
                         </td>
                       </tr>
@@ -968,7 +965,9 @@ const Reports = () => {
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đơn vị' : 'Unit'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Thời hạn' : 'Duration'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đã bán' : 'Sold'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Đã kích hoạt' : 'Active'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</TableHeaderCell>
                     </TableHeaderRow>
                   </thead>
                   <tbody>
@@ -982,20 +981,15 @@ const Reports = () => {
                           {service.price}
                         </TableCell>
                         <TableCell $align="center" style={{ color: '#6b7280', fontSize: '13px' }}>VNĐ</TableCell>
-                        <TableCell $align="center">{service.duration}</TableCell>
+                        <TableCell $align="center">{String(service.duration || '').replace(/[\u00A0\u200B\uFEFF]/g, ' ').trim()}</TableCell>
                         <TableCell $align="center" style={{ fontWeight: 700 }}>{service.totalCount}</TableCell>
-                        <TableCell $align="center">
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                            {service.pendingCount > 0 && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}: {service.pendingCount}</span>}
-                            {service.activeCount > 0 && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đã kích hoạt' : 'Active'}: {service.activeCount}</span>}
-                            {service.expiredCount > 0 && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}: {service.expiredCount}</span>}
-                            {service.pendingCount === 0 && service.activeCount === 0 && service.expiredCount === 0 && <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>}
-                          </div>
-                        </TableCell>
+                        <TableCell $align="center">{service.pendingCount > 0 ? service.pendingCount : '—'}</TableCell>
+                        <TableCell $align="center">{service.activeCount > 0 ? service.activeCount : '—'}</TableCell>
+                        <TableCell $align="center">{service.expiredCount > 0 ? service.expiredCount : '—'}</TableCell>
                       </TableRow>
                     )) : (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>
                           {language === 'vi' ? 'chưa có' : 'no data'}
                         </td>
                       </tr>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 // aws-amplify will be loaded dynamically where needed to avoid Vite prebundle
 // export-shape issues (some builds don't expose default/named exports consistently).
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -688,10 +688,18 @@ function FloatInput({ id, name, type = 'text', label, value, onChange, error, ic
 ═══════════════════════════════════════════════════════════════ */
 const CandidateRegister = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefill = location.state?.prefill || {};
+
   const [showPw, setShowPw] = useState(false);
   const [showCpw, setShowCpw] = useState(false);
   const [agreed, setAgreed] = useState(false);
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({
+    fullName: prefill.fullName || '',
+    email: prefill.email || '',
+    password: prefill.password || '',
+    confirmPassword: prefill.confirmPassword || ''
+  });
   const [errors, setErrors] = useState({});
   const [googleError, setGoogleError] = useState(null);
 
@@ -740,44 +748,9 @@ const CandidateRegister = () => {
   
   // Check if email exists when user leaves email field
   const handleEmailBlur = async () => {
-    console.log('🔍 handleEmailBlur called with email:', form.email);
-    
-    if (!form.email || !/\S+@\S+\.\S+/.test(form.email)) {
-      console.log('⚠️ Email empty or invalid format');
-      return;
-    }
-    
-    try {
-      console.log('📡 Importing Auth...');
-      const { Auth } = await import('../../utils/amplifyClient');
-      
-      console.log('🔎 Checking if email exists:', form.email);
-      
-      // Try to check if user exists by attempting to resend confirmation code
-      try {
-        await Auth.resendSignUpCode({ username: form.email });
-        // If this succeeds, user exists but not confirmed
-        console.log('⚠️ User exists but not confirmed');
-        setErrors(p => ({ ...p, email: 'Email này đã được đăng ký nhưng chưa xác thực. Vui lòng kiểm tra email để xác thực.' }));
-      } catch (err) {
-        console.log('📋 resendSignUpCode error:', err.name, err.message);
-        
-        if (err.name === 'UserNotFoundException') {
-          // User doesn't exist - good!
-          console.log('✅ Email available');
-          setErrors(p => ({ ...p, email: '' }));
-        } else if (err.name === 'InvalidParameterException' && err.message?.includes('confirmed')) {
-          // User exists and is already confirmed
-          console.log('❌ Email already registered and confirmed');
-          setErrors(p => ({ ...p, email: 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc sử dụng email khác.' }));
-        } else {
-          // Other errors - ignore
-          console.warn('⚠️ Email check error (ignored):', err);
-        }
-      }
-    } catch (err) {
-      console.error('❌ Error checking email:', err);
-    }
+    if (!form.email || !/\S+@\S+\.\S+/.test(form.email)) return;
+    // Don't block user while typing — only clear existing errors
+    setErrors(p => ({ ...p, email: '' }));
   };
 
   const validate = () => {
@@ -835,7 +808,8 @@ const CandidateRegister = () => {
             email: form.email,
             password: form.password,
             role: 'candidate',
-            fromRegistration: true
+            fromRegistration: true,
+            formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword }
           }
         });
       } else {
@@ -849,7 +823,40 @@ const CandidateRegister = () => {
 
       let errorMessage = '';
       if (err.name === 'UsernameExistsException' || err.message?.includes('User already') || err.message?.includes('already exists')) {
-        errorMessage = 'Tài khoản này đã tồn tại';
+        // Try to resend OTP — if user is unconfirmed, redirect to OTP page
+        try {
+          const { Auth } = await import('../../utils/amplifyClient');
+          await Auth.resendSignUpCode({ username: form.email });
+          // Resend succeeded → unconfirmed user → go to OTP
+          navigate('/verify-otp', {
+            state: {
+              email: form.email,
+              password: form.password,
+              role: 'candidate',
+              fromRegistration: true,
+              formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword }
+            }
+          });
+          return;
+        } catch (resendErr) {
+          if (resendErr.name === 'InvalidParameterException' || resendErr.message?.includes('confirmed')) {
+            // User is already confirmed — truly duplicate account
+            errorMessage = 'Email này đã được đăng ký và xác thực. Vui lòng đăng nhập hoặc dùng email khác.';
+          } else {
+            // Any other resend error (LimitExceeded, network...) — still send to OTP page
+            // because the root cause is UsernameExists (unconfirmed)
+            navigate('/verify-otp', {
+              state: {
+                email: form.email,
+                password: form.password,
+                role: 'candidate',
+                fromRegistration: true,
+                formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword }
+              }
+            });
+            return;
+          }
+        }
       } else if (err.name === 'InvalidPasswordException') {
         errorMessage = 'Mật khẩu không đủ mạnh. Vui lòng thử mật khẩu khác.';
       } else if (err.name === 'InvalidParameterException') {
@@ -923,7 +930,7 @@ const CandidateRegister = () => {
 
         <Brand>
           <BrandLogoBox>
-            <BrandLogo src="/OpPoReview/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+            <BrandLogo src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
           </BrandLogoBox>
         </Brand>
 
@@ -983,7 +990,7 @@ const CandidateRegister = () => {
           {/* Header */}
           <CardTop>
             <LogoRow>
-              <LogoImg src="/OpPoReview/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+              <LogoImg src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
               <LogoTxt>Ốp Pờ</LogoTxt>
             </LogoRow>
             <CardTitle>Tạo tài khoản ứng viên</CardTitle>
@@ -1033,7 +1040,18 @@ const CandidateRegister = () => {
               </ChkTxt>
             </ChkRow>
             {errors.agreed && <FErr style={{ marginTop: -8, marginBottom: 10 }}>{errors.agreed}</FErr>}
-            {errors.submit && <FErr style={{ marginTop: -8, marginBottom: 10, textAlign: 'center' }}>{errors.submit}</FErr>}
+            {errors.submit && (
+              <div style={{ marginTop: -8, marginBottom: 10, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, textAlign: 'center' }}>
+                <p style={{ color: '#dc2626', fontSize: 13, fontWeight: 600, marginBottom: errors.submit.includes('đăng nhập') ? 6 : 0 }}>
+                  {errors.submit}
+                </p>
+                {errors.submit.includes('đăng nhập') && (
+                  <a href="/login" style={{ color: '#0E3995', fontSize: 13, fontWeight: 700, textDecoration: 'underline' }}>
+                    Đăng nhập ngay →
+                  </a>
+                )}
+              </div>
+            )}
 
             <SubmitBtn
               type="submit"

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
@@ -531,11 +531,11 @@ const DownloadApp = () => {
             
             <StoreButtons>
               <StoreButton href="https://apps.apple.com" target="_blank">
-                <img src="/OpPoReview/images/appstore1.jpg" alt="App Store" />
+                <img src="/images/appstore1.jpg" alt="App Store" />
               </StoreButton>
               
               <StoreButton href="https://play.google.com" target="_blank">
-                <img src="/OpPoReview/images/chplay.jpg" alt="Google Play" />
+                <img src="/images/chplay.jpg" alt="Google Play" />
               </StoreButton>
             </StoreButtons>
           </DownloadOptions>

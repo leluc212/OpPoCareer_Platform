@@ -521,6 +521,78 @@ const saveNotification = async (notification) => {
 };
 
 /**
+ * Notify admin when employer submits a withdrawal request
+ */
+export const createWithdrawalRequestNotification = async ({ employerId, companyName, amount, bankName, accountNumber, accountName }) => {
+  const notification = {
+    type: 'withdrawal_request',
+    title: 'Yêu cầu rút tiền mới',
+    titleEn: 'New Withdrawal Request',
+    message: `${companyName || employerId} đã gửi yêu cầu rút ${Number(amount).toLocaleString('vi-VN')} VND về tài khoản ${bankName} - ${accountNumber} (${accountName}).`,
+    messageEn: `${companyName || employerId} has submitted a withdrawal request for ${Number(amount).toLocaleString('vi-VN')} VND to ${bankName} - ${accountNumber} (${accountName}).`,
+    recipientId: 'admin',
+    recipientRole: 'admin',
+    senderId: employerId,
+    senderName: companyName || employerId,
+    data: { employerId, companyName, amount, bankName, accountNumber, accountName },
+    icon: 'banknote',
+    color: '#f59e0b',
+    actionUrl: '/admin/employers',
+    actionText: 'Xem yêu cầu',
+    actionTextEn: 'View Request'
+  };
+  return await saveNotification(notification);
+};
+
+/**
+ * Notify employer when their withdrawal request is approved
+ */
+export const createWithdrawalApprovedNotification = async ({ employerId, amount, bankName, accountNumber }) => {
+  const notification = {
+    type: 'withdrawal_approved',
+    title: 'Yêu cầu rút tiền đã được duyệt',
+    titleEn: 'Withdrawal Request Approved',
+    message: `Yêu cầu rút ${Number(amount).toLocaleString('vi-VN')} VND của bạn đã được admin phê duyệt. Tiền sẽ được chuyển vào tài khoản ${bankName} - ${accountNumber} trong vòng 1-3 ngày làm việc.`,
+    messageEn: `Your withdrawal request of ${Number(amount).toLocaleString('vi-VN')} VND has been approved. Funds will be transferred to ${bankName} - ${accountNumber} within 1-3 business days.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: { amount, bankName, accountNumber },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '/employer/wallet',
+    actionText: 'Xem ví của tôi',
+    actionTextEn: 'View My Wallet'
+  };
+  return await saveNotification(notification);
+};
+
+/**
+ * Notify employer when their withdrawal request is rejected
+ */
+export const createWithdrawalRejectedNotification = async ({ employerId, amount, bankName, accountNumber, reason }) => {
+  const notification = {
+    type: 'withdrawal_rejected',
+    title: 'Yêu cầu rút tiền bị từ chối',
+    titleEn: 'Withdrawal Request Rejected',
+    message: `Yêu cầu rút ${Number(amount).toLocaleString('vi-VN')} VND của bạn đã bị từ chối${reason ? `: ${reason}` : ''}. Số dư đã được hoàn lại vào ví của bạn. Vui lòng liên hệ admin để biết thêm chi tiết.`,
+    messageEn: `Your withdrawal request of ${Number(amount).toLocaleString('vi-VN')} VND has been rejected${reason ? `: ${reason}` : ''}. The amount has been returned to your wallet.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: { amount, bankName, accountNumber, reason },
+    icon: 'x-circle',
+    color: '#ef4444',
+    actionUrl: '/employer/wallet',
+    actionText: 'Xem ví của tôi',
+    actionTextEn: 'View My Wallet'
+  };
+  return await saveNotification(notification);
+};
+
+/**
  * Mark notification as read
  */
 export const markAsRead = async (notificationId) => {
@@ -642,6 +714,9 @@ export default {
   getUnreadCount,
   createPackagePurchaseRequestNotification,
   createPackageApprovedNotification,
+  createWithdrawalRequestNotification,
+  createWithdrawalApprovedNotification,
+  createWithdrawalRejectedNotification,
   createEmployerApplicationNotification,
   createCandidateCvAcceptedNotification,
   createCandidateCvRejectedNotification,

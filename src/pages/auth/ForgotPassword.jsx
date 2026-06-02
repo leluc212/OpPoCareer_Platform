@@ -288,6 +288,7 @@ const ForgotPassword = () => {
   const { t } = useLanguage();
   const [step, setStep] = useState(1); // 1: Email, 2: OTP, 3: New Password, 4: Success
   const [email, setEmail] = useState('');
+  const [normalizedEmail, setNormalizedEmail] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -328,11 +329,11 @@ const ForgotPassword = () => {
       // Import Auth functions from amplifyClient
       const { Auth } = await import('../../utils/amplifyClient');
       
-      console.log('Sending reset code to:', email);
+      const normalizedEmail = email.trim().toLowerCase();
+      setNormalizedEmail(normalizedEmail);
+      console.log('Sending reset code to:', normalizedEmail);
       
-      // AWS Amplify v6 - Reset password (sends code to email)
-      // This will throw UserNotFoundException if email doesn't exist
-      await Auth.resetPassword({ username: email });
+      await Auth.resetPassword({ username: normalizedEmail });
       
       console.log('Reset code sent successfully');
       setErrors({});
@@ -347,7 +348,7 @@ const ForgotPassword = () => {
       } else if (err.name === 'LimitExceededException' || err.message?.includes('Attempt limit exceeded')) {
         errorMessage = 'Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau 15 phút.';
       } else if (err.name === 'InvalidParameterException') {
-        errorMessage = 'Email không hợp lệ. Vui lòng kiểm tra lại định dạng email.';
+        errorMessage = 'Tài khoản này đăng ký bằng Google, không thể đặt lại mật khẩu theo cách này. Vui lòng đăng nhập bằng Google.';
       } else if (err.name === 'NotAuthorizedException') {
         errorMessage = 'Tài khoản này không được phép đặt lại mật khẩu. Vui lòng liên hệ quản trị viên.';
       } else {
@@ -360,20 +361,14 @@ const ForgotPassword = () => {
     }
   };
 
-  // Handle OTP verification (just verify, don't reset password yet)
+  // Handle OTP verification - verify code is complete before proceeding
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
-    const newErrors = {};
-    
-    // Validate OTP
     const otpValue = otp.join('');
     if (otpValue.length !== 6) {
-      newErrors.otp = 'Vui lòng nhập đầy đủ mã xác minh';
-      setErrors(newErrors);
+      setErrors({ otp: 'Vui lòng nhập đầy đủ 6 chữ số' });
       return;
     }
-    
-    // Just move to next step - we'll verify the code when resetting password
     setErrors({});
     setStep(3);
   };
@@ -426,8 +421,16 @@ const ForgotPassword = () => {
     // Validate password
     if (!password) {
       newErrors.password = 'Vui lòng nhập mật khẩu mới';
-    } else if (password.length < 6) {
-      newErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự';
+    } else if (password.length < 8) {
+      newErrors.password = 'Mật khẩu phải có ít nhất 8 ký tự';
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = 'Mật khẩu phải có ít nhất 1 chữ hoa';
+    } else if (!/[a-z]/.test(password)) {
+      newErrors.password = 'Mật khẩu phải có ít nhất 1 chữ thường';
+    } else if (!/[0-9]/.test(password)) {
+      newErrors.password = 'Mật khẩu phải có ít nhất 1 chữ số';
+    } else if (!/[^a-zA-Z0-9]/.test(password)) {
+      newErrors.password = 'Mật khẩu phải có ít nhất 1 ký tự đặc biệt (!@#$%...)';
     }
     
     if (!confirmPassword) {
@@ -447,11 +450,10 @@ const ForgotPassword = () => {
       const { Auth } = await import('../../utils/amplifyClient');
       
       const otpValue = otp.join('');
-      console.log('Confirming password reset for:', email);
+      console.log('Confirming password reset for:', normalizedEmail);
       
-      // AWS Amplify v6 - Confirm reset password with code
       await Auth.confirmResetPassword({
-        username: email,
+        username: normalizedEmail,
         confirmationCode: otpValue,
         newPassword: password
       });
@@ -463,7 +465,7 @@ const ForgotPassword = () => {
       // Redirect to login after 3 seconds
       setTimeout(() => {
         navigate('/login');
-      }, 3000);
+      }, 2500);
     } catch (err) {
       console.error('Confirm reset password error:', err);
       
@@ -499,8 +501,8 @@ const ForgotPassword = () => {
     try {
       const { Auth } = await import('../../utils/amplifyClient');
       
-      console.log('Resending reset code to:', email);
-      await Auth.resetPassword({ username: email });
+      console.log('Resending reset code to:', normalizedEmail);
+      await Auth.resetPassword({ username: normalizedEmail });
       
       console.log('Reset code resent successfully');
       setResendTimer(60);
@@ -643,7 +645,7 @@ const ForgotPassword = () => {
                   </InputIcon>
                   <Input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                    placeholder="Tối thiểu 8 ký tự, có hoa, thường, số, ký tự đặc biệt"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     $error={errors.password}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -1341,9 +1341,9 @@ const CandidateDashboard = () => {
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const banners = [
-    { src: "/OpPoReview/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
-    { src: "/OpPoReview/images/unnamed1.jpg", alt: "Banner" },
-    { src: "/OpPoReview/images/unnamed.jpg", alt: "Banner" }
+    { src: "/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
+    { src: "/images/unnamed1.jpg", alt: "Banner" },
+    { src: "/images/unnamed.jpg", alt: "Banner" }
   ];
 
   useEffect(() => {
@@ -2303,7 +2303,7 @@ const CandidateDashboard = () => {
                 whileHover={{ y: -3 }}
               >
                 <SideAdTag>✨ Hot Hot Hot</SideAdTag>
-                <img src="/OpPoReview/images/phucloctho.jpg" alt="Phúc Lộc Thọ" />
+                <img src="/images/phucloctho.jpg" alt="Phúc Lộc Thọ" />
               </SideAdWrap>
             </SidebarCol>
           </ContentGrid>
@@ -2318,14 +2318,14 @@ const CandidateDashboard = () => {
         whileTap={{ scale: 0.95 }}
         style={{ position: 'fixed', bottom: '32px', right: '32px', zIndex: 1000, cursor: 'pointer' }}
       >
-        <img src="/OpPoReview/images/katinatlogo.jpg" alt="Katinat" draggable="false" />
+        <img src="/images/katinatlogo.jpg" alt="Katinat" draggable="false" />
         <UnreadDot $show={hasUnread} />
       </ChatBubbleBtn>
 
       {chatOpen && (
         <ChatWindow>
           <ChatHeader>
-            <img src="/OpPoReview/images/katinatlogo.jpg" alt="Katinat" />
+            <img src="/images/katinatlogo.jpg" alt="Katinat" />
             <div className="info">
               <h4>Katinat Quận Cam</h4>
               <p><span className="dot" /> {language === 'vi' ? 'Đang hoạt động' : 'Active'}</p>

@@ -1,14 +1,17 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Optional dev-only proxy target for package subscriptions API. Set
-// PACKAGE_SUBSCRIPTIONS_PROXY_TARGET or VITE_PACKAGE_SUBSCRIPTIONS_PROXY_TARGET
-// in your environment if you want to forward `/api-packages` to the real API
-// to avoid CORS while developing.
 const packageProxyTarget = process.env.PACKAGE_SUBSCRIPTIONS_PROXY_TARGET || process.env.VITE_PACKAGE_SUBSCRIPTIONS_PROXY_TARGET || '';
 
-export default defineConfig({
-  base: '/OpPoReview/',
+export default defineConfig(({ mode }) => {
+  // Đọc .env, .env.production, v.v. theo mode
+  const env = loadEnv(mode, process.cwd(), '');
+  const base = env.VITE_BASE_URL || process.env.VITE_BASE_URL || '/';
+
+  return {
+  // LOCAL dev: base = '/'   (không có VITE_BASE_URL)
+  // GitHub Pages: VITE_BASE_URL=/OpPoReview/ trong .env.production hoặc CI env
+  base,
   plugins: [react()],
   server: {
     port: 3000,
@@ -109,6 +112,19 @@ export default defineConfig({
             }
           });
         }
+      },
+      // eKYC Mock Server (local dev) — đổi target thành API Gateway khi deploy AWS
+      '/api-ekyc': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-ekyc/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
+          });
+        }
       }
     },
   },
@@ -136,4 +152,5 @@ export default defineConfig({
   optimizeDeps: {
     include: ['@popperjs/core']
   }
+  } // end return
 })

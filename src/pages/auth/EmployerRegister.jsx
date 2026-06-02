@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 // load aws-amplify dynamically where needed to handle ESM/CJS export differences
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -829,14 +829,20 @@ const IconUser = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor
 ──────────────────────────────────────────────────────────────────── */
 const EmployerRegister = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefill = location.state?.prefill || {};
+
   const [step, setStep] = useState(1);
   const [showPw, setShowPw] = useState(false);
   const [showCpw, setShowCpw] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [form, setForm] = useState({
-    fullName: '',
-    email: '', password: '', confirmPassword: '',
-    companyName: '', phone: '',
+    fullName:        prefill.fullName        || '',
+    email:           prefill.email           || '',
+    password:        prefill.password        || '',
+    confirmPassword: prefill.confirmPassword || '',
+    companyName:     prefill.companyName     || '',
+    phone:           prefill.phone           || '',
   });
   const [errors, setErrors] = useState({});
   const [googleError, setGoogleError] = useState(null);
@@ -887,30 +893,7 @@ const EmployerRegister = () => {
   // Check if email exists when user leaves email field
   const handleEmailBlur = async () => {
     if (!form.email || !/\S+@\S+\.\S+/.test(form.email)) return;
-    
-    try {
-      const { Auth } = await import('../../utils/amplifyClient');
-      
-      // Try to check if user exists by attempting to resend confirmation code
-      try {
-        await Auth.resendSignUpCode({ username: form.email });
-        // If this succeeds, user exists but not confirmed
-        setErrors(p => ({ ...p, email: 'Email này đã được đăng ký nhưng chưa xác thực. Vui lòng kiểm tra email để xác thực.' }));
-      } catch (err) {
-        if (err.name === 'UserNotFoundException') {
-          // User doesn't exist - good!
-          setErrors(p => ({ ...p, email: '' }));
-        } else if (err.name === 'InvalidParameterException' && err.message?.includes('confirmed')) {
-          // User exists and is already confirmed
-          setErrors(p => ({ ...p, email: 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc sử dụng email khác.' }));
-        } else {
-          // Other errors - ignore
-          console.warn('Email check error:', err);
-        }
-      }
-    } catch (err) {
-      console.error('Error checking email:', err);
-    }
+    setErrors(p => ({ ...p, email: '' }));
   };
 
   const validateStep1 = () => {
@@ -984,7 +967,8 @@ const EmployerRegister = () => {
             email: form.email,
             password: form.password,
             role: 'employer',
-            fromRegistration: true
+            fromRegistration: true,
+            formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword, companyName: form.companyName, phone: form.phone }
           }
         });
       } else {
@@ -998,7 +982,36 @@ const EmployerRegister = () => {
 
       let errorMessage = '';
       if (err.name === 'UsernameExistsException' || err.message?.includes('User already') || err.message?.includes('already exists')) {
-        errorMessage = 'Tài khoản này đã tồn tại';
+        // Try to resend OTP — if user is unconfirmed, redirect to OTP page
+        try {
+          const { Auth } = await import('../../utils/amplifyClient');
+          await Auth.resendSignUpCode({ username: form.email });
+          navigate('/verify-otp', {
+            state: {
+              email: form.email,
+              password: form.password,
+              role: 'employer',
+              fromRegistration: true,
+              formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword, companyName: form.companyName, phone: form.phone }
+            }
+          });
+          return;
+        } catch (resendErr) {
+          if (resendErr.name === 'InvalidParameterException' || resendErr.message?.includes('confirmed')) {
+            errorMessage = 'Email này đã được đăng ký và xác thực. Vui lòng đăng nhập hoặc dùng email khác.';
+          } else {
+            navigate('/verify-otp', {
+              state: {
+                email: form.email,
+                password: form.password,
+                role: 'employer',
+                fromRegistration: true,
+                formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword, companyName: form.companyName, phone: form.phone }
+              }
+            });
+            return;
+          }
+        }
       } else if (err.name === 'InvalidPasswordException') {
         errorMessage = 'Mật khẩu không đủ mạnh. Vui lòng thử mật khẩu khác.';
       } else if (err.name === 'InvalidParameterException') {
@@ -1070,7 +1083,7 @@ const EmployerRegister = () => {
 
         <BrandRow>
           <BrandLogoBox>
-            <LogoImg src="/OpPoReview/images/logo.png" alt="Ốp Pờ"
+            <LogoImg src="/images/logo.png" alt="Ốp Pờ"
               onError={e => { e.target.style.display = 'none'; }} />
           </BrandLogoBox>
         </BrandRow>
@@ -1142,7 +1155,7 @@ const EmployerRegister = () => {
           {/* Header */}
           <CardHead>
             <CardLogoRow>
-              <MiniLogo src="/OpPoReview/images/logo.png" alt="Ốp Pờ"
+              <MiniLogo src="/images/logo.png" alt="Ốp Pờ"
                 onError={e => { e.target.style.display = 'none'; }} />
               <MiniName>Ốp Pờ</MiniName>
             </CardLogoRow>
@@ -1269,7 +1282,18 @@ const EmployerRegister = () => {
                   </CheckText>
                 </CheckRow>
                 {errors.agreed && <FieldErr style={{ marginTop: -8, marginBottom: 10 }}>⚠ {errors.agreed}</FieldErr>}
-                {errors.submit && <FieldErr style={{ marginTop: -4, marginBottom: 14, textAlign: 'center', display: 'block', fontSize: '13.5px' }}>⚠ {errors.submit}</FieldErr>}
+                {errors.submit && (
+                  <div style={{ marginTop: -4, marginBottom: 14, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, textAlign: 'center' }}>
+                    <p style={{ color: '#dc2626', fontSize: 13, fontWeight: 600, marginBottom: errors.submit.includes('đăng nhập') ? 6 : 0 }}>
+                      ⚠ {errors.submit}
+                    </p>
+                    {errors.submit.includes('đăng nhập') && (
+                      <a href="/login" style={{ color: '#0E3995', fontSize: 13, fontWeight: 700, textDecoration: 'underline' }}>
+                        Đăng nhập ngay →
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 <form onSubmit={handleSubmit}>
                   <SubmitBtn

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { motion, useInView } from 'framer-motion';
@@ -2865,15 +2865,15 @@ const particleConfigs = [
 ];
 
 const companyLogos = [
-  { name: 'TRUNG NGUYÊN', logo: '/OpPoReview/images/trungnguyen.jpg' },
-  { name: 'KATINAT', logo: '/OpPoReview/images/katinat.png' },
-  { name: 'BAMOS COFFEE', logo: '/OpPoReview/images/bamos.png' },
-  { name: 'STARBUCK', logo: '/OpPoReview/images/starbuck.png' },
-  { name: 'PHUC LONG', logo: '/OpPoReview/images/phuclong.jpg' },
-  { name: 'THE COFFEE HOUSE', logo: '/OpPoReview/images/coffeehouse.jpg' },
-  { name: 'HỒNG TRÀ NGÔ GIA', logo: '/OpPoReview/images/ngogia.png' },
-  { name: 'SUNCHA', logo: '/OpPoReview/images/suncha.jpg' },
-  { name: 'HIGHLANDS', logo: '/OpPoReview/images/highlands.jpg' },
+  { name: 'TRUNG NGUYÊN', logo: '/images/trungnguyen.jpg' },
+  { name: 'KATINAT', logo: '/images/katinat.png' },
+  { name: 'BAMOS COFFEE', logo: '/images/bamos.png' },
+  { name: 'STARBUCK', logo: '/images/starbuck.png' },
+  { name: 'PHUC LONG', logo: '/images/phuclong.jpg' },
+  { name: 'THE COFFEE HOUSE', logo: '/images/coffeehouse.jpg' },
+  { name: 'HỒNG TRÀ NGÔ GIA', logo: '/images/ngogia.png' },
+  { name: 'SUNCHA', logo: '/images/suncha.jpg' },
+  { name: 'HIGHLANDS', logo: '/images/highlands.jpg' },
 ];
 
 const LandingPage = ({ children }) => {
@@ -3010,7 +3010,7 @@ const LandingPage = ({ children }) => {
       >
         <LeftSection>
           <Logo to="/">
-            <img src="/OpPoReview/images/logo.png" alt="Ốp Pờ" style={{ height: '42px', marginRight: '5px' }} />
+            <img src="/images/logo.png" alt="Ốp Pờ" style={{ height: '42px', marginRight: '5px' }} />
 
           </Logo>
           <NavLinks $isDark={isDarkMode}>
@@ -3600,14 +3600,14 @@ const LandingPage = ({ children }) => {
                 transition={{ duration: 0.6, delay: 0.5 }}
               >
                 <SecondaryBanner
-                  src="/OpPoReview/images/phache.png"
+                  src="/images/phache.png"
                   alt="Phache"
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.7, delay: 0.7 }}
                 />
                 <MainBanner
-                  src="/OpPoReview/images/poster.png"
+                  src="/images/poster.png"
                   alt="Poster"
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -3890,7 +3890,7 @@ const LandingPage = ({ children }) => {
         >
           <TechBannerContent>
             <TechBannerImage
-              src="/OpPoReview/images/lemoments.png"
+              src="/images/lemoments.png"
               alt="Le Moments Technology"
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -4022,7 +4022,7 @@ const LandingPage = ({ children }) => {
                 <StoreButtons>
                   <StoreButton href="https://apps.apple.com" target="_blank">
                     <img
-                      src="/OpPoReview/images/appstore1.jpg"
+                      src="/images/appstore1.jpg"
                       alt="App Store"
                       style={{
                         width: '120px',
@@ -4034,7 +4034,7 @@ const LandingPage = ({ children }) => {
 
                   <StoreButton href="https://play.google.com" target="_blank">
                     <img
-                      src="/OpPoReview/images/chplay.jpg"
+                      src="/images/chplay.jpg"
                       alt="Google Play"
                       style={{
                         width: '120px',
@@ -4097,7 +4097,7 @@ const LandingPage = ({ children }) => {
                             transition={{ duration: 0.4, delay: 0.2 }}
                           >
                             <img
-                              src="/OpPoReview/images/logo.png"
+                              src="/images/logo.png"
                               alt="Ốp Pờ"
                               style={{
                                 width: '100%',
@@ -4253,8 +4253,8 @@ const LandingPage = ({ children }) => {
           <FooterMain>
             <FooterLeft $isDark={isDarkMode}>
               <div className="logo-area">
-                <Link to="/OpPoReview/" className="logo-link">
-                  <img src="/OpPoReview/images/logo.png" alt="Ốp Pờ Logo" />
+                <Link to="/" className="logo-link">
+                  <img src="/images/logo.png" alt="Ốp Pờ Logo" />
                 </Link>
                 <p>{language === 'vi' ? 'Bạn vừa bị đuổi - Đã có Ốp Pờ lo' : 'Just got fired? Ốp Pờ has you covered'}</p>
                 <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4319,7 +4319,7 @@ const LandingPage = ({ children }) => {
             </CompanyDetails>
 
             <QrCodeArea>
-              <img src="/OpPoReview/images/qrcode.png" alt="QR Code" onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://leluc212.github.io/OpPoReview/' }} />
+              <img src="/images/qrcode.png" alt="QR Code" onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://leluc212.github.io/OpPoReview/' }} />
               <p>leluc212.github.io/OpPoReview</p>
             </QrCodeArea>
           </FooterBottom>

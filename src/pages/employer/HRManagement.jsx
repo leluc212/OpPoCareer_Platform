@@ -2783,11 +2783,7 @@ const HRManagement = () => {
   };
 
   const handleCreatePost = () => {
-    if (!isWalletConnected) {
-      setShowWalletModal(true);
-    } else {
-      navigate('/employer/post-quick-job');
-    }
+    navigate('/employer/post-quick-job');
   };
 
   const closeWalletModal = () => {
@@ -3446,6 +3442,26 @@ const HRManagement = () => {
                               <Zap size={12} style={{ color: '#EF4444' }} />
                               {language === 'vi' ? 'Tuyển gấp' : 'Urgent'}
                             </div>
+                            {/* Approval status badge */}
+                            {(() => {
+                              const s = post.status;
+                              if (s === 'approved' || s === 'active') return (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 11px', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '100px', fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                  <CheckCircle size={11} /> {language === 'vi' ? 'Đã duyệt' : 'Approved'}
+                                </div>
+                              );
+                              if (s === 'rejected') return (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 11px', background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: '100px', fontSize: '12px', fontWeight: '700', color: '#dc2626', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                  <XCircle size={11} /> {language === 'vi' ? 'Từ chối' : 'Rejected'}
+                                </div>
+                              );
+                              // pending or anything else
+                              return (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 11px', background: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: '100px', fontSize: '12px', fontWeight: '700', color: '#b45309', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                  <Clock size={11} /> {language === 'vi' ? 'Chờ duyệt' : 'Pending'}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <QuickJobPostMeta>
                             <div className="meta-item">
@@ -3628,71 +3644,6 @@ const HRManagement = () => {
                 </ChatModalInput>
               </ChatModalContainer>
             </ChatModalOverlay>
-          )}
-        </AnimatePresence>
-
-        {/* Wallet Verification Modal */}
-        <AnimatePresence>
-          {showWalletModal && (
-            <WalletModalOverlay
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closeWalletModal}
-            >
-              <WalletModalContainer
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <WalletModalIcon>
-                  <Wallet />
-                </WalletModalIcon>
-                <WalletModalTitle>
-                  {language === 'vi' ? 'Yêu cầu liên kết ví' : 'Wallet Connection Required'}
-                </WalletModalTitle>
-                <WalletModalMessage>
-                  {language === 'vi'
-                    ? 'Bạn cần liên kết ví ngân hàng trước khi có thể đăng tin tuyển dụng. Điều này giúp đảm bảo thanh toán an toàn và minh bạch.'
-                    : 'You need to connect your bank wallet before posting job listings. This ensures secure and transparent payment processing.'}
-                </WalletModalMessage>
-                <TermsCheckboxContainer>
-                  <input
-                    type="checkbox"
-                    id="terms-checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  />
-                  <label htmlFor="terms-checkbox">
-                    {language === 'vi'
-                      ? <>Tôi đã đồng ý <a href="/OpPoReview/terms-urgent-jobs" style={{ fontWeight: 600, cursor: 'pointer' }} onClick={(e) => { e.preventDefault(); setShowWalletModal(false); navigate('/terms-urgent-jobs', { state: { returnToWallet: true } }); }}>điều khoản</a> sử dụng Job gấp này</>
-                      : <>I agree to the <a href="/OpPoReview/terms-urgent-jobs" style={{ fontWeight: 600, cursor: 'pointer' }} onClick={(e) => { e.preventDefault(); setShowWalletModal(false); navigate('/terms-urgent-jobs', { state: { returnToWallet: true } }); }}>Terms of Service</a> for Urgent Jobs</>
-                    }
-                  </label>
-                </TermsCheckboxContainer>
-                <WalletModalActions>
-                  <WalletModalButton
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={closeWalletModal}
-                  >
-                    <X />
-                    {language === 'vi' ? 'Đóng' : 'Cancel'}
-                  </WalletModalButton>
-                  <WalletModalButton
-                    $variant="primary"
-                    disabled={!agreedToTerms}
-                    whileHover={{ scale: agreedToTerms ? 1.02 : 1 }}
-                    whileTap={{ scale: agreedToTerms ? 0.98 : 1 }}
-                    onClick={agreedToTerms ? handleConnectWallet : undefined}
-                  >
-                    <Wallet />
-                    {language === 'vi' ? 'Liên kết ví' : 'Connect Wallet'}
-                  </WalletModalButton>
-                </WalletModalActions>
-              </WalletModalContainer>
-            </WalletModalOverlay>
           )}
         </AnimatePresence>
 

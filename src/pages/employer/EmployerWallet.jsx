@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import employerProfileService from '../../services/employerProfileService';
 import { getWallet, withdrawWallet } from '../../services/packageCatalogService';
+import { createWithdrawalRequestNotification } from '../../services/notificationService';
 import {
   Wallet as WalletIcon,
   TrendingUp,
@@ -1288,6 +1289,20 @@ const EmployerWallet = () => {
       setWithdrawLoading(false);
       setWithdrawSuccess(true);
 
+      // Notify admin about withdrawal request
+      try {
+        await createWithdrawalRequestNotification({
+          employerId,
+          companyName,
+          amount: parsedWithdrawAmount,
+          bankName: withdrawBankName,
+          accountNumber: withdrawAccountNumber,
+          accountName: withdrawAccountName,
+        });
+      } catch (notifErr) {
+        console.warn('Notification error (withdrawal request):', notifErr.message);
+      }
+
       setTimeout(() => {
         setShowWithdrawModal(false);
         setWithdrawSuccess(false);
@@ -1312,6 +1327,20 @@ const EmployerWallet = () => {
         paymentDetails: { bankName: withdrawBankName, accountNumber: withdrawAccountNumber }
       };
       setTransactions(prev => [localTx, ...prev]);
+
+      // Notify admin even on fallback
+      try {
+        await createWithdrawalRequestNotification({
+          employerId,
+          companyName,
+          amount: parsedWithdrawAmount,
+          bankName: withdrawBankName,
+          accountNumber: withdrawAccountNumber,
+          accountName: withdrawAccountName,
+        });
+      } catch (notifErr) {
+        console.warn('Notification error (withdrawal request fallback):', notifErr.message);
+      }
 
       setWithdrawLoading(false);
       setWithdrawSuccess(true);

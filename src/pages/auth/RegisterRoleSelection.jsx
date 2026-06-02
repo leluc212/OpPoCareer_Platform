@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion } from 'framer-motion';
@@ -613,7 +613,7 @@ const RegisterRoleSelection = () => {
         {/* brand */}
         <motion.div variants={item}>
           <BrandLink to="/">
-            <BrandImg src="/OpPoReview/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+            <BrandImg src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
           </BrandLink>
         </motion.div>
 

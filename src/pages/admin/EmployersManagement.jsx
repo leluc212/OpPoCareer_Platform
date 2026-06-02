@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
 import { getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
+import { createWithdrawalApprovedNotification, createWithdrawalRejectedNotification } from '../../services/notificationService';
 
 const PageContainer = styled.div``;
 
@@ -536,18 +537,31 @@ const EmployersManagement = () => {
   };
 
   const handleApproveWithdrawal = async (requestId) => {
+    const req = withdrawRequests.find(r => r.id === requestId);
     try {
       await updateWithdrawalStatus(requestId, 'approved');
       setWithdrawRequests(prev => 
-        prev.map(req => 
-          req.id === requestId ? { ...req, status: 'approved' } : req
-        )
+        prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r)
       );
       try {
         const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-        const updated = stored.map(req => req.id === requestId ? { ...req, status: 'approved' } : req);
+        const updated = stored.map(r => r.id === requestId ? { ...r, status: 'approved' } : r);
         localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
       } catch (_) {}
+
+      // Send notification to employer
+      if (req?.employerId) {
+        try {
+          await createWithdrawalApprovedNotification({
+            employerId: req.employerId,
+            amount: req.amount || 0,
+            bankName: req.bankName || req.bank || '',
+            accountNumber: req.accountNumber || req.bankAccount || '',
+          });
+        } catch (notifErr) {
+          console.warn('Notification error (withdrawal approved):', notifErr.message);
+        }
+      }
     } catch (err) {
       console.error('Error approving withdrawal:', err);
       alert(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền' : 'Failed to approve withdrawal');
@@ -555,18 +569,31 @@ const EmployersManagement = () => {
   };
 
   const handleRejectWithdrawal = async (requestId) => {
+    const req = withdrawRequests.find(r => r.id === requestId);
     try {
       await updateWithdrawalStatus(requestId, 'rejected');
       setWithdrawRequests(prev => 
-        prev.map(req => 
-          req.id === requestId ? { ...req, status: 'rejected' } : req
-        )
+        prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r)
       );
       try {
         const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-        const updated = stored.map(req => req.id === requestId ? { ...req, status: 'rejected' } : req);
+        const updated = stored.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r);
         localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
       } catch (_) {}
+
+      // Send notification to employer
+      if (req?.employerId) {
+        try {
+          await createWithdrawalRejectedNotification({
+            employerId: req.employerId,
+            amount: req.amount || 0,
+            bankName: req.bankName || req.bank || '',
+            accountNumber: req.accountNumber || req.bankAccount || '',
+          });
+        } catch (notifErr) {
+          console.warn('Notification error (withdrawal rejected):', notifErr.message);
+        }
+      }
     } catch (err) {
       console.error('Error rejecting withdrawal:', err);
       alert(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền' : 'Failed to reject withdrawal');

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -1714,10 +1714,10 @@ const AdminDashboard = () => {
                 const bgColor = colors[index % colors.length];
 
                 const logoMap = {
-                  'Cơm tấm Phúc Lộc Thọ': '/OpPoReview/images/logoplt.png',
-                  'Katinat': '/OpPoReview/images/katinatlogo.jpg',
-                  'The Coffee House': '/OpPoReview/images/coffeehouse.jpg',
-                  'Highlands Coffee': '/OpPoReview/images/highlands.jpg',
+                  'Cơm tấm Phúc Lộc Thọ': '/images/logoplt.png',
+                  'Katinat': '/images/katinatlogo.jpg',
+                  'The Coffee House': '/images/coffeehouse.jpg',
+                  'Highlands Coffee': '/images/highlands.jpg',
                 };
                 const logo = logoMap[post.employer] || null;
 

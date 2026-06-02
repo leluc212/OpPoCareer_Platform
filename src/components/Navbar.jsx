@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, Star, UserPlus, History, Building2, Tag as TagIcon } from 'lucide-react';
@@ -442,7 +442,7 @@ const Navbar = ({ showSearch = true }) => {
   const [searchHistory, setSearchHistory] = useState(() => JSON.parse(localStorage.getItem('jobSearchHistory') || '[]'));
   const [allJobTitles, setAllJobTitles] = useState([]);
   const searchBarRef = useRef(null);
-  const [companyLogo, setCompanyLogo] = useState(() => localStorage.getItem('companyLogo') || '/OpPoReview/images/katinatlogo.jpg');
+  const [companyLogo, setCompanyLogo] = useState(() => localStorage.getItem('companyLogo') || '/images/katinatlogo.jpg');
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationTab, setNotificationTab] = useState('all');
   const [candidateProfile, setCandidateProfile] = useState(null);
@@ -587,7 +587,7 @@ const Navbar = ({ showSearch = true }) => {
 
   useEffect(() => {
     const handleLogoChange = () => {
-      setCompanyLogo(localStorage.getItem('companyLogo') || '/OpPoReview/images/katinatlogo.jpg');
+      setCompanyLogo(localStorage.getItem('companyLogo') || '/images/katinatlogo.jpg');
     };
     window.addEventListener('logoChanged', handleLogoChange);
     return () => window.removeEventListener('logoChanged', handleLogoChange);

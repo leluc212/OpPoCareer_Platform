@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+﻿import React, { useMemo, useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -1843,9 +1843,9 @@ const JobListing = () => {
   const [highlightedJobId, setHighlightedJobId] = useState(null);
 
   const banners = [
-    { src: "/OpPoReview/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
-    { src: "/OpPoReview/images/unnamed1.jpg", alt: "Banner" },
-    { src: "/OpPoReview/images/unnamed.jpg", alt: "Banner" }
+    { src: "/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
+    { src: "/images/unnamed1.jpg", alt: "Banner" },
+    { src: "/images/unnamed.jpg", alt: "Banner" }
   ];
 
   useEffect(() => {

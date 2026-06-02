@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "ekyc:mock": "node ekyc-mock-server.js",
     "create-profile-table": "node amplify/backend/create-candidate-profile-table.js",
     "create-profile-table:ps": "powershell -ExecutionPolicy Bypass -File amplify/backend/create-candidate-profile-table.ps1"
   },
@@ -30,6 +31,8 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "vite": "^7.3.1"
   }
 }

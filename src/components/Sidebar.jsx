@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useLayoutEffect } from 'react';
+﻿import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useLanguage } from '../context/LanguageContext';
@@ -435,7 +435,7 @@ const Sidebar = ({ role, onHoverChange }) => {
       onMouseLeave={handleMouseLeave}
     >
       <Logo>
-        <img src="/OpPoReview/images/logo.png" alt="Ốp Pờ" style={{ height: '60px' }} />
+        <img src="/images/logo.png" alt="Ốp Pờ" style={{ height: '60px' }} />
         <LogoText>Ốp Pờ</LogoText>
       </Logo>
       

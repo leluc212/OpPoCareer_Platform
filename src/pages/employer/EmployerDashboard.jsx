@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
+import { imgUrl } from '../../utils/assetUrl';
 import StatsCard from '../../components/StatsCard';
 import StatusBadge from '../../components/StatusBadge';
 import CompanyProfileSetupModal from '../../components/CompanyProfileSetupModal';
@@ -15,9 +16,12 @@ import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import { getJobApplications } from '../../services/applicationService';
+import candidateProfileService from '../../services/candidateProfileService';
 import { getNotifications } from '../../services/notificationService';
 import { formatRelativeTime } from '../../hooks/useRelativeTime';
 import DynamicTranslate from '../../components/DynamicTranslate';
+import Modal from '../../components/Modal';
+import { ProfileDetailModal } from './Applications';
 import {
   Briefcase,
   Users,
@@ -75,7 +79,7 @@ const DashboardContainer = styled.div`
 `;
 
 const WelcomeBanner = styled(motion.div)`
-  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)), url('/OpPoReview/images/katinatQ8.jpg');
+  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)), url('${imgUrl('images/katinatQ8.jpg')}');
   background-size: cover;
   background-position: center;
   border-radius: ${props => props.theme.borderRadius.xl};
@@ -339,6 +343,9 @@ const ApplicationMeta = styled.div`
   }
 `;
 
+// ─── Quick Profile Preview Modal ──────────────────────────
+// (removed — using full ProfileDetailModal from Applications)
+
 const ActivityFeed = styled.div``;
 
 const ActivityItem = styled(motion.div)`
@@ -503,6 +510,63 @@ const EmployerDashboard = () => {
     applicationsList: []
   });
   const [recentApplications, setRecentApplications] = useState([]);
+  const [previewApp, setPreviewApp] = useState(null);
+  const [previewCandidate, setPreviewCandidate] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const handleViewProfile = async (app) => {
+    // Show modal immediately with basic info
+    const basic = {
+      id: app.id,
+      candidateId: app.candidateId,
+      candidate: app.candidate,
+      candidateEmail: app.candidateEmail || app.candidate,
+      email: app.candidateEmail || app.candidate,
+      job: app.job,
+      applied: app.applied,
+      status: app.status,
+      phone: app.phone || '-',
+      location: app.location || '-',
+      education: app.education || '-',
+      experience: app.experience || '-',
+      skills: app.skills || [],
+      bio: app.bio || '-',
+      cvUrl: app.cvUrl || '',
+      cvFileName: app.cvFileName || '',
+      reviews: app.reviews || [],
+    };
+    setPreviewCandidate(basic);
+
+    // Fetch full profile from DB if candidateId available
+    if (app.candidateId) {
+      setPreviewLoading(true);
+      try {
+        const profile = await candidateProfileService.getProfile(app.candidateId);
+        if (profile) {
+          setPreviewCandidate(prev => ({
+            ...prev,
+            ...profile,
+            candidate: profile.fullName || prev.candidate,
+            candidateEmail: profile.email || prev.candidateEmail,
+            phone: profile.phone || prev.phone,
+            location: profile.location || prev.location,
+            education: profile.education || prev.education,
+            experience: profile.experience || prev.experience,
+            skills: profile.skills || prev.skills,
+            bio: profile.bio || prev.bio,
+            cvUrl: profile.cvUrl || prev.cvUrl,
+            cvFileName: profile.cvFileName || prev.cvFileName,
+            profileImage: profile.profileImage || prev.profileImage,
+            reviews: profile.reviews || prev.reviews,
+          }));
+        }
+      } catch (err) {
+        console.error('Error fetching candidate profile:', err);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }
+  };
   const [recentActivities, setRecentActivities] = useState([]);
   const [performanceMetrics, setPerformanceMetrics] = useState({
     responseRate: '0%',
@@ -564,14 +628,23 @@ const EmployerDashboard = () => {
           const jobMatch = allStandard.find(j => (j.idJob || j.id) === app.jobId);
           return {
             id: app.applicationId || app.idApp || app.id || Math.random().toString(),
+            candidateId: app.candidateId || app.userId || app.candidateUserId || '',
             candidate: app.fullName || app.candidateName || app.candidateEmail || (language === 'vi' ? 'Ứng viên' : 'Candidate'),
+            candidateEmail: app.candidateEmail || '',
             job: jobMatch?.title || (language === 'vi' ? 'Công việc' : 'Job'),
-
-
             applied: new Date(app.createdAt || Date.now()).toLocaleDateString(),
             status: app.status || 'pending',
             avatar: (app.fullName || app.candidateName || app.candidateEmail || 'U')[0],
-            jobId: app.jobId
+            jobId: app.jobId,
+            phone: app.phone || '-',
+            location: app.location || '-',
+            education: app.education || '-',
+            experience: app.experience || '-',
+            skills: app.skills || [],
+            bio: app.bio || '-',
+            cvUrl: app.cvUrl || '',
+            cvFileName: app.cvFileName || '',
+            reviews: app.reviews || [],
           };
         });
         
@@ -692,7 +765,7 @@ const EmployerDashboard = () => {
     if (employerProfile?.companyLogo) {
       return employerProfile.companyLogo;
     }
-    return '/OpPoReview/images/katinatlogo.jpg';
+    return '/images/katinatlogo.jpg';
   };
 
   return (
@@ -815,7 +888,7 @@ const EmployerDashboard = () => {
                       <h4>{app.candidate === 'Ứng viên' ? (language === 'vi' ? 'Ứng viên' : 'Candidate') : app.candidate}</h4>
                       <p><DynamicTranslate text={app.job} showIndicator={false} /></p>
                     </CandidateInfo>
-                    <ViewProfileButton onClick={() => navigate('/employer/standard-jobs', { state: { candidateId: app.id, section: 'applications' } })}>
+                    <ViewProfileButton onClick={() => handleViewProfile(app)}>
                       <Eye />
                       {language === 'vi' ? 'Xem hồ sơ' : 'View Profile'}
                     </ViewProfileButton>
@@ -824,10 +897,6 @@ const EmployerDashboard = () => {
                     <span>
                       <Clock />
                       {app.applied}
-                    </span>
-                    <span>
-                      <Download />
-                      {language === 'vi' ? 'Tải CV' : 'Download CV'}
                     </span>
                   </ApplicationMeta>
                 </ApplicationCard>
@@ -909,66 +978,6 @@ const EmployerDashboard = () => {
           </Section>
         </ContentGrid>
 
-        {/* Performance Metrics */}
-        <Section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-        >
-          <SectionHeader>
-            <h2>
-              <BarChart3 />
-              {language === 'vi' ? 'Hiệu Suất Tuyển Dụng' : 'Recruitment Performance'}
-            </h2>
-          </SectionHeader>
-
-          <PerformanceGrid>
-            <PerformanceCard
-              $color="#1e40af"
-              whileHover={{ scale: 1.05 }}
-            >
-              <PerformanceIcon $color="#1e40af">
-                <Target />
-              </PerformanceIcon>
-              <PerformanceValue>{performanceMetrics.responseRate}</PerformanceValue>
-              <PerformanceLabel>{language === 'vi' ? 'Tỷ Lệ Phản Hồi' : 'Response Rate'}</PerformanceLabel>
-            </PerformanceCard>
-
-            <PerformanceCard
-              $color="#10B981"
-              whileHover={{ scale: 1.05 }}
-            >
-              <PerformanceIcon $color="#10B981">
-                <Award />
-              </PerformanceIcon>
-              <PerformanceValue>{performanceMetrics.companyRating}</PerformanceValue>
-              <PerformanceLabel>{language === 'vi' ? 'Đánh Giá Công Ty' : 'Company Rating'}</PerformanceLabel>
-            </PerformanceCard>
-
-            <PerformanceCard
-              $color="#F59E0B"
-              whileHover={{ scale: 1.05 }}
-            >
-              <PerformanceIcon $color="#F59E0B">
-                <Zap />
-              </PerformanceIcon>
-              <PerformanceValue>{performanceMetrics.avgHiringTime}</PerformanceValue>
-              <PerformanceLabel>{language === 'vi' ? 'Thời gian trung bình' : 'Avg Hiring Time'}</PerformanceLabel>
-            </PerformanceCard>
-
-            <PerformanceCard
-              $color="#1e40af"
-              whileHover={{ scale: 1.05 }}
-            >
-              <PerformanceIcon $color="#1e40af">
-                <TrendingUp />
-              </PerformanceIcon>
-              <PerformanceValue>{performanceMetrics.growth}</PerformanceValue>
-              <PerformanceLabel>{language === 'vi' ? 'Tăng Trưởng Tháng Này' : 'Growth This Month'}</PerformanceLabel>
-            </PerformanceCard>
-          </PerformanceGrid>
-        </Section>
-
         {/* Company Profile Setup Modal */}
         <CompanyProfileSetupModal
           isOpen={showProfileSetupModal}
@@ -976,6 +985,22 @@ const EmployerDashboard = () => {
           profileCompletion={profileCompletion}
         />
       </DashboardContainer>
+
+      {/* Full Profile Modal */}
+      <Modal
+        isOpen={!!previewCandidate}
+        onClose={() => { setPreviewCandidate(null); setPreviewLoading(false); }}
+        size="large"
+        noPadding
+      >
+        {previewCandidate && (
+          <ProfileDetailModal
+            candidate={previewCandidate}
+            onClose={() => { setPreviewCandidate(null); setPreviewLoading(false); }}
+            isLoading={previewLoading}
+          />
+        )}
+      </Modal>
     </DashboardLayout>
   );
 };

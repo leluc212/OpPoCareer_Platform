@@ -224,33 +224,56 @@ function ChangePassword() {
            passwordRequirements.hasSpecial;
   };
 
-  const handleSubmit = (e) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
-    // Validate password requirements
+
+    if (!passwordData.currentPassword) {
+      setError(language === 'vi' ? 'Vui lòng nhập mật khẩu hiện tại' : 'Please enter current password');
+      return;
+    }
     if (!isPasswordValid()) {
-      setError(language === 'vi' 
-        ? 'Mật khẩu mới không đáp ứng đủ yêu cầu!' 
-        : 'New password does not meet all requirements!');
+      setError(language === 'vi' ? 'Mật khẩu mới không đáp ứng đủ yêu cầu!' : 'New password does not meet all requirements!');
       return;
     }
-    
-    // Validate passwords match
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setError(language === 'vi' 
-        ? 'Mật khẩu xác nhận không khớp!' 
-        : 'Passwords do not match!');
+      setError(language === 'vi' ? 'Mật khẩu xác nhận không giống với mật khẩu mới!' : 'Confirm password does not match new password!');
       return;
     }
-    
-    // TODO: Call API to change password
-    console.log('Change password:', passwordData);
-    
-    setSuccess(true);
-    setTimeout(() => {
-      navigate('/candidate/settings');
-    }, 2000);
+    if (passwordData.currentPassword === passwordData.newPassword) {
+      setError(language === 'vi' ? 'Mật khẩu mới phải khác mật khẩu hiện tại!' : 'New password must be different from current password!');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { Auth } = await import('../../utils/amplifyClient');
+      await Auth.updatePassword({
+        oldPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword
+      });
+      setSuccess(true);
+      setTimeout(() => navigate('/candidate/settings'), 2000);
+    } catch (err) {
+      console.error('Change password error:', err);
+      let msg = '';
+      if (err.name === 'NotAuthorizedException' || err.message?.includes('Incorrect username or password')) {
+        msg = language === 'vi' ? 'Mật khẩu hiện tại không đúng!' : 'Current password is incorrect!';
+      } else if (err.name === 'LimitExceededException') {
+        msg = language === 'vi' ? 'Thử quá nhiều lần. Vui lòng thử lại sau.' : 'Too many attempts. Please try again later.';
+      } else if (err.name === 'InvalidPasswordException') {
+        msg = language === 'vi' ? 'Mật khẩu mới không hợp lệ. Vui lòng kiểm tra lại.' : 'New password is invalid.';
+      } else if (err.name === 'UserNotConfirmedException') {
+        msg = language === 'vi' ? 'Tài khoản chưa được xác thực.' : 'Account not confirmed.';
+      } else {
+        msg = err.message || (language === 'vi' ? 'Có lỗi xảy ra. Vui lòng thử lại.' : 'An error occurred. Please try again.');
+      }
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const togglePasswordVisibility = (field) => {
@@ -405,16 +428,18 @@ function ChangePassword() {
             </FormGroup>
 
             <ButtonGroup>
-              <Button type="submit" variant="primary" style={{ flex: 1 }}>
-                <Lock size={18} />
-                {language === 'vi' ? 'Cập nhật mật khẩu' : 'Update Password'}
-              </Button>
               <Button 
                 type="button"
                 onClick={() => navigate('/candidate/settings')}
                 style={{ flex: 1, background: '#6B7280' }}
               >
                 {language === 'vi' ? 'Hủy' : 'Cancel'}
+              </Button>
+              <Button type="submit" variant="primary" style={{ flex: 1 }} disabled={loading}>
+                <Lock size={18} />
+                {loading
+                  ? (language === 'vi' ? 'Đang cập nhật...' : 'Updating...')
+                  : (language === 'vi' ? 'Cập nhật mật khẩu' : 'Update Password')}
               </Button>
             </ButtonGroup>
           </form>

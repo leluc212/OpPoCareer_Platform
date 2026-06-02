@@ -1526,6 +1526,14 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
 
 ProfileDetailModal.displayName = 'ProfileDetailModal';
 
+export { ProfileDetailModal,
+  ProfileHeader, ProfileAvatarRow, ProfileAvatar, ProfileHeaderInfo, ProfileJobBadge, HeaderRatingBadge,
+  ProfileContent, ProfileInner, ProfileSection,
+  InfoGrid, InfoCard, InfoIconBox, InfoItem,
+  SkillsWrap, SkillTag, BioText,
+  CVCard, CVIconBox, CVInfo, CVDownloadButton, EmptyCV
+};
+
 // Application Card Component
 const ApplicationRow = React.memo(({
   app,

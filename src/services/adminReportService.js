@@ -239,6 +239,21 @@ class AdminReportService {
   calculatePackageStats(subscriptions) {
     if (!Array.isArray(subscriptions)) return [];
 
+    const cleanDuration = (raw) => {
+      if (!raw) return '7 ngày';
+      const str = String(raw);
+      // Detect by number in the raw string regardless of encoding
+      if (str.includes('24')) return '24h';
+      if (str.includes('7')) return '7 ngày';
+      // Try normalize
+      const cleaned = str
+        .normalize('NFC')
+        .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return cleaned || '7 ngày';
+    };
+
     // Map to store stats per unique package name
     const statsMap = {};
 
@@ -252,7 +267,7 @@ class AdminReportService {
           totalCount: 0,
           revenue: 0,
           price: s.price || 0,
-          duration: s.duration || '7 ngày',
+          duration: cleanDuration(s.duration),
           pendingCount: 0,
           expiredCount: 0
         };

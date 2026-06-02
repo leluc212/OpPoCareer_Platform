@@ -3,6 +3,8 @@ import styled, { keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
+import quickJobService from '../../services/quickJobService';
+import applicationService from '../../services/applicationService';
 import {
   ShieldCheck,
   Lock,
@@ -559,166 +561,6 @@ const EmptyState = styled.div`
   p { font-size: 13.5px; }
 `;
 
-const DEMO_ESCROW_JOBS = [
-  {
-    jobId: 1001,
-    jobTitle: 'Ph\u1EE5c v\u1EE5 b\u00E0n - Starbucks Nguy\u1EC5n Hu\u1EC7',
-    amount: 750000,
-    status: 'released',
-    employerConfirmed: true,
-    candidateConfirmed: true,
-    createdAt: '2026-03-01T08:30:00.000Z',
-    releasedAt: '2026-03-02T17:00:00.000Z',
-    totalHours: 8,
-    hourlyRate: 93750
-  },
-  {
-    jobId: 1002,
-    jobTitle: 'Pha ch\u1EBF ca t\u1ED1i - Highlands Coffee B\u00ECnh Th\u1EA1nh',
-    amount: 500000,
-    status: 'released',
-    employerConfirmed: true,
-    candidateConfirmed: true,
-    createdAt: '2026-03-02T06:00:00.000Z',
-    releasedAt: '2026-03-03T18:30:00.000Z',
-    totalHours: 6,
-    hourlyRate: 83333
-  },
-  {
-    jobId: 1003,
-    jobTitle: 'B\u1EBFp ch\u00EDnh ca tr\u01B0a - Pizza 4P\'s Th\u1EA3o \u0110i\u1EC1n',
-    amount: 1200000,
-    status: 'held',
-    employerConfirmed: true,
-    candidateConfirmed: false,
-    createdAt: '2026-03-05T07:00:00.000Z',
-    totalHours: 10,
-    hourlyRate: 120000
-  },
-  {
-    jobId: 1004,
-    jobTitle: 'Ph\u1EE5 b\u1EBFp g\u1EA5p - The Coffee House Qu\u1EADn 1',
-    amount: 350000,
-    status: 'held',
-    employerConfirmed: false,
-    candidateConfirmed: false,
-    createdAt: '2026-03-06T09:15:00.000Z',
-    totalHours: 5,
-    hourlyRate: 70000
-  },
-  {
-    jobId: 1005,
-    jobTitle: 'Ph\u1EE5c v\u1EE5 ti\u1EC7c bu\u1ED1i t\u1ED1i - Lotteria Landmark 81',
-    amount: 900000,
-    status: 'released',
-    employerConfirmed: true,
-    candidateConfirmed: true,
-    createdAt: '2026-03-03T10:00:00.000Z',
-    releasedAt: '2026-03-04T20:00:00.000Z',
-    totalHours: 9,
-    hourlyRate: 100000
-  },
-  {
-    jobId: 1006,
-    jobTitle: 'Thu ng\u00E2n ca \u0111\u00EAm - McDonald\'s Ph\u1EA1m V\u0103n \u0110\u1ED3ng',
-    amount: 640000,
-    status: 'held',
-    employerConfirmed: false,
-    candidateConfirmed: false,
-    createdAt: '2026-03-07T20:00:00.000Z',
-    totalHours: 8,
-    hourlyRate: 80000
-  },
-  {
-    jobId: 1007,
-    jobTitle: 'R\u1EEDa ch\u00E9n + d\u1ECDn b\u00E0n - KFC L\u00EA V\u0103n S\u1EF9',
-    amount: 480000,
-    status: 'refunded',
-    employerConfirmed: false,
-    candidateConfirmed: false,
-    createdAt: '2026-02-28T08:00:00.000Z',
-    totalHours: 6,
-    hourlyRate: 80000
-  },
-  {
-    jobId: 1008,
-    jobTitle: 'Giao h\u00E0ng \u0111\u1ED3 u\u1ED1ng - Phúc Long Vincom \u0110\u1ED3ng Kh\u1EDFi',
-    amount: 420000,
-    status: 'held',
-    employerConfirmed: true,
-    candidateConfirmed: true,
-    createdAt: '2026-03-07T10:00:00.000Z',
-    totalHours: 5,
-    hourlyRate: 84000
-  },
-  {
-    jobId: 1009,
-    jobTitle: 'Nh\u00E2n vi\u00EAn b\u1EBFp n\u00F3ng - Jollibee Nguy\u1EC5n Tr\u00E3i',
-    amount: 560000,
-    status: 'released',
-    employerConfirmed: true,
-    candidateConfirmed: true,
-    createdAt: '2026-02-27T07:00:00.000Z',
-    releasedAt: '2026-02-28T19:00:00.000Z',
-    totalHours: 7,
-    hourlyRate: 80000
-  },
-  {
-    jobId: 1010,
-    jobTitle: 'Ph\u1EE5c v\u1EE5 qu\u1EA7y bar - Gong Cha S\u00E0i G\u00F2n Centre',
-    amount: 380000,
-    status: 'held',
-    employerConfirmed: false,
-    candidateConfirmed: false,
-    createdAt: '2026-03-08T06:30:00.000Z',
-    totalHours: 5,
-    hourlyRate: 76000
-  }
-];
-
-const DEMO_ESCROW_TX = [
-  {
-    id: 2001,
-    jobId: 1001,
-    jobTitle: 'Ph\u1EE5c v\u1EE5 b\u00E0n - Starbucks Nguy\u1EC5n Hu\u1EC7',
-    totalAmount: 750000,
-    candidateAmount: 637500,
-    adminAmount: 112500,
-    date: '2026-03-02T17:00:00.000Z',
-    type: 'release'
-  },
-  {
-    id: 2002,
-    jobId: 1002,
-    jobTitle: 'Pha ch\u1EBF ca t\u1ED1i - Highlands Coffee B\u00ECnh Th\u1EA1nh',
-    totalAmount: 500000,
-    candidateAmount: 425000,
-    adminAmount: 75000,
-    date: '2026-03-03T18:30:00.000Z',
-    type: 'release'
-  },
-  {
-    id: 2003,
-    jobId: 1005,
-    jobTitle: 'Ph\u1EE5c v\u1EE5 ti\u1EC7c bu\u1ED1i t\u1ED1i - Lotteria Landmark 81',
-    totalAmount: 900000,
-    candidateAmount: 765000,
-    adminAmount: 135000,
-    date: '2026-03-04T20:00:00.000Z',
-    type: 'release'
-  },
-  {
-    id: 2004,
-    jobId: 1009,
-    jobTitle: 'Nh\u00E2n vi\u00EAn b\u1EBFp n\u00F3ng - Jollibee Nguy\u1EC5n Tr\u00E3i',
-    totalAmount: 560000,
-    candidateAmount: 476000,
-    adminAmount: 84000,
-    date: '2026-02-28T19:00:00.000Z',
-    type: 'release'
-  }
-];
-
 const AdminEscrow = () => {
   const { language } = useLanguage();
   const [escrowJobs, setEscrowJobs] = useState([]);
@@ -728,15 +570,148 @@ const AdminEscrow = () => {
   const [selectedJob, setSelectedJob] = useState(null);
 
   useEffect(() => {
+    // 1. Initial load from localStorage (instant rendering)
     const savedJobs = JSON.parse(localStorage.getItem('escrow_jobs') || '[]');
     const savedTx = JSON.parse(localStorage.getItem('escrow_transactions') || '[]');
-    // Merge demo data with any real data from localStorage
-    const realJobIds = new Set(savedJobs.map(j => j.jobId));
-    const mergedJobs = [...savedJobs, ...DEMO_ESCROW_JOBS.filter(d => !realJobIds.has(d.jobId))];
-    const realTxIds = new Set(savedTx.map(t => t.id));
-    const mergedTx = [...savedTx, ...DEMO_ESCROW_TX.filter(d => !realTxIds.has(d.id))];
-    setEscrowJobs(mergedJobs);
-    setEscrowTx(mergedTx);
+    setEscrowJobs(savedJobs);
+    setEscrowTx(savedTx);
+
+    // 2. Fetch live data from AWS DynamoDB database and update
+    const loadLiveData = async () => {
+      try {
+        const [realJobs, realApps] = await Promise.all([
+          quickJobService.getAllQuickJobs().catch(() => []),
+          applicationService.getAllApplications().catch(() => [])
+        ]);
+
+        if (realJobs.length > 0) {
+          // Map DynamoDB quick jobs to escrow structure
+          const dbEscrowJobs = realJobs.map(job => {
+            const jobId = job.jobID || job.idJob || job.id;
+            const jobApps = realApps.filter(app => String(app.jobId) === String(jobId));
+            
+            const completedApp = jobApps.find(app => app.status === 'completed');
+            const pendingCandidateApp = jobApps.find(app => app.status === 'completed_pending_candidate');
+            
+            const employerConfirmed = !!completedApp || !!pendingCandidateApp;
+            const candidateConfirmed = !!completedApp;
+            
+            let status = 'held';
+            if (job.status === 'deleted') {
+              status = 'refunded';
+            } else if (completedApp) {
+              status = 'released';
+            }
+
+            const totalHours = Number(job.totalHours || 0);
+            const hourlyRate = Number(job.hourlyRate || 0);
+            const amount = Number(job.totalSalary) || (hourlyRate * totalHours) || 0;
+
+            return {
+              jobId: jobId,
+              jobTitle: job.title || 'Untitled Job',
+              amount: amount,
+              status: status,
+              employerConfirmed,
+              candidateConfirmed,
+              createdAt: job.createdAt || new Date().toISOString(),
+              releasedAt: completedApp?.candidateConfirmedAt || completedApp?.updatedAt || null,
+              totalHours: totalHours,
+              hourlyRate: hourlyRate
+            };
+          }).filter(ej => ej.amount > 0);
+
+          // Map completed jobs to transaction list
+          const dbEscrowTx = [];
+          dbEscrowJobs.forEach((ej) => {
+            if (ej.status === 'released') {
+              const totalAmount = ej.amount;
+              const candidateAmount = Math.round(totalAmount * 0.85);
+              const adminAmount = totalAmount - candidateAmount;
+              
+              dbEscrowTx.push({
+                id: `db-tx-${ej.jobId}`,
+                jobId: ej.jobId,
+                jobTitle: ej.jobTitle,
+                totalAmount,
+                candidateAmount,
+                adminAmount,
+                date: ej.releasedAt || ej.createdAt || new Date().toISOString(),
+                type: 'release'
+              });
+            }
+          });
+
+          // Merge local storage + live database (avoiding duplicates, prioritizing database data)
+          const mergedJobsMap = new Map();
+          
+          // First add local storage jobs
+          savedJobs.forEach(job => {
+            if (job && job.jobId) {
+              mergedJobsMap.set(String(job.jobId), job);
+            }
+          });
+          
+          // Then add/overwrite with database jobs, which are ground truth
+          dbEscrowJobs.forEach(dbJob => {
+            if (dbJob && dbJob.jobId) {
+              const key = String(dbJob.jobId);
+              if (mergedJobsMap.has(key)) {
+                // If it already exists, merge fields; database values override local storage
+                const localJob = mergedJobsMap.get(key);
+                mergedJobsMap.set(key, {
+                  ...localJob,
+                  ...dbJob,
+                  // Ensure if either version says 'released' (database taking precedence), status resolves to it
+                  status: dbJob.status !== 'held' ? dbJob.status : (localJob.status !== 'held' ? localJob.status : 'held')
+                });
+              } else {
+                mergedJobsMap.set(key, dbJob);
+              }
+            }
+          });
+          
+          const finalJobs = Array.from(mergedJobsMap.values());
+
+          // Merge transaction lists (avoiding duplicates, prioritizing database transactions)
+          const mergedTxMap = new Map();
+          
+          savedTx.forEach(tx => {
+            if (tx && (tx.jobId || tx.id)) {
+              mergedTxMap.set(String(tx.jobId || tx.id), tx);
+            }
+          });
+          
+          dbEscrowTx.forEach(dbTx => {
+            if (dbTx && (dbTx.jobId || dbTx.id)) {
+              const key = String(dbTx.jobId || dbTx.id);
+              if (mergedTxMap.has(key)) {
+                const localTx = mergedTxMap.get(key);
+                mergedTxMap.set(key, {
+                  ...localTx,
+                  ...dbTx
+                });
+              } else {
+                mergedTxMap.set(key, dbTx);
+              }
+            }
+          });
+          
+          const finalTx = Array.from(mergedTxMap.values());
+
+          // Sort chronologically (newest first)
+          finalJobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          finalTx.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+          setEscrowJobs(finalJobs);
+          setEscrowTx(finalTx);
+        }
+      } catch (err) {
+        console.error("❌ Error fetching live escrow data from database:", err);
+      }
+    };
+
+    loadLiveData();
   }, []);
 
   const totalHeld = escrowJobs

@@ -4,6 +4,10 @@ import { motion } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button, Input } from '../../components/FormElements';
+import adminReportService from '../../services/adminReportService';
+import quickJobService from '../../services/quickJobService';
+import applicationService from '../../services/applicationService';
+import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import {
   Wallet as WalletIcon,
   TrendingUp,
@@ -91,7 +95,7 @@ const BalanceCard = styled(motion.div)`
     display: flex;
     justify-content: space-between;
     align-items: start;
-    margin-bottom: 32px;
+    margin-bottom: 0;
     position: relative;
     z-index: 1;
 
@@ -504,6 +508,11 @@ const TransactionItem = styled(motion.div)`
         display: flex;
         align-items: center;
         gap: 6px;
+
+        svg {
+          width: 14px;
+          height: 14px;
+        }
       }
     }
   }
@@ -511,10 +520,9 @@ const TransactionItem = styled(motion.div)`
   .transaction-amount {
     text-align: right;
     flex-shrink: 0;
-    margin-left: 16px;
 
     .amount {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 800;
       color: ${props => props.$type === 'income' ? props.theme.colors.success : props.theme.colors.error};
       margin-bottom: 6px;
@@ -615,159 +623,188 @@ const ReceiptCard = styled(motion.div)`
 
 const AdminWallet = () => {
   const { language } = useLanguage();
-  const [balance, setBalance] = useState(2458750000);
+  const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [showBalance, setShowBalance] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
-
-  useEffect(() => {
-    const savedWallet = localStorage.getItem('admin_wallet');
-    const defaultTx = [
-      {
-        id: 1,
-        type: 'income',
-        title: language === 'vi' ? 'Thanh toán gói Premium - Bamos chi nhánh Thủ Đức' : 'Premium package - Bamos Thu Duc Branch',
-        meta: language === 'vi' ? 'Chuyển khoản' : 'Bank transfer',
-        amount: 5000000,
-        date: '15/02/2026',
-        time: '14:30',
-        status: 'completed'
-      },
-      {
-        id: 2,
-        type: 'expense',
-        title: language === 'vi' ? 'Hoàn tiền cho ứng viên Nguyễn Thị Mỹ Chi' : 'Refund to candidate Nguyen Thi My Chi',
-        meta: language === 'vi' ? 'Ví điện tử' : 'E-wallet',
-        amount: 500000,
-        date: '14/02/2026',
-        time: '10:15',
-        status: 'completed'
-      },
-      {
-        id: 3,
-        type: 'income',
-        title: language === 'vi' ? 'Phí dịch vụ quảng cáo - Highlands quận 9' : 'Ad service fee - Highlands Q9',
-        meta: 'PayPal',
-        amount: 2500000,
-        date: '14/02/2026',
-        time: '09:00',
-        status: 'completed'
-      },
-      {
-        id: 4,
-        type: 'income',
-        title: language === 'vi' ? 'Thanh toán gói Basic - Katinat quận 8' : 'Basic package - Katinat Q8',
-        meta: language === 'vi' ? 'Chuyển khoản' : 'Bank transfer',
-        amount: 1500000,
-        date: '13/02/2026',
-        time: '16:45',
-        status: 'pending'
-      },
-      {
-        id: 5,
-        type: 'expense',
-        title: language === 'vi' ? 'Chi phí vận hành hệ thống' : 'System operation cost',
-        meta: language === 'vi' ? 'Chuyển khoản' : 'Bank transfer',
-        amount: 10000000,
-        date: '13/02/2026',
-        time: '08:00',
-        status: 'completed'
-      },
-      {
-        id: 6,
-        type: 'income',
-        title: language === 'vi' ? 'Phí đăng tin - Nhiều nhà tuyển dụng' : 'Job posting fee - Multiple employers',
-        meta: language === 'vi' ? 'Ví điện tử' : 'E-wallet',
-        amount: 8500000,
-        date: '12/02/2026',
-        time: '15:20',
-        status: 'completed'
-      },
-      {
-        id: 7,
-        type: 'expense',
-        title: language === 'vi' ? 'Hoàn tiền do lỗi hệ thống' : 'Refund due to system error',
-        meta: language === 'vi' ? 'Chuyển khoản' : 'Bank transfer',
-        amount: 1200000,
-        date: '12/02/2026',
-        time: '11:30',
-        status: 'failed'
-      },
-      {
-        id: 8,
-        type: 'income',
-        title: language === 'vi' ? 'Gia hiện gói Premium - Công ty GHI' : 'Premium renewal - GHI Company',
-        meta: 'PayPal',
-        amount: 5000000,
-        date: '11/02/2026',
-        time: '13:00',
-        status: 'completed'
-      }
-    ];
-
-    if (savedWallet) {
-      try {
-        const parsed = JSON.parse(savedWallet);
-        setBalance(parsed.balance !== undefined ? parsed.balance : 2458750000);
-        setTransactions(parsed.transactions || defaultTx);
-      } catch (e) {
-        setTransactions(defaultTx);
-      }
-    } else {
-      localStorage.setItem('admin_wallet', JSON.stringify({
-        balance: 2458750000,
-        transactions: defaultTx
-      }));
-      setTransactions(defaultTx);
-    }
-  }, [language]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalIncome, setTotalIncome] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [netProfit, setNetProfit] = useState(0);
+  const [transactionCount, setTransactionCount] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState('');
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('vi-VN').format(amount) + ' VND';
   };
 
+  const loadWalletData = async () => {
+    try {
+      setIsLoading(true);
+      
+      const [subscriptions, realJobs, apps] = await Promise.all([
+        adminReportService.getAllSubscriptions().catch(() => []),
+        quickJobService.getAllQuickJobs().catch(() => []),
+        applicationService.getAllApplications().catch(() => [])
+      ]);
+
+      // 1. Process Subscription Purchases as Income Transactions
+      const subscriptionTransactions = subscriptions
+        .filter(item => item.status === 'active' || item.status === 'expired' || item.status === 'expiring' || item.status === 'locked' || item.approvalStatus === 'approved' || item.status === 'pending' || item.approvalStatus === 'pending')
+        .map(item => {
+          const priceVal = typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0;
+          const isPending = item.status === 'pending' || item.approvalStatus === 'pending';
+          
+          return {
+            id: `sub-${item.subscriptionId || item.id || Math.random()}`,
+            type: 'income',
+            title: language === 'vi'
+              ? `Thanh toán gói ${item.packageName || item.package} - ${item.companyName || item.employer}`
+              : `Package payment ${item.packageName || item.package} - ${item.companyName || item.employer}`,
+            meta: language === 'vi' ? 'Gói dịch vụ' : 'Package subscription',
+            amount: priceVal,
+            date: item.purchaseDate || (item.purchaseDateTime ? new Date(item.purchaseDateTime).toLocaleDateString('vi-VN') : ''),
+            time: item.purchaseDateTime ? new Date(item.purchaseDateTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '00:00',
+            status: isPending ? 'pending' : 'completed',
+            rawDate: item.purchaseDateTime || item.purchaseDate || item.createdAt || new Date().toISOString()
+          };
+        });
+
+      // 2. Process Escrow Commission (15%) from Completed Applications of Quick Jobs as Income Transactions
+      const completedApps = apps.filter(app => app.status === 'completed');
+      const commissionTransactions = completedApps
+        .map(app => {
+          const job = realJobs.find(j => String(j.idJob || j.id || j.jobID) === String(app.jobId));
+          const totalAmount = job ? (Number(job.totalSalary) || (Number(job.hourlyRate || 0) * Number(job.totalHours || 0)) || 0) : 0;
+          const candidateAmount = Math.round(totalAmount * 0.85);
+          const adminCommission = totalAmount - candidateAmount;
+
+          if (adminCommission <= 0) return null;
+
+          return {
+            id: `escrow-${app.applicationId || app.id}`,
+            type: 'income',
+            title: language === 'vi'
+              ? `Hoa hồng dịch vụ (15%) - ${job?.title || 'Công việc tuyển gấp'}`
+              : `Service commission (15%) - ${job?.title || 'Urgent job'}`,
+            meta: language === 'vi' ? 'Ví Escrow' : 'Escrow Wallet',
+            amount: adminCommission,
+            date: new Date(app.candidateConfirmedAt || app.updatedAt || app.createdAt || Date.now()).toLocaleDateString('vi-VN'),
+            time: new Date(app.candidateConfirmedAt || app.updatedAt || app.createdAt || Date.now()).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+            status: 'completed',
+            rawDate: app.candidateConfirmedAt || app.updatedAt || app.createdAt || new Date().toISOString()
+          };
+        })
+        .filter(Boolean);
+
+      // 3. Process Approved Withdrawal Requests from Candidate E-wallet as Expense Transactions
+      const adminRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
+      const withdrawalTransactions = adminRequests.map(w => {
+        const isApproved = w.status === 'approved';
+        const isRejected = w.status === 'rejected';
+        
+        return {
+          id: `withdraw-${w.id}`,
+          type: 'expense',
+          title: language === 'vi'
+            ? `Giải ngân cho ${w.companyName || 'Ứng viên'}`
+            : `Payout to ${w.companyName || 'Candidate'}`,
+          meta: language === 'vi' ? 'Chuyển khoản ngân hàng' : 'Bank transfer',
+          amount: parseFloat(w.amount || 0),
+          date: w.date ? new Date(w.date).toLocaleDateString('vi-VN') : '',
+          time: w.date ? new Date(w.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '00:00',
+          status: isApproved ? 'completed' : (isRejected ? 'failed' : 'pending'),
+          rawDate: w.date || new Date().toISOString(),
+          rawStatus: w.status
+        };
+      });
+
+      // Merge and sort all transactions by rawDate descending
+      const allTx = [...subscriptionTransactions, ...commissionTransactions, ...withdrawalTransactions];
+      allTx.sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate));
+
+      setTransactions(allTx);
+
+      // Summarize metrics
+      // Total Income is from completed subscriptions + completed commissions
+      const sumIncome = subscriptionTransactions
+        .filter(tx => tx.status === 'completed')
+        .reduce((sum, tx) => sum + tx.amount, 0) + 
+        commissionTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+      // Total Expenses is from approved withdraw requests
+      const sumExpenses = withdrawalTransactions
+        .filter(tx => tx.rawStatus === 'approved')
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+      const netPlatformBalance = sumIncome - sumExpenses;
+
+      setBalance(netPlatformBalance);
+      setTotalIncome(sumIncome);
+      setTotalExpenses(sumExpenses);
+      setNetProfit(sumIncome - sumExpenses);
+      setTransactionCount(allTx.length);
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      setLastUpdated(language === 'vi' ? `Hôm nay, ${timeStr}` : `Today, ${timeStr}`);
+    } catch (err) {
+      console.error('Error loading admin wallet data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWalletData();
+  }, [language]);
+
   const stats = [
     {
-      label: language === 'vi' ? 'Tổng Thu Nhập (Tháng này)' : 'Total Income (This Month)',
-      value: '325,500,000 VND',
+      label: language === 'vi' ? 'Tổng Thu Nhập' : 'Total Income',
+      value: formatCurrency(totalIncome),
       icon: TrendingUp,
       color: 'success',
-      change: '+18.5%',
+      change: language === 'vi' ? 'Tích lũy' : 'Cumulative',
       positive: true
     },
     {
-      label: language === 'vi' ? 'Tổng Chi Phí (Tháng này)' : 'Total Expenses (This Month)',
-      value: '187,250,000 VND',
+      label: language === 'vi' ? 'Tổng Chi Phí' : 'Total Expenses',
+      value: formatCurrency(totalExpenses),
       icon: TrendingDown,
       color: 'error',
-      change: '+5.2%',
+      change: language === 'vi' ? 'Giải ngân' : 'Payouts',
       positive: false
     },
     {
       label: language === 'vi' ? 'Lợi Nhuận Ròng' : 'Net Profit',
-      value: '138,250,000 VND',
+      value: formatCurrency(netProfit),
       icon: DollarSign,
       color: 'primary',
-      change: '+32.1%',
+      change: language === 'vi' ? 'Số dư khả dụng' : 'Available balance',
       positive: true
     },
     {
       label: language === 'vi' ? 'Số Giao Dịch' : 'Transactions',
-      value: '8',
+      value: String(transactionCount),
       icon: BarChart3,
       color: 'warning',
-      change: '+3',
+      change: language === 'vi' ? 'Tổng giao dịch' : 'Total transactions',
       positive: true
     }
   ];
 
-  const receipts = [
-    { id: 1, title: language === 'vi' ? 'H\u00f3a \u0111\u01a1n #INV-2026-001' : 'Invoice #INV-2026-001', date: '15/02/2026', amount: '5,000,000 VND' },
-    { id: 2, title: language === 'vi' ? 'H\u00f3a \u0111\u01a1n #INV-2026-002' : 'Invoice #INV-2026-002', date: '14/02/2026', amount: '2,500,000 VND' },
-    { id: 3, title: language === 'vi' ? 'H\u00f3a \u0111\u01a1n #INV-2026-003' : 'Invoice #INV-2026-003', date: '13/02/2026', amount: '1,500,000 VND' },
-    { id: 4, title: language === 'vi' ? 'H\u00f3a \u0111\u01a1n #INV-2026-004' : 'Invoice #INV-2026-004', date: '12/02/2026', amount: '8,500,000 VND' }
-  ];
+  // Derive Dynamic Receipts (Invoices) from successful subscription transactions
+  const receipts = transactions
+    .filter(tx => tx.id.startsWith('sub-') && tx.status === 'completed')
+    .slice(0, 4)
+    .map(tx => ({
+      id: tx.id,
+      title: language === 'vi' ? `Hóa đơn #INV-${tx.id.substring(4, 12)}` : `Invoice #INV-${tx.id.substring(4, 12)}`,
+      date: tx.date,
+      amount: formatCurrency(tx.amount)
+    }));
 
   const filtered = filterType === 'all'
     ? transactions
@@ -775,9 +812,9 @@ const AdminWallet = () => {
 
   const statusLabel = (status) => {
     const map = {
-      completed: language === 'vi' ? 'Ho\u00e0n th\u00e0nh' : 'Completed',
-      pending:   language === 'vi' ? '\u0110ang x\u1eed l\u00fd' : 'Pending',
-      failed:    language === 'vi' ? 'Th\u1ea5t b\u1ea1i' : 'Failed'
+      completed: language === 'vi' ? 'Hoàn thành' : 'Completed',
+      pending:   language === 'vi' ? 'Đang xử lý' : 'Pending',
+      failed:    language === 'vi' ? 'Thất bại' : 'Failed'
     };
     return map[status] || status;
   };
@@ -785,259 +822,265 @@ const AdminWallet = () => {
   return (
     <DashboardLayout role="admin" key={language}>
       <WalletContainer>
-
-        <Header>
-          <h1>
-            <WalletIcon />
-            {language === 'vi' ? 'V\u00ed \u0110i\u1ec7n T\u1eed N\u1ec1n T\u1ea3ng' : 'Platform E-Wallet'}
-          </h1>
-          <div className="header-actions">
-            <Button
-              $variant="secondary"
-              $size="small"
-              onClick={() => setIsDevModalOpen(true)}
-            >
-              <Settings style={{ width: '18px', height: '18px' }} />
-              {language === 'vi' ? 'C\u00e0i \u0110\u1eb7t Thanh To\u00e1n' : 'Payment Settings'}
-            </Button>
-            <Button
-              $variant="primary"
-              $size="small"
-              onClick={() => setIsDevModalOpen(true)}
-            >
-              <Download style={{ width: '18px', height: '18px' }} />
-              {language === 'vi' ? 'Xu\u1ea5t B\u00e1o C\u00e1o' : 'Export Report'}
-            </Button>
+        {isLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', border: '4px solid #1e40af', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+            <p style={{ color: '#6B7280', fontSize: '15px', fontWeight: '500' }}>
+              {language === 'vi' ? 'Đang tải dữ liệu ví...' : 'Loading wallet data...'}
+            </p>
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
-        </Header>
-
-        <BalanceCard
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="balance-header">
-            <div className="balance-info">
-              <div className="label">
-                {language === 'vi' ? 'T\u1ed5ng S\u1ed1 D\u01b0 N\u1ec1n T\u1ea3ng' : 'Total Platform Balance'}
-              </div>
-              <div className="amount-wrapper">
-                <div className="amount">
-                  {showBalance ? formatCurrency(balance) : '••••••••••••'}
-                </div>
-                <button
-                  className="toggle-balance"
-                  onClick={() => setShowBalance(!showBalance)}
+        ) : (
+          <>
+            <Header>
+              <h1>
+                <WalletIcon />
+                {language === 'vi' ? 'Ví Điện Tử Nền Tảng' : 'Platform E-Wallet'}
+              </h1>
+              <div className="header-actions">
+                <Button
+                  $variant="primary"
+                  $size="small"
+                  onClick={() => setIsDevModalOpen(true)}
                 >
-                  {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
-                </button>
+                  <Download style={{ width: '18px', height: '18px' }} />
+                  {language === 'vi' ? 'Xuất Báo Cáo' : 'Export Report'}
+                </Button>
               </div>
-              <div className="last-updated">
-                <Clock />
-                {language === 'vi' ? 'C\u1eadp nh\u1eadt l\u1ea7n cu\u1ed1i: H\u00f4m nay, 14:30' : 'Last updated: Today, 14:30'}
-              </div>
-            </div>
-            <WalletIcon className="wallet-icon" />
-          </div>
+            </Header>
 
-          <div className="balance-actions">
-            <ActionButton
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsDevModalOpen(true)}
+            <BalanceCard
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
             >
-              <ArrowUpRight />
-              {language === 'vi' ? 'R\u00fat Ti\u1ec1n' : 'Withdraw'}
-            </ActionButton>
-            <ActionButton
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsDevModalOpen(true)}
-            >
-              <CreditCard />
-              {language === 'vi' ? 'C\u00e0i \u0110\u1eb7t Thanh To\u00e1n' : 'Payment Config'}
-            </ActionButton>
-          </div>
-        </BalanceCard>
-
-        <StatsGrid>
-          {stats.map((stat, index) => (
-            <StatCard
-              key={index}
-              $color={stat.color}
-              $positive={stat.positive}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <div className="stat-left">
-                <div className="icon">
-                  <stat.icon />
-                </div>
-                <div className="stat-info">
-                  <div className="stat-label">{stat.label}</div>
-                  <div className="stat-value">{stat.value}</div>
-                </div>
-              </div>
-              <div className="stat-right">
-                <div className="stat-change">
-                  {stat.positive ? <TrendingUp /> : <TrendingDown />}
-                  {stat.change}
-                </div>
-              </div>
-            </StatCard>
-          ))}
-        </StatsGrid>
-
-        <ContentSection>
-          <div>
-            <Card
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <div className="card-header">
-                <h2>
-                  <Calendar />
-                  {language === 'vi' ? 'L\u1ecbch S\u1eed Giao D\u1ecbch' : 'Transaction History'}
-                </h2>
-                <div className="header-action">
-                  <Button
-                    $variant="secondary"
-                    $size="small"
-                    onClick={() => setIsDevModalOpen(true)}
-                  >
-                    <Download style={{ width: '16px', height: '16px' }} />
-                    {language === 'vi' ? 'Xu\u1ea5t Excel' : 'Export Excel'}
-                  </Button>
-                </div>
-              </div>
-
-              <FilterBar>
-                <div className="filter-group">
-                  <FilterButton
-                    $active={filterType === 'all'}
-                    onClick={() => setFilterType('all')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {language === 'vi' ? 'T\u1ea5t C\u1ea3' : 'All'}
-                  </FilterButton>
-                  <FilterButton
-                    $active={filterType === 'income'}
-                    onClick={() => setFilterType('income')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {language === 'vi' ? 'Thu Nh\u1eadp' : 'Income'}
-                  </FilterButton>
-                  <FilterButton
-                    $active={filterType === 'expense'}
-                    onClick={() => setFilterType('expense')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {language === 'vi' ? 'Chi Ph\u00ed' : 'Expense'}
-                  </FilterButton>
-                </div>
-                <Input
-                  type="date"
-                  style={{ width: 'auto', padding: '10px 16px' }}
-                />
-              </FilterBar>
-
-              <TransactionList>
-                {filtered.map((tx, index) => (
-                  <TransactionItem
-                    key={tx.id}
-                    $type={tx.type}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                  >
-                    <div className="transaction-info">
-                      <div className="icon">
-                        {tx.type === 'income'
-                          ? <ArrowDownLeft />
-                          : <ArrowUpRight />}
-                      </div>
-                      <div className="details">
-                        <h4>{tx.title}</h4>
-                        <p>
-                          <CreditCard style={{ width: '14px', height: '14px' }} />
-                          {tx.meta}
-                          {' \u2022 '}
-                          <Clock style={{ width: '14px', height: '14px' }} />
-                          {tx.date} {tx.time}
-                        </p>
-                      </div>
+              <div className="balance-header" style={{ marginBottom: 0 }}>
+                <div className="balance-info">
+                  <div className="label">
+                    {language === 'vi' ? 'Tổng Số Dư Nền Tảng' : 'Total Platform Balance'}
+                  </div>
+                  <div className="amount-wrapper">
+                    <div className="amount">
+                      {showBalance ? formatCurrency(balance) : '••••••••••••'}
                     </div>
-                    <div className="transaction-amount">
-                      <div className="amount">
-                        {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
-                      </div>
-                      <StatusBadge $status={tx.status}>
-                        {statusLabel(tx.status)}
-                      </StatusBadge>
-                    </div>
-                  </TransactionItem>
-                ))}
-              </TransactionList>
-            </Card>
-          </div>
-
-          <div>
-            <Card
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <div className="card-header">
-                <h2>
-                  <Receipt />
-                  {language === 'vi' ? 'H\u00f3a \u0110\u01a1n N\u1ec1n T\u1ea3ng' : 'Platform Invoices'}
-                </h2>
+                    <button
+                      className="toggle-balance"
+                      onClick={() => setShowBalance(!showBalance)}
+                    >
+                      {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
+                    </button>
+                  </div>
+                  <div className="last-updated">
+                    <Clock />
+                    {language === 'vi' ? `Cập nhật lần cuối: ${lastUpdated}` : `Last updated: ${lastUpdated}`}
+                  </div>
+                </div>
+                <WalletIcon className="wallet-icon" />
               </div>
+            </BalanceCard>
 
-              {receipts.map((receipt, index) => (
-                <ReceiptCard
-                  key={receipt.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 + index * 0.05 }}
-                  whileHover={{ scale: 1.02 }}
+            <StatsGrid>
+              {stats.map((stat, index) => (
+                <StatCard
+                  key={index}
+                  $color={stat.color}
+                  $positive={stat.positive}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
                 >
-                  <div className="receipt-header">
-                    <h4>
-                      <FileText />
-                      {receipt.title}
-                    </h4>
-                    <Download
-                      className="download-btn"
-                      style={{ width: '18px', height: '18px' }}
-                      onClick={() => setIsDevModalOpen(true)}
-                    />
+                  <div className="stat-left">
+                    <div className="icon">
+                      <stat.icon />
+                    </div>
+                    <div className="stat-info">
+                      <div className="stat-label">{stat.label}</div>
+                      <div className="stat-value">{stat.value}</div>
+                    </div>
                   </div>
-                  <div className="receipt-info">
-                    <span>{receipt.date}</span>
-                    <span className="amount">{receipt.amount}</span>
+                  <div className="stat-right">
+                    <div className="stat-change">
+                      {stat.positive ? <TrendingUp /> : <TrendingDown />}
+                      {stat.change}
+                    </div>
                   </div>
-                </ReceiptCard>
+                </StatCard>
               ))}
+            </StatsGrid>
 
-              <Button
-                $variant="ghost"
-                $fullWidth
-                style={{ marginTop: '16px' }}
-                onClick={() => setIsDevModalOpen(true)}
-              >
-                {language === 'vi' ? 'Xem T\u1ea5t C\u1ea3 H\u00f3a \u0110\u01a1n' : 'View All Invoices'}
-              </Button>
-            </Card>
-          </div>
+            <ContentSection>
+              <div>
+                <Card
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <div className="card-header">
+                    <h2>
+                      <Calendar />
+                      {language === 'vi' ? 'Lịch Sử Giao Dịch' : 'Transaction History'}
+                    </h2>
+                    <div className="header-action">
+                      <Button
+                        $variant="secondary"
+                        $size="small"
+                        onClick={() => setIsDevModalOpen(true)}
+                      >
+                        <Download style={{ width: '16px', height: '16px' }} />
+                        {language === 'vi' ? 'Xuất Excel' : 'Export Excel'}
+                      </Button>
+                    </div>
+                  </div>
 
-        </ContentSection>
+                  <FilterBar>
+                    <div className="filter-group">
+                      <FilterButton
+                        $active={filterType === 'all'}
+                        onClick={() => setFilterType('all')}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {language === 'vi' ? 'Tất Cả' : 'All'}
+                      </FilterButton>
+                      <FilterButton
+                        $active={filterType === 'income'}
+                        onClick={() => setFilterType('income')}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {language === 'vi' ? 'Thu Nhập' : 'Income'}
+                      </FilterButton>
+                      <FilterButton
+                        $active={filterType === 'expense'}
+                        onClick={() => setFilterType('expense')}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {language === 'vi' ? 'Chi Phí' : 'Expense'}
+                      </FilterButton>
+                    </div>
+                    <Input
+                      type="date"
+                      style={{ width: 'auto', padding: '10px 16px' }}
+                    />
+                  </FilterBar>
+
+                  <TransactionList>
+                    {filtered.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 0', color: '#6B7280' }}>
+                        {language === 'vi' ? 'Không tìm thấy giao dịch nào' : 'No transactions found'}
+                      </div>
+                    ) : (
+                      filtered.map((tx, index) => (
+                        <TransactionItem
+                          key={tx.id}
+                          $type={tx.type}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                        >
+                          <div className="transaction-info">
+                            <div className="icon">
+                              {tx.type === 'income'
+                                ? <ArrowDownLeft />
+                                : <ArrowUpRight />}
+                            </div>
+                            <div className="details">
+                              <h4>{tx.title}</h4>
+                              <p>
+                                <CreditCard style={{ width: '14px', height: '14px' }} />
+                                {tx.meta}
+                                {' • '}
+                                <Clock style={{ width: '14px', height: '14px' }} />
+                                {tx.date} {tx.time}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="transaction-amount">
+                            <div className="amount">
+                              {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                            </div>
+                            <StatusBadge $status={tx.status}>
+                              {statusLabel(tx.status)}
+                            </StatusBadge>
+                          </div>
+                        </TransactionItem>
+                      ))
+                    )}
+                  </TransactionList>
+                </Card>
+              </div>
+
+              <div>
+                <Card
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  <div className="card-header">
+                    <h2>
+                      <Receipt />
+                      {language === 'vi' ? 'Hóa Đơn Nền Tảng' : 'Platform Invoices'}
+                    </h2>
+                  </div>
+
+                  {receipts.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#6B7280' }}>
+                      {language === 'vi' ? 'Chưa có hóa đơn nào' : 'No invoices yet'}
+                    </div>
+                  ) : (
+                    receipts.map((receipt, index) => (
+                      <ReceiptCard
+                        key={receipt.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 + index * 0.05 }}
+                        whileHover={{ scale: 1.02 }}
+                      >
+                        <div className="receipt-header">
+                          <h4>
+                            <FileText />
+                            {receipt.title}
+                          </h4>
+                          <Download
+                            className="download-btn"
+                            style={{ width: '18px', height: '18px' }}
+                            onClick={() => setIsDevModalOpen(true)}
+                          />
+                        </div>
+                        <div className="receipt-info">
+                          <span>{receipt.date}</span>
+                          <span className="amount">{receipt.amount}</span>
+                        </div>
+                      </ReceiptCard>
+                    ))
+                  )}
+
+                  {receipts.length > 0 && (
+                    <Button
+                      $variant="ghost"
+                      $fullWidth
+                      style={{ marginTop: '16px' }}
+                      onClick={() => setIsDevModalOpen(true)}
+                    >
+                      {language === 'vi' ? 'Xem Tất Cả Hóa Đơn' : 'View All Invoices'}
+                    </Button>
+                  )}
+                </Card>
+              </div>
+            </ContentSection>
+          </>
+        )}
       </WalletContainer>
+
+      <UnderDevelopmentModal
+        isOpen={isDevModalOpen}
+        onClose={() => setIsDevModalOpen(false)}
+      />
     </DashboardLayout>
   );
 };

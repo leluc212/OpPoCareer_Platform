@@ -20,9 +20,13 @@ import {
   FileText,
   Plus,
   Eye,
-  EyeOff
+  EyeOff,
+  CheckCircle
 } from 'lucide-react';
 import { Button, Input, FormGroup, Label } from '../../components/FormElements';
+import quickJobService from '../../services/quickJobService';
+import applicationService from '../../services/applicationService';
+import candidateProfileService from '../../services/candidateProfileService';
 
 const WalletContainer = styled.div`
   max-width: 1400px;
@@ -630,108 +634,274 @@ const EmptyState = styled.div`
   }
 `;
 
+const ModalOverlay = styled(motion.div)`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+`;
+
+const ModalContent = styled(motion.div)`
+  background: ${props => props.theme.colors.bgLight};
+  border-radius: ${props => props.theme.borderRadius.xl};
+  max-width: 500px;
+  width: 100%;
+  padding: 32px;
+  box-shadow: ${props => props.theme.shadows.lg};
+  border: 2px solid ${props => props.theme.colors.border};
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  
+  h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: ${props => props.theme.colors.text};
+  }
+  
+  button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: ${props => props.theme.colors.textLight};
+    &:hover { color: ${props => props.theme.colors.text}; }
+  }
+`;
+
+const ModalBody = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const Select = styled.select`
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: ${props => props.theme.borderRadius.md};
+  border: 2px solid ${props => props.theme.colors.border};
+  background: ${props => props.theme.colors.bgLight};
+  color: ${props => props.theme.colors.text};
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  
+  &:focus {
+    border-color: ${props => props.theme.colors.primary};
+    outline: none;
+  }
+`;
+
+const ErrorMsg = styled.p`
+  color: ${props => props.theme.colors.error};
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
+`;
+
 const Wallet = () => {
   const { language } = useLanguage();
-  const [balance, setBalance] = useState(15750000);
+  const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [showBalance, setShowBalance] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [candidateProfile, setCandidateProfile] = useState(null);
+
+  // Stats states
+  const [totalIncome, setTotalIncome] = useState(0);
+  const [totalWithdrawn, setTotalWithdrawn] = useState(0);
+  const [transactionCount, setTransactionCount] = useState(0);
+
+  // Withdraw Modal States
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawBankName, setWithdrawBankName] = useState('');
+  const [withdrawAccountNumber, setWithdrawAccountNumber] = useState('');
+  const [withdrawAccountName, setWithdrawAccountName] = useState('');
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+
+  const loadWalletData = async () => {
+    try {
+      setIsLoading(true);
+      
+      const [profile, apps, realJobs] = await Promise.all([
+        candidateProfileService.getMyProfile().catch(() => null),
+        applicationService.getMyCandidateApplications().catch(() => []),
+        quickJobService.getAllQuickJobs().catch(() => [])
+      ]);
+      
+      setCandidateProfile(profile);
+      
+      // Calculate dynamic income transactions from completed applications in database
+      const incomeTransactions = apps
+        .filter(app => app.status === 'completed')
+        .map(app => {
+          const job = realJobs.find(j => String(j.idJob || j.id || j.jobID) === String(app.jobId));
+          const totalAmount = job ? (Number(job.totalSalary) || (Number(job.hourlyRate || 0) * Number(job.totalHours || 0)) || 0) : 0;
+          const candidateAmount = Math.round(totalAmount * 0.85);
+          const companyName = job?.companyName || job?.employerName || 'Nhà tuyển dụng';
+          const jobTitle = job?.title || 'Công việc tuyển gấp';
+          
+          return {
+            id: `income-${app.applicationId || app.id}`,
+            type: 'income',
+            title: language === 'vi' ? `Nhận tiền từ ${companyName}` : `Payment from ${companyName}`,
+            description: language === 'vi' ? `Thanh toán cho công việc tuyển gấp: ${jobTitle}` : `Payment for urgent job: ${jobTitle}`,
+            amount: candidateAmount,
+            date: app.candidateConfirmedAt || app.updatedAt || app.createdAt || new Date().toISOString()
+          };
+        })
+        .filter(t => t.amount > 0);
+
+      // Get withdrawal transactions from database candidate profile and sync status with admin requests
+      const adminRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
+      const savedWithdrawals = profile?.withdrawals || [];
+      const withdrawalTransactions = savedWithdrawals.map(w => {
+        const adminReq = adminRequests.find(r => String(r.id) === String(w.id));
+        const currentStatus = adminReq ? adminReq.status : (w.status || 'pending');
+        
+        return {
+          id: w.id || `withdraw-${w.date}`,
+          type: 'expense',
+          title: w.title || (language === 'vi' ? 'Rút tiền về ngân hàng' : 'Withdraw to bank'),
+          description: w.description || (language === 'vi' ? `Chuyển về tài khoản ${w.bankName} - ${w.accountNumber}` : `Transfer to ${w.bankName} - ${w.accountNumber}`),
+          amount: -Math.abs(Number(w.amount || 0)), // Ensure negative
+          date: w.date,
+          status: currentStatus
+        };
+      });
+
+      // Merge and sort
+      const mergedTx = [...incomeTransactions, ...withdrawalTransactions];
+      mergedTx.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      setTransactions(mergedTx);
+      
+      // Sums
+      const sumIncome = incomeTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+      const sumWithdrawn = withdrawalTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+      const currentBalance = sumIncome - sumWithdrawn;
+      
+      setBalance(currentBalance);
+      setTotalIncome(sumIncome);
+      setTotalWithdrawn(sumWithdrawn);
+      setTransactionCount(mergedTx.length);
+      
+    } catch (err) {
+      console.error('Error loading wallet data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const savedWallet = localStorage.getItem('candidate_wallet');
-    const defaultTx = [
-      {
-        id: 1,
-        type: 'income',
-        title: language === 'vi' ? 'Nhận tiền từ The Coffee House' : 'Payment from The Coffee House',
-        description: language === 'vi' ? 'Thanh toán cho công việc #12345' : 'Payment for job #12345',
-        amount: 2500000,
-        date: '2026-02-13'
-      },
-      {
-        id: 2,
-        type: 'income',
-        title: language === 'vi' ? 'Nhận tiền từ Highlands Coffee' : 'Payment from Highlands Coffee',
-        description: language === 'vi' ? 'Thanh toán cho công việc #12344' : 'Payment for job #12344',
-        amount: 3000000,
-        date: '2026-02-10'
-      },
-      {
-        id: 3,
+    loadWalletData();
+  }, [language]);
+
+  const handleConfirmWithdraw = async () => {
+    const amountNum = Number(withdrawAmount);
+    if (!amountNum || amountNum <= 0 || amountNum > balance || !withdrawBankName || !withdrawAccountNumber || !withdrawAccountName) {
+      alert(language === 'vi' ? 'Thông tin rút tiền không hợp lệ!' : 'Invalid withdrawal details!');
+      return;
+    }
+    
+    try {
+      setWithdrawLoading(true);
+      
+      const newWithdrawal = {
+        id: `WITHDRAW-${Date.now()}`,
         type: 'expense',
         title: language === 'vi' ? 'Rút tiền về ngân hàng' : 'Withdraw to bank',
-        description: language === 'vi' ? 'Chuyển về tài khoản VCB' : 'Transfer to VCB account',
-        amount: -5000000,
-        date: '2026-02-08'
-      },
-      {
-        id: 4,
-        type: 'income',
-        title: language === 'vi' ? 'Nhận tiền từ Pizza 4P\'s' : 'Payment from Pizza 4P\'s',
-        description: language === 'vi' ? 'Thanh toán cho công việc #12343' : 'Payment for job #12343',
-        amount: 1800000,
-        date: '2026-02-05'
-      },
-      {
-        id: 5,
-        type: 'income',
-        title: language === 'vi' ? 'Nhận tiền từ Golden Gate Group' : 'Payment from Golden Gate Group',
-        description: language === 'vi' ? 'Thanh toán cho công việc #12342' : 'Payment for job #12342',
-        amount: 2200000,
-        date: '2026-02-01'
-      }
-    ];
+        description: language === 'vi' 
+          ? `Chuyển về tài khoản ${withdrawBankName} - ${withdrawAccountNumber}` 
+          : `Transfer to ${withdrawBankName} - ${withdrawAccountNumber}`,
+        amount: -amountNum,
+        date: new Date().toISOString(),
+        bankName: withdrawBankName,
+        accountNumber: withdrawAccountNumber,
+        accountName: withdrawAccountName,
+        status: 'pending'
+      };
 
-    if (savedWallet) {
-      try {
-        const parsed = JSON.parse(savedWallet);
-        setBalance(parsed.balance !== undefined ? parsed.balance : 15750000);
-        setTransactions(parsed.transactions || defaultTx);
-      } catch (e) {
-        setTransactions(defaultTx);
-      }
-    } else {
-      localStorage.setItem('candidate_wallet', JSON.stringify({
-        balance: 15750000,
-        transactions: defaultTx
-      }));
-      setTransactions(defaultTx);
+      // 1. Save to candidate profile in DynamoDB database
+      const existingWithdrawals = candidateProfile?.withdrawals || [];
+      const updatedWithdrawals = [newWithdrawal, ...existingWithdrawals];
+      
+      await candidateProfileService.updateProfile({
+        withdrawals: updatedWithdrawals
+      });
+
+      // 2. Save request to localStorage so Admin can view it in Admin Panel
+      const newAdminRequest = {
+        id: newWithdrawal.id,
+        employerId: candidateProfile?.userId || 'candidate-user',
+        companyName: candidateProfile?.fullName || 'Ứng viên',
+        companyLogo: candidateProfile?.profileImage || '',
+        amount: amountNum,
+        bankName: withdrawBankName,
+        accountNumber: withdrawAccountNumber,
+        accountName: withdrawAccountName,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        isCandidate: true // Flag to distinguish candidate from employer in Admin Panel
+      };
+      
+      const adminRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
+      adminRequests.unshift(newAdminRequest);
+      localStorage.setItem('admin_withdraw_requests', JSON.stringify(adminRequests));
+
+      setWithdrawSuccess(true);
+      
+      // Reload wallet data
+      await loadWalletData();
+      
+      setTimeout(() => {
+        setShowWithdrawModal(false);
+        setWithdrawSuccess(false);
+        // Reset form
+        setWithdrawAmount('');
+        setWithdrawBankName('');
+        setWithdrawAccountNumber('');
+        setWithdrawAccountName('');
+      }, 2000);
+      
+    } catch (err) {
+      console.error('Error processing candidate withdrawal:', err);
+      alert(language === 'vi' ? 'Yêu cầu rút tiền thất bại!' : 'Withdrawal request failed!');
+    } finally {
+      setWithdrawLoading(false);
     }
-  }, [language]);
+  };
 
   const stats = [
     {
-      label: language === 'vi' ? 'Tổng Thu Nhập Tháng' : 'Total Income',
-      value: '12,300,000 VND',
+      label: language === 'vi' ? 'Tổng Thu Nhập' : 'Total Income',
+      value: totalIncome.toLocaleString('vi-VN') + ' VND',
       icon: TrendingUp,
       color: 'success',
-      change: '+15.3%',
-      positive: true
     },
     {
-      label: language === 'vi' ? 'Đã Rút Trong Tháng' : 'Withdrawn',
-      value: '5,000,000 VND',
+      label: language === 'vi' ? 'Đã Rút' : 'Withdrawn',
+      value: totalWithdrawn.toLocaleString('vi-VN') + ' VND',
       icon: TrendingDown,
       color: 'error',
-      change: '-8.2%',
-      positive: false
     },
     {
       label: language === 'vi' ? 'Số Lượng Giao Dịch' : 'Transactions',
-      value: '23',
+      value: String(transactionCount),
       icon: BarChart3,
       color: 'primary',
-      change: '+12',
-      positive: true
     }
-  ];
-
-  const receipts = [
-    { id: 1, title: language === 'vi' ? 'Hóa đơn #INV-2026-001' : 'Invoice #INV-2026-001', date: '13/02/2026', amount: '2,500,000 VND' },
-    { id: 2, title: language === 'vi' ? 'Hóa đơn #INV-2026-002' : 'Invoice #INV-2026-002', date: '10/02/2026', amount: '3,000,000 VND' },
-    { id: 3, title: language === 'vi' ? 'Hóa đơn #INV-2026-003' : 'Invoice #INV-2026-003', date: '05/02/2026', amount: '1,800,000 VND' },
-    { id: 4, title: language === 'vi' ? 'Hóa đơn #INV-2026-004' : 'Invoice #INV-2026-004', date: '01/02/2026', amount: '2,200,000 VND' }
   ];
 
   const filteredTransactions = filterType === 'all'
@@ -741,196 +911,329 @@ const Wallet = () => {
   return (
     <DashboardLayout role="candidate" showSearch={false} key={language}>
       <WalletContainer>
-        <Header>
-          <h1>
-            <WalletIcon />
-            {language === 'vi' ? 'Ví Điện Tử' : 'E-Wallet'}
-          </h1>
-          <div className="header-actions">
-            <Button
-              $variant="secondary"
-              $size="small"
-              onClick={() => setIsDevModalOpen(true)}
-            >
-              <Settings style={{ width: '18px', height: '18px' }} />
-              {language === 'vi' ? 'Cài Đặt' : 'Settings'}
-            </Button>
-            <Button
-              $variant="primary"
-              $size="small"
-              onClick={() => setIsDevModalOpen(true)}
-            >
-              <Download style={{ width: '18px', height: '18px' }} />
-              {language === 'vi' ? 'Xuất Báo Cáo' : 'Export Report'}
-            </Button>
+        {isLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', border: '4px solid #1e40af', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+            <p style={{ color: '#6B7280', fontSize: '15px', fontWeight: '500' }}>
+              {language === 'vi' ? 'Đang tải dữ liệu ví...' : 'Loading wallet data...'}
+            </p>
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
-        </Header>
-
-        <BalanceCard
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="balance-header">
-            <div className="balance-info">
-              <div className="label">{language === 'vi' ? 'Số Dư Khả Dụng' : 'Available Balance'}</div>
-              <div className="amount-wrapper">
-                <div className="amount">
-                  {showBalance ? balance.toLocaleString('vi-VN') + ' VND' : '••••••••'}
-                </div>
-                <button
-                  className="toggle-balance"
-                  onClick={() => setShowBalance(!showBalance)}
+        ) : (
+          <>
+            <Header>
+              <h1>
+                <WalletIcon />
+                {language === 'vi' ? 'Ví Điện Tử' : 'E-Wallet'}
+              </h1>
+              <div className="header-actions">
+                <Button
+                  $variant="secondary"
+                  $size="small"
+                  onClick={() => setIsDevModalOpen(true)}
                 >
-                  {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
-                </button>
+                  <Settings style={{ width: '18px', height: '18px' }} />
+                  {language === 'vi' ? 'Cài Đặt' : 'Settings'}
+                </Button>
+                <Button
+                  $variant="primary"
+                  $size="small"
+                  onClick={() => setIsDevModalOpen(true)}
+                >
+                  <Download style={{ width: '18px', height: '18px' }} />
+                  {language === 'vi' ? 'Xuất Báo Cáo' : 'Export Report'}
+                </Button>
               </div>
-              <div className="last-updated">
-                <Clock />
-                {language === 'vi' ? 'Cập nhật lần cuối: Hôm nay, 14:30' : 'Last updated: Today, 14:30'}
-              </div>
-            </div>
-            <WalletIcon className="wallet-icon" />
-          </div>
-          <div className="balance-actions">
-            <ActionButton
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsDevModalOpen(true)}
+            </Header>
+
+            <BalanceCard
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
             >
-              <ArrowUpRight />
-              {language === 'vi' ? 'Rút Tiền' : 'Withdraw'}
-            </ActionButton>
-
-          </div>
-        </BalanceCard>
-
-        <StatsGrid>
-          {stats.map((stat, index) => (
-            <StatCard
-              key={index}
-              $color={stat.color}
-              $positive={stat.positive}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <div className="stat-left">
-                <div className="icon">
-                  <stat.icon />
-                </div>
-                <div className="stat-info">
-                  <div className="stat-label">{stat.label}</div>
-                  <div className="stat-value">{stat.value}</div>
-                </div>
-              </div>
-              <div className="stat-right">
-                <div className="stat-change">
-                  {stat.positive ? <TrendingUp /> : <TrendingDown />}
-                  {stat.change}
-                </div>
-              </div>
-            </StatCard>
-          ))}
-        </StatsGrid>
-
-        <ContentSection>
-          <div>
-            <Card
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <div className="card-header">
-                <h2>
-                  <Calendar />
-                  {language === 'vi' ? 'Lịch Sử Giao Dịch' : 'Transaction History'}
-                </h2>
-                <div className="header-action">
-                  <Button
-                    $variant="secondary"
-                    $size="small"
-                    onClick={() => setIsDevModalOpen(true)}
-                  >
-                    <Download style={{ width: '16px', height: '16px' }} />
-                    {language === 'vi' ? 'Xuất' : 'Export'}
-                  </Button>
-                </div>
-              </div>
-
-              <FilterBar>
-                <div className="filter-group">
-                  <FilterButton
-                    $active={filterType === 'all'}
-                    onClick={() => setFilterType('all')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {language === 'vi' ? 'Tất Cả' : 'All'}
-                  </FilterButton>
-                  <FilterButton
-                    $active={filterType === 'income'}
-                    onClick={() => setFilterType('income')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {language === 'vi' ? 'Thu Nhập' : 'Income'}
-                  </FilterButton>
-                  <FilterButton
-                    $active={filterType === 'expense'}
-                    onClick={() => setFilterType('expense')}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {language === 'vi' ? 'Rút tiền' : 'Withdraw'}
-                  </FilterButton>
-                </div>
-                <Input
-                  type="date"
-                  style={{ width: 'auto', padding: '10px 16px' }}
-                />
-              </FilterBar>
-
-              <TransactionList>
-                {filteredTransactions.map((transaction, index) => (
-                  <TransactionItem
-                    key={transaction.id}
-                    $type={transaction.type}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    whileHover={{ scale: 1.02 }}
-                  >
-                    <div className="transaction-info">
-                      <div className="icon">
-                        {transaction.type === 'income' ? <ArrowDownLeft /> : <ArrowUpRight />}
-                      </div>
-                      <div className="details">
-                        <h4>{transaction.title}</h4>
-                        <p>
-                          <Receipt style={{ width: '14px', height: '14px' }} />
-                          {transaction.description}
-                        </p>
-                      </div>
+              <div className="balance-header">
+                <div className="balance-info">
+                  <div className="label">{language === 'vi' ? 'Số Dư Khả Dụng' : 'Available Balance'}</div>
+                  <div className="amount-wrapper">
+                    <div className="amount">
+                      {showBalance ? balance.toLocaleString('vi-VN') + ' VND' : '••••••••'}
                     </div>
-                    <div className="transaction-amount">
-                      <div className="amount">
-                        {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString('vi-VN')} VND
-                      </div>
-                      <div className="date">
-                        <Calendar />
-                        {new Date(transaction.date).toLocaleDateString('vi-VN')}
-                      </div>
+                    <button
+                      className="toggle-balance"
+                      onClick={() => setShowBalance(!showBalance)}
+                    >
+                      {showBalance ? <Eye size={18} /> : <EyeOff size={18} />}
+                    </button>
+                  </div>
+                </div>
+                <WalletIcon className="wallet-icon" />
+              </div>
+              <div className="balance-actions">
+                <ActionButton
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowWithdrawModal(true)}
+                >
+                  <ArrowUpRight />
+                  {language === 'vi' ? 'Rút Tiền' : 'Withdraw'}
+                </ActionButton>
+              </div>
+            </BalanceCard>
+
+            <StatsGrid>
+              {stats.map((stat, index) => (
+                <StatCard
+                  key={index}
+                  $color={stat.color}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <div className="stat-left">
+                    <div className="icon">
+                      <stat.icon />
                     </div>
-                  </TransactionItem>
-                ))}
-              </TransactionList>
-            </Card>
-          </div>
+                    <div className="stat-info">
+                      <div className="stat-label">{stat.label}</div>
+                      <div className="stat-value">{stat.value}</div>
+                    </div>
+                  </div>
+                </StatCard>
+              ))}
+            </StatsGrid>
 
+            <ContentSection>
+              <div>
+                <Card
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <div className="card-header">
+                    <h2>
+                      <Calendar />
+                      {language === 'vi' ? 'Lịch Sử Giao Dịch' : 'Transaction History'}
+                    </h2>
+                    <div className="header-action">
+                      <Button
+                        $variant="secondary"
+                        $size="small"
+                        onClick={() => setIsDevModalOpen(true)}
+                      >
+                        <Download style={{ width: '16px', height: '16px' }} />
+                        {language === 'vi' ? 'Xuất' : 'Export'}
+                      </Button>
+                    </div>
+                  </div>
 
-        </ContentSection>
+                  <FilterBar>
+                    <div className="filter-group">
+                      <FilterButton
+                        $active={filterType === 'all'}
+                        onClick={() => setFilterType('all')}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {language === 'vi' ? 'Tất Cả' : 'All'}
+                      </FilterButton>
+                      <FilterButton
+                        $active={filterType === 'income'}
+                        onClick={() => setFilterType('income')}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {language === 'vi' ? 'Thu Nhập' : 'Income'}
+                      </FilterButton>
+                      <FilterButton
+                        $active={filterType === 'expense'}
+                        onClick={() => setFilterType('expense')}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {language === 'vi' ? 'Rút tiền' : 'Withdraw'}
+                      </FilterButton>
+                    </div>
+                    <Input
+                      type="date"
+                      style={{ width: 'auto', padding: '10px 16px' }}
+                    />
+                  </FilterBar>
+
+                  <TransactionList>
+                    {filteredTransactions.length === 0 ? (
+                      <EmptyState>
+                        <div className="empty-icon"><Calendar /></div>
+                        <h3>{language === 'vi' ? 'Chưa có giao dịch nào' : 'No transactions yet'}</h3>
+                        <p>{language === 'vi' ? 'Các giao dịch của bạn sẽ xuất hiện tại đây khi bạn hoàn thành công việc.' : 'Your transactions will appear here once you complete a job.'}</p>
+                      </EmptyState>
+                    ) : (
+                      filteredTransactions.map((transaction, index) => (
+                        <TransactionItem
+                          key={transaction.id}
+                          $type={transaction.type}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          whileHover={{ scale: 1.02 }}
+                        >
+                          <div className="transaction-info">
+                            <div className="icon">
+                              {transaction.type === 'income' ? <ArrowDownLeft /> : <ArrowUpRight />}
+                            </div>
+                            <div className="details">
+                              <h4>{transaction.title}</h4>
+                              <p>
+                                <Receipt style={{ width: '14px', height: '14px' }} />
+                                {transaction.description}
+                                {transaction.status && (
+                                  <span style={{
+                                    marginLeft: '8px',
+                                    fontSize: '11px',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontWeight: '600',
+                                    background: transaction.status === 'approved' ? '#D1FAE5' : (transaction.status === 'rejected' ? '#FEE2E2' : '#FEF3C7'),
+                                    color: transaction.status === 'approved' ? '#059669' : (transaction.status === 'rejected' ? '#DC2626' : '#D97706'),
+                                  }}>
+                                    {transaction.status === 'approved' 
+                                      ? (language === 'vi' ? 'Đã duyệt' : 'Approved') 
+                                      : (transaction.status === 'rejected' 
+                                        ? (language === 'vi' ? 'Từ chối' : 'Rejected') 
+                                        : (language === 'vi' ? 'Đang chờ' : 'Pending'))}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="transaction-amount">
+                            <div className="amount">
+                              {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString('vi-VN')} VND
+                            </div>
+                            <div className="date">
+                              <Calendar />
+                              {new Date(transaction.date).toLocaleDateString('vi-VN')}
+                            </div>
+                          </div>
+                        </TransactionItem>
+                      ))
+                    )}
+                  </TransactionList>
+                </Card>
+              </div>
+            </ContentSection>
+          </>
+        )}
       </WalletContainer>
+
+      {/* Withdrawal Modal */}
+      {showWithdrawModal && (
+        <ModalOverlay
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => !withdrawLoading && setShowWithdrawModal(false)}
+        >
+          <ModalContent
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <ModalHeader>
+              <h3>{language === 'vi' ? 'Yêu cầu Rút tiền' : 'Withdraw Funds'}</h3>
+              <button onClick={() => !withdrawLoading && setShowWithdrawModal(false)}>&times;</button>
+            </ModalHeader>
+            
+            {withdrawSuccess ? (
+              <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#059669' }}>
+                  <CheckCircle size={32} />
+                </div>
+                <h4 style={{ fontSize: '18px', fontWeight: '700', color: '#1E293B', marginBottom: '8px' }}>
+                  {language === 'vi' ? 'Gửi yêu cầu thành công!' : 'Request Sent Successfully!'}
+                </h4>
+                <p style={{ color: '#6B7280', fontSize: '14px' }}>
+                  {language === 'vi' ? 'Hệ thống đang gửi yêu cầu rút tiền lên admin phê duyệt.' : 'System is submitting your request to admin for approval.'}
+                </p>
+              </div>
+            ) : (
+              <ModalBody>
+                <FormGroup>
+                  <Label>{language === 'vi' ? 'Chọn Ngân Hàng' : 'Select Bank'}</Label>
+                  <Select
+                    value={withdrawBankName}
+                    onChange={e => setWithdrawBankName(e.target.value)}
+                    disabled={withdrawLoading}
+                  >
+                    <option value="">-- {language === 'vi' ? 'Chọn ngân hàng' : 'Choose a bank'} --</option>
+                    <option value="Vietcombank">Vietcombank</option>
+                    <option value="Techcombank">Techcombank</option>
+                    <option value="MB Bank">MB Bank</option>
+                    <option value="VietinBank">VietinBank</option>
+                    <option value="BIDV">BIDV</option>
+                    <option value="Agribank">Agribank</option>
+                    <option value="ACB">ACB</option>
+                    <option value="Sacombank">Sacombank</option>
+                    <option value="TPBank">TPBank</option>
+                  </Select>
+                </FormGroup>
+                
+                <FormGroup>
+                  <Label>{language === 'vi' ? 'Số Tài Khoản' : 'Account Number'}</Label>
+                  <Input
+                    type="text"
+                    placeholder={language === 'vi' ? 'Nhập số tài khoản thụ hưởng' : 'Enter account number'}
+                    value={withdrawAccountNumber}
+                    onChange={e => setWithdrawAccountNumber(e.target.value.replace(/\D/g, ''))}
+                    disabled={withdrawLoading}
+                  />
+                </FormGroup>
+                
+                <FormGroup>
+                  <Label>{language === 'vi' ? 'Tên Tài Khoản (viết hoa không dấu)' : 'Account Name (uppercase, no accent)'}</Label>
+                  <Input
+                    type="text"
+                    placeholder="E.g. NGUYEN VAN A"
+                    value={withdrawAccountName}
+                    onChange={e => setWithdrawAccountName(e.target.value.toUpperCase())}
+                    disabled={withdrawLoading}
+                  />
+                </FormGroup>
+                
+                <FormGroup>
+                  <Label>{language === 'vi' ? 'Số Tiền Rút (VND)' : 'Withdraw Amount (VND)'}</Label>
+                  <Input
+                    type="number"
+                    placeholder={language === 'vi' ? 'Nhập số tiền cần rút' : 'Enter amount to withdraw'}
+                    value={withdrawAmount}
+                    onChange={e => setWithdrawAmount(e.target.value)}
+                    disabled={withdrawLoading}
+                  />
+                  <span style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', display: 'block' }}>
+                    {language === 'vi' ? `Số dư khả dụng: ${balance.toLocaleString('vi-VN')} VND` : `Available balance: ${balance.toLocaleString('vi-VN')} VND`}
+                  </span>
+                  {Number(withdrawAmount) > balance && (
+                    <ErrorMsg>{language === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!'}</ErrorMsg>
+                  )}
+                </FormGroup>
+                
+                <Button
+                  $variant="primary"
+                  style={{ width: '100%', marginTop: '8px' }}
+                  onClick={handleConfirmWithdraw}
+                  disabled={withdrawLoading || !withdrawBankName || !withdrawAccountNumber || !withdrawAccountName || !withdrawAmount || Number(withdrawAmount) > balance || Number(withdrawAmount) <= 0}
+                >
+                  {withdrawLoading
+                    ? (language === 'vi' ? 'Đang gửi...' : 'Submitting...')
+                    : (language === 'vi' ? 'Xác Nhận Rút Tiền' : 'Confirm Withdrawal')}
+                </Button>
+              </ModalBody>
+            )}
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </DashboardLayout>
   );
 };

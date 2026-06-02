@@ -25,6 +25,11 @@ import {
   RefreshCw
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
+import { 
+  createQuickJobActivationApprovedNotification, 
+  createQuickJobActivationRejectedNotification, 
+  createQuickJobActivationDeactivatedNotification 
+} from '../../services/notificationService';
 
 
 const PageContainer = styled.div`
@@ -578,6 +583,24 @@ const EmployerDetail = () => {
       setUpdatingQuickJob(true);
       await adminEmployerService.updateQuickJobStatus(id, status);
       setEmployer(prev => ({ ...prev, quickJobStatus: status }));
+
+      // Send status change notification to Employer
+      try {
+        const companyName = employer?.name || 'Nhà tuyển dụng';
+        if (status === 'approved') {
+          await createQuickJobActivationApprovedNotification(id, companyName);
+          console.log(`✅ Approved notification sent to employer: ${companyName}`);
+        } else if (status === 'rejected') {
+          await createQuickJobActivationRejectedNotification(id, companyName);
+          console.log(`✅ Rejected notification sent to employer: ${companyName}`);
+        } else if (status === 'not_requested') {
+          await createQuickJobActivationDeactivatedNotification(id, companyName);
+          console.log(`✅ Deactivated notification sent to employer: ${companyName}`);
+        }
+      } catch (notifyErr) {
+        console.error('❌ Error sending quick job status notification to employer:', notifyErr);
+      }
+
       alert(language === 'vi' ? 'Cập nhật trạng thái thành công!' : 'Status updated successfully!');
     } catch (err) {
       console.error('Error updating quick job status:', err);

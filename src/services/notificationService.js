@@ -403,6 +403,150 @@ export const createJobRejectedNotification = async (employerId, job) => {
 };
 
 /**
+ * Create notification when employer requests quick jobs activation
+ * @param {object} payload - { employerId, companyName }
+ */
+export const createQuickJobActivationRequestNotification = async (payload) => {
+  const { employerId, companyName } = payload;
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'quick_job_activation_request',
+    title: 'Yêu cầu kích hoạt Công việc tuyển gấp',
+    titleEn: 'Quick Jobs Activation Request',
+    message: `Nhà tuyển dụng "${safeCompanyName}" đã gửi yêu cầu kích hoạt tính năng Công việc tuyển gấp.`,
+    messageEn: `Employer "${safeCompanyName}" has requested activation for Quick Jobs.`,
+    recipientId: 'admin',
+    recipientRole: 'admin',
+    senderId: employerId,
+    senderName: safeCompanyName,
+    data: {
+      employerId,
+      companyName: safeCompanyName
+    },
+    icon: 'zap',
+    color: '#f59e0b',
+    actionUrl: '/admin/employers',
+    actionText: 'Xem chi tiết',
+    actionTextEn: 'View details'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when admin approves quick jobs activation
+ * @param {string} employerId
+ * @param {string} companyName
+ */
+export const createQuickJobActivationApprovedNotification = async (employerId, companyName) => {
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'quick_job_activation_approved',
+    title: 'Đã kích hoạt Công việc tuyển gấp',
+    titleEn: 'Quick Jobs Activated',
+    message: `Chúc mừng! Tài khoản của bạn đã được Admin kích hoạt tính năng đăng tuyển Công việc tuyển gấp.`,
+    messageEn: `Congratulations! Your account has been activated for Quick Jobs postings by Admin.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      employerId,
+      companyName: safeCompanyName
+    },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Bắt đầu sử dụng',
+    actionTextEn: 'Get started'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when admin rejects quick jobs activation
+ * @param {string} employerId
+ * @param {string} companyName
+ */
+export const createQuickJobActivationRejectedNotification = async (employerId, companyName) => {
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'quick_job_activation_rejected',
+    title: 'Từ chối kích hoạt Công việc tuyển gấp',
+    titleEn: 'Quick Jobs Activation Rejected',
+    message: `Yêu cầu kích hoạt tính năng tuyển gấp của bạn chưa được duyệt. Vui lòng kiểm tra lại hồ sơ doanh nghiệp hoặc liên hệ hỗ trợ.`,
+    messageEn: `Your request to activate the Quick Jobs feature was not approved. Please check your company profile or contact support.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      employerId,
+      companyName: safeCompanyName
+    },
+    icon: 'x-circle',
+    color: '#ef4444',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Xem chi tiết',
+    actionTextEn: 'View details'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when admin deactivates quick jobs
+ * @param {string} employerId
+ * @param {string} companyName
+ */
+export const createQuickJobActivationDeactivatedNotification = async (employerId, companyName) => {
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'quick_job_activation_deactivated',
+    title: 'Hủy kích hoạt Công việc tuyển gấp',
+    titleEn: 'Quick Jobs Deactivated',
+    message: `Tính năng Công việc tuyển gấp của bạn đã bị hủy kích hoạt bởi Admin.`,
+    messageEn: `Your Quick Jobs feature has been deactivated by Admin.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      employerId,
+      companyName: safeCompanyName
+    },
+    icon: 'x-circle',
+    color: '#ef4444',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Xem chi tiết',
+    actionTextEn: 'View details'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
  * Save notification to API
  */
 const saveNotification = async (notification) => {
@@ -647,6 +791,10 @@ export default {
   createCandidateCvRejectedNotification,
   createJobApprovedNotification,
   createJobRejectedNotification,
+  createQuickJobActivationRequestNotification,
+  createQuickJobActivationApprovedNotification,
+  createQuickJobActivationRejectedNotification,
+  createQuickJobActivationDeactivatedNotification,
   markAsRead,
   markAllAsRead,
   deleteNotification,

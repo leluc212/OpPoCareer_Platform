@@ -12,7 +12,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import quickJobService from '../../services/quickJobService';
 import employerProfileService from '../../services/employerProfileService';
 import applicationService from '../../services/applicationService';
-import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification } from '../../services/notificationService';
+import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
 // Helper: tính số giờ từ chuỗi shift "HH:MM - HH:MM"
@@ -2530,6 +2530,22 @@ const HRManagement = () => {
         quickJobStatus: 'pending'
       });
       setProfile(updated);
+      
+      // Send notification to Admin
+      try {
+        const empId = updated?.userId || updated?.id || user?.userId || user?.id || user?.email || null;
+        const compName = updated?.companyName || user?.companyName || user?.name || 'Nhà tuyển dụng';
+        if (empId) {
+          await createQuickJobActivationRequestNotification({
+            employerId: empId,
+            companyName: compName
+          });
+          console.log('✅ Notification sent to Admin for quick job activation request');
+        }
+      } catch (notifyErr) {
+        console.error('❌ Error sending quick job activation notification to admin:', notifyErr);
+      }
+
       setSuccessToastMessage(language === 'vi' ? 'Gửi yêu cầu thành công! Chúng tôi sẽ liên hệ sớm nhất.' : 'Request sent successfully! We will contact you soon.');
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 4000);
@@ -3399,11 +3415,11 @@ const HRManagement = () => {
               <Zap /> {language === 'vi' ? 'TÍNH NĂNG ĐẶC BIỆT' : 'PREMIUM FEATURE'}
             </HeroBadge>
             <HeroTitle>
-              {language === 'vi' ? 'Dịch vụ Công việc tuyển gấp' : 'Urgent Recruitment Jobs'}
+              {language === 'vi' ? 'Dịch vụ tuyển gấp' : 'Urgent Recruitment'}
             </HeroTitle>
             <HeroDesc>
-              {language === 'vi' 
-                ? 'Giải pháp tuyển dụng tức thì tối ưu. Tìm kiếm nhân sự chất lượng cao và lấp đầy ca làm trống chỉ trong vài giờ thay vì nhiều ngày.' 
+              {language === 'vi'
+                ? 'Giải pháp tuyển dụng tức thì tối ưu. Tìm kiếm nhân sự chất lượng cao và lấp đầy ca làm trống chỉ trong vài giờ thay vì nhiều ngày.'
                 : 'The ultimate real-time hiring solution. Match with high-quality workers and fill empty shifts within hours instead of days.'}
             </HeroDesc>
           </IntroHero>
@@ -3420,8 +3436,8 @@ const HRManagement = () => {
               </CardIconBox>
               <CardTitle>{language === 'vi' ? 'Nổi bật & Đẩy tin' : 'Highlighted & Boosted'}</CardTitle>
               <CardText>
-                {language === 'vi' 
-                  ? 'Bài đăng của bạn sẽ có biểu tượng "Tuyển gấp" nổi bật và hiển thị ở vị trí ưu tiên trên trang chủ của ứng viên.' 
+                {language === 'vi'
+                  ? 'Bài đăng của bạn sẽ có biểu tượng "Tuyển gấp" nổi bật và hiển thị ở vị trí ưu tiên trên trang chủ của ứng viên.'
                   : 'Your posts will feature a prominent "Urgent" badge and display at the top of the candidates\' feed.'}
               </CardText>
             </IntroCard>
@@ -3432,8 +3448,8 @@ const HRManagement = () => {
               </CardIconBox>
               <CardTitle>{language === 'vi' ? 'Tiếp cận Real-time' : 'Real-time Matching'}</CardTitle>
               <CardText>
-                {language === 'vi' 
-                  ? 'Hệ thống tự động gửi thông báo đẩy (push) đến điện thoại của ứng viên phù hợp trong phạm vi lân cận ngay khi tạo tin.' 
+                {language === 'vi'
+                  ? 'Hệ thống tự động gửi thông báo đẩy (push) đến điện thoại của ứng viên phù hợp trong phạm vi lân cận ngay khi tạo tin.'
                   : 'The system instantly sends push notifications to suitable candidates nearby as soon as the job is posted.'}
               </CardText>
             </IntroCard>
@@ -3444,8 +3460,8 @@ const HRManagement = () => {
               </CardIconBox>
               <CardTitle>{language === 'vi' ? 'Ký quỹ an toàn' : 'Secure Escrow'}</CardTitle>
               <CardText>
-                {language === 'vi' 
-                  ? 'Lương được giữ an toàn qua tài khoản ký quỹ (Escrow) và tự động giải ngân cho ứng viên ngay sau khi hoàn thành công việc.' 
+                {language === 'vi'
+                  ? 'Lương được giữ an toàn qua tài khoản ký quỹ (Escrow) và tự động giải ngân cho ứng viên ngay sau khi hoàn thành công việc.'
                   : 'Funds are securely held in escrow and automatically released to the worker once the shift is completed.'}
               </CardText>
             </IntroCard>
@@ -3461,8 +3477,8 @@ const HRManagement = () => {
               <div className="step-num">1</div>
               <div className="step-title">{language === 'vi' ? 'Gửi yêu cầu kích hoạt' : 'Request Activation'}</div>
               <div className="step-desc">
-                {language === 'vi' 
-                  ? 'Đăng ký sử dụng tính năng và chờ hệ thống kiểm duyệt hồ sơ doanh nghiệp của bạn.' 
+                {language === 'vi'
+                  ? 'Đăng ký sử dụng tính năng và chờ hệ thống kiểm duyệt hồ sơ doanh nghiệp của bạn.'
                   : 'Submit an activation request and wait for the system to verify your company profile.'}
               </div>
             </StepItem>
@@ -3471,9 +3487,9 @@ const HRManagement = () => {
               <div className="step-num">2</div>
               <div className="step-title">{language === 'vi' ? 'Ký quỹ tin đăng' : 'Escrow Shift Pay'}</div>
               <div className="step-desc">
-                {language === 'vi' 
-                  ? 'Nạp tiền lương tương ứng vào ví điện tử Oppo. Hệ thống sẽ ký quỹ để đảm bảo quyền lợi ứng viên.' 
-                  : 'Deposit the shift salary into your Oppo wallet. The system holds it in escrow to secure candidates.'}
+                {language === 'vi'
+                  ? 'Nạp tiền lương tương ứng vào ví điện tử Ốp Pờ. Hệ thống sẽ ký quỹ để đảm bảo quyền lợi ứng viên.'
+                  : 'Deposit the shift salary into your Op Po wallet. The system holds it in escrow to secure candidates.'}
               </div>
             </StepItem>
 
@@ -3481,8 +3497,8 @@ const HRManagement = () => {
               <div className="step-num">3</div>
               <div className="step-title">{language === 'vi' ? 'Chat Real-time' : 'Real-time Chat'}</div>
               <div className="step-desc">
-                {language === 'vi' 
-                  ? 'Ứng viên sẽ nhận việc tức thì. Bạn có thể chat realtime để trao đổi và hướng dẫn công việc.' 
+                {language === 'vi'
+                  ? 'Ứng viên sẽ nhận việc tức thì. Bạn có thể chat realtime để trao đổi và hướng dẫn công việc.'
                   : 'Candidates accept the job instantly. Chat with them in real-time to organize the shift details.'}
               </div>
             </StepItem>
@@ -3491,8 +3507,8 @@ const HRManagement = () => {
               <div className="step-num">4</div>
               <div className="step-title">{language === 'vi' ? 'Xác nhận & Thanh toán' : 'Complete & Pay'}</div>
               <div className="step-desc">
-                {language === 'vi' 
-                  ? 'Xác nhận công việc hoàn thành. Hệ thống sẽ tự động chuyển khoản từ tài khoản ký quỹ vào ví của ứng viên.' 
+                {language === 'vi'
+                  ? 'Xác nhận công việc hoàn thành. Hệ thống sẽ tự động chuyển khoản từ tài khoản ký quỹ vào ví của ứng viên.'
                   : 'Confirm job completion. The system automatically releases escrowed funds to the worker\'s wallet.'}
               </div>
             </StepItem>
@@ -3509,9 +3525,9 @@ const HRManagement = () => {
               <div>
                 <div className="faq-q">{language === 'vi' ? 'Mức lương sàn tuyển gấp là bao nhiêu?' : 'What is the minimum hourly rate?'}</div>
                 <div className="faq-a">
-                  {language === 'vi' 
-                    ? 'Để đảm bảo thu hút ứng viên trong thời gian ngắn, lương của Công việc tuyển gấp phải từ 29.500 VNĐ/giờ trở lên.' 
-                    : 'To attract workers quickly, the urgent hourly wage must be at least 29,500 VND/hour.'}
+                  {language === 'vi'
+                    ? 'Để đảm bảo thu hút ứng viên trong thời gian ngắn, lương của Công việc tuyển gấp phải cao hơn mức lương tối thiểu vùng.'
+                    : 'To attract workers quickly, the urgent hourly wage must be higher than the regional minimum wage.'}
                 </div>
               </div>
             </FaqItem>
@@ -3521,8 +3537,8 @@ const HRManagement = () => {
               <div>
                 <div className="faq-q">{language === 'vi' ? 'Phí hoa hồng dịch vụ là bao nhiêu?' : 'What is the service fee?'}</div>
                 <div className="faq-a">
-                  {language === 'vi' 
-                    ? 'Hệ thống thu phí dịch vụ 15% tính trên tổng lương ca làm việc khi bài đăng được hoàn thành thành công.' 
+                  {language === 'vi'
+                    ? 'Hệ thống thu phí dịch vụ 15% tính trên tổng lương ca làm việc khi bài đăng được hoàn thành thành công.'
                     : 'The system charges a 15% commission fee based on the total shift salary upon successful completion.'}
                 </div>
               </div>
@@ -3533,9 +3549,9 @@ const HRManagement = () => {
               <div>
                 <div className="faq-q">{language === 'vi' ? 'Chính sách hoàn tiền ký quỹ ra sao?' : 'What is the refund policy?'}</div>
                 <div className="faq-a">
-                  {language === 'vi' 
-                    ? 'Nếu ca làm việc không diễn ra hoặc không có ứng viên nhận việc, 100% số tiền đã ký quỹ sẽ được hoàn trả lại ví của bạn.' 
-                    : 'If the shift does not occur or no worker accepts it, 100% of the escrowed funds are returned to your wallet.'}
+                  {language === 'vi'
+                    ? 'Nếu ca làm việc không diễn ra hoặc chưa có ứng viên phù hợp (sau lần Yêu cầu thay đổi ứng viên đầu tiên) chúng tôi sẽ giữ 15% phí sàn, 85% số tiền đã ký quỹ sẽ được hoàn trả lại ví của bạn.'
+                    : 'If the shift does not occur or no worker accepts it (after the first shift change request), 100% of the escrowed funds are returned to your wallet.'}
                 </div>
               </div>
             </FaqItem>
@@ -3547,8 +3563,8 @@ const HRManagement = () => {
                 {language === 'vi' ? 'Yêu cầu đang chờ duyệt' : 'Request Pending Approval'}
               </h3>
               <p style={{ fontSize: '14px', color: '#a16207', margin: '0 0 16px 0', fontWeight: '500' }}>
-                {language === 'vi' 
-                  ? 'Chúng tôi đã nhận được yêu cầu kích hoạt của bạn và sẽ liên hệ sớm nhất trong vòng 24 giờ.' 
+                {language === 'vi'
+                  ? 'Chúng tôi đã nhận được yêu cầu kích hoạt của bạn và sẽ liên hệ sớm nhất trong vòng 24 giờ.'
                   : 'We have received your activation request and will contact you as soon as possible within 24 hours.'}
               </p>
               <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap', width: '100%', marginTop: '16px' }}>
@@ -3574,8 +3590,8 @@ const HRManagement = () => {
                 {language === 'vi' ? 'Bắt đầu sử dụng Công việc tuyển gấp' : 'Start using Urgent Recruitment'}
               </h3>
               <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 24px 0', fontWeight: '500' }}>
-                {language === 'vi' 
-                  ? 'Kích hoạt tính năng tuyển gấp ngay hôm nay để lấp đầy ca làm việc của bạn trong tích tắc.' 
+                {language === 'vi'
+                  ? 'Kích hoạt tính năng tuyển gấp ngay hôm nay để lấp đầy ca làm việc của bạn trong tích tắc.'
                   : 'Activate the urgent recruitment feature today and fill your empty work shifts in no time.'}
               </p>
               <ActionButton
@@ -3584,7 +3600,6 @@ const HRManagement = () => {
                 disabled={requestSending}
                 onClick={handleRequestActivation}
               >
-                <Zap />
                 {language === 'vi' ? 'Gửi yêu cầu kích hoạt Công việc tuyển gấp' : 'Request Urgent Jobs Activation'}
               </ActionButton>
             </ActionBanner>
@@ -3605,8 +3620,8 @@ const HRManagement = () => {
         <ConfirmModal
           isOpen={showCancelConfirmModal}
           title={language === 'vi' ? 'Hủy yêu cầu kích hoạt' : 'Cancel Activation Request'}
-          message={language === 'vi' 
-            ? 'Bạn có chắc chắn muốn hủy yêu cầu kích hoạt Công việc tuyển gấp? Bạn sẽ phải gửi lại yêu cầu nếu muốn kích hoạt sau này.' 
+          message={language === 'vi'
+            ? 'Bạn có chắc chắn muốn hủy yêu cầu kích hoạt Công việc tuyển gấp? Bạn sẽ phải gửi lại yêu cầu nếu muốn kích hoạt sau này.'
             : 'Are you sure you want to cancel the Urgent Jobs activation request? You will need to resubmit the request if you change your mind.'}
           confirmText={language === 'vi' ? 'Hủy yêu cầu' : 'Cancel Request'}
           cancelText={language === 'vi' ? 'Giữ lại' : 'Keep Request'}

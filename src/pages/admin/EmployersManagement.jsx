@@ -22,6 +22,11 @@ import {
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
 import { getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
+import { 
+  createQuickJobActivationApprovedNotification, 
+  createQuickJobActivationRejectedNotification, 
+  createQuickJobActivationDeactivatedNotification 
+} from '../../services/notificationService';
 
 const PageContainer = styled.div``;
 
@@ -410,6 +415,21 @@ const Tab = styled.button`
   }
 `;
 
+const TabBadge = styled.span`
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -676,17 +696,47 @@ const EmployersManagement = () => {
     try {
       console.log(`⚡ Admin updating quick job status for ${employerId} to ${status}`);
       await adminEmployerService.updateQuickJobStatus(employerId, status);
+      
+      // Get the employer's company name from current state
+      const targetEmployer = employers.find(e => e.id === employerId);
+      const companyName = targetEmployer?.companyName || 'Nhà tuyển dụng';
+
       setEmployers(prev => prev.map(employer =>
         employer.id === employerId
           ? { ...employer, quickJobStatus: status }
           : employer
       ));
+
+      // Send status change notification to Employer
+      try {
+        if (status === 'approved') {
+          await createQuickJobActivationApprovedNotification(employerId, companyName);
+          console.log(`✅ Approved notification sent to employer: ${companyName}`);
+        } else if (status === 'rejected') {
+          await createQuickJobActivationRejectedNotification(employerId, companyName);
+          console.log(`✅ Rejected notification sent to employer: ${companyName}`);
+        } else if (status === 'not_requested') {
+          await createQuickJobActivationDeactivatedNotification(employerId, companyName);
+          console.log(`✅ Deactivated notification sent to employer: ${companyName}`);
+        }
+      } catch (notifyErr) {
+        console.error('❌ Error sending quick job status notification to employer:', notifyErr);
+      }
+
       alert(language === 'vi' ? 'Cập nhật trạng thái tuyển gấp thành công!' : 'Urgent Job status updated successfully!');
     } catch (error) {
       console.error('❌ Error updating quick job status:', error);
       alert(language === 'vi' ? 'Không thể cập nhật trạng thái tuyển gấp' : 'Failed to update Urgent Job status');
     }
   };
+
+  const pendingWithdrawCount = useMemo(() => {
+    return withdrawRequests.filter(req => req.status === 'pending').length;
+  }, [withdrawRequests]);
+
+  const pendingQuickJobCount = useMemo(() => {
+    return employers.filter(e => e.quickJobStatus === 'pending').length;
+  }, [employers]);
 
   const filteredEmployers = useMemo(() => {
     return employers.filter(employer => {
@@ -838,6 +888,7 @@ const EmployersManagement = () => {
               >
                 <TrendingUp size={18} style={{ marginRight: '8px' }} />
                 {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
+                {pendingWithdrawCount > 0 && <TabBadge>{pendingWithdrawCount}</TabBadge>}
               </Tab>
               <Tab 
                 $active={activeTab === 'quick_jobs'}
@@ -845,6 +896,7 @@ const EmployersManagement = () => {
               >
                 <Zap size={18} style={{ marginRight: '8px' }} />
                 {language === 'vi' ? 'Duyệt tuyển gấp' : 'Urgent Jobs'}
+                {pendingQuickJobCount > 0 && <TabBadge>{pendingQuickJobCount}</TabBadge>}
               </Tab>
             </TabsContainer>
 

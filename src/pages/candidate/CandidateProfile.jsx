@@ -1280,17 +1280,7 @@ const CandidateProfile = () => {
     facePhoto: null,
   });
 
-  const [kycCompleted, setKycCompleted] = useState(() => {
-    const savedKYC = localStorage.getItem('candidateKYC');
-    if (savedKYC) {
-      const parsed = JSON.parse(savedKYC);
-      if (parsed.formData) {
-        setKycFormData(parsed.formData);
-      }
-      return parsed.completed || false;
-    }
-    return false;
-  });
+  const [kycCompleted, setKycCompleted] = useState(false);
 
   const kycSteps = [
     {
@@ -1696,10 +1686,6 @@ const CandidateProfile = () => {
     }
 
     // Save KYC data
-    localStorage.setItem('candidateKYC', JSON.stringify({
-      completed: true,
-      formData: kycFormData
-    }));
     
     setKycCompleted(true);
     setShowKYCModal(false);
@@ -1722,7 +1708,7 @@ const CandidateProfile = () => {
       verificationCode: '',
       facePhoto: null,
     });
-    localStorage.setItem('candidateKYC', JSON.stringify({ completed: false }));
+    // Reset KYC status
   };
 
   const startCamera = async () => {

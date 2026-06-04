@@ -1,0 +1,75 @@
+INIT_START Runtime Version: python:3.11.mainlinev2.v11	Runtime Version ARN: arn:aws:lambda:ap-southeast-1::runtime:53285ee2fb9fac4cc9ebbb3c5ac1845832297f816fabe2356a10a7e37355c64e
+
+START RequestId: 9f4986ee-7ed3-414d-bdff-0f9d14b4bcf4 Version: $LATEST
+
+[POST] /ekyc/ocr
+
+handle_ocr start, user_id=296aa58c-30a1-70cc-44ed-b829e33a8245
+
+imageFront present=True, length=360388
+
+Loading credentials...
+
+Getting auth token...
+
+Token OK exp in 54900s
+
+Auth ok, bearer prefix=eyJhbGciOiJSUzI1NiIs...
+
+Original base64 length=360388
+
+Resized base64 length=360388
+
+Uploading front image to VNPT...
+
+Upload: image size=270289 bytes, type=image/jpeg
+
+Upload: status=200 FULL_BODY={"message":"IDG-00000000","object":{"fileName":"cccd","tokenId":"532e07aa-8191-1d4a-e063-63199f0a1a69","description":"ekyc","storageType":"IDG01","title":"ekyc","uploadedDate":"6/4/26 10:31 PM","hash":"idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_6729040a-602a-11f1-92a9-2d4ea0b90848","fileType":"jpg"}}
+
+Upload hash=idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_6729040a-602a-11f1-92a9-2d4ea0b90848 token=532e07aa-8191-1d4a-e063-63199f0a1a69
+
+front_hash=idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_6729040a-602a-11f1-92a9-2 front_token=532e07aa-8191-1d4a-e063-63199f0a1a69
+
+Calling OCR with hash...
+
+OCR try [CCCD chip (chip endpoint)] url=['ocr', 'chip', 'front'] token=532e07aa-8191-1d4a-e063-63199f0a1a69 type=3
+
+OCR [CCCD chip (chip endpoint)]: status=401 body={"messageObjects":[],"messageFields":[],"statusCode":"401 UNAUTHORIZED","message":"IDG-00000401","status":"UNAUTHORIZED","error":"No permission to access api"}
+
+OCR [CCCD chip (chip endpoint)] skipping (401): no permission or wrong type, trying next...
+
+OCR try [CCCD gắn chip (id endpoint, type=2)] url=['ocr', 'id', 'front'] token=532e07aa-8191-1d4a-e063-63199f0a1a69 type=2
+
+OCR [CCCD gắn chip (id endpoint, type=2)]: status=200 body={"imgs":{"img_front":"idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_6729040a-602a-11f1-92a9-2d4ea0b90848"},"dataSign":"h2734wstudMzuBGlbvRrm3lcilTtLMH5lH6f+5F/cwjbRAtSsoarqvTy2NLowlCpo5MSo7bjagUT4f6Gk+nu6Q==","dataBase64":"eyJpbWdzIjp7ImltZ19mcm9udCI6ImlkZzIwMjYwNjA0LTUzNDg3NzY0LTI0ZDYtNDg1OS1lMDYzLTYyMTk5ZjBhYTRjZC9JREcwMV82NzI5MDQwYS02MDJhLTExZjEtOTJhOS0yZDRlYTBiOTA4NDgifSwibWVzc2FnZSI6IklERy0wMDAwMDAwMCIsInNlcnZlcl92ZXJzaW9uIjoiMS42LjE0Iiwib2JqZWN0Ijp7Im9yaWdpbl9sb2NhdGlvbiI6IkFuIEjDsmEsIFRo4buLIHjDoyBUcuG6o25nIELDoG5nLCBUw6J5IE5pbmgiLCJtc2ciOiJPSyIsIm5hbWVfcHJvYiI6MC45OTk5OTk0NzU0NzkxMjU5LCJnZW5kZXIiOiJOYW0iLCJuYW1lX2Zha2Vfd2FybmluZ19wcm9iIjowLjE1MTEwNzQyODA3Mzg4MzA1LCJjb3Zlcl9wcm9iX2Zyb250IjowLCJleHBpcmVfd2FybmluZyI6Im5vIiwiYWRkcmVzc19mYWtlX3dhcm5pbmciOmZhbHNlLCJ2YWxpZF9kYXRl
+
+OCR success with [CCCD gắn chip (id endpoint, type=2)]
+
+OCR ok: id=072204002312 name=LÊ TẤN LỰC
+
+END RequestId: 9f4986ee-7ed3-414d-bdff-0f9d14b4bcf4
+
+REPORT RequestId: 9f4986ee-7ed3-414d-bdff-0f9d14b4bcf4	Duration: 2809.74 ms	Billed Duration: 3617 ms	Memory Size: 256 MB	Max Memory Used: 109 MB	Init Duration: 807.13 ms	
+
+START RequestId: 70169f3e-e4a4-4786-99ff-a82aaa62fdd0 Version: $LATEST
+
+[POST] /ekyc/verify-face
+
+Rate limit error: An error occurred (ValidationException) when calling the UpdateItem operation: The document path provided in the update expression is invalid for update
+
+Uploading selfie...
+
+Upload: image size=52017 bytes, type=image/jpeg
+
+Upload: status=200 FULL_BODY={"message":"IDG-00000000","object":{"fileName":"cccd","tokenId":"532e07aa-8191-1d4a-e063-63199f0a1a69","description":"ekyc","storageType":"IDG01","title":"ekyc","uploadedDate":"6/4/26 10:31 PM","hash":"idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_86e93829-602a-11f1-b867-43873ef261ca","fileType":"jpg"}}
+
+Upload hash=idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_86e93829-602a-11f1-b867-43873ef261ca token=532e07aa-8191-1d4a-e063-63199f0a1a69
+
+Face hash=idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_86e93829-602a-11f1-b867-43873ef261ca
+
+Liveness: 400 {"dataSign":"QIzv7P1aH+37peaqBK5K3bygPZA5LT/xOulKTBLM2wzLXcFImUWbNWriqIHM+nE/6w0i6/RfRPwF8ypUr7Cp3A==","dataBase64":"eyJtZXNzYWdlIjoiSURHLTAwMDEwNDQ0Iiwic2VydmVyX3ZlcnNpb24iOiIxLjYuMTQiLCJlcnJvcnMiOls
+
+Face compare: 200 {"imgs":{"img_face":"idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_86e93829-602a-11f1-b867-43873ef261ca","img_front":"idg20260604-53487764-24d6-4859-e063-62199f0aa4cd/IDG01_6729040a-602a-11f1
+
+END RequestId: 70169f3e-e4a4-4786-99ff-a82aaa62fdd0
+
+REPORT RequestId: 70169f3e-e4a4-4786-99ff-a82aaa62fdd0	Duration: 1835.78 ms	Billed Duration: 1836 ms	Memory Size: 256 MB	Max Memory Used: 109 MB	

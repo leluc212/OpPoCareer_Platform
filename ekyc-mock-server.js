@@ -35,7 +35,7 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 const kycAttempts = new Map();   // userId -> { count, date }
 const kycStatus   = new Map();   // userId -> kycRecord
 
-const MAX_DAILY_ATTEMPTS = 3;
+const MAX_DAILY_ATTEMPTS = 999; // Tăng giới hạn để test local thoải mái
 
 // ─── Helper: Check rate limit ─────────────────────────────────────────────────
 function checkRateLimit(userId) {

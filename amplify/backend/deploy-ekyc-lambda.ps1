@@ -11,8 +11,8 @@ $FUNCTION_NAME = "ekyc-handler"
 $API_ID        = "sd7ds72m8g"       # API Gateway HTTP API — dùng chung với candidate profile
 $ZIP_FILE      = "ekyc-handler.zip"
 
-Write-Host "📦 Zipping Lambda..."
-Compress-Archive -Path ekyc_handler.py -DestinationPath $ZIP_FILE -Force
+Write-Host "📦 Updating ekyc_handler.py inside zip..."
+python update_ekyc_zip.py
 
 # ── Deploy Lambda ──────────────────────────────────────────────────────────────
 $exists = aws lambda get-function --function-name $FUNCTION_NAME --region $REGION 2>$null

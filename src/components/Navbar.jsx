@@ -364,7 +364,7 @@ const FloatingChatWindow = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 9999;
+  z-index: 1000;
   animation: slideUp 0.25s ease-out;
   
   @keyframes slideUp {

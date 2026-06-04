@@ -56,7 +56,7 @@ const FloatContainer = styled.div`
   right: 24px;
   top: 55%;
   transform: translateY(-50%);
-  z-index: 9999;
+  z-index: 990;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -606,6 +606,7 @@ export default function FloatingSupportBar() {
   const { toasts, removeToast, success, error: toastError } = useToast();
 
   const [savedJobsCount, setSavedJobsCount] = useState(0);
+  const [kycCompleted, setKycCompleted] = useState(false);
   const [activeModal, setActiveModal] = useState(null); // 'feedback', 'support', 'referral', or null
   const [feedbackCategory, setFeedbackCategory] = useState('bug');
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -614,22 +615,27 @@ export default function FloatingSupportBar() {
   const [copiedText, setCopiedText] = useState(null);
   const [guestEmail, setGuestEmail] = useState('');
 
-  // Fetch initial saved jobs count if candidate
+  // Fetch initial saved jobs count and eKYC status if candidate
   useEffect(() => {
-    const fetchSavedJobsCount = async () => {
+    const fetchProfileData = async () => {
       if (isAuthenticated && user?.role === 'candidate') {
         try {
           const profile = await candidateProfileService.getMyProfile();
-          if (profile && Array.isArray(profile.savedJobs)) {
-            setSavedJobsCount(profile.savedJobs.length);
+          if (profile) {
+            if (Array.isArray(profile.savedJobs)) {
+              setSavedJobsCount(profile.savedJobs.length);
+            }
+            if (profile.kycCompleted || profile.kycStatus === 'VERIFIED') {
+              setKycCompleted(true);
+            }
           }
         } catch (err) {
-          console.error('Error fetching saved jobs count:', err);
+          console.error('Error fetching candidate profile data:', err);
         }
       }
     };
 
-    fetchSavedJobsCount();
+    fetchProfileData();
   }, [isAuthenticated, user]);
 
   // Listen to the custom event for saved jobs toggled
@@ -673,6 +679,14 @@ export default function FloatingSupportBar() {
       setActiveModal('referral');
     } else if (type === 'kyc') {
       if (user?.role === 'candidate') {
+        if (kycCompleted) {
+          success(
+            language === 'vi'
+              ? 'Tài khoản của bạn đã được xác thực eKYC thành công!'
+              : 'Your account has already been eKYC verified!'
+          );
+          return;
+        }
         navigate('/candidate/kyc');
       } else if (user?.role === 'employer') {
         navigate('/employer/verification');
@@ -809,15 +823,6 @@ export default function FloatingSupportBar() {
           </CircularBtn>
         )}
 
-        {/* Referral Circular Button */}
-        {isCandidate && !isAdmin && (
-          <CircularBtn onClick={() => handleShortcutClick('referral')}>
-            <UserPlus />
-            <Tooltip>
-              {language === 'vi' ? 'Giới thiệu bạn bè' : 'Refer Friends'}
-            </Tooltip>
-          </CircularBtn>
-        )}
 
         {/* Post Standard Job - Employer Only */}
         {isEmployer && (
@@ -830,7 +835,7 @@ export default function FloatingSupportBar() {
         )}
 
         {/* KYC / Verification Status Circular Button */}
-        {!isAdmin && (
+        {!isAdmin && !(user?.role === 'candidate' && kycCompleted) && (
           <PulseCircularBtn onClick={() => handleShortcutClick('kyc')}>
             <ShieldCheck />
             <Tooltip>

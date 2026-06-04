@@ -5,7 +5,7 @@
  *   Bước 0 — CCCD: upload mặt trước + mặt sau → gọi OCR → hiển thị kết quả → ứng viên xác nhận
  *   Bước 1 — Selfie: chụp ảnh → gọi face verify → VERIFIED → done
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,12 +16,14 @@ import {
   ArrowRight, ArrowLeft, AlertCircle, Shield, Loader, XCircle
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
-import { ocrCCCD, verifyFace } from '../../services/ekycService';
+import { ocrCCCD, verifyFace, getKycStatus } from '../../services/ekycService';
+import { useAuth } from '../../context/AuthContext';
+import candidateProfileService from '../../services/candidateProfileService';
 
 // ─── Animations ───────────────────────────────────────────────────────────────
-const spin   = keyframes`from { transform: rotate(0deg); } to { transform: rotate(360deg); }`;
-const float  = keyframes`0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); }`;
-const pulse  = keyframes`
+const spin = keyframes`from { transform: rotate(0deg); } to { transform: rotate(360deg); }`;
+const float = keyframes`0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); }`;
+const pulse = keyframes`
   0%,100% { transform: scale(1); box-shadow: 0 8px 24px rgba(30,64,175,.35); }
   50%      { transform: scale(1.05); box-shadow: 0 12px 32px rgba(30,64,175,.45); }
 `;
@@ -87,8 +89,8 @@ const Step = styled(motion.div)`
     font-weight: 800; font-size: clamp(13px,1.5vw,16px);
     transition: all .4s cubic-bezier(.4,0,.2,1);
     box-shadow: ${p => (p.$completed || p.$active)
-      ? `0 8px 24px ${p.$active ? 'rgba(30,64,175,.35)' : 'rgba(16,185,129,.35)'}`
-      : '0 2px 8px rgba(0,0,0,.05)'};
+    ? `0 8px 24px ${p.$active ? 'rgba(30,64,175,.35)' : 'rgba(16,185,129,.35)'}`
+    : '0 2px 8px rgba(0,0,0,.05)'};
     svg { width: clamp(16px,2vw,22px); height: clamp(16px,2vw,22px); }
     ${p => p.$active && css`animation: ${pulse} 2s ease-in-out infinite;`}
   }
@@ -271,35 +273,66 @@ const LoadingOverlay = styled(motion.div)`
 // ─── Component ────────────────────────────────────────────────────────────────
 const CandidateKYC = () => {
   const { language } = useLanguage();
-  const navigate     = useNavigate();
-  const videoRef     = useRef(null);
-  const streamRef    = useRef(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   // Bước 0 = CCCD, Bước 1 = Selfie, Bước 2 = Done
-  const [currentStep,    setCurrentStep]    = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
-  const [loading,        setLoading]        = useState(false);
-  const [loadingMsg,     setLoadingMsg]     = useState('');
-  const [error,          setError]          = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadingMsg, setLoadingMsg] = useState(language === 'vi' ? 'Đang kiểm tra trạng thái xác thực...' : 'Checking verification status...');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const checkVerificationStatus = async () => {
+      if (!user?.userId) return;
+      try {
+        const res = await getKycStatus(user.userId);
+        if (active) {
+          if (res && (res.kycCompleted || res.kycStatus === 'VERIFIED')) {
+            navigate('/candidate/profile', { replace: true });
+          } else {
+            setLoading(false);
+            setLoadingMsg('');
+          }
+        }
+      } catch (err) {
+        console.error('Error checking KYC status:', err);
+        if (active) {
+          setLoading(false);
+          setLoadingMsg('');
+        }
+      }
+    };
+
+    checkVerificationStatus();
+
+    return () => {
+      active = false;
+    };
+  }, [user, navigate, language]);
 
   // CCCD images & OCR
-  const [frontImage,   setFrontImage]   = useState(null);
-  const [backImage,    setBackImage]    = useState(null);
-  const [ocrResult,    setOcrResult]    = useState(null);  // kết quả từ VNPT
-  const [frontHash,    setFrontHash]    = useState(null);  // hash để tái dùng cho face verify
-  const [frontToken,   setFrontToken]   = useState(null);  // transaction token từ OCR
+  const [frontImage, setFrontImage] = useState(null);
+  const [backImage, setBackImage] = useState(null);
+  const [ocrResult, setOcrResult] = useState(null);  // kết quả từ VNPT
+  const [frontHash, setFrontHash] = useState(null);  // hash để tái dùng cho face verify
+  const [frontToken, setFrontToken] = useState(null);  // transaction token từ OCR
   const [ocrConfirmed, setOcrConfirmed] = useState(false); // ứng viên đã bấm xác nhận
 
   // Selfie & face result
-  const [selfieImg,  setSelfieImg]  = useState(null);
+  const [selfieImg, setSelfieImg] = useState(null);
   const [faceResult, setFaceResult] = useState(null);
-  const [cameraOn,   setCameraOn]   = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
 
   const t = (vi, en) => language === 'vi' ? vi : en;
 
   const steps = [
     { id: 0, label: t('Xác minh CCCD', 'ID Card'), icon: CreditCard },
-    { id: 1, label: t('Khuôn mặt',     'Selfie'),  icon: Camera },
+    { id: 1, label: t('Khuôn mặt', 'Selfie'), icon: Camera },
   ];
 
   const getProgress = () => (completedSteps.length / steps.length) * 100;
@@ -382,7 +415,15 @@ const CandidateKYC = () => {
       const faceRes = await verifyFace(selfieImg, frontHash, frontToken);
       setFaceResult(faceRes);
       if (faceRes?.kycStatus === 'VERIFIED') {
-        localStorage.setItem('candidateKYC', JSON.stringify({ completed: true }));
+        try {
+          await candidateProfileService.updateProfile({
+            cccd: ocrResult?.id || '',
+            fullName: ocrResult?.name || '',
+            dateOfBirth: ocrResult?.dob || ''
+          });
+        } catch (dbErr) {
+          console.error('Failed to update profile fields:', dbErr);
+        }
         markComplete(1);
         setTimeout(() => { markComplete(0); setCurrentStep(2); }, 2000);
       } else {
@@ -484,9 +525,11 @@ const CandidateKYC = () => {
         <AnimatePresence>
           {error && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-              style={{ background: '#fee2e2', border: '2px solid #ef444450', borderRadius: 12,
+              style={{
+                background: '#fee2e2', border: '2px solid #ef444450', borderRadius: 12,
                 padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center',
-                gap: 10, color: '#b91c1c', fontSize: 14, fontWeight: 600 }}>
+                gap: 10, color: '#b91c1c', fontSize: 14, fontWeight: 600
+              }}>
               <XCircle size={18} style={{ flexShrink: 0 }} />
               {error}
             </motion.div>
@@ -659,8 +702,10 @@ const CandidateKYC = () => {
                 ) : (
                   <>
                     <img src={selfieImg} alt="selfie"
-                      style={{ width: '100%', maxWidth: 360, borderRadius: 14, objectFit: 'cover',
-                               aspectRatio: '4/3', boxShadow: '0 6px 20px rgba(0,0,0,.1)' }} />
+                      style={{
+                        width: '100%', maxWidth: 360, borderRadius: 14, objectFit: 'cover',
+                        aspectRatio: '4/3', boxShadow: '0 6px 20px rgba(0,0,0,.1)'
+                      }} />
                     <div style={{ marginTop: 10 }}>
                       <Button $variant="secondary"
                         onClick={() => { setSelfieImg(null); setFaceResult(null); setError(''); }}>

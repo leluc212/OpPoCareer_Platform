@@ -4305,7 +4305,7 @@ const LandingPage = ({ children }) => {
             </CompanyDetails>
 
             <QrCodeArea>
-              <img src="/images/qrcode.png" alt="QR Code" onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://leluc212.github.io/OpPoReview/' }} />
+              <img src="/images/qrcode.png" alt="QR Code" onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://oppocareer.com&format=png&margin=10' }} />
               <p>https://oppocareer.com</p>
             </QrCodeArea>
           </FooterBottom>

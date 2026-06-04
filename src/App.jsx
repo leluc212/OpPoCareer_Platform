@@ -413,7 +413,7 @@ function ThemedApp() {
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : theme}>
       <GlobalStyles />
-      <Router basename="/OpPoReview/">
+      <Router basename="/">
         <ScrollToTop />
         <AppRoutes />
         <FloatingSupportBar />

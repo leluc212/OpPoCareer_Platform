@@ -1,8 +1,9 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../../context/LanguageContext';
+import { s3Images } from '../../utils/s3Images';
 
 /* ═══════════════════════════════════════════════
    KEYFRAMES
@@ -613,7 +614,7 @@ const RegisterRoleSelection = () => {
         {/* brand */}
         <motion.div variants={item}>
           <BrandLink to="/">
-            <BrandImg src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+            <BrandImg src={s3Images.system.logo} alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
           </BrandLink>
         </motion.div>
 

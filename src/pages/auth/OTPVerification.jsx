@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Button } from '../../components/FormElements';
 import { CheckCircle, ArrowLeft, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { s3Images } from '../../utils/s3Images';
 
 /* ── Animations ── */
 const gradMove = keyframes`
@@ -461,7 +462,7 @@ const OTPVerification = () => {
 
           <div style={{ marginTop: 28 }}>
             <LogoRow>
-              <LogoImg src="/images/logo.png" alt="logo" onError={e => { e.target.style.display = 'none'; }} />
+              <LogoImg src={s3Images.system.logo} alt="logo" onError={e => { e.target.style.display = 'none'; }} />
               <LogoTxt>Ốp Pờ</LogoTxt>
             </LogoRow>
 

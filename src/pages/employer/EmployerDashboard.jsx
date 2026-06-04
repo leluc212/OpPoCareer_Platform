@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -765,7 +765,7 @@ const EmployerDashboard = () => {
     if (employerProfile?.companyLogo) {
       return employerProfile.companyLogo;
     }
-    return '/images/katinatlogo.jpg';
+    return imgUrl('images/katinatlogo.jpg');
   };
 
   return (

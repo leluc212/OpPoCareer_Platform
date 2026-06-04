@@ -993,9 +993,9 @@ const Subscription = () => {
                     <Clock size={16} /> {vi ? 'Chúng tôi sẽ liên hệ bạn' : 'We will contact you'}
                   </div>
                   <div style={{ fontSize: '13px', color: '#475569', lineHeight: '1.5' }}>
-                    {vi 
-                      ? 'Sau khi bạn gửi yêu cầu, đội ngũ hỗ trợ của chúng tôi sẽ liên hệ qua thông tin tài khoản của bạn để hỗ trợ kích hoạt gói dịch vụ.' 
-                      : 'After you submit the request, our support team will contact you via your account details to assist in activating the service.'}
+                    {vi
+                      ? 'Sau khi bạn gửi yêu cầu, đội ngũ hỗ trợ của chúng tôi sẽ liên hệ qua số điện thoại đã đăng ký để hỗ trợ kích hoạt gói dịch vụ.'
+                      : 'After you submit the request, our support team will contact you via your registered phone number to assist in activating the service.'}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #DBEAFE', paddingTop: '10px', marginTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#475569' }}>
@@ -1014,8 +1014,8 @@ const Subscription = () => {
                   <CancelButton type="button" onClick={() => setShowDurationModal(false)} style={{ padding: '8px 16px', fontSize: '13.5px' }}>
                     {vi ? 'Hủy' : 'Cancel'}
                   </CancelButton>
-                  <ConfirmButton 
-                    type="button" 
+                  <ConfirmButton
+                    type="button"
                     onClick={handleSendContactRequest}
                     style={{ background: selectedPackage.color, padding: '8px 20px', fontSize: '13.5px' }}
                   >

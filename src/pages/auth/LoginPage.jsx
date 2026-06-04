@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { s3Images } from '../../utils/s3Images';
 
 /* ═══════════════════════════════════════════════════
    KEYFRAMES
@@ -870,7 +871,7 @@ const LoginPage = () => {
           <Star $s={8} $t="68%" $l="5%" $dur={4} $d={0.5}>✦</Star>
           <Star $s={12} $t="86%" $l="86%" $dur={2.4} $d={1.5}>✦</Star>
           <BrandRow>
-            <BrandImg src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+            <BrandImg src={s3Images.system.logo} alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
           </BrandRow>
 
           <HeroWrap>
@@ -941,7 +942,7 @@ const LoginPage = () => {
           </AnimatePresence>
           {/* Header */}
           <CardLogoRow>
-            <CLogoImg src="/images/logo.png" alt="Ốp Pờ" onError={e=>{e.target.style.display='none';}} />
+            <CLogoImg src={s3Images.system.logo} alt="Ốp Pờ" onError={e=>{e.target.style.display='none';}} />
           </CardLogoRow>
           <CardTitle>{t.login.signIn}</CardTitle>
           <CardSub>

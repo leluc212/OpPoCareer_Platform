@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "ekyc:mock": "node ekyc-mock-server.js",
     "create-profile-table": "node amplify/backend/create-candidate-profile-table.js",
-    "create-profile-table:ps": "powershell -ExecutionPolicy Bypass -File amplify/backend/create-candidate-profile-table.ps1"
+    "create-profile-table:ps": "powershell -ExecutionPolicy Bypass -File amplify/backend/create-candidate-profile-table.ps1",
+    "upload-images": "python scripts/upload_images_to_s3.py --bucket opporeview-cv-storage"
   },
   "dependencies": {
     "@aws-amplify/core": "^6.16.1",

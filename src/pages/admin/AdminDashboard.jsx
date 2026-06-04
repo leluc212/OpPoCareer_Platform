@@ -1,10 +1,11 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import StatsCard from '../../components/StatsCard';
 
 import { useLanguage } from '../../context/LanguageContext';
+import { s3Images } from '../../utils/s3Images';
 
 import { Users, Briefcase, Building2, DollarSign, CheckSquare, XSquare, Shield, Calendar, ArrowRight, Zap, TrendingUp, Star, Sparkles, Eye, Rocket, FileText, ChevronDown } from 'lucide-react';
 
@@ -1714,10 +1715,10 @@ const AdminDashboard = () => {
                 const bgColor = colors[index % colors.length];
 
                 const logoMap = {
-                  'Cơm tấm Phúc Lộc Thọ': '/images/logoplt.png',
-                  'Katinat': '/images/katinatlogo.jpg',
-                  'The Coffee House': '/images/coffeehouse.jpg',
-                  'Highlands Coffee': '/images/highlands.jpg',
+                  'Cơm tấm Phúc Lộc Thọ': s3Images.system.logoPlt,
+                  'Katinat': s3Images.system.katinatlogo,
+                  'The Coffee House': s3Images.system.coffeehouse,
+                  'Highlands Coffee': s3Images.system.highlands,
                 };
                 const logo = logoMap[post.employer] || null;
 

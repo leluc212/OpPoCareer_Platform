@@ -1,8 +1,9 @@
-﻿import React from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Globe, ChevronDown, Star } from 'lucide-react';
+import { s3Images } from '../../utils/s3Images';
 
 const DownloadAppContainer = styled.div`
   min-height: 100vh;
@@ -531,11 +532,11 @@ const DownloadApp = () => {
             
             <StoreButtons>
               <StoreButton href="https://apps.apple.com" target="_blank">
-                <img src="/images/appstore1.jpg" alt="App Store" />
+                <img src={s3Images.system.appstore} alt="App Store" />
               </StoreButton>
               
               <StoreButton href="https://play.google.com" target="_blank">
-                <img src="/images/chplay.jpg" alt="Google Play" />
+                <img src={s3Images.system.chplay} alt="Google Play" />
               </StoreButton>
             </StoreButtons>
           </DownloadOptions>

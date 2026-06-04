@@ -382,6 +382,7 @@ const CandidateKYC = () => {
       const faceRes = await verifyFace(selfieImg, frontHash, frontToken);
       setFaceResult(faceRes);
       if (faceRes?.kycStatus === 'VERIFIED') {
+        localStorage.setItem('candidateKYC', JSON.stringify({ completed: true }));
         markComplete(1);
         setTimeout(() => { markComplete(0); setCurrentStep(2); }, 2000);
       } else {

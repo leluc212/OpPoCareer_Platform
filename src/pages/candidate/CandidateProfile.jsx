@@ -1228,6 +1228,11 @@ const CandidateProfile = () => {
               if (profile.profileImage) {
                 setProfileImage(profile.profileImage);
               }
+
+              // Load eKYC status
+              if (profile.kycCompleted || profile.kycStatus === 'VERIFIED') {
+                setKycCompleted(true);
+              }
               
               console.log('✅ Profile loaded from DynamoDB');
             } else {

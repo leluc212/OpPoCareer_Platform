@@ -675,22 +675,26 @@ const Subscription = () => {
 
   const handleSelectPackage = (plan, priceOption) => {
     setSelectedPackage(plan);
+    setSelectedDuration(priceOption);
     setShowDurationModal(true);
   };
 
   const handleClickPackageButton = (plan) => {
     setSelectedPackage(plan);
+    if (plan.prices && plan.prices.length > 0) {
+      setSelectedDuration(plan.prices[0]);
+    } else {
+      setSelectedDuration(null);
+    }
     setShowDurationModal(true);
   };
 
-  const handleSelectDuration = (priceOption) => {
-    setSelectedDuration(priceOption);
-    setShowDurationModal(false);
-    setShowConfirmModal(true);
-  };
+  const handleSendContactRequest = async () => {
+    if (!selectedPackage || !selectedDuration) {
+      alert(vi ? 'Vui lòng chọn gói và thời hạn sử dụng.' : 'Please select a package and duration.');
+      return;
+    }
 
-  const handleConfirmPurchase = async () => {
-    // Parse price from string (e.g., "495,000 VND" -> 495000)
     const priceString = selectedDuration.amount.replace(/[^0-9]/g, '');
     const packagePrice = parseInt(priceString);
 
@@ -707,17 +711,6 @@ const Subscription = () => {
       console.error('Error getting Cognito session:', error);
     }
 
-    // Get wallet balance from database
-    let currentBalance = 0;
-    try {
-      const wallet = await getWallet(employerId);
-      currentBalance = wallet.walletBalance || 0;
-    } catch (error) {
-      console.error('Error getting wallet balance from database:', error);
-      alert(vi ? 'Không thể tải thông tin ví từ máy chủ. Vui lòng thử lại.' : 'Failed to fetch wallet information from server. Please try again.');
-      return;
-    }
-
     // Get companyName from DynamoDB
     let companyName = 'Unknown Company';
     try {
@@ -732,91 +725,37 @@ const Subscription = () => {
       companyName = employerProfile.companyName || 'Unknown Company';
     }
 
-    console.log('Package price:', packagePrice);
-    console.log('Current balance:', currentBalance);
-    console.log('Employer ID:', employerId);
-    console.log('Company Name:', companyName);
-
-    // Check if balance is sufficient
-    if (currentBalance < packagePrice) {
-      // Show insufficient balance modal
-      setShowConfirmModal(false);
-      setShowInsufficientBalanceModal(true);
-      return;
-    }
-
-    console.log('New balance after purchase:', currentBalance - packagePrice);
-
-    // Create purchase record and send to API
-    console.log('🚀 Starting purchase process...');
-    console.log('   Package:', selectedPackage.packageName);
-    console.log('   Duration:', selectedDuration.duration);
-    console.log('   Price:', packagePrice);
-    console.log('   Employer:', employerId);
-    console.log('   Company:', companyName);
-
-    // Generate subscription ID first (in case API fails)
-    const subscriptionId = `SUB-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log('   Subscription ID:', subscriptionId);
-
     try {
       const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
-      console.log('📡 Subscription API:', API_ENDPOINT);
-
       const purchaseData = {
         employerId: employerId,
         companyName: companyName,
         packageName: selectedPackage.packageName,
-        duration: selectedDuration.duration
+        duration: selectedDuration.duration,
+        paymentMethod: 'contact'
       };
 
-      console.log('📤 Sending purchase to subscription API...');
+      console.log('📤 Sending request to subscription API:', purchaseData);
 
-      let subscriptionCreated = false;
-      let apiSubscriptionId = subscriptionId;
+      const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8'
+        },
+        body: JSON.stringify(purchaseData)
+      });
 
-      try {
-        const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8'
-          },
-          body: JSON.stringify(purchaseData)
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          console.log('✅ Subscription created via API:', result);
-          apiSubscriptionId = result.data?.subscriptionId || subscriptionId;
-          subscriptionCreated = true;
-        } else {
-          const errorMsg = await response.json().catch(() => ({}));
-          console.warn('⚠️ Subscription API returned error:', response.status);
-          alert(errorMsg.message || 'Thanh toán gói thất bại. Vui lòng kiểm tra lại số dư ví.');
-          return;
-        }
-      } catch (apiError) {
-        console.error('⚠️ Subscription API failed:', apiError.message);
-        alert(vi ? 'Kết nối đến hệ thống thanh toán bị lỗi. Vui lòng thử lại.' : 'Connection to payment system failed. Please try again.');
+      if (!response.ok) {
+        const errorMsg = await response.json().catch(() => ({}));
+        alert(errorMsg.message || 'Gửi yêu cầu mở gói thất bại. Vui lòng thử lại.');
         return;
       }
 
-      // ALWAYS create notification for admin (even if subscription API fails)
-      console.log('');
-      console.log('📤 Creating notification for admin...');
-      console.log('   This is CRITICAL - notification must be created!');
-      console.log('   Environment check:');
-      console.log('   - VITE_NOTIFICATIONS_API:', import.meta.env.VITE_NOTIFICATIONS_API);
-      console.log('   - typeof:', typeof import.meta.env.VITE_NOTIFICATIONS_API);
+      const result = await response.json();
+      console.log('✅ Subscription request created:', result);
+      const apiSubscriptionId = result.data?.subscriptionId;
 
-      // Verify API endpoint is available
-      if (!import.meta.env.VITE_NOTIFICATIONS_API) {
-        console.error('❌ CRITICAL: VITE_NOTIFICATIONS_API is undefined!');
-        console.error('   All env vars:', import.meta.env);
-        alert('Lỗi: Không thể kết nối đến hệ thống thông báo. Vui lòng liên hệ admin.');
-        return;
-      }
-
+      // Create notification for admin
       try {
         const notificationData = {
           subscriptionId: apiSubscriptionId,
@@ -826,55 +765,17 @@ const Subscription = () => {
           duration: selectedDuration.duration,
           price: packagePrice
         };
-
-        console.log('📦 Notification data:', notificationData);
-        console.log('📤 Calling createPackagePurchaseRequestNotification...');
-
-        const notificationResult = await createPackagePurchaseRequestNotification(notificationData);
-
-        console.log('✅ Notification function returned!');
-        console.log('   Result:', notificationResult);
-        console.log('   Result type:', typeof notificationResult);
-        console.log('   Result.success:', notificationResult?.success);
-
-        if (notificationResult && notificationResult.success) {
-          console.log('✅ Notification ID:', notificationResult.data?.notificationId);
-          console.log('✅ Notification saved to DynamoDB!');
-          console.log('✅ Admin will see this notification in their dashboard');
-        } else {
-          console.error('❌ Notification API returned success=false');
-          console.error('   Full response:', JSON.stringify(notificationResult, null, 2));
-          // Don't block the purchase flow, but log the error
-          console.warn('⚠️ Continuing with purchase despite notification error');
-        }
-
-        // Trigger a storage event to update navbar immediately
-        console.log('📡 Dispatching storage event to update navbar...');
-        window.dispatchEvent(new Event('storage'));
-        console.log('✅ Storage event dispatched');
-
+        await createPackagePurchaseRequestNotification(notificationData);
       } catch (notifError) {
-        console.error('❌ CRITICAL ERROR: Failed to create notification!');
-        console.error('   Error type:', notifError.constructor.name);
-        console.error('   Error:', notifError);
-        console.error('   Message:', notifError.message);
-        console.error('   Stack:', notifError.stack);
-
-        // Log additional debugging info
-        if (notifError.response) {
-          console.error('   Response status:', notifError.response.status);
-          console.error('   Response data:', notifError.response.data);
-        }
-
-        // Show alert to user but don't block the purchase
-        console.warn('⚠️ Showing alert to user about notification error');
-        alert('Cảnh báo: Đơn hàng đã được tạo nhưng thông báo cho admin có thể bị lỗi. Vui lòng liên hệ admin để xác nhận.');
+        console.error('❌ Failed to create notification for admin:', notifError);
       }
 
       // Show success modal
-      console.log('✅ Purchase process completed!');
-      setShowConfirmModal(false);
+      setShowDurationModal(false);
       setShowSuccessModal(true);
+
+      // Trigger a storage event to update navbar immediately
+      window.dispatchEvent(new Event('storage'));
 
       // Auto close after 3 seconds
       setTimeout(() => {
@@ -884,11 +785,8 @@ const Subscription = () => {
       }, 3000);
 
     } catch (error) {
-      console.error('❌ Error in purchase process:', error);
-      console.error('   Message:', error.message);
-      console.error('   Stack:', error.stack);
-
-      alert(vi ? 'Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.' : 'Error creating order. Please try again.');
+      console.error('❌ Error in sending contact request:', error);
+      alert(vi ? 'Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.' : 'Error sending request. Please try again.');
     }
   };
 
@@ -1026,12 +924,12 @@ const Subscription = () => {
 
         </Inner>
 
-        {/* Duration Selection Modal */}
+        {/* Purchase/Open Request Modal */}
         {showDurationModal && selectedPackage && (
           <ModalOverlay onClick={() => setShowDurationModal(false)}>
-            <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
               <ModalHeader>
-                <h3>{vi ? 'Thông tin liên hệ mua gói' : 'Contact to Purchase'}</h3>
+                <h3>{vi ? 'Yêu cầu mở gói dịch vụ' : 'Request Service Package'}</h3>
                 <CloseButton onClick={() => setShowDurationModal(false)}>
                   <X />
                 </CloseButton>
@@ -1044,86 +942,87 @@ const Subscription = () => {
                     <p>{selectedPackage.subtitle}</p>
                   </div>
                 </PackageInfo>
+
+                {/* Duration Options */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#334155', marginBottom: '10px', textAlign: 'left' }}>
+                    {vi ? 'Chọn thời hạn sử dụng:' : 'Select duration:'}
+                  </div>
+                  <DurationOptions style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginTop: '8px' }}>
+                    {selectedPackage.prices.map((priceOption, idx) => {
+                      const isSelected = selectedDuration && selectedDuration.duration === priceOption.duration;
+                      return (
+                        <DurationOptionCard
+                          key={idx}
+                          $color={selectedPackage.color}
+                          style={{
+                            borderColor: isSelected ? selectedPackage.color : '#E2E8F0',
+                            background: isSelected ? `${selectedPackage.color}12` : 'white',
+                            padding: '12px 8px',
+                            transform: isSelected ? 'scale(1.02)' : 'none',
+                            boxShadow: isSelected ? `0 4px 12px ${selectedPackage.color}18` : 'none',
+                            borderWidth: isSelected ? '2px' : '1px'
+                          }}
+                          onClick={() => setSelectedDuration(priceOption)}
+                        >
+                          <DurationLabel style={{ color: isSelected ? selectedPackage.color : '#64748B', fontSize: '12.5px', marginBottom: '4px' }}>
+                            {priceOption.duration}
+                          </DurationLabel>
+                          <DurationPrice style={{ color: isSelected ? selectedPackage.color : '#1E293B', fontSize: '14.5px', fontWeight: '800' }}>
+                            {priceOption.amount}
+                          </DurationPrice>
+                        </DurationOptionCard>
+                      );
+                    })}
+                  </DurationOptions>
+                </div>
+
+                {/* Contact & Support Info */}
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '16px',
-                  marginTop: '20px',
-                  padding: '20px',
-                  background: '#F8FAFC',
-                  borderRadius: '16px',
-                  border: '1.5px dashed #E2E8F0',
-                  textAlign: 'left'
+                  gap: '12px',
+                  padding: '16px',
+                  background: '#EFF6FF',
+                  border: '1.5px solid #BFDBFE',
+                  borderRadius: '12px',
+                  textAlign: 'left',
+                  marginBottom: '20px'
                 }}>
-                  <div style={{ fontWeight: '700', color: '#1e40af', fontSize: '15px', lineHeight: '1.5', marginBottom: '4px' }}>
-                    {vi ? 'Liên hệ để biết thêm thông tin chi tiết' : 'Contact for more details'}
+                  <div style={{ fontWeight: '700', color: '#1e40af', fontSize: '13.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={16} /> {vi ? 'Chúng tôi sẽ liên hệ bạn' : 'We will contact you'}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14.5px', color: '#475569' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Mail size={16} style={{ color: '#1e40af' }} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Email</div>
-                      <strong style={{ color: '#1e293b' }}>oppohiringplatform@gmail.com</strong>
-                    </div>
+                  <div style={{ fontSize: '13px', color: '#475569', lineHeight: '1.5' }}>
+                    {vi
+                      ? 'Sau khi bạn gửi yêu cầu, đội ngũ hỗ trợ của chúng tôi sẽ liên hệ qua số điện thoại đã đăng ký để hỗ trợ kích hoạt gói dịch vụ.'
+                      : 'After you submit the request, our support team will contact you via your registered phone number to assist in activating the service.'}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14.5px', color: '#475569' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Phone size={16} style={{ color: '#10B981' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #DBEAFE', paddingTop: '10px', marginTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#475569' }}>
+                      <Mail size={14} style={{ color: '#1e40af' }} />
+                      <span>oppohiringplatform@gmail.com</span>
                     </div>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>{vi ? 'Số điện thoại' : 'Phone'}</div>
-                      <strong style={{ color: '#1e293b' }}>0563 518 922</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#475569' }}>
+                      <Phone size={14} style={{ color: '#10B981' }} />
+                      <strong>0563 518 922</strong>
                     </div>
                   </div>
                 </div>
-              </ModalBody>
-            </ModalContent>
-          </ModalOverlay>
-        )}
 
-        {/* Confirmation Modal */}
-        {showConfirmModal && selectedPackage && selectedDuration && (
-          <ModalOverlay onClick={() => setShowConfirmModal(false)}>
-            <ModalContent onClick={(e) => e.stopPropagation()}>
-              <ModalHeader>
-                <h3>{vi ? 'Xác nhận mua gói' : 'Confirm Purchase'}</h3>
-                <CloseButton onClick={() => setShowConfirmModal(false)}>
-                  <X />
-                </CloseButton>
-              </ModalHeader>
-              <ModalBody>
-                <PackageInfo>
-                  <selectedPackage.Icon size={40} color={selectedPackage.color} />
-                  <div>
-                    <h4>{selectedPackage.name}</h4>
-                    <p>{selectedPackage.subtitle}</p>
-                  </div>
-                </PackageInfo>
-                <PurchaseDetails>
-                  <DetailRow>
-                    <span>{vi ? 'Thời hạn:' : 'Duration:'}</span>
-                    <strong>{selectedDuration.duration}</strong>
-                  </DetailRow>
-                  <DetailRow>
-                    <span>{vi ? 'Giá:' : 'Price:'}</span>
-                    <strong style={{ color: selectedPackage.color }}>{selectedDuration.amount}</strong>
-                  </DetailRow>
-                </PurchaseDetails>
-                <InfoNote>
-                  {vi
-                    ? '⏳ Yêu cầu mua gói sẽ được gửi đến admin để duyệt. Bạn sẽ nhận được thông báo khi gói được kích hoạt.'
-                    : '⏳ Purchase request will be sent to admin for approval. You will be notified when the package is activated.'}
-                </InfoNote>
+                {/* Buttons inside ModalBody */}
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <CancelButton type="button" onClick={() => setShowDurationModal(false)} style={{ padding: '8px 16px', fontSize: '13.5px' }}>
+                    {vi ? 'Hủy' : 'Cancel'}
+                  </CancelButton>
+                  <ConfirmButton
+                    type="button"
+                    onClick={handleSendContactRequest}
+                    style={{ background: selectedPackage.color, padding: '8px 20px', fontSize: '13.5px' }}
+                  >
+                    {vi ? 'Gửi yêu cầu mở gói' : 'Send Request'}
+                  </ConfirmButton>
+                </div>
               </ModalBody>
-              <ModalFooter>
-                <CancelButton onClick={() => setShowConfirmModal(false)}>
-                  {vi ? 'Hủy' : 'Cancel'}
-                </CancelButton>
-                <ConfirmButton onClick={handleConfirmPurchase}>
-                  {vi ? 'Xác nhận mua' : 'Confirm Purchase'}
-                </ConfirmButton>
-              </ModalFooter>
             </ModalContent>
           </ModalOverlay>
         )}
@@ -1144,12 +1043,12 @@ const Subscription = () => {
                 <CheckCircle size={60} />
               </SuccessIcon>
               <SuccessTitle>
-                {vi ? 'Thanh toán thành công!' : 'Payment Successful!'}
+                {vi ? 'Gửi yêu cầu thành công!' : 'Request Sent Successfully!'}
               </SuccessTitle>
               <SuccessMessage>
                 {vi
-                  ? 'Yêu cầu mua gói của bạn đã được gửi đến admin. Bạn sẽ nhận được thông báo khi gói được kích hoạt.'
-                  : 'Your package purchase request has been sent to admin. You will be notified when the package is activated.'}
+                  ? 'Yêu cầu mở gói dịch vụ đã được gửi thành công. Chúng tôi sẽ liên hệ bạn sớm nhất để hỗ trợ kích hoạt.'
+                  : 'Your service package activation request has been sent successfully. We will contact you shortly to activate it.'}
               </SuccessMessage>
               <SuccessButton onClick={() => setShowSuccessModal(false)}>
                 {vi ? 'Đóng' : 'Close'}

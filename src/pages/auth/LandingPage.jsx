@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { motion, useInView } from 'framer-motion';
@@ -8,6 +8,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
+import { s3Images } from '../../utils/s3Images';
+import { imgUrl } from '../../utils/assetUrl';
 
 const LandingContainer = styled.div`
   min-height: 80vh;
@@ -2865,15 +2867,15 @@ const particleConfigs = [
 ];
 
 const companyLogos = [
-  { name: 'TRUNG NGUYÊN', logo: '/images/trungnguyen.jpg' },
-  { name: 'KATINAT', logo: '/images/katinat.png' },
-  { name: 'BAMOS COFFEE', logo: '/images/bamos.png' },
-  { name: 'STARBUCK', logo: '/images/starbuck.png' },
-  { name: 'PHUC LONG', logo: '/images/phuclong.jpg' },
-  { name: 'THE COFFEE HOUSE', logo: '/images/coffeehouse.jpg' },
-  { name: 'HỒNG TRÀ NGÔ GIA', logo: '/images/ngogia.png' },
-  { name: 'SUNCHA', logo: '/images/suncha.jpg' },
-  { name: 'HIGHLANDS', logo: '/images/highlands.jpg' },
+  { name: 'TRUNG NGUYÊN', logo: s3Images.system.trungnguyen },
+  { name: 'KATINAT', logo: s3Images.system.katinat },
+  { name: 'BAMOS COFFEE', logo: s3Images.system.bamos },
+  { name: 'STARBUCK', logo: s3Images.system.starbuck },
+  { name: 'PHUC LONG', logo: s3Images.system.phuclong },
+  { name: 'THE COFFEE HOUSE', logo: s3Images.system.coffeehouse },
+  { name: 'HỒNG TRÀ NGÔ GIA', logo: s3Images.system.ngogia },
+  { name: 'SUNCHA', logo: s3Images.system.suncha },
+  { name: 'HIGHLANDS', logo: s3Images.system.highlands },
 ];
 
 const LandingPage = ({ children }) => {
@@ -3010,7 +3012,7 @@ const LandingPage = ({ children }) => {
       >
         <LeftSection>
           <Logo to="/">
-            <img src="/images/logo.png" alt="Ốp Pờ" style={{ height: '42px', marginRight: '5px' }} />
+            <img src={s3Images.system.logo} alt="Ốp Pờ" style={{ height: '42px', marginRight: '5px' }} />
 
           </Logo>
           <NavLinks $isDark={isDarkMode}>
@@ -3600,14 +3602,14 @@ const LandingPage = ({ children }) => {
                 transition={{ duration: 0.6, delay: 0.5 }}
               >
                 <SecondaryBanner
-                  src="/images/phache.png"
+                  src={s3Images.poster.phache}
                   alt="Phache"
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.7, delay: 0.7 }}
                 />
                 <MainBanner
-                  src="/images/poster.png"
+                  src={s3Images.poster.default}
                   alt="Poster"
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -3886,7 +3888,7 @@ const LandingPage = ({ children }) => {
         >
           <TechBannerContent>
             <TechBannerImage
-              src="/images/lemoments.png"
+              src={s3Images.poster.lemoments}
               alt="Le Moments Technology"
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -4016,9 +4018,21 @@ const LandingPage = ({ children }) => {
                 </QRCodeSection>
 
                 <StoreButtons>
+                  <StoreButton href="https://apps.apple.com" target="_blank">
+                    <img
+                      src={s3Images.system.appstore}
+                      alt="App Store"
+                      style={{
+                        width: '120px',
+                        height: 'auto',
+                        objectFit: 'contain'
+                      }}
+                    />
+                  </StoreButton>
+
                   <StoreButton href="https://play.google.com" target="_blank">
                     <img
-                      src="/images/chplay.jpg"
+                      src={s3Images.system.chplay}
                       alt="Google Play"
                       style={{
                         width: '120px',
@@ -4081,7 +4095,7 @@ const LandingPage = ({ children }) => {
                             transition={{ duration: 0.4, delay: 0.2 }}
                           >
                             <img
-                              src="/images/logo.png"
+                              src={s3Images.system.logo}
                               alt="Ốp Pờ"
                               style={{
                                 width: '100%',
@@ -4238,7 +4252,7 @@ const LandingPage = ({ children }) => {
             <FooterLeft $isDark={isDarkMode}>
               <div className="logo-area">
                 <Link to="/" className="logo-link">
-                  <img src="/images/logo.png" alt="Ốp Pờ Logo" />
+                  <img src={s3Images.system.logo} alt="Ốp Pờ Logo" />
                 </Link>
                 <p>{language === 'vi' ? 'Bạn vừa bị đuổi - Đã có Ốp Pờ lo' : 'Just got fired? Ốp Pờ has you covered'}</p>
                 <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>

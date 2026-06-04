@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 // aws-amplify will be loaded dynamically where needed to avoid Vite prebundle
 // export-shape issues (some builds don't expose default/named exports consistently).
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
+import { s3Images } from '../../utils/s3Images';
 
 /* ═══════════════════════════════════════════════════════════════
    KEYFRAMES
@@ -930,7 +931,7 @@ const CandidateRegister = () => {
 
         <Brand>
           <BrandLogoBox>
-            <BrandLogo src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+            <BrandLogo src={s3Images.system.logo} alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
           </BrandLogoBox>
         </Brand>
 
@@ -990,7 +991,7 @@ const CandidateRegister = () => {
           {/* Header */}
           <CardTop>
             <LogoRow>
-              <LogoImg src="/images/logo.png" alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
+              <LogoImg src={s3Images.system.logo} alt="Ốp Pờ" onError={e => { e.target.style.display = 'none'; }} />
               <LogoTxt>Ốp Pờ</LogoTxt>
             </LogoRow>
             <CardTitle>Tạo tài khoản ứng viên</CardTitle>

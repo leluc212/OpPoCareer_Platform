@@ -1382,10 +1382,50 @@ const EmployerWallet = () => {
     setTimeout(() => setCopiedText(''), 2000);
   };
 
-
-
-
-
+  const handleExportTransactions = () => {
+    try {
+      // 1. Define CSV headers
+      const headers = language === 'vi' 
+        ? ['Mã giao dịch', 'Loại giao dịch', 'Chi tiết', 'Số tiền (VND)', 'Ngày giao dịch']
+        : ['Transaction ID', 'Type', 'Description', 'Amount (VND)', 'Date'];
+        
+      // 2. Format row data
+      const rows = filteredTransactions.map(tx => {
+        const isIncome = tx.type === 'income' || tx.type === 'credit';
+        const sign = isIncome ? '+' : '-';
+        const formattedAmount = `${sign}${Math.abs(tx.amount)}`;
+        
+        const txType = isIncome
+          ? (language === 'vi' ? 'Nạp tiền / Thu nhập' : 'Deposit / Income')
+          : (language === 'vi' ? 'Rút tiền / Chi tiêu' : 'Withdrawal / Expense');
+          
+        return [
+          tx.id,
+          txType,
+          tx.description ? tx.description.replace(/,/g, ';') : '',
+          formattedAmount,
+          tx.date ? new Date(tx.date).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : ''
+        ];
+      });
+      
+      // 3. Construct CSV Content (with UTF-8 BOM for Excel to display Vietnamese characters correctly)
+      const csvContent = "\uFEFF" // UTF-8 BOM
+        + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
+        
+      // 4. Create blob and download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `opporeview_employer_transactions_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error exporting transactions:', err);
+      alert(language === 'vi' ? 'Xuất báo cáo thất bại!' : 'Failed to export report!');
+    }
+  };
   // Calculate stats
   const totalIncome = transactions
     .filter(t => t.type === 'income' || t.type === 'credit')
@@ -1547,6 +1587,7 @@ const EmployerWallet = () => {
                   <Button
                     $variant="secondary"
                     $size="small"
+                    onClick={handleExportTransactions}
                   >
                     <Download style={{ width: '16px', height: '16px' }} />
                     {language === 'vi' ? 'Xuất' : 'Export'}

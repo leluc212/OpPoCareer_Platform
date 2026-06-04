@@ -692,86 +692,110 @@ def create_subscription(body_str, headers):
         price = get_package_price(body['packageName'], body['duration'])
         price_decimal = Decimal(str(price))
         
-        # Check and deduct employer wallet balance in database
-        employer_id = body['employerId']
-        wallet_info = get_or_create_wallet(employer_id)
-        balance = wallet_info.get('walletBalance', Decimal('0'))
-        
-        if balance < price_decimal:
-            return {
-                'statusCode': 400,
-                'headers': headers,
-                'body': json.dumps({
-                    'success': False,
-                    'message': 'Số dư tài khoản không đủ để thanh toán gói dịch vụ này. Vui lòng nạp thêm tiền.'
-                })
-            }
-            
-        new_balance = balance - price_decimal
+        payment_method = body.get('paymentMethod', 'wallet')
+        is_contact_request = payment_method == 'contact'
         
         now_dt = get_vn_now()
-        txn_id = f"TXN-BUY-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
         
-        transaction = {
-            'transactionId': txn_id,
-            'type': 'debit',
-            'amount': price_decimal,
-            'description': f"Thanh toán gói dịch vụ {body['packageName']} ({body['duration']})",
-            'timestamp': now_dt.isoformat(),
-            'status': 'completed',
-            'paymentDetails': {
+        if not is_contact_request:
+            # Check and deduct employer wallet balance in database
+            employer_id = body['employerId']
+            wallet_info = get_or_create_wallet(employer_id)
+            balance = wallet_info.get('walletBalance', Decimal('0'))
+            
+            if balance < price_decimal:
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'message': 'Số dư tài khoản không đủ để thanh toán gói dịch vụ này. Vui lòng nạp thêm tiền.'
+                    })
+                }
+                
+            new_balance = balance - price_decimal
+            
+            txn_id = f"TXN-BUY-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+            
+            transaction = {
+                'transactionId': txn_id,
+                'type': 'debit',
+                'amount': price_decimal,
+                'description': f"Thanh toán gói dịch vụ {body['packageName']} ({body['duration']})",
+                'timestamp': now_dt.isoformat(),
+                'status': 'completed',
+                'paymentDetails': {
+                    'subscriptionId': subscription_id,
+                    'packageName': body['packageName'],
+                    'duration': body['duration']
+                }
+            }
+            
+            transactions = wallet_info.get('walletTransactions', [])
+            transactions.insert(0, transaction)
+            
+            # Deduct wallet balance and add transaction history record
+            employer_profile_table.update_item(
+                Key={'userId': employer_id},
+                UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
+                ExpressionAttributeValues={
+                    ':bal': new_balance,
+                    ':txs': transactions,
+                    ':updatedAt': now_dt.isoformat()
+                }
+            )
+            
+            expiry_dt = calculate_expiry_datetime(body['duration'], now_dt)
+            expiry_date = format_vn_date(expiry_dt)
+            
+            # Create item as active & approved directly since it is paid via wallet
+            item = {
                 'subscriptionId': subscription_id,
+                'employerId': body['employerId'],
+                'companyName': body['companyName'],
                 'packageName': body['packageName'],
-                'duration': body['duration']
+                'duration': body['duration'],
+                'price': price_decimal,
+                'purchaseDate': format_vn_date(now_dt),
+                'purchaseDateTime': now_dt.isoformat(),
+                'expiryDate': expiry_date,
+                'expiryDateTime': expiry_dt.isoformat(),
+                'status': 'active',  # active immediately
+                'approvalStatus': 'approved',  # approved immediately
+                'createdAt': now_dt.isoformat(),
+                'updatedAt': now_dt.isoformat(),
+                'paymentMethod': 'wallet'
             }
-        }
-        
-        transactions = wallet_info.get('walletTransactions', [])
-        transactions.insert(0, transaction)
-        
-        # Deduct wallet balance and add transaction history record
-        employer_profile_table.update_item(
-            Key={'userId': employer_id},
-            UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
-            ExpressionAttributeValues={
-                ':bal': new_balance,
-                ':txs': transactions,
-                ':updatedAt': now_dt.isoformat()
+        else:
+            # Create item as pending request
+            item = {
+                'subscriptionId': subscription_id,
+                'employerId': body['employerId'],
+                'companyName': body['companyName'],
+                'packageName': body['packageName'],
+                'duration': body['duration'],
+                'price': price_decimal,
+                'purchaseDate': format_vn_date(now_dt),
+                'purchaseDateTime': now_dt.isoformat(),
+                # Note: No expiryDate or expiryDateTime since it's waiting for approval
+                'status': 'pending',
+                'approvalStatus': 'pending',
+                'createdAt': now_dt.isoformat(),
+                'updatedAt': now_dt.isoformat(),
+                'paymentMethod': 'contact'
             }
-        )
-        
-        expiry_dt = calculate_expiry_datetime(body['duration'], now_dt)
-        expiry_date = format_vn_date(expiry_dt)
-        
-        # Create item as active & approved directly since it is paid via wallet
-        item = {
-            'subscriptionId': subscription_id,
-            'employerId': body['employerId'],
-            'companyName': body['companyName'],
-            'packageName': body['packageName'],
-            'duration': body['duration'],
-            'price': price_decimal,
-            'purchaseDate': format_vn_date(now_dt),
-            'purchaseDateTime': now_dt.isoformat(),
-            'expiryDate': expiry_date,
-            'expiryDateTime': expiry_dt.isoformat(),
-            'status': 'active',  # active immediately
-            'approvalStatus': 'approved',  # approved immediately
-            'createdAt': now_dt.isoformat(),
-            'updatedAt': now_dt.isoformat()
-        }
         
         # Put item in DynamoDB
         table.put_item(Item=item)
         
-        print(f"✅ Subscription created and paid: {subscription_id}")
+        print(f"✅ Subscription created (paymentMethod: {payment_method}): {subscription_id}")
         
         return {
             'statusCode': 201,
             'headers': headers,
             'body': json.dumps({
                 'success': True,
-                'message': 'Đăng ký gói dịch vụ thành công.',
+                'message': 'Đăng ký gói dịch vụ thành công.' if not is_contact_request else 'Gửi yêu cầu mở gói thành công.',
                 'data': item
             }, default=decimal_default)
         }

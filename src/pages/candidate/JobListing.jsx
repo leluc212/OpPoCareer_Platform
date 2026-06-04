@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -17,6 +17,7 @@ import candidateProfileService from '../../services/candidateProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { s3Images } from '../../utils/s3Images';
 
 // Animations
 const fadeIn = `
@@ -1918,9 +1919,9 @@ const JobListing = () => {
   const [highlightedJobId, setHighlightedJobId] = useState(null);
 
   const banners = [
-    { src: "/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
-    { src: "/images/unnamed1.jpg", alt: "Banner" },
-    { src: "/images/unnamed.jpg", alt: "Banner" }
+    { src: s3Images.banner.seoul, alt: "Seoul Vua Mì Cay" },
+    { src: s3Images.banner.unnamed1, alt: "Banner" },
+    { src: s3Images.banner.unnamed, alt: "Banner" }
   ];
 
   useEffect(() => {

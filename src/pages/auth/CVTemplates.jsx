@@ -12,6 +12,7 @@ import {
 import candidateProfileService from '../../services/candidateProfileService';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { s3Images } from '../../utils/s3Images';
 
 const fadeUp = keyframes`
   from { opacity: 0; transform: translateY(20px); }
@@ -1957,7 +1958,7 @@ const CVTemplates = () => {
       <LoggedInHeader $isDark={isDarkMode}>
         <NavLeft>
           <Logo to="/">
-            <img src="/OpPoReview/images/logo.png" alt="Ốp Pờ" />
+            <img src={s3Images.system.logo} alt="Ốp Pờ" />
           </Logo>
           <BackToProfileBtn to="/candidate/profile" $isDark={isDarkMode}>
             <ArrowLeft size={14} />

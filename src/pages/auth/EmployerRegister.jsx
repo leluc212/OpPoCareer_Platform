@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 // load aws-amplify dynamically where needed to handle ESM/CJS export differences
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
+import { s3Images } from '../../utils/s3Images';
 
 /* ────────────────────────────────────────────────────────────────────
    KEYFRAMES
@@ -1083,7 +1084,7 @@ const EmployerRegister = () => {
 
         <BrandRow>
           <BrandLogoBox>
-            <LogoImg src="/images/logo.png" alt="Ốp Pờ"
+            <LogoImg src={s3Images.system.logo} alt="Ốp Pờ"
               onError={e => { e.target.style.display = 'none'; }} />
           </BrandLogoBox>
         </BrandRow>
@@ -1155,7 +1156,7 @@ const EmployerRegister = () => {
           {/* Header */}
           <CardHead>
             <CardLogoRow>
-              <MiniLogo src="/images/logo.png" alt="Ốp Pờ"
+              <MiniLogo src={s3Images.system.logo} alt="Ốp Pờ"
                 onError={e => { e.target.style.display = 'none'; }} />
               <MiniName>Ốp Pờ</MiniName>
             </CardLogoRow>

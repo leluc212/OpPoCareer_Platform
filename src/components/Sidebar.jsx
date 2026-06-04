@@ -1,8 +1,9 @@
-﻿import React, { useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useLayoutEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { s3Images } from '../utils/s3Images';
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -447,7 +448,7 @@ const Sidebar = ({ role, onHoverChange }) => {
       onMouseLeave={handleMouseLeave}
     >
       <Logo>
-        <img src="/images/logo.png" alt="Ốp Pờ" style={{ height: '60px' }} />
+        <img src={s3Images.system.logo} alt="Ốp Pờ" style={{ height: '60px' }} />
         <LogoText>Ốp Pờ</LogoText>
       </Logo>
       

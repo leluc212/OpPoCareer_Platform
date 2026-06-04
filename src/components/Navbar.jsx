@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, Star, UserPlus, History, Building2, Tag as TagIcon, Package, Zap, XCircle, MessageSquare, Send, Trash2, Home } from 'lucide-react';
@@ -9,6 +9,7 @@ import employerProfileService from '../services/employerProfileService';
 import jobPostService from '../services/jobPostService';
 import { getNotifications, getUnreadCount, markAsRead } from '../services/notificationService';
 import RelativeTime from './RelativeTime';
+import { s3Images } from '../utils/s3Images';
 
 const NavbarContainer = styled.nav`
   height: 80px;
@@ -840,7 +841,7 @@ const Navbar = ({ showSearch = true }) => {
   const [searchHistory, setSearchHistory] = useState(() => JSON.parse(localStorage.getItem('jobSearchHistory') || '[]'));
   const [allJobTitles, setAllJobTitles] = useState([]);
   const searchBarRef = useRef(null);
-  const [companyLogo, setCompanyLogo] = useState(() => localStorage.getItem('companyLogo') || '/images/katinatlogo.jpg');
+  const [companyLogo, setCompanyLogo] = useState(() => localStorage.getItem('companyLogo') || s3Images.system.katinatlogo);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationTab, setNotificationTab] = useState('all');
   const [candidateProfile, setCandidateProfile] = useState(null);
@@ -997,7 +998,7 @@ const Navbar = ({ showSearch = true }) => {
 
   useEffect(() => {
     const handleLogoChange = () => {
-      setCompanyLogo(localStorage.getItem('companyLogo') || '/images/katinatlogo.jpg');
+      setCompanyLogo(localStorage.getItem('companyLogo') || s3Images.system.katinatlogo);
     };
     window.addEventListener('logoChanged', handleLogoChange);
     return () => window.removeEventListener('logoChanged', handleLogoChange);
@@ -1144,10 +1145,10 @@ const Navbar = ({ showSearch = true }) => {
 
               let logo = job?.companyLogo;
               if (!logo && companyName && companyName.toLowerCase().includes('katinat')) {
-                logo = '/OpPoReview/images/katinatlogo.jpg';
+                logo = s3Images.system.katinatlogo;
               }
               if (!logo) {
-                logo = '/OpPoReview/images/katinatlogo.jpg'; // default fallback
+                logo = s3Images.system.katinatlogo; // default fallback
               }
 
               return {
@@ -1165,9 +1166,9 @@ const Navbar = ({ showSearch = true }) => {
               (notif) => notif.data?.jobId === app.jobId
             );
             const fallbackCompanyName = matchingNotif?.data?.companyName || app.employerName || app.companyName || 'Công ty';
-            let logo = '/OpPoReview/images/katinatlogo.jpg';
+            let logo = s3Images.system.katinatlogo;
             if (fallbackCompanyName.toLowerCase().includes('katinat')) {
-              logo = '/OpPoReview/images/katinatlogo.jpg';
+              logo = s3Images.system.katinatlogo;
             }
 
             return {

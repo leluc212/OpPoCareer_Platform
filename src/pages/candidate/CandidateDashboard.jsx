@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -14,6 +14,7 @@ import candidateProfileService from '../../services/candidateProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
+import { s3Images } from '../../utils/s3Images';
 import {
   Briefcase,
   FileText,
@@ -1174,9 +1175,9 @@ const CandidateDashboard = () => {
   const [successfulMatchesCount, setSuccessfulMatchesCount] = useState(0);
 
   const banners = [
-    { src: "/images/seoul.jpg", alt: "Seoul Vua Mì Cay" },
-    { src: "/images/unnamed1.jpg", alt: "Banner" },
-    { src: "/images/unnamed.jpg", alt: "Banner" }
+    { src: s3Images.banner.seoul, alt: "Seoul Vua Mì Cay" },
+    { src: s3Images.banner.unnamed1, alt: "Banner" },
+    { src: s3Images.banner.unnamed, alt: "Banner" }
   ];
 
   useEffect(() => {
@@ -2553,7 +2554,7 @@ const CandidateDashboard = () => {
                 whileHover={{ y: -3 }}
               >
                 <SideAdTag>✨ Hot Hot Hot</SideAdTag>
-                <img src="/images/phucloctho.jpg" alt="Phúc Lộc Thọ" />
+                <img src={s3Images.poster.phucloctho} alt="Phúc Lộc Thọ" />
               </SideAdWrap>
             </SidebarCol>
           </ContentGrid>

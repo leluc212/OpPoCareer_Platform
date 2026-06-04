@@ -51,6 +51,10 @@ def lambda_handler(event, context):
         user_id = path.split('/profile/')[-1].strip('/')
 
     try:
+        # ─── Verification routes (must come before profile routes) ────────────────
+        if '/candidate/verification-request' in path or '/admin/candidate-verifications' in path:
+            return handle_verification_routes(event, http_method, path, path_params)
+
         # Check if feedback route
         if '/feedback' in path:
             feedbacks_table = dynamodb.Table('Feedbacks')
@@ -196,9 +200,106 @@ def lambda_handler(event, context):
                 }
             )
             return response(200, {'success': True, 'message': 'Profile deactivated'})
- 
+
         else:
             return response(400, {'success': False, 'message': 'Invalid request'})
+
+    except Exception as e:
+        print(f'Error: {str(e)}')
+        return response(500, {'success': False, 'message': str(e)})
+
+
+# ─── Verification Routes (called from the same lambda_handler above) ──────────
+# These are handled BEFORE the profile routes via early path checks in lambda_handler.
+# Patch: add verification route handling at the top of the try block.
+# Since we can't restructure the whole function here, we add a helper and
+# insert a check at the START of the try block via a path prefix guard.
+# The actual insertion point is patched below as a separate exported helper.
+def handle_verification_routes(event, http_method, path, path_params):
+    """
+    Handle candidate verification routes:
+      POST   /candidate/verification-request          (candidate submits)
+      GET    /admin/candidate-verifications            (admin lists SUBMITTED/REJECTED)
+      POST   /admin/candidate-verifications/{id}/approve
+      POST   /admin/candidate-verifications/{id}/reject
+    """
+    timestamp = datetime.utcnow().isoformat() + 'Z'
+
+    # POST /candidate/verification-request
+    if http_method == 'POST' and '/candidate/verification-request' in path:
+        body = json.loads(event.get('body') or '{}')
+        candidate_id = body.get('candidateId') or path_params.get('userId')
+        if not candidate_id:
+            return response(400, {'success': False, 'message': 'candidateId required'})
+
+        table.update_item(
+            Key={'userId': candidate_id},
+            UpdateExpression='SET verificationStatus = :s, verificationSubmittedAt = :t, updatedAt = :t',
+            ExpressionAttributeValues={
+                ':s': 'SUBMITTED',
+                ':t': timestamp
+            }
+        )
+        return response(200, {'success': True, 'message': 'Verification request submitted'})
+
+    # GET /admin/candidate-verifications
+    if http_method == 'GET' and '/admin/candidate-verifications' in path and not any(
+        x in path for x in ['/approve', '/reject']
+    ):
+        result = table.scan(
+            FilterExpression='verificationStatus = :s1 OR verificationStatus = :s2',
+            ExpressionAttributeValues={':s1': 'SUBMITTED', ':s2': 'REJECTED'}
+        )
+        items = result.get('Items', [])
+        items.sort(key=lambda x: x.get('verificationSubmittedAt', ''), reverse=True)
+        return response(200, {'success': True, 'data': items, 'count': len(items)})
+
+    # POST /admin/candidate-verifications/{id}/approve
+    if http_method == 'POST' and '/approve' in path and '/admin/candidate-verifications' in path:
+        # Extract candidate id from path: /admin/candidate-verifications/{id}/approve
+        parts = path.strip('/').split('/')
+        try:
+            idx = parts.index('candidate-verifications')
+            candidate_id = parts[idx + 1]
+        except (ValueError, IndexError):
+            return response(400, {'success': False, 'message': 'Cannot parse candidate id from path'})
+
+        body = json.loads(event.get('body') or '{}')
+        note = body.get('note', '')
+
+        table.update_item(
+            Key={'userId': candidate_id},
+            UpdateExpression='SET verificationStatus = :s, verificationApprovedAt = :t, verificationNote = :n, updatedAt = :t',
+            ExpressionAttributeValues={
+                ':s': 'APPROVED',
+                ':t': timestamp,
+                ':n': note
+            }
+        )
+        return response(200, {'success': True, 'message': 'Candidate verification approved'})
+
+    # POST /admin/candidate-verifications/{id}/reject
+    if http_method == 'POST' and '/reject' in path and '/admin/candidate-verifications' in path:
+        parts = path.strip('/').split('/')
+        try:
+            idx = parts.index('candidate-verifications')
+            candidate_id = parts[idx + 1]
+        except (ValueError, IndexError):
+            return response(400, {'success': False, 'message': 'Cannot parse candidate id from path'})
+
+        body = json.loads(event.get('body') or '{}')
+        note = body.get('note', '')
+
+        table.update_item(
+            Key={'userId': candidate_id},
+            UpdateExpression='SET verificationStatus = :s, verificationRejectedAt = :t, verificationNote = :n, updatedAt = :t',
+            ExpressionAttributeValues={
+                ':s': 'REJECTED',
+                ':t': timestamp,
+                ':n': note
+            }
+        )
+        return response(200, {'success': True, 'message': 'Candidate verification rejected'})
 
 
     except Exception as e:

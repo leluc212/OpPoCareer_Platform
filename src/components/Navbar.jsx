@@ -1094,14 +1094,21 @@ const Navbar = ({ showSearch = true }) => {
         const filteredValidChats = validChats.filter(app => !deletedChatIds.includes(app.applicationId));
 
         // Fetch company logo and name for each chat dynamically
-        const enrichedChats = await Promise.all(
+        const enrichedChats = (await Promise.all(
           filteredValidChats.map(async (app) => {
             try {
               let job = null;
               if (app.jobId) {
+                // Check localStorage 404 cache first
+                const notFoundCache = JSON.parse(localStorage.getItem('jobs_not_found') || '[]');
+                if (notFoundCache.includes(app.jobId)) {
+                  return null; // job đã biết là không tồn tại, bỏ qua
+                }
+
                 if (resolvedJobsRef.current[app.jobId] !== undefined) {
                   const cached = resolvedJobsRef.current[app.jobId];
-                  job = cached === 'not_found' ? null : cached;
+                  if (cached === 'not_found') return null;
+                  job = cached;
                 } else {
                   if (app.jobId.startsWith('QJOB-')) {
                     const { default: quickJobService } = await import('../services/quickJobService');
@@ -1109,7 +1116,16 @@ const Navbar = ({ showSearch = true }) => {
                   } else if (app.jobId.startsWith('JOB-')) {
                     job = await jobPostService.getJobPost(app.jobId).catch(() => null);
                   }
-                  resolvedJobsRef.current[app.jobId] = job || 'not_found';
+                  if (!job) {
+                    // Lưu vào cache để không gọi lại
+                    resolvedJobsRef.current[app.jobId] = 'not_found';
+                    const cache = JSON.parse(localStorage.getItem('jobs_not_found') || '[]');
+                    if (!cache.includes(app.jobId)) {
+                      localStorage.setItem('jobs_not_found', JSON.stringify([...cache, app.jobId]));
+                    }
+                    return null;
+                  }
+                  resolvedJobsRef.current[app.jobId] = job;
                 }
               }
 
@@ -1161,39 +1177,20 @@ const Navbar = ({ showSearch = true }) => {
               jobTitle: matchingNotif?.data?.jobTitle || app.jobTitle || 'Công việc'
             };
           })
-        );
+        )).filter(Boolean);
         setCandidateChats(enrichedChats);
 
-        // Sync database-stored messages to localStorage
-        enrichedChats.forEach(app => {
-          if (app.chatMessages && Array.isArray(app.chatMessages) && app.chatMessages.length > 0) {
-            const savedMessagesStr = localStorage.getItem(`chat_${app.applicationId}`);
-            const dbStr = JSON.stringify(app.chatMessages);
-            if (savedMessagesStr !== dbStr) {
-              // DB has different content than local — DB is source of truth
-              console.log(`[Candidate Sync] Syncing chat messages from DB for ${app.applicationId}`);
-              localStorage.setItem(`chat_${app.applicationId}`, dbStr);
-              window.dispatchEvent(new Event('storage'));
-            }
-          }
-        });
-
-        // Simple count of unread chats
+        // Tính unread từ DB data trực tiếp
         let unreadTotal = 0;
         enrichedChats.forEach(app => {
-          const savedMessages = localStorage.getItem(`chat_${app.applicationId}`);
-          if (savedMessages) {
-            try {
-              const msgs = JSON.parse(savedMessages);
-              const lastMsg = msgs[msgs.length - 1];
-              if (lastMsg && lastMsg.sender === 'me') { // sent by employer
-                const lastReadId = localStorage.getItem(`chat_read_${app.applicationId}`);
-                if (lastReadId !== String(lastMsg.id)) {
-                  unreadTotal++;
-                }
+          const msgs = app.chatMessages;
+          if (msgs && Array.isArray(msgs) && msgs.length > 0) {
+            const lastMsg = msgs[msgs.length - 1];
+            if (lastMsg && lastMsg.sender === 'me') {
+              const lastReadId = localStorage.getItem(`chat_read_${app.applicationId}`);
+              if (lastReadId !== String(lastMsg.id)) {
+                unreadTotal++;
               }
-            } catch (e) {
-              console.error(e);
             }
           }
         });
@@ -1211,16 +1208,16 @@ const Navbar = ({ showSearch = true }) => {
   // Load chat messages when activeChatApp changes
   useEffect(() => {
     if (activeChatApp) {
-      const savedMessages = localStorage.getItem(`chat_${activeChatApp.applicationId}`);
-      let currentMsgs = [];
-      if (savedMessages) {
-        try {
-          currentMsgs = JSON.parse(savedMessages);
-          setChatMessages(currentMsgs);
-        } catch (e) {
-          console.error(e);
+      // Ưu tiên dùng dữ liệu từ DB (chatMessages đã được load cùng với application)
+      const dbMessages = activeChatApp.chatMessages;
+      if (dbMessages && Array.isArray(dbMessages) && dbMessages.length > 0) {
+        setChatMessages(dbMessages);
+        const lastMsg = dbMessages[dbMessages.length - 1];
+        if (lastMsg) {
+          localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(lastMsg.id));
         }
       } else {
+        // Chưa có tin nhắn nào → tạo lời chào mặc định rồi lưu lên DB
         const companyName = activeChatApp.employerName || activeChatApp.companyName || 'Nhà tuyển dụng';
         const greetingMessage = {
           id: Date.now(),
@@ -1230,61 +1227,51 @@ const Navbar = ({ showSearch = true }) => {
             : `Hello! ${companyName} has approved your urgent job application. You can contact us here! 😊`,
           time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         };
-        currentMsgs = [greetingMessage];
-        setChatMessages(currentMsgs);
-        localStorage.setItem(`chat_${activeChatApp.applicationId}`, JSON.stringify(currentMsgs));
-      }
-
-      // Mark as read immediately on open
-      const lastMsg = currentMsgs[currentMsgs.length - 1];
-      if (lastMsg) {
-        localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(lastMsg.id));
+        const initMsgs = [greetingMessage];
+        setChatMessages(initMsgs);
+        import('../services/applicationService').then(({ default: applicationService }) => {
+          applicationService.updateApplicationStatus(
+            activeChatApp.applicationId,
+            activeChatApp.status,
+            { chatMessages: initMsgs }
+          ).catch(err => console.error('Failed to init chat in DB:', err));
+        });
       }
     }
-  }, [activeChatApp, language]);
+  }, [activeChatApp?.applicationId, language]);
 
-  // Sync active chat messages in real time for candidate
+  // Sync active chat messages in real time — poll DB trực tiếp
   useEffect(() => {
     if (!activeChatApp) return;
 
-    const syncMessages = () => {
-      const savedMessages = localStorage.getItem(`chat_${activeChatApp.applicationId}`);
-      if (savedMessages) {
-        try {
-          const parsed = JSON.parse(savedMessages);
+    const syncMessages = async () => {
+      try {
+        const { default: applicationService } = await import('../services/applicationService');
+        const apps = await applicationService.getMyCandidateApplications().catch(() => null);
+        if (!apps) return;
+        const fresh = apps.find(a => a.applicationId === activeChatApp.applicationId);
+        if (!fresh) return;
+        const msgs = fresh.chatMessages;
+        if (msgs && Array.isArray(msgs)) {
           setChatMessages(prev => {
-            if (JSON.stringify(prev) !== JSON.stringify(parsed)) {
-              // Mark as read when new messages are received while the chat is open
-              const lastMsg = parsed[parsed.length - 1];
+            if (JSON.stringify(prev) !== JSON.stringify(msgs)) {
+              const lastMsg = msgs[msgs.length - 1];
               if (lastMsg) {
                 localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(lastMsg.id));
               }
-              return parsed;
+              return msgs;
             }
             return prev;
           });
-        } catch (e) {
-          console.error(e);
         }
+      } catch (e) {
+        // silent
       }
     };
 
-    // Poll every 1 second
-    const interval = setInterval(syncMessages, 1000);
-
-    // Listen for storage events (updates from other tabs)
-    const handleStorageChange = (e) => {
-      if (!e.key || e.key === `chat_${activeChatApp.applicationId}`) {
-        syncMessages();
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [activeChatApp]);
+    const interval = setInterval(syncMessages, 3000);
+    return () => clearInterval(interval);
+  }, [activeChatApp?.applicationId]);
 
   // Scroll to bottom when messages update
   const scrollToBottom = () => {
@@ -1310,14 +1297,12 @@ const Navbar = ({ showSearch = true }) => {
     const updated = [...chatMessages, newMessage];
     setChatMessages(updated);
     setChatInput('');
-    localStorage.setItem(`chat_${activeChatApp.applicationId}`, JSON.stringify(updated));
-    localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(newMessage.id));
 
-    // Sync to DynamoDB — this is the bridge for cross-browser messaging
+    // Lưu thẳng lên DB, không qua localStorage
     import('../services/applicationService').then(({ default: applicationService }) => {
       applicationService.updateApplicationStatus(
-        activeChatApp.applicationId, 
-        activeChatApp.status, 
+        activeChatApp.applicationId,
+        activeChatApp.status,
         { chatMessages: updated }
       ).catch(err => console.error('Failed to sync candidate message to DB:', err));
     });

@@ -27,11 +27,12 @@ table          = dynamodb.Table('CandidateProfiles')
 
 # ─── VNPT endpoints ───────────────────────────────────────────────────────────
 VNPT_BASE           = 'https://api.idg.vnpt.vn'
-VNPT_UPLOAD_URL     = f'{VNPT_BASE}/file-service/v1/addFile'
-VNPT_OCR_FRONT_URL  = f'{VNPT_BASE}/ai/v1/ocr/id/front'
-VNPT_FACE_MATCH_URL = f'{VNPT_BASE}/ai/v1/face/compare'
-VNPT_LIVENESS_URL   = f'{VNPT_BASE}/ai/v1/face/liveness'
-VNPT_TOKEN_URL      = f'{VNPT_BASE}/auth/oauth/token'
+VNPT_UPLOAD_URL       = f'{VNPT_BASE}/file-service/v1/addFile'
+VNPT_OCR_CHIP_URL     = f'{VNPT_BASE}/ai/v1/ocr/chip/front'   # CCCD chip QR (2021+)
+VNPT_OCR_FRONT_URL    = f'{VNPT_BASE}/ai/v1/ocr/id/front'     # CMND / CCCD cũ
+VNPT_FACE_MATCH_URL   = f'{VNPT_BASE}/ai/v1/face/compare'
+VNPT_LIVENESS_URL     = f'{VNPT_BASE}/ai/v1/face/liveness'
+VNPT_TOKEN_URL        = f'{VNPT_BASE}/auth/oauth/token'
 SECRET_NAME         = 'vnpt-ekyc-credentials'
 
 SIMILARITY_THRESHOLD = 85.0
@@ -109,8 +110,12 @@ def extract_user_id(event):
         return None
 
 def load_creds():
-    secret = secrets_client.get_secret_value(SecretId=SECRET_NAME)
-    return json.loads(secret['SecretString'])
+    try:
+        secret = secrets_client.get_secret_value(SecretId=SECRET_NAME)
+        return json.loads(secret['SecretString'])
+    except Exception as e:
+        print(f'load_creds ERROR: {type(e).__name__}: {e}')
+        raise
 
 def get_auth(creds):
     """Trả (bearer_token, token_id, token_key). Tự refresh khi hết hạn."""
@@ -133,14 +138,24 @@ def get_auth(creds):
         print(f'Token OK exp in {exp-now}s')
         return token, tid, tkey
 
-    # Refresh
+    # Refresh bằng username/password (VNPT IDG dùng password grant)
     print('Token expired, refreshing...')
     try:
-        form     = urllib.parse.urlencode({'grant_type': 'client_credentials', 'scope': 'read'}).encode()
+        username = creds.get('username', '')
+        password = creds.get('password', '') or creds.get('token_key', '')
+        form     = urllib.parse.urlencode({
+            'grant_type': 'password',
+            'username':   username,
+            'password':   password,
+            'scope':      'read'
+        }).encode()
         cred_b64 = base64.b64encode(f'{tid}:{tkey}'.encode()).decode()
+        print(f'Refresh URL: {VNPT_TOKEN_URL}')
+        print(f'username: {username[:20]}...')
         r = req_lib.post(VNPT_TOKEN_URL, data=form, timeout=10,
             headers={'Content-Type': 'application/x-www-form-urlencoded',
                      'Authorization': f'Basic {cred_b64}'})
+        print(f'Refresh response: {r.status_code} body={r.text[:300]}')
         if r.status_code == 200:
             tr = r.json()
             new_token = tr.get('access_token')
@@ -220,7 +235,9 @@ def vnpt_upload(b64_data, bearer, tid, tkey):
     obj = result.get('object') or result.get('data') or result
     if isinstance(obj, dict):
         h     = (obj.get('hash') or obj.get('fileId') or obj.get('id') or obj.get('hashFile'))
-        token = obj.get('token') or obj.get('transToken') or obj.get('trans_token') or ''
+        # VNPT upload trả về trans_token trong field 'tokenId' (không phải 'token' hay 'transToken')
+        token = (obj.get('tokenId') or obj.get('token') or
+                 obj.get('transToken') or obj.get('trans_token') or '')
     elif isinstance(obj, str) and len(obj) > 5:
         h, token = obj, ''
     else:
@@ -232,22 +249,67 @@ def vnpt_upload(b64_data, bearer, tid, tkey):
 
 def vnpt_ocr(front_hash, trans_token, bearer, tid, tkey):
     """
-    OCR CCCD mặt trước — gửi hash Minio (từ bước upload), KHÔNG phải base64.
-    Theo API docs VNPT: img_front là hash Minio, token là trans_token từ upload.
+    OCR CCCD mặt trước.
+    Thử theo thứ tự:
+      1. /ai/v1/ocr/chip/front  → CCCD chip gắn QR (2021+), type=3
+      2. /ai/v1/ocr/id/front    → CMND 9 số / CCCD 12 số cũ, type=1
+    Trả về response JSON của lần thành công.
     """
-    payload = {
+    tok = trans_token or tid
+    base_payload = {
         'img_front':         front_hash,
         'client_session':    CLIENT_SESSION,
-        'type':              1,
         'validate_postcode': False,
-        'token':             trans_token or tid,
+        'token':             tok,
     }
-    print(f'OCR with hash={front_hash[:60]} token={payload["token"][:36]}')
-    r = req_lib.post(VNPT_OCR_FRONT_URL, headers=vnpt_headers(bearer, tid, tkey), json=payload, timeout=30)
-    print(f'OCR: status={r.status_code} body={r.text[:500]}')
-    if r.status_code >= 400:
-        raise urllib.error.HTTPError(VNPT_OCR_FRONT_URL, r.status_code, r.text[:500], {}, None)
-    return r.json()
+
+    # Danh sách endpoint — Free Trial chỉ có quyền dùng /ocr/id/front
+    attempts = [
+        (VNPT_OCR_FRONT_URL, 1, 'CCCD/CMND'),    # CCCD 12 số / CMND 9 số
+        (VNPT_OCR_FRONT_URL, 0, 'auto-detect'),   # fallback auto
+    ]
+
+    last_error = None
+    for url, doc_type, label in attempts:
+        payload = {**base_payload, 'type': doc_type}
+        print(f'OCR try [{label}] url={url.split("/")[-3:]} token={tok[:36]} type={doc_type}')
+        r = req_lib.post(url, headers=vnpt_headers(bearer, tid, tkey), json=payload, timeout=30)
+        print(f'OCR [{label}]: status={r.status_code} body={r.text[:800]}')
+
+        if r.status_code == 200:
+            result = r.json()
+            err_code = result.get('errorCode')
+            msg = result.get('message') or result.get('msg') or ''
+            # 0 hoặc IDG-00000000 = success
+            if err_code == 0 or msg == 'IDG-00000000':
+                print(f'OCR success with [{label}]')
+                return result
+            # IDG-00010445 = sai loại giấy tờ → thử tiếp
+            if 'IDG-00010445' in str(result) or 'IDG-00010444' in str(result):
+                print(f'OCR [{label}] wrong doc type, trying next...')
+                last_error = r
+                continue
+            return result  # Lỗi khác thì trả về để xử lý ở trên
+
+        if r.status_code in (400, 401, 403):
+            body = r.text
+            skip_codes = ('IDG-00010445', 'IDG-00010444', 'input_khong_hop_le',
+                          'IDG-00000401', 'No permission', 'UNAUTHORIZED')
+            if any(c in body for c in skip_codes):
+                if 'input_khong_hop_le' in body or 'IDG-00010445' in body:
+                    last_error = type('E', (), {'text': 'CCCD gắn chip (loại mới 2021+) chưa được hỗ trợ ở gói hiện tại. Vui lòng liên hệ admin.'})()
+                else:
+                    last_error = r
+                print(f'OCR [{label}] skipping ({r.status_code}): {body[:100]}')
+                continue
+        # Lỗi khác (500...) → raise ngay
+        raise urllib.error.HTTPError(url, r.status_code, r.text[:800], {}, None)
+
+    # Tất cả đều fail
+    err_msg = 'Không nhận diện được loại giấy tờ'
+    if last_error and hasattr(last_error, 'text'):
+        err_msg = last_error.text
+    raise urllib.error.HTTPError(VNPT_OCR_FRONT_URL, 400, err_msg, {}, None)
 
 def check_rate_limit(user_id):
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
@@ -275,18 +337,24 @@ def handle_ocr(event, user_id):
       2. Gọi OCR với hash (img_front = hash, token = trans_token)
       3. Trả kết quả + front_hash để dùng ở bước face verify
     """
+    print(f'handle_ocr start, user_id={user_id}')
     try:
         body = json.loads(event.get('body') or '{}')
-    except Exception:
+    except Exception as e:
+        print(f'JSON parse error: {e}')
         return resp(400, {'success': False, 'errorMsg': 'Invalid JSON'})
 
     front = strip_prefix(body.get('imageFront', ''))
+    print(f'imageFront present={bool(front)}, length={len(front) if front else 0}')
     if not front:
         return resp(400, {'success': False, 'errorMsg': 'imageFront là bắt buộc'})
 
     try:
+        print('Loading credentials...')
         creds             = load_creds()
+        print('Getting auth token...')
         bearer, tid, tkey = get_auth(creds)
+        print(f'Auth ok, bearer prefix={bearer[:20]}...')
 
         # Bước 1: Resize ảnh nếu cần, rồi upload lên VNPT → lấy hash Minio
         print(f'Original base64 length={len(front)}')

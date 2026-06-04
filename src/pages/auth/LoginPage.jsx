@@ -884,14 +884,6 @@ const LoginPage = () => {
             <FeatureList>
               {(rc.hero.features[language] || rc.hero.features.vi).map((f, i) => <FItem key={i}>{f}</FItem>)}
             </FeatureList>
-            <StatsRow>
-              {rc.hero.stats.map(s => (
-                <Stat key={s.l.vi}>
-                  <div className="n">{s.n}</div>
-                  <div className="l">{s.l[language] || s.l.vi}</div>
-                </Stat>
-              ))}
-            </StatsRow>
           </HeroWrap>
         </Left>
       </AnimatePresence>

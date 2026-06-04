@@ -809,16 +809,6 @@ export default function FloatingSupportBar() {
           </CircularBtn>
         )}
 
-        {/* Referral Circular Button */}
-        {isCandidate && !isAdmin && (
-          <CircularBtn onClick={() => handleShortcutClick('referral')}>
-            <UserPlus />
-            <Tooltip>
-              {language === 'vi' ? 'Giới thiệu bạn bè' : 'Refer Friends'}
-            </Tooltip>
-          </CircularBtn>
-        )}
-
         {/* Post Standard Job - Employer Only */}
         {isEmployer && (
           <CircularBtn onClick={() => navigate('/employer/post-job')}>
@@ -1012,18 +1002,18 @@ export default function FloatingSupportBar() {
                     <ContactItem>
                       <div className="info">
                         <Phone />
-                        <span>Hotline/Zalo: 0901 234 567</span>
+                        <span>Hotline/Zalo: 0563 518 922</span>
                       </div>
-                      <CopyButton onClick={() => handleCopy('0901 234 567', 'phone')}>
+                      <CopyButton onClick={() => handleCopy('0563 518 922', 'phone')}>
                         {copiedText === 'phone' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
                       </CopyButton>
                     </ContactItem>
                     <ContactItem>
                       <div className="info">
                         <Mail />
-                        <span>Email: support@opporeview.com</span>
+                        <span>Email: oppohiringplatform@gmail.com</span>
                       </div>
-                      <CopyButton onClick={() => handleCopy('support@opporeview.com', 'email')}>
+                      <CopyButton onClick={() => handleCopy('oppohiringplatform@gmail.com', 'email')}>
                         {copiedText === 'email' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
                       </CopyButton>
                     </ContactItem>
@@ -1044,64 +1034,6 @@ export default function FloatingSupportBar() {
           </ModalOverlay>
         )}
 
-        {/* Referral Modal */}
-        {activeModal === 'referral' && (
-          <ModalOverlay
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setActiveModal(null)}
-          >
-            <ModalContent
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              onClick={e => e.stopPropagation()}
-            >
-              <ModalHeader>
-                <h3>{language === 'vi' ? 'Giới thiệu bạn bè' : 'Refer Friends'}</h3>
-                <CloseBtn onClick={() => setActiveModal(null)}>
-                  <X />
-                </CloseBtn>
-              </ModalHeader>
-              <ModalBody>
-                <ReferralCard>
-                  <div className="icon-wrap">
-                    <UserPlus />
-                  </div>
-                  <p>
-                    {language === 'vi'
-                      ? 'Chia sẻ mã giới thiệu hoặc link đăng ký của bạn để nhận thêm điểm thưởng và quà tặng hấp dẫn từ Ốp Pờ! Nhận ngay 10,000 VNĐ cho mỗi lượt giới thiệu xác thực eKYC thành công.'
-                      : 'Share your referral code or sign-up link to get rewards! Receive 10,000 VND for each successful verified eKYC referral.'}
-                  </p>
-                </ReferralCard>
-
-                <FormGroup>
-                  <label>{language === 'vi' ? 'Mã giới thiệu của bạn' : 'Your Referral Code'}</label>
-                  <CodeBox>
-                    <span>{referralCode}</span>
-                    <CopyButton onClick={() => handleCopy(referralCode, 'code')}>
-                      {copiedText === 'code' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
-                    </CopyButton>
-                  </CodeBox>
-                </FormGroup>
-
-                <FormGroup>
-                  <label>{language === 'vi' ? 'Đường dẫn giới thiệu' : 'Referral Link'}</label>
-                  <CodeBox>
-                    <span style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
-                      {referralLink}
-                    </span>
-                    <CopyButton onClick={() => handleCopy(referralLink, 'link')}>
-                      {copiedText === 'link' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
-                    </CopyButton>
-                  </CodeBox>
-                </FormGroup>
-              </ModalBody>
-            </ModalContent>
-          </ModalOverlay>
-        )}
       </AnimatePresence>
     </>
   );

@@ -16,7 +16,12 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  BadgeCheck,
+  AlertCircle,
+  Eye,
+  Mail,
+  Phone
 } from 'lucide-react';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
@@ -529,6 +534,80 @@ const TabBadge = styled.span`
   justify-content: center;
 `;
 
+const CandidateInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+const CandidateAvatar = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: ${props => props.theme.borderRadius.md};
+  background: ${props => props.$bgColor || '#e0e7ff'};
+  color: ${props => props.$color || '#4338ca'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
+  flex-shrink: 0;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`;
+
+const CandidateDetails = styled.div`
+  flex: 1;
+  min-width: 0;
+`;
+
+const CandidateName = styled.div`
+  font-weight: 600;
+  font-size: 15px;
+  color: ${props => props.theme.colors.text};
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const CandidateMeta = styled.div`
+  font-size: 13px;
+  color: ${props => props.theme.colors.textLight};
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+`;
+
+const IconButton = styled.button`
+  padding: 8px;
+  border: none;
+  border-radius: ${props => props.theme.borderRadius.md};
+  background: #e0e7ff;
+  color: #4338ca;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+`;
+
 const ApproveButton = styled.button`
   padding: 6px 16px;
   border: none;
@@ -607,8 +686,10 @@ const CandidatesManagement = () => {
   const [apiChartData, setApiChartData] = useState([]);
   const [apiJobChartData, setApiJobChartData] = useState([]);
 
-  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' or 'withdrawals'
+  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates', 'withdrawals', 'verifications'
   const [withdrawRequests, setWithdrawRequests] = useState([]);
+  const [verifications, setVerifications] = useState([]);
+  const [verifLoading, setVerifLoading] = useState(false);
 
   const loadWithdrawRequests = () => {
     const dbRequests = [];
@@ -654,6 +735,80 @@ const CandidatesManagement = () => {
     dbRequests.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setWithdrawRequests(dbRequests);
   };
+
+  const getCandidateInitials = (name) => {
+    if (!name || name === 'N/A') return '?';
+    return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const getColorScheme = (index) => {
+    const schemes = [
+      { bg: '#e0e7ff', color: '#4338ca' },
+      { bg: '#fef3c7', color: '#ca8a04' },
+      { bg: '#dcfce7', color: '#15803d' },
+      { bg: '#fee2e2', color: '#dc2626' },
+      { bg: '#f3e8ff', color: '#7c3aed' },
+    ];
+    return schemes[index % schemes.length];
+  };
+
+  // ─── Load verification requests ────────────────────────────────────────────
+  const loadVerifications = async () => {
+    setVerifLoading(true);
+    try {
+      const all = await candidateProfileService.getAllCandidates();
+      const fromServer = all
+        .filter(c => c.verificationStatus === 'SUBMITTED' || c.verificationStatus === 'APPROVED' || c.verificationStatus === 'REJECTED')
+        .map(c => ({
+          id: c.userId || c.id,
+          name: c.fullName || c.name || c.email?.split('@')[0] || 'Unknown',
+          email: c.email || '',
+          phone: c.phone || c.phoneNumber || '',
+          avatar: c.avatar || c.profileImage || null,
+          verificationStatus: c.verificationStatus,
+          verificationSubmittedAt: c.verificationSubmittedAt || c.updatedAt || '',
+          verificationNote: c.verificationNote || '',
+          kycDone: c.kycCompleted || c.ekycStatus === 'verified' || false,
+          profileCompletion: c.profileCompletion || 0,
+        }))
+        .sort((a, b) => new Date(b.verificationSubmittedAt) - new Date(a.verificationSubmittedAt));
+
+      setVerifications(fromServer);
+    } catch (e) {
+      console.error('Error loading verifications:', e);
+    } finally {
+      setVerifLoading(false);
+    }
+  };
+
+  const handleApproveVerif = async (candidateId) => {
+    // Optimistic update trước
+    setVerifications(prev => prev.map(v =>
+      v.id === candidateId ? { ...v, verificationStatus: 'APPROVED' } : v
+    ));
+    try {
+      await candidateProfileService.approveVerification(candidateId, '');
+    } catch (e) {
+      // Rollback nếu lỗi
+      setVerifications(prev => prev.map(v =>
+        v.id === candidateId ? { ...v, verificationStatus: 'REJECTED' } : v
+      ));
+      alert(language === 'vi' ? 'Lỗi khi duyệt' : 'Error approving');
+    }
+  };
+
+  const handleRejectVerif = async (candidateId) => {
+    // Xóa khỏi list ngay lập tức (giống bên tuyển gấp NTD)
+    setVerifications(prev => prev.filter(v => v.id !== candidateId));
+    try {
+      await candidateProfileService.rejectVerification(candidateId, '');
+    } catch (e) {
+      // Rollback nếu lỗi - load lại từ server
+      loadVerifications();
+      alert(language === 'vi' ? 'Lỗi khi từ chối' : 'Error rejecting');
+    }
+  };
+  // ───────────────────────────────────────────────────────────────────────────
 
   const handleApproveWithdrawal = async (requestId) => {
     try {
@@ -828,6 +983,9 @@ const CandidatesManagement = () => {
   useEffect(() => {
     if (activeTab === 'withdrawals') {
       loadWithdrawRequests();
+    }
+    if (activeTab === 'verifications') {
+      loadVerifications();
     }
   }, [activeTab]);
 
@@ -1059,6 +1217,16 @@ const CandidatesManagement = () => {
             {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
             {withdrawRequests.filter(req => req.status === 'pending').length > 0 && (
               <TabBadge>{withdrawRequests.filter(req => req.status === 'pending').length}</TabBadge>
+            )}
+          </Tab>
+          <Tab
+            $active={activeTab === 'verifications'}
+            onClick={() => setActiveTab('verifications')}
+          >
+            <Zap size={18} style={{ marginRight: '8px' }} />
+            {language === 'vi' ? 'Duyệt Tuyển Gấp' : 'Quick Job Approvals'}
+            {verifications.filter(v => v.verificationStatus === 'SUBMITTED').length > 0 && (
+              <TabBadge>{verifications.filter(v => v.verificationStatus === 'SUBMITTED').length}</TabBadge>
             )}
           </Tab>
         </TabsContainer>
@@ -1365,7 +1533,7 @@ const CandidatesManagement = () => {
                 ))}
               </tbody>
             </Table>
-          ) : (
+          ) : activeTab === 'withdrawals' ? (
             <Table>
               <thead>
                 <tr>
@@ -1441,14 +1609,125 @@ const CandidatesManagement = () => {
                 )}
               </tbody>
             </Table>
+          ) : (
+            /* ── Tab: Duyệt Tuyển Gấp ── */
+            <Table>
+              <thead>
+                <tr>
+                  <th>{language === 'vi' ? 'Ứng viên' : 'Candidate'}</th>
+                  <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
+                  <th>{language === 'vi' ? 'eKYC' : 'eKYC'}</th>
+                  <th>{language === 'vi' ? 'Hồ sơ' : 'Profile'}</th>
+                  <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                  <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verifLoading ? (
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                    {language === 'vi' ? 'Đang tải...' : 'Loading...'}
+                  </td></tr>
+                ) : verifications.length === 0 ? (
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                    {language === 'vi' ? 'Không có yêu cầu xác minh nào' : 'No verification requests found'}
+                  </td></tr>
+                ) : verifications
+                    .filter(v => !searchTerm || v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.email.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .map((v, index) => {
+                      const colorScheme = getColorScheme(index);
+                      const initials = getCandidateInitials(v.name);
+                      return (
+                  <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/admin/candidates/${v.id}`)}>
+                    <td>
+                      <CandidateInfo>
+                        <CandidateAvatar $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                          {v.avatar ? <img src={v.avatar} alt={v.name} /> : initials}
+                        </CandidateAvatar>
+                        <CandidateDetails>
+                          <CandidateName>{v.name}</CandidateName>
+                          <CandidateMeta>ID: {v.id?.slice(0, 16)}...</CandidateMeta>
+                        </CandidateDetails>
+                      </CandidateInfo>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                          <Mail size={12} />
+                          {v.email}
+                        </div>
+                        {v.phone && v.phone !== 'N/A' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                            <Phone size={12} />
+                            {v.phone}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <VerificationBadge $verified={v.kycDone}>
+                        {v.kycDone ? <CheckSquare /> : <XSquare />}
+                        {v.kycDone ? (language === 'vi' ? 'Đã xác thực' : 'Verified') : (language === 'vi' ? 'Chưa' : 'No')}
+                      </VerificationBadge>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 60, height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${v.profileCompletion}%`, background: v.profileCompletion >= 60 ? '#10b981' : '#f59e0b', borderRadius: 3 }} />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: v.profileCompletion >= 60 ? '#10b981' : '#f59e0b' }}>{v.profileCompletion}%</span>
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge $status={v.verificationStatus === 'SUBMITTED' ? 'pending' : v.verificationStatus === 'APPROVED' ? 'approved' : 'rejected'}>
+                        {v.verificationStatus === 'SUBMITTED' && <Clock size={12} />}
+                        {v.verificationStatus === 'APPROVED' && <CheckCircle size={12} />}
+                        {v.verificationStatus === 'REJECTED' && <XCircle size={12} />}
+                        {v.verificationStatus === 'SUBMITTED' && (language === 'vi' ? 'Chờ duyệt' : 'Pending')}
+                        {v.verificationStatus === 'APPROVED' && (language === 'vi' ? 'Đã duyệt' : 'Approved')}
+                        {v.verificationStatus === 'REJECTED' && (language === 'vi' ? 'Từ chối' : 'Rejected')}
+                      </StatusBadge>
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <ActionButtons>
+                        {v.verificationStatus === 'SUBMITTED' && (
+                          <>
+                            <ApproveButton onClick={() => handleApproveVerif(v.id)}>
+                              <CheckCircle size={16} />
+                              {language === 'vi' ? 'Duyệt' : 'Approve'}
+                            </ApproveButton>
+                            <RejectButton onClick={() => handleRejectVerif(v.id)}>
+                              <XCircle size={16} />
+                              {language === 'vi' ? 'Từ chối' : 'Reject'}
+                            </RejectButton>
+                          </>
+                        )}
+                        {v.verificationStatus === 'APPROVED' && (
+                          <RejectButton onClick={() => handleRejectVerif(v.id)}>
+                            <XCircle size={16} />
+                            {language === 'vi' ? 'Hủy kích hoạt' : 'Deactivate'}
+                          </RejectButton>
+                        )}
+                        <IconButton
+                          title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                          onClick={() => navigate(`/admin/candidates/${v.id}`)}
+                        >
+                          <Eye size={16} />
+                        </IconButton>
+                      </ActionButtons>
+                    </td>
+                  </tr>
+                      );
+                    })}
+              </tbody>
+            </Table>
           )}
         </TableWrapper>
 
         <PaginationContainer>
           <PaginationInfo>
             {language === 'vi'
-              ? `Đang xem ${startIndex + 1}-${Math.min(endIndex, activeTab === 'withdrawals' ? filteredWithdrawRequests.length : filteredCandidates.length)} trên ${activeTab === 'withdrawals' ? filteredWithdrawRequests.length : filteredCandidates.length} kết quả`
-              : `Showing ${startIndex + 1}-${Math.min(endIndex, activeTab === 'withdrawals' ? filteredWithdrawRequests.length : filteredCandidates.length)} of ${activeTab === 'withdrawals' ? filteredWithdrawRequests.length : filteredCandidates.length} results`
+              ? `Đang xem ${startIndex + 1}-${Math.min(endIndex, activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : filteredCandidates.length)} trên ${activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : filteredCandidates.length} kết quả`
+              : `Showing ${startIndex + 1}-${Math.min(endIndex, activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : filteredCandidates.length)} of ${activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : filteredCandidates.length} results`
             }
           </PaginationInfo>
 

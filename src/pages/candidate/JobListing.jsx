@@ -1676,6 +1676,20 @@ const JobListing = () => {
   const location = useLocation();
   const resultsRef = useRef(null);
   const viewedJobIdsRef = useRef(new Set());
+
+  // ─── Quick job verification status ───────────────────────────────────────
+  const [quickJobStatus, setQuickJobStatus] = React.useState(null); // null=loading, 'PENDING'|'SUBMITTED'|'APPROVED'
+  React.useEffect(() => {
+    let cancelled = false;
+    import('../../services/candidateProfileService').then(({ default: svc }) => {
+      svc.getMyProfile().then(p => {
+        if (!cancelled) setQuickJobStatus(p?.verificationStatus || 'PENDING');
+      }).catch(() => { if (!cancelled) setQuickJobStatus('PENDING'); });
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const quickJobApproved = quickJobStatus === 'APPROVED';
+  // ─────────────────────────────────────────────────────────────────────────
   const [savedJobs, setSavedJobs] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -2198,7 +2212,8 @@ const JobListing = () => {
   };
 
   const handleApplyJob = (job) => {
-    if (job) setApplyModal({ job });
+    if (!job) return;
+    setApplyModal({ job });
   };
 
   const confirmApply = async () => {
@@ -2642,6 +2657,10 @@ const JobListing = () => {
     return 0;
   }, [isAvailable, showNearbyJobs, nearbyJobs]);
 
+  // ─── Verification gate: only blocks quick job apply (not the whole page) ─
+  // verifStatus is used below when candidate tries to apply a quick job.
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <DashboardLayout role="candidate" key={language}>
       <Container>
@@ -2730,38 +2749,80 @@ const JobListing = () => {
               >
                 {/* Job Search Status Toggle */}
                 {!showSavedJobsOnly && (
-                  <StatusCard
-                    $active={isAvailable}
-                    as={motion.div}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <div className="status-content">
-                      <div className="status-info">
-                        <div className="status-badge">
-                          {isAvailable ? <CheckCircle /> : <XCircle />}
-                          {isAvailable
-                            ? (language === 'vi' ? 'Trạng thái tìm việc đang bật' : 'Job Search Active')
-                            : (language === 'vi' ? 'Trạng thái tìm việc đang tắt' : 'Job Search Paused')}
+                  <>
+                    {/* Banner khi chưa được duyệt quick job */}
+                    {jobCategory === 'shift' && !quickJobApproved && quickJobStatus !== null ? (
+                      <div style={{
+                        background: 'rgba(255,255,255,0.12)',
+                        border: '1.5px solid rgba(255,255,255,0.25)',
+                        borderRadius: 14,
+                        padding: '14px 20px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: 16, flexWrap: 'wrap'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                          </div>
+                          <div>
+                            <div style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>
+                              {quickJobStatus === 'SUBMITTED'
+                                ? (language === 'vi' ? 'Yêu cầu đang chờ admin duyệt...' : 'Request pending admin review...')
+                                : (language === 'vi' ? 'Để sử dụng công việc tuyển gấp' : 'To use quick jobs')}
+                            </div>
+                            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 2 }}>
+                              {quickJobStatus === 'SUBMITTED'
+                                ? (language === 'vi' ? 'Thường mất 1–2 ngày làm việc.' : 'Usually 1–2 business days.')
+                                : (language === 'vi' ? 'Nhấn vào đây để biết thêm chi tiết' : 'Click here to learn more')}
+                            </div>
+                          </div>
                         </div>
+                        {quickJobStatus !== 'SUBMITTED' && (
+                          <button
+                            onClick={() => navigate('/candidate/quick-job-intro')}
+                            style={{ padding: '9px 20px', background: 'white', color: '#1e40af', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                          >
+                            {language === 'vi' ? 'Tìm hiểu ngay →' : 'Learn more →'}
+                          </button>
+                        )}
                       </div>
-                      <ToggleButton
-                        onClick={handleToggleAvailability}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                    ) : (
+                      <StatusCard
+                        $active={isAvailable}
+                        as={motion.div}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3 }}
                       >
-                        <Power />
-                        {isAvailable
-                          ? (language === 'vi' ? 'Tắt' : 'Pause')
-                          : (language === 'vi' ? 'Bật' : 'Activate')}
-                      </ToggleButton>
-                    </div>
-                  </StatusCard>
+                        <div className="status-content">
+                          <div className="status-info">
+                            <div className="status-badge">
+                              {isAvailable ? <CheckCircle /> : <XCircle />}
+                              {isAvailable
+                                ? (language === 'vi' ? 'Trạng thái tìm việc đang bật' : 'Job Search Active')
+                                : (language === 'vi' ? 'Trạng thái tìm việc đang tắt' : 'Job Search Paused')}
+                            </div>
+                          </div>
+                          <ToggleButton
+                            onClick={handleToggleAvailability}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <Power />
+                            {isAvailable
+                              ? (language === 'vi' ? 'Tắt' : 'Pause')
+                              : (language === 'vi' ? 'Bật' : 'Activate')}
+                          </ToggleButton>
+                        </div>
+                      </StatusCard>
+                    )}
+                  </>
                 )}
 
-                {/* Location button - Only show when job search is active */}
-                {isAvailable && (
+                {/* Location button - Only show when job search is active AND quick job approved */}
+                {isAvailable && quickJobApproved && (
                   <>
                     <LocationButton
                       $active={showNearbyJobs}

@@ -3753,10 +3753,6 @@ const LandingPage = ({ children }) => {
                     <span className="n">99%</span>
                     <span className="l">{language === 'vi' ? 'Giảm rủi ro bảo mật' : 'Security Risk Reduced'}</span>
                   </AboutInlineStat>
-                  <AboutInlineStat>
-                    <span className="n">5K+</span>
-                    <span className="l">{language === 'vi' ? 'Doanh nghiệp tin dùng' : 'Businesses'}</span>
-                  </AboutInlineStat>
                 </AboutInlineStats>
               </AboutInlineLeft>
 
@@ -4020,18 +4016,6 @@ const LandingPage = ({ children }) => {
                 </QRCodeSection>
 
                 <StoreButtons>
-                  <StoreButton href="https://apps.apple.com" target="_blank">
-                    <img
-                      src="/images/appstore1.jpg"
-                      alt="App Store"
-                      style={{
-                        width: '120px',
-                        height: 'auto',
-                        objectFit: 'contain'
-                      }}
-                    />
-                  </StoreButton>
-
                   <StoreButton href="https://play.google.com" target="_blank">
                     <img
                       src="/images/chplay.jpg"
@@ -4320,7 +4304,7 @@ const LandingPage = ({ children }) => {
 
             <QrCodeArea>
               <img src="/images/qrcode.png" alt="QR Code" onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://leluc212.github.io/OpPoReview/' }} />
-              <p>leluc212.github.io/OpPoReview</p>
+              <p>https://oppocareer.com</p>
             </QrCodeArea>
           </FooterBottom>
 

@@ -484,6 +484,82 @@ class CandidateProfileService {
       serviceName: 'CandidateService'
     });
   }
+
+  // ─── Verification APIs ────────────────────────────────────────────────────
+
+  /**
+   * Candidate submits a verification request
+   * Updates verificationStatus → SUBMITTED in DynamoDB
+   */
+  async submitVerificationRequest() {
+    try {
+      const session = await fetchAuthSession();
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) throw new Error('User not authenticated');
+
+      const result = await this.makeRequest('/candidate/verification-request', {
+        method: 'POST',
+        body: JSON.stringify({ candidateId: userId })
+      });
+      return result;
+    } catch (error) {
+      console.error('Error submitting verification request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin: get all candidates with SUBMITTED or REJECTED verificationStatus
+   */
+  async getPendingVerifications() {
+    try {
+      const result = await this.makeRequest('/admin/candidate-verifications');
+      return result.success ? result.data : [];
+    } catch (error) {
+      console.error('Error fetching pending verifications:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Admin: approve a candidate verification
+   */
+  async approveVerification(candidateId, note = '') {
+    try {
+      const result = await this.makeRequest(`/profile/${candidateId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          verificationStatus: 'APPROVED',
+          verificationApprovedAt: new Date().toISOString(),
+          verificationNote: note
+        })
+      });
+      return result;
+    } catch (error) {
+      console.error('Error approving verification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin: reject a candidate verification
+   */
+  async rejectVerification(candidateId, note = '') {
+    try {
+      const result = await this.makeRequest(`/profile/${candidateId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          verificationStatus: 'REJECTED',
+          verificationRejectedAt: new Date().toISOString(),
+          verificationNote: note
+        })
+      });
+      return result;
+    } catch (error) {
+      console.error('Error rejecting verification:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

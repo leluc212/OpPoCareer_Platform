@@ -17,7 +17,10 @@ import {
   CheckCircle,
   XCircle,
   Edit,
-  Loader2
+  Loader2,
+  BadgeCheck,
+  Clock,
+  Send
 } from 'lucide-react';
 
 const PageContainer = styled.div`
@@ -358,6 +361,10 @@ const CandidateDetail = () => {
   const [activeTab, setActiveTab] = useState('info');
   const [candidate, setCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [verifNote, setVerifNote] = useState('');
+  const [verifLoading, setVerifLoading] = useState(false);
+
+  const vi = language === 'vi';
 
   useEffect(() => {
     const fetchCandidate = async () => {
@@ -373,9 +380,9 @@ const CandidateDetail = () => {
             name: found.fullName || (found.email ? found.email.split('@')[0] : 'Unknown Candidate'),
             email: found.email || 'No email provided',
             phone: found.phone || 'No phone',
-            dob: found.dateOfBirth || (language === 'vi' ? 'Chưa cập nhật' : 'Not updated'),
-            gender: found.gender || (language === 'vi' ? 'Chưa xác định' : 'Unknown'),
-            address: found.location || (language === 'vi' ? 'Chưa cập nhật' : 'Not updated'),
+            dob: found.dateOfBirth || (vi ? 'Chưa cập nhật' : 'Not updated'),
+            gender: found.gender || (vi ? 'Chưa xác định' : 'Unknown'),
+            address: found.location || (vi ? 'Chưa cập nhật' : 'Not updated'),
             ekycVerified: found.kycCompleted || found.ekycStatus === 'verified' || false,
             approvalStatus: (found.kycCompleted || found.ekycStatus === 'verified') ? 'approved' : 'pending',
             joined: found.createdAt ? new Date(found.createdAt).toLocaleDateString('vi-VN') : 'N/A',
@@ -383,8 +390,16 @@ const CandidateDetail = () => {
             rating: found.rating || 5.0,
             totalEarned: found.totalEarned || '0',
             violations: found.violations || [],
-            workAreas: found.workAreas || []
+            workAreas: found.workAreas || [],
+            // Verification fields
+            verificationStatus: found.verificationStatus || 'PENDING',
+            verificationSubmittedAt: found.verificationSubmittedAt || '',
+            verificationApprovedAt: found.verificationApprovedAt || '',
+            verificationRejectedAt: found.verificationRejectedAt || '',
+            verificationNote: found.verificationNote || '',
+            profileCompletion: found.profileCompletion || 0,
           });
+          setVerifNote(found.verificationNote || '');
         }
       } catch (error) {
         console.error('❌ Error fetching candidate details:', error);
@@ -394,7 +409,37 @@ const CandidateDetail = () => {
     };
 
     fetchCandidate();
-  }, [id, language]);
+  }, [id, language]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleApprove = async () => {
+    setVerifLoading(true);
+    try {
+      await candidateProfileService.approveVerification(candidate.id, verifNote);
+      setCandidate(prev => ({ ...prev, verificationStatus: 'APPROVED', verificationApprovedAt: new Date().toISOString() }));
+      alert(vi ? '✅ Đã phê duyệt xác minh ứng viên.' : '✅ Candidate verification approved.');
+    } catch (e) {
+      alert(vi ? 'Lỗi khi duyệt. Vui lòng thử lại.' : 'Error approving. Please try again.');
+    } finally {
+      setVerifLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!verifNote.trim()) {
+      alert(vi ? 'Vui lòng nhập lý do từ chối.' : 'Please enter a rejection reason.');
+      return;
+    }
+    setVerifLoading(true);
+    try {
+      await candidateProfileService.rejectVerification(candidate.id, verifNote);
+      setCandidate(prev => ({ ...prev, verificationStatus: 'REJECTED', verificationRejectedAt: new Date().toISOString(), verificationNote: verifNote }));
+      alert(vi ? '❌ Đã từ chối yêu cầu xác minh.' : '❌ Verification request rejected.');
+    } catch (e) {
+      alert(vi ? 'Lỗi khi từ chối. Vui lòng thử lại.' : 'Error rejecting. Please try again.');
+    } finally {
+      setVerifLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -497,6 +542,14 @@ const CandidateDetail = () => {
           </Tab>
           <Tab $active={activeTab === 'history'} onClick={() => setActiveTab('history')}>
             {language === 'vi' ? 'Lịch sử vi phạm' : 'Violation History'}
+          </Tab>
+          <Tab $active={activeTab === 'verification'} onClick={() => setActiveTab('verification')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <BadgeCheck size={15} />
+            {language === 'vi' ? 'Xác minh' : 'Verification'}
+            {candidate?.verificationStatus === 'SUBMITTED' && (
+              <span style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, marginLeft: 2 }}>!</span>
+            )}
           </Tab>
         </TabsContainer>
 
@@ -644,6 +697,120 @@ const CandidateDetail = () => {
               ) : (
                 <div style={{ fontSize: '14px', color: '#10b981', fontWeight: '600' }}>
                   {language === 'vi' ? '✓ Không có vi phạm nào' : '✓ No violations'}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'verification' && (
+            <>
+              <SectionTitle>
+                <BadgeCheck />
+                {vi ? 'Xác Minh Ứng Viên' : 'Candidate Verification'}
+              </SectionTitle>
+
+              {/* Status card */}
+              <div style={{
+                padding: '20px', borderRadius: 12, marginBottom: 20,
+                background: ({APPROVED:'#dcfce7',SUBMITTED:'#fef3c7',REJECTED:'#fee2e2',PENDING:'#f3f4f6'})[candidate.verificationStatus] || '#f3f4f6',
+                border: `2px solid ${({APPROVED:'#86efac',SUBMITTED:'#fcd34d',REJECTED:'#fca5a5',PENDING:'#e5e7eb'})[candidate.verificationStatus] || '#e5e7eb'}`,
+                display: 'flex', alignItems: 'center', gap: 14
+              }}>
+                {candidate.verificationStatus === 'APPROVED' && <BadgeCheck size={28} style={{color:'#10b981',flexShrink:0}}/>}
+                {candidate.verificationStatus === 'SUBMITTED' && <Clock size={28} style={{color:'#d97706',flexShrink:0}}/>}
+                {candidate.verificationStatus === 'REJECTED' && <XCircle size={28} style={{color:'#ef4444',flexShrink:0}}/>}
+                {candidate.verificationStatus === 'PENDING' && <Shield size={28} style={{color:'#6b7280',flexShrink:0}}/>}
+                <div>
+                  <div style={{fontWeight:700,fontSize:15}}>
+                    {({
+                      APPROVED: vi ? 'Đã được phê duyệt' : 'Approved',
+                      SUBMITTED: vi ? 'Đang chờ xét duyệt' : 'Pending review',
+                      REJECTED: vi ? 'Đã bị từ chối' : 'Rejected',
+                      PENDING: vi ? 'Chưa gửi yêu cầu' : 'Not submitted',
+                    })[candidate.verificationStatus]}
+                  </div>
+                  {candidate.verificationSubmittedAt && (
+                    <div style={{fontSize:12,color:'#64748b',marginTop:3}}>
+                      {vi ? 'Gửi lúc: ' : 'Submitted: '}{new Date(candidate.verificationSubmittedAt).toLocaleString('vi-VN')}
+                    </div>
+                  )}
+                  {candidate.verificationApprovedAt && (
+                    <div style={{fontSize:12,color:'#15803d',marginTop:3}}>
+                      {vi ? 'Duyệt lúc: ' : 'Approved: '}{new Date(candidate.verificationApprovedAt).toLocaleString('vi-VN')}
+                    </div>
+                  )}
+                  {candidate.verificationRejectedAt && (
+                    <div style={{fontSize:12,color:'#dc2626',marginTop:3}}>
+                      {vi ? 'Từ chối lúc: ' : 'Rejected: '}{new Date(candidate.verificationRejectedAt).toLocaleString('vi-VN')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* eKYC status */}
+              <InfoGrid style={{marginBottom:20}}>
+                <InfoItem>
+                  <div className="label">{vi ? 'eKYC (CCCD + khuôn mặt)' : 'eKYC (ID + Face)'}</div>
+                  <div className="value">
+                    {candidate.ekycVerified
+                      ? <><CheckCircle size={16} style={{color:'#10b981'}}/> {vi ? 'Đã xác minh' : 'Verified'}</>
+                      : <><XCircle size={16} style={{color:'#ef4444'}}/> {vi ? 'Chưa xác minh' : 'Not verified'}</>
+                    }
+                  </div>
+                </InfoItem>
+                <InfoItem>
+                  <div className="label">{vi ? 'Hoàn thiện hồ sơ' : 'Profile completion'}</div>
+                  <div className="value">
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{flex:1,height:8,background:'#e5e7eb',borderRadius:4,overflow:'hidden',minWidth:80}}>
+                        <div style={{height:'100%',width:`${candidate.profileCompletion}%`,background:candidate.profileCompletion>=60?'#10b981':'#f59e0b',borderRadius:4}} />
+                      </div>
+                      <span style={{fontWeight:800,color:candidate.profileCompletion>=60?'#10b981':'#f59e0b'}}>{candidate.profileCompletion}%</span>
+                    </div>
+                  </div>
+                </InfoItem>
+              </InfoGrid>
+
+              {/* Admin note */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#64748b',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.5px'}}>
+                  {vi ? 'Ghi chú (bắt buộc khi từ chối)' : 'Admin note (required when rejecting)'}
+                </div>
+                <textarea
+                  value={verifNote}
+                  onChange={e => setVerifNote(e.target.value)}
+                  placeholder={vi ? 'Nhập ghi chú cho ứng viên...' : 'Enter a note for the candidate...'}
+                  style={{width:'100%',padding:'10px 14px',border:'2px solid #e2e8f0',borderRadius:10,fontSize:14,fontFamily:'inherit',resize:'vertical',minHeight:80,boxSizing:'border-box'}}
+                />
+              </div>
+
+              {/* Action buttons */}
+              {candidate.verificationStatus === 'SUBMITTED' && (
+                <div style={{display:'flex',gap:12}}>
+                  <button
+                    onClick={handleApprove}
+                    disabled={verifLoading}
+                    style={{flex:1,padding:'12px',background:'#10b981',color:'white',border:'none',borderRadius:10,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:verifLoading?0.6:1}}
+                  >
+                    <CheckCircle size={16}/>{verifLoading ? (vi?'Đang xử lý...':'Processing...') : (vi?'Phê duyệt':'Approve')}
+                  </button>
+                  <button
+                    onClick={handleReject}
+                    disabled={verifLoading}
+                    style={{flex:1,padding:'12px',background:'#ef4444',color:'white',border:'none',borderRadius:10,fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:verifLoading?0.6:1}}
+                  >
+                    <XCircle size={16}/>{verifLoading ? (vi?'Đang xử lý...':'Processing...') : (vi?'Từ chối':'Reject')}
+                  </button>
+                </div>
+              )}
+              {candidate.verificationStatus === 'APPROVED' && (
+                <div style={{padding:'12px 16px',background:'#dcfce7',border:'2px solid #86efac',borderRadius:10,color:'#15803d',fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:8}}>
+                  <BadgeCheck size={18}/>{vi?'Ứng viên này đã được xác minh và có thể sử dụng đầy đủ tính năng.':'This candidate is verified and can use all features.'}
+                </div>
+              )}
+              {candidate.verificationStatus === 'PENDING' && (
+                <div style={{padding:'12px 16px',background:'#f3f4f6',border:'2px solid #e5e7eb',borderRadius:10,color:'#6b7280',fontWeight:600,fontSize:14,display:'flex',alignItems:'center',gap:8}}>
+                  <Shield size={18}/>{vi?'Ứng viên chưa gửi yêu cầu xác minh.':'Candidate has not submitted a verification request.'}
                 </div>
               )}
             </>

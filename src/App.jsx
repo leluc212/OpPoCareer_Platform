@@ -41,6 +41,7 @@ import CandidatePosts from './pages/candidate/CandidatePosts';
 import ChangePassword from './pages/candidate/ChangePassword';
 import DeleteAccount from './pages/candidate/DeleteAccount';
 import CandidateKYC from './pages/candidate/CandidateKYC';
+import QuickJobIntroPage from './pages/candidate/QuickJobIntroPage';
 
 // Employer Pages
 import EmployerDashboard from './pages/employer/EmployerDashboard';
@@ -242,6 +243,11 @@ function AppRoutes() {
       <Route path="/candidate/kyc" element={
         <ProtectedRoute allowedRoles={['candidate']}>
           <CandidateKYC />
+        </ProtectedRoute>
+      } />
+      <Route path="/candidate/quick-job-intro" element={
+        <ProtectedRoute allowedRoles={['candidate']}>
+          <QuickJobIntroPage />
         </ProtectedRoute>
       } />
       

@@ -140,7 +140,9 @@ class QuickJobService {
         mode: 'cors'
       });
 
-      console.log(`📥 QuickJobService: Response status: ${response.status} from ${fullUrl}`);
+      if (response.status !== 404) {
+        console.log(`📥 QuickJobService: Response status: ${response.status} from ${fullUrl}`);
+      }
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({ message: 'Request failed' }));

@@ -8,7 +8,7 @@ import react from '@vitejs/plugin-react'
 const packageProxyTarget = process.env.PACKAGE_SUBSCRIPTIONS_PROXY_TARGET || process.env.VITE_PACKAGE_SUBSCRIPTIONS_PROXY_TARGET || '';
 
 export default defineConfig({
-  base: '/OpPoReview/',
+  base: '/',
   plugins: [react()],
   server: {
     port: 3000,

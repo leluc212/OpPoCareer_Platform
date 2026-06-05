@@ -782,26 +782,74 @@ const CandidatesManagement = () => {
   };
 
   const handleApproveVerif = async (candidateId) => {
+    const candidate = verifications.find(v => v.id === candidateId);
     // Optimistic update trước
     setVerifications(prev => prev.map(v =>
       v.id === candidateId ? { ...v, verificationStatus: 'APPROVED' } : v
     ));
     try {
       await candidateProfileService.approveVerification(candidateId, '');
+      // Gửi thông báo cho ứng viên
+      try {
+        await notificationService.createCandidateQuickJobVerifNotification(
+          candidateId,
+          candidate?.name || '',
+          'approved'
+        );
+      } catch (notifyErr) {
+        console.error('Failed to send approval notification to candidate:', notifyErr);
+      }
     } catch (e) {
       // Rollback nếu lỗi
       setVerifications(prev => prev.map(v =>
-        v.id === candidateId ? { ...v, verificationStatus: 'REJECTED' } : v
+        v.id === candidateId ? { ...v, verificationStatus: 'SUBMITTED' } : v
       ));
       alert(language === 'vi' ? 'Lỗi khi duyệt' : 'Error approving');
     }
   };
 
+  const handleDeactivateVerif = async (candidateId) => {
+    const candidate = verifications.find(v => v.id === candidateId);
+    // Optimistic update
+    setVerifications(prev => prev.map(v =>
+      v.id === candidateId ? { ...v, verificationStatus: 'REJECTED' } : v
+    ));
+    try {
+      await candidateProfileService.rejectVerification(candidateId, '');
+      // Gửi thông báo hủy kích hoạt (nội dung khác với từ chối lần đầu)
+      try {
+        await notificationService.createCandidateQuickJobVerifNotification(
+          candidateId,
+          candidate?.name || '',
+          'deactivated'
+        );
+      } catch (notifyErr) {
+        console.error('Failed to send deactivation notification to candidate:', notifyErr);
+      }
+    } catch (e) {
+      // Rollback
+      setVerifications(prev => prev.map(v =>
+        v.id === candidateId ? { ...v, verificationStatus: 'APPROVED' } : v
+      ));
+      alert(language === 'vi' ? 'Lỗi khi hủy kích hoạt' : 'Error deactivating');
+    }
+  };
+
   const handleRejectVerif = async (candidateId) => {
-    // Xóa khỏi list ngay lập tức (giống bên tuyển gấp NTD)
+    const candidate = verifications.find(v => v.id === candidateId);
     setVerifications(prev => prev.filter(v => v.id !== candidateId));
     try {
       await candidateProfileService.rejectVerification(candidateId, '');
+      // Gửi thông báo cho ứng viên
+      try {
+        await notificationService.createCandidateQuickJobVerifNotification(
+          candidateId,
+          candidate?.name || '',
+          'rejected'
+        );
+      } catch (notifyErr) {
+        console.error('Failed to send rejection notification to candidate:', notifyErr);
+      }
     } catch (e) {
       // Rollback nếu lỗi - load lại từ server
       loadVerifications();
@@ -972,6 +1020,16 @@ const CandidatesManagement = () => {
       console.error('❌ Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (activeTab === 'verifications') {
+      await loadVerifications();
+    } else if (activeTab === 'withdrawals') {
+      await loadData();
+    } else {
+      await loadData();
     }
   };
 
@@ -1477,9 +1535,9 @@ const CandidatesManagement = () => {
               onChange={handleSearchChange}
             />
           </SearchBox>
-          <ReloadButton onClick={loadData} disabled={loading}>
-            <RefreshCw size={18} className={loading ? 'spinning' : ''} />
-            {loading
+          <ReloadButton onClick={handleRefresh} disabled={loading || verifLoading}>
+            <RefreshCw size={18} className={(loading || verifLoading) ? 'spinning' : ''} />
+            {(loading || verifLoading)
               ? (language === 'vi' ? 'Đang tải...' : 'Loading...')
               : (language === 'vi' ? 'Làm mới' : 'Refresh')
             }
@@ -1702,7 +1760,7 @@ const CandidatesManagement = () => {
                           </>
                         )}
                         {v.verificationStatus === 'APPROVED' && (
-                          <RejectButton onClick={() => handleRejectVerif(v.id)}>
+                          <RejectButton onClick={() => handleDeactivateVerif(v.id)}>
                             <XCircle size={16} />
                             {language === 'vi' ? 'Hủy kích hoạt' : 'Deactivate'}
                           </RejectButton>

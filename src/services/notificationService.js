@@ -547,7 +547,111 @@ export const createQuickJobActivationDeactivatedNotification = async (employerId
 };
 
 /**
- * Save notification to API
+ * Notify admin when a candidate submits a quick job verification request
+ * @param {string} candidateId - Cognito userId của ứng viên
+ * @param {string} candidateName - Tên ứng viên
+ */
+export const createCandidateVerificationRequestNotification = async (candidateId, candidateName) => {
+  if (!candidateId) throw new Error('candidateId is required');
+
+  const safeName = candidateName || 'Ứng viên';
+
+  const notification = {
+    type: 'candidate_verification_request',
+    title: 'Yêu cầu duyệt hồ sơ Tuyển Gấp',
+    titleEn: 'Quick Job Profile Verification Request',
+    message: `Ứng viên "${safeName}" đã gửi yêu cầu xét duyệt hồ sơ Tuyển Gấp. Vui lòng kiểm tra và phê duyệt.`,
+    messageEn: `Candidate "${safeName}" has submitted a Quick Job profile verification request. Please review and approve.`,
+    recipientId: 'admin',
+    recipientRole: 'admin',
+    senderId: candidateId,
+    senderName: safeName,
+    data: { candidateId, candidateName: safeName },
+    icon: 'user-check',
+    color: '#8b5cf6',
+    actionUrl: '/admin/candidates',
+    actionText: 'Xem hồ sơ',
+    actionTextEn: 'View Profile'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Notify candidate when admin approves, rejects, or deactivates their quick job verification
+ * @param {string} candidateId - Cognito userId của ứng viên
+ * @param {string} candidateName - Tên ứng viên
+ * @param {'approved'|'rejected'|'deactivated'} status
+ */
+export const createCandidateQuickJobVerifNotification = async (candidateId, candidateName, status) => {
+  if (!candidateId) throw new Error('candidateId is required');
+
+  const isApproved = status === 'approved';
+  const isDeactivated = status === 'deactivated';
+  const safeName = candidateName || 'Ứng viên';
+
+  let type, title, titleEn, message, messageEn, icon, color, actionUrl, actionText, actionTextEn;
+
+  if (isApproved) {
+    type = 'success';
+    title = 'Hồ sơ Tuyển Gấp đã được duyệt';
+    titleEn = 'Quick Job Profile Approved';
+    message = `Chúc mừng ${safeName}! Hồ sơ của bạn đã được Admin xét duyệt thành công. Bạn có thể bắt đầu nhận việc làm tuyển gấp ngay bây giờ.`;
+    messageEn = `Congratulations ${safeName}! Your profile has been approved by Admin. You can now start receiving Quick Job offers.`;
+    icon = 'check-circle';
+    color = '#10b981';
+    actionUrl = '/candidate/jobs';
+    actionText = 'Xem việc làm';
+    actionTextEn = 'View jobs';
+  } else if (isDeactivated) {
+    type = 'system';
+    title = 'Tài khoản Tuyển Gấp bị hủy kích hoạt';
+    titleEn = 'Quick Job Access Deactivated';
+    message = `Tài khoản của bạn đã bị hủy kích hoạt. Bạn sẽ không nhận được việc làm tuyển gấp cho đến khi được kích hoạt lại. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.`;
+    messageEn = `Your Quick Job access has been deactivated by Admin. You will not receive Quick Job offers until reactivated. Please contact support for more information.`;
+    icon = 'x-circle';
+    color = '#f59e0b';
+    actionUrl = '/candidate/profile';
+    actionText = 'Liên hệ hỗ trợ';
+    actionTextEn = 'Contact support';
+  } else {
+    // rejected
+    type = 'system';
+    title = 'Hồ sơ Tuyển Gấp chưa được duyệt';
+    titleEn = 'Quick Job Profile Not Approved';
+    message = `Hồ sơ Tuyển Gấp của bạn chưa đáp ứng yêu cầu xét duyệt. Vui lòng cập nhật đầy đủ thông tin cá nhân và hoàn thành eKYC để được xét duyệt lại.`;
+    messageEn = `Your Quick Job profile did not meet the review requirements. Please complete your personal information and eKYC to reapply.`;
+    icon = 'alert-circle';
+    color = '#ef4444';
+    actionUrl = '/candidate/profile';
+    actionText = 'Cập nhật hồ sơ';
+    actionTextEn = 'Update profile';
+  }
+
+  const notification = {
+    type,
+    title,
+    titleEn,
+    message,
+    messageEn,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: 'admin',
+    senderName: 'Admin Ốp Pờ',
+    data: { status, candidateId, candidateName: safeName },
+    icon,
+    color,
+    actionUrl,
+    actionText,
+    actionTextEn
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Save a notification via the API
+ * @param {object} notification - Notification data
  */
 const saveNotification = async (notification) => {
   try {
@@ -940,6 +1044,8 @@ export default {
   createQuickJobActivationApprovedNotification,
   createQuickJobActivationRejectedNotification,
   createQuickJobActivationDeactivatedNotification,
+  createCandidateVerificationRequestNotification,
+  createCandidateQuickJobVerifNotification,
   createCandidateWithdrawalRequestNotification,
   createCandidateWithdrawalStatusNotification,
   markAsRead,

@@ -10,7 +10,7 @@ import quickJobService from '../../services/quickJobService';
 import candidateProfileService from '../../services/candidateProfileService';
 import {
   Search, MapPin, Briefcase, Clock, Building2,
-  Zap, Filter, ChevronRight, X, DollarSign,
+  Zap, Filter, ChevronRight, ChevronDown, X, DollarSign,
   Calendar, Users, Globe, FileText, LogIn, Bookmark
 } from 'lucide-react';
 
@@ -126,8 +126,67 @@ const FilterCard = styled.div`
   background: ${p => p.$isDark ? 'rgba(30,41,59,0.8)' : '#fff'};
   border: 1.5px solid ${p => p.$isDark ? 'rgba(75,85,99,0.3)' : '#e2e8f0'};
   border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 16px;
+  overflow: hidden;
+  position: sticky;
+  top: 80px;
+`;
+
+const FilterHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid ${p => p.$isDark ? 'rgba(75,85,99,0.3)' : '#f1f5f9'};
+  span {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: ${p => p.$isDark ? '#94a3b8' : '#64748b'};
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #ef4444;
+    padding: 2px 6px;
+    border-radius: 4px;
+    &:hover { background: #fef2f2; }
+  }
+`;
+
+const FilterSection = styled.div`
+  border-bottom: 1px solid ${p => p.$isDark ? 'rgba(75,85,99,0.2)' : '#f1f5f9'};
+  &:last-child { border-bottom: none; }
+`;
+
+const FilterSectionHeader = styled.button`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: ${p => p.$isDark ? '#cbd5e1' : '#374151'};
+  transition: background 0.15s;
+  &:hover { background: ${p => p.$isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc'}; }
+  svg { opacity: 0.5; transition: transform 0.2s; transform: rotate(${p => p.$open ? '180deg' : '0deg'}); }
+`;
+
+const FilterBody = styled.div`
+  padding: ${p => p.$open ? '4px 16px 10px' : '0'};
+  max-height: ${p => p.$open ? '300px' : '0'};
+  overflow: hidden;
+  transition: max-height 0.2s ease, padding 0.2s ease;
 `;
 
 const FilterTitle = styled.div`
@@ -143,12 +202,21 @@ const FilterOption = styled.label`
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.88rem;
+  font-size: 0.83rem;
   color: ${p => p.$isDark ? '#cbd5e1' : '#475569'};
   cursor: pointer;
-  padding: 4px 0;
-  input { accent-color: #1a62ff; }
+  padding: 3px 0;
+  input { accent-color: #1a62ff; flex-shrink: 0; }
   &:hover { color: #1a62ff; }
+`;
+
+const RegisterCard = styled.div`
+  background: ${p => p.$isDark ? 'rgba(30,41,59,0.8)' : '#fff'};
+  border: 1.5px solid ${p => p.$isDark ? 'rgba(75,85,99,0.3)' : '#e2e8f0'};
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 12px;
+  text-align: center;
 `;
 
 /* ─── Job List ─── */
@@ -487,6 +555,15 @@ const PublicJobListing = () => {
     try { return JSON.parse(localStorage.getItem('public_saved_jobs') || '[]'); } catch { return []; }
   });
 
+  // Extended filter states
+  const [selectedSalary, setSelectedSalary] = useState('');
+  const [selectedDateRange, setSelectedDateRange] = useState('');
+  const [selectedLocations, setSelectedLocations] = useState([]);
+
+  // Collapsible filter sections
+  const [openSections, setOpenSections] = useState({ type: true, salary: false, date: false, location: false });
+  const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }));
+
   // Sync tab với URL param
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -535,6 +612,80 @@ const PublicJobListing = () => {
     }).finally(() => setLoading(false));
   }, []);
 
+  // ── Helper: parse salary to a numeric value (thousands VND) ──
+  const parseSalary = (s) => {
+    if (!s) return 0;
+    const str = String(s).replace(/\./g, '').replace(/,/g, '');
+    const nums = str.match(/\d+/g);
+    if (!nums) return 0;
+    return Math.max(...nums.map(Number));
+  };
+
+  const matchSalary = (job, range) => {
+    if (!range) return true;
+    const sal = String(job.salary || '').toLowerCase();
+    if (range === 'negotiable') return sal.includes('thỏa thuận') || sal.includes('negotiable') || !job.salary;
+    const v = parseSalary(job.salary);
+    // Detect if salary is hourly (contains /giờ or /h) vs monthly
+    const isHourly = sal.includes('giờ') || sal.includes('/h');
+    // Normalize to monthly rough estimate for comparison
+    const monthly = isHourly ? v * 8 * 26 : v; // 8h/day * 26 days
+    switch (range) {
+      case 'under-5m': return monthly > 0 && monthly < 5000000;
+      case '5m-10m': return monthly >= 5000000 && monthly < 10000000;
+      case '10m-20m': return monthly >= 10000000 && monthly <= 20000000;
+      case 'over-20m': return monthly > 20000000;
+      default: return true;
+    }
+  };
+
+  const matchDate = (job, range) => {
+    if (!range) return true;
+    const d = job.createdAt;
+    if (!d) return true;
+    const diff = (Date.now() - new Date(d).getTime()) / 3600000; // hours
+    switch (range) {
+      case 'today': return diff <= 24;
+      case '3days': return diff <= 72;
+      case '7days': return diff <= 168;
+      case '30days': return diff <= 720;
+      default: return true;
+    }
+  };
+
+  // Top cities extracted from jobs
+  const topCities = useMemo(() => {
+    const counts = {};
+    jobs.forEach(j => {
+      const city = (j.location || '').split(',').pop().trim();
+      if (city) counts[city] = (counts[city] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, n]) => ({ city: c, count: n }));
+  }, [jobs]);
+
+  // Top companies from jobs
+  const topCompanies = useMemo(() => {
+    const counts = {};
+    jobs.forEach(j => {
+      const name = j.companyName || j.employerName;
+      if (name) counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => ({ name, count }));
+  }, [jobs]);
+
+  const hasActiveFilters = jobType !== 'all' || selectedSalary || selectedDateRange || selectedLocations.length > 0;
+
+  const clearAllFilters = () => {
+    setJobType('all');
+    setSelectedSalary('');
+    setSelectedDateRange('');
+    setSelectedLocations([]);
+  };
+
+  const toggleLocation = (city) => setSelectedLocations(prev =>
+    prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]
+  );
+
   const filtered = useMemo(() => {
     const kw = keyword.toLowerCase();
     const lc = loc.toLowerCase();
@@ -542,13 +693,17 @@ const PublicJobListing = () => {
       const matchKw = !kw || (j.title || '').toLowerCase().includes(kw) || (j.companyName || j.employerName || '').toLowerCase().includes(kw);
       const matchLoc = !lc || (j.location || '').toLowerCase().includes(lc);
       const matchType = jobType === 'all' || j._type === jobType;
-      return matchKw && matchLoc && matchType;
+      const matchSal = matchSalary(j, selectedSalary);
+      const matchDt = matchDate(j, selectedDateRange);
+      const matchCo = true;
+      const matchCity = selectedLocations.length === 0 || selectedLocations.some(city => (j.location || '').includes(city));
+      return matchKw && matchLoc && matchType && matchSal && matchDt && matchCo && matchCity;
     });
     if (activeTab === 'saved') {
       result = result.filter(j => savedJobIds.includes(j.idJob || j.jobID));
     }
     return result;
-  }, [jobs, keyword, loc, jobType, activeTab, savedJobIds]);
+  }, [jobs, keyword, loc, jobType, selectedSalary, selectedDateRange, selectedLocations, activeTab, savedJobIds]);
 
   const handleSearch = () => {
     // just re-filter, state already updated
@@ -612,24 +767,101 @@ const PublicJobListing = () => {
         {/* Sidebar */}
         <Sidebar>
           <FilterCard $isDark={isDarkMode}>
-            <FilterTitle $isDark={isDarkMode}>
-              <Filter size={13} style={{ display: 'inline', marginRight: 4 }} />
-              {language === 'vi' ? 'Loại việc' : 'Job Type'}
-            </FilterTitle>
-            {[
-              { val: 'all', label: language === 'vi' ? 'Tất cả' : 'All' },
-              { val: 'standard', label: language === 'vi' ? 'Tiêu chuẩn' : 'Standard' },
-              { val: 'urgent', label: language === 'vi' ? 'Tuyển gấp' : 'Urgent' },
-            ].map(opt => (
-              <FilterOption key={opt.val} $isDark={isDarkMode}>
-                <input type="radio" name="jobType" checked={jobType === opt.val} onChange={() => setJobType(opt.val)} />
-                {opt.label}
-              </FilterOption>
-            ))}
+            <FilterHeader $isDark={isDarkMode}>
+              <span><Filter size={12} />{language === 'vi' ? 'Bộ lọc' : 'Filters'}</span>
+              {hasActiveFilters && (
+                <button onClick={clearAllFilters}>{language === 'vi' ? 'Xóa' : 'Clear'}</button>
+              )}
+            </FilterHeader>
+
+            {/* Job type */}
+            <FilterSection $isDark={isDarkMode}>
+              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.type} onClick={() => toggleSection('type')}>
+                {language === 'vi' ? 'Loại việc' : 'Job Type'}
+                <ChevronDown size={14} />
+              </FilterSectionHeader>
+              <FilterBody $open={openSections.type}>
+                {[
+                  { val: 'all', label: language === 'vi' ? 'Tất cả' : 'All' },
+                  { val: 'standard', label: language === 'vi' ? 'Tiêu chuẩn' : 'Standard' },
+                  { val: 'urgent', label: language === 'vi' ? 'Tuyển gấp' : 'Urgent' },
+                ].map(opt => (
+                  <FilterOption key={opt.val} $isDark={isDarkMode}>
+                    <input type="radio" name="jobType" checked={jobType === opt.val} onChange={() => setJobType(opt.val)} />
+                    {opt.label}
+                  </FilterOption>
+                ))}
+              </FilterBody>
+            </FilterSection>
+
+            {/* Salary */}
+            <FilterSection $isDark={isDarkMode}>
+              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.salary} onClick={() => toggleSection('salary')}>
+                {language === 'vi' ? 'Mức lương' : 'Salary'}
+                <ChevronDown size={14} />
+              </FilterSectionHeader>
+              <FilterBody $open={openSections.salary}>
+                {[
+                  { val: '', label: language === 'vi' ? 'Tất cả' : 'All' },
+                  { val: 'under-5m', label: language === 'vi' ? 'Dưới 5 triệu' : 'Under 5M' },
+                  { val: '5m-10m', label: '5 – 10 triệu' },
+                  { val: '10m-20m', label: '10 – 20 triệu' },
+                  { val: 'over-20m', label: language === 'vi' ? 'Trên 20 triệu' : 'Over 20M' },
+                  { val: 'negotiable', label: language === 'vi' ? 'Thỏa thuận' : 'Negotiable' },
+                ].map(opt => (
+                  <FilterOption key={opt.val || 'all-sal'} $isDark={isDarkMode}>
+                    <input type="radio" name="salary" checked={selectedSalary === opt.val} onChange={() => setSelectedSalary(opt.val)} />
+                    {opt.label}
+                  </FilterOption>
+                ))}
+              </FilterBody>
+            </FilterSection>
+
+            {/* Date posted */}
+            <FilterSection $isDark={isDarkMode}>
+              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.date} onClick={() => toggleSection('date')}>
+                {language === 'vi' ? 'Ngày đăng' : 'Date Posted'}
+                <ChevronDown size={14} />
+              </FilterSectionHeader>
+              <FilterBody $open={openSections.date}>
+                {[
+                  { val: '', label: language === 'vi' ? 'Tất cả' : 'All time' },
+                  { val: 'today', label: language === 'vi' ? 'Hôm nay' : 'Today' },
+                  { val: '3days', label: language === 'vi' ? '3 ngày qua' : 'Last 3 days' },
+                  { val: '7days', label: language === 'vi' ? '7 ngày qua' : 'Last 7 days' },
+                  { val: '30days', label: language === 'vi' ? '30 ngày qua' : 'Last 30 days' },
+                ].map(opt => (
+                  <FilterOption key={opt.val || 'all-date'} $isDark={isDarkMode}>
+                    <input type="radio" name="dateRange" checked={selectedDateRange === opt.val} onChange={() => setSelectedDateRange(opt.val)} />
+                    {opt.label}
+                  </FilterOption>
+                ))}
+              </FilterBody>
+            </FilterSection>
+
+            {/* Location */}
+            {topCities.length > 0 && (
+              <FilterSection $isDark={isDarkMode}>
+                <FilterSectionHeader $isDark={isDarkMode} $open={openSections.location} onClick={() => toggleSection('location')}>
+                  {language === 'vi' ? 'Địa điểm' : 'Location'}
+                  <ChevronDown size={14} />
+                </FilterSectionHeader>
+                <FilterBody $open={openSections.location}>
+                  {topCities.map(({ city, count }) => (
+                    <FilterOption key={city} $isDark={isDarkMode}>
+                      <input type="checkbox" checked={selectedLocations.includes(city)} onChange={() => toggleLocation(city)} />
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{city}</span>
+                      <span style={{ fontSize: '0.72rem', opacity: 0.4 }}>{count}</span>
+                    </FilterOption>
+                  ))}
+                </FilterBody>
+              </FilterSection>
+            )}
+
           </FilterCard>
 
-          <FilterCard $isDark={isDarkMode} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.85rem', color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 12 }}>
+          <RegisterCard $isDark={isDarkMode}>
+            <div style={{ fontSize: '0.82rem', color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 10 }}>
               {language === 'vi' ? 'Muốn ứng tuyển?' : 'Want to apply?'}
             </div>
             <Link
@@ -638,17 +870,16 @@ const PublicJobListing = () => {
                 display: 'block',
                 background: '#1a62ff',
                 color: '#fff',
-                borderRadius: 10,
-                padding: '10px 16px',
+                borderRadius: 8,
+                padding: '9px 14px',
                 fontWeight: 700,
-                fontSize: '0.88rem',
+                fontSize: '0.83rem',
                 textDecoration: 'none',
-                textAlign: 'center'
               }}
             >
               {language === 'vi' ? 'Đăng ký ứng viên' : 'Register as Candidate'}
             </Link>
-          </FilterCard>
+          </RegisterCard>
         </Sidebar>
 
         {/* Job List */}

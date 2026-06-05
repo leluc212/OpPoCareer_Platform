@@ -753,7 +753,6 @@ const EmployersManagement = () => {
         console.error('❌ Error sending quick job status notification to employer:', notifyErr);
       }
 
-      alert(language === 'vi' ? 'Cập nhật trạng thái tuyển gấp thành công!' : 'Urgent Job status updated successfully!');
     } catch (error) {
       console.error('❌ Error updating quick job status:', error);
       alert(language === 'vi' ? 'Không thể cập nhật trạng thái tuyển gấp' : 'Failed to update Urgent Job status');

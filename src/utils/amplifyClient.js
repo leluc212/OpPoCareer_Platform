@@ -17,11 +17,12 @@ import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
 // Configure token storage to use localStorage
 cognitoUserPoolsTokenProvider.setKeyValueStorage(window.localStorage);
 
-// Standardize redirect URI from the app base so local dev and deployed builds stay aligned.
-const appBase = import.meta.env.BASE_URL || '/';
-const redirectUri = new URL(appBase, window.location.origin).href;
-
-console.log('🌐 [Amplify] Calculated Redirect URI:', redirectUri);
+// Redirect URI must exactly match what's registered in Cognito Hosted UI.
+// Local dev: http://localhost:3000/  (vite base = '/', port 3000)
+// Production: https://leluc212.github.io/OpPoReview/
+const redirectUri = window.location.hostname === 'localhost'
+  ? 'http://localhost:3000/'
+  : 'https://leluc212.github.io/OpPoReview/';
 
 // Configure Amplify v6 with proper storage and OAuth settings
 Amplify.configure({

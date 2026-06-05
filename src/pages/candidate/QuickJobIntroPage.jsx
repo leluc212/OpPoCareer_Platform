@@ -12,6 +12,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import candidateProfileService from '../../services/candidateProfileService';
+import { createCandidateVerificationRequestNotification } from '../../services/notificationService';
 import {
   Zap, Shield, Wallet, UsersRound, CheckCircle,
   TrendingUp, AlertCircle, Clock, ArrowRight, ArrowLeft
@@ -163,12 +164,24 @@ const QuickJobIntroPage = () => {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      // Lấy profile để có tên ứng viên
+      const profile = await candidateProfileService.getMyProfile();
+      const candidateName = profile?.fullName || profile?.name || user?.name || user?.email?.split('@')[0] || 'Ứng viên';
+      const candidateId = profile?.userId || user?.userId || user?.sub;
+
       await candidateProfileService.updateProfile({
         verificationStatus: 'SUBMITTED',
         verificationSubmittedAt: new Date().toISOString()
       });
       setStatus('SUBMITTED');
       setShowSuccess(true);
+
+      // Gửi thông báo cho admin
+      try {
+        await createCandidateVerificationRequestNotification(candidateId, candidateName);
+      } catch (notifyErr) {
+        console.error('Failed to send verification request notification to admin:', notifyErr);
+      }
     } catch (e) {
       alert(t('Gửi yêu cầu thất bại. Vui lòng thử lại.', 'Failed to submit. Please try again.'));
     } finally {

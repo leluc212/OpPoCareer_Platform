@@ -1253,7 +1253,8 @@ const CandidateDashboard = () => {
           type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (job.jobType === 'full-time' ? 'Toàn thời gian' : 'Bán thời gian'),
           salary: jobSalary,
           postedAt: formatRelativeTime(job.createdAt),
-          tags: typeof job.tags === 'string' ? job.tags.split(',').map(t => t.trim()) : (job.tags || [])
+          tags: typeof job.tags === 'string' ? job.tags.split(',').map(t => t.trim()) : (job.tags || []),
+          isQuick
         };
       }));
 
@@ -2439,7 +2440,10 @@ const CandidateDashboard = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3 + index * 0.08 }}
                         whileHover={{ scale: 1.01 }}
-                        onClick={() => navigate('/candidate/jobs', { state: { selectedJobId: app.jobId } })}
+                        onClick={() => navigate({
+                          pathname: '/candidate/jobs',
+                          search: `?tab=${app.urgent ? 'shift' : 'standard'}`
+                        }, { state: { selectedJobId: app.jobId } })}
                       >
                         <ApplicationHeader>
                           <ApplicationInfo>
@@ -2500,7 +2504,7 @@ const CandidateDashboard = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4 + index * 0.1 }}
                         whileHover={{ scale: 1.02 }}
-                        onClick={() => navigate('/candidate/jobs', { state: { selectedJobId: job.id } })}
+                        onClick={() => navigate({ pathname: '/candidate/jobs', search: `?tab=${job.isQuick ? 'shift' : 'standard'}` }, { state: { selectedJobId: job.id } })}
                       >
                         <JobHeader>
                           <CompanyLogo>

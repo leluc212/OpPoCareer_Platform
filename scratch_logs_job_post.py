@@ -3,7 +3,7 @@ import sys
 
 def main():
     region = 'ap-southeast-1'
-    log_group = '/aws/lambda/quick-job-handler'
+    log_group = '/aws/lambda/JobPostAPI'
     logs_client = boto3.client('logs', region_name=region)
     
     # Get latest log streams
@@ -19,7 +19,7 @@ def main():
         print("No log streams found")
         return
         
-    with open('all_quick_job_logs.txt', 'w', encoding='utf-8') as f:
+    with open('all_job_post_logs.txt', 'w', encoding='utf-8') as f:
         for stream in streams:
             stream_name = stream['logStreamName']
             f.write(f"\n================ Reading stream: {stream_name} ================\n")
@@ -35,8 +35,7 @@ def main():
             for event in events:
                 msg = event.get('message', '')
                 f.write(msg.strip() + "\n")
-    print("Logs written to all_quick_job_logs.txt")
+    print("Logs written to all_job_post_logs.txt")
 
 if __name__ == '__main__':
     main()
-

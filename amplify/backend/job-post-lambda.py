@@ -63,7 +63,7 @@ def lambda_handler(event, context):
         
         # --- 4. AUTH EXTRACTION ---
         authorizer = event.get('requestContext', {}).get('authorizer', {})
-        claims = authorizer.get('claims', {})
+        claims = authorizer.get('claims') or authorizer.get('jwt', {}).get('claims') or {}
         user_id = claims.get('sub')
         
         if not user_id:
@@ -115,16 +115,24 @@ def lambda_handler(event, context):
             table.put_item(Item=item)
             return {'statusCode': 201, 'headers': headers, 'body': json.dumps({'success': True, 'data': item}, default=decimal_default)}
 
-        # E. GET /jobs/{idJob}
+        # E. Routes based on idJob (e.g. /jobs/JOB-123)
         elif '/jobs/' in normalized_path:
             jid = path_parameters.get('idJob') or (path_segments[-1] if path_segments else None)
             if jid == 'active': # Safety catch
                  return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'data': []})} # Handled above
             
-            res = table.get_item(Key={'idJob': jid})
-            if 'Item' not in res:
-                return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Job not found'})}
-            return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'data': res['Item']}, default=decimal_default)}
+            if http_method == 'GET':
+                return get_job_post(jid, headers)
+            elif http_method == 'PUT':
+                return update_job_post(event, jid, user_id, headers)
+            elif http_method == 'DELETE':
+                return delete_job_post(jid, user_id, headers)
+            else:
+                return {
+                    'statusCode': 405,
+                    'headers': headers,
+                    'body': json.dumps({'success': False, 'message': f'Method {http_method} not allowed'})
+                }
 
         # F. FALLBACK
         return {
@@ -194,6 +202,13 @@ def create_job_post(event, user_id, headers):
         
         # Put item in DynamoDB
         table.put_item(Item=item)
+        
+        if item.get('status') == 'active':
+            try:
+                from job_recommender import recommend_job_to_candidates
+                recommend_job_to_candidates(item, is_quick_job=False)
+            except Exception as rec_err:
+                print(f"Recommendation alert error: {str(rec_err)}")
         
         print(f"✅ Job post created: {item['idJob']}")
         
@@ -349,9 +364,18 @@ def update_job_post(event, job_id, user_id, headers):
         
         existing_job = response['Item']
         
-        # Verify ownership - only job owner can update
-        # Allow if user_id matches employerId OR if user_id is None (for backward compatibility)
-        if user_id and user_id != 'anonymous' and existing_job.get('employerId') != user_id:
+        # Check if user is in Admin group
+        authorizer = event.get('requestContext', {}).get('authorizer', {})
+        claims = authorizer.get('claims') or authorizer.get('jwt', {}).get('claims') or {}
+        groups = claims.get('cognito:groups') or claims.get('groups') or ''
+        is_admin = False
+        if isinstance(groups, list):
+            is_admin = 'Admin' in groups
+        elif isinstance(groups, str):
+            is_admin = 'Admin' in [g.strip() for g in groups.split(',') if g.strip()]
+        
+        # Verify ownership - only job owner or Admin can update
+        if user_id and user_id != 'anonymous' and not is_admin and existing_job.get('employerId') != user_id:
             print(f"Ownership check failed: user_id={user_id}, employerId={existing_job.get('employerId')}")
             return {
                 'statusCode': 403,
@@ -405,6 +429,12 @@ def update_job_post(event, job_id, user_id, headers):
         response = table.update_item(**update_params)
         
         updated_item = response['Attributes']
+        if updated_item.get('status') == 'active' and existing_job.get('status') != 'active':
+            try:
+                from job_recommender import recommend_job_to_candidates
+                recommend_job_to_candidates(updated_item, is_quick_job=False)
+            except Exception as rec_err:
+                print(f"Recommendation alert error: {str(rec_err)}")
         print(f"✅ Job post updated: {job_id}")
         
         return {

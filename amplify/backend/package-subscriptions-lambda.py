@@ -7,6 +7,7 @@ import uuid
 import re
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
+from email_service import send_email
 
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
@@ -790,6 +791,58 @@ def create_subscription(body_str, headers):
         
         print(f"✅ Subscription created (paymentMethod: {payment_method}): {subscription_id}")
         
+        # Send Email Alert for Contact Request Subscriptions
+        if is_contact_request:
+            employer_email = None
+            try:
+                emp_resp = employer_profile_table.get_item(Key={'userId': body['employerId']})
+                if 'Item' in emp_resp:
+                    employer_email = emp_resp['Item'].get('email')
+            except Exception as email_err:
+                print(f"⚠️ Warning: Failed to fetch employer email for notification: {str(email_err)}")
+            
+            admin_email = os.environ.get('ADMIN_EMAIL', 'admin@opporeview.com')
+            formatted_price = f"{int(price_decimal):,}".replace(",", ".")
+            
+            # 1. Notify Admin
+            admin_subject = f"🔔 [Yêu Cầu Mở Gói] Đăng ký gói {body['packageName']} từ {body['companyName']}"
+            admin_html = f"""
+            <html>
+            <body>
+                <h3 style="color: #1e40af;">Yêu cầu kích hoạt gói dịch vụ mới (Liên hệ)</h3>
+                <p><strong>Doanh nghiệp:</strong> {body['companyName']} ({body['employerId']})</p>
+                <p><strong>Email Nhà tuyển dụng:</strong> {employer_email or 'Không có'}</p>
+                <p><strong>Gói dịch vụ:</strong> {body['packageName']} ({body['duration']})</p>
+                <p><strong>Đơn giá:</strong> {formatted_price} VND</p>
+                <p><strong>Mã đăng ký:</strong> {subscription_id}</p>
+                <br/>
+                <p>Vui lòng truy cập trang quản trị Admin Dashboard để duyệt yêu cầu này.</p>
+            </body>
+            </html>
+            """
+            send_email(admin_email, admin_subject, admin_html)
+            
+            # 2. Confirm to Employer
+            if employer_email:
+                emp_subject = f"5️⃣ [OpPoReview] Xác nhận yêu cầu đăng ký gói {body['packageName']}"
+                emp_html = f"""
+                <html>
+                <body>
+                    <h3 style="color: #1e40af;">Cảm ơn quý khách đã đăng ký dịch vụ tại OpPoReview!</h3>
+                    <p>Chúng tôi đã nhận được yêu cầu kích hoạt gói dịch vụ của bạn:</p>
+                    <ul>
+                        <li><strong>Gói dịch vụ:</strong> {body['packageName']} ({body['duration']})</li>
+                        <li><strong>Mã đăng ký:</strong> {subscription_id}</li>
+                        <li><strong>Trạng thái:</strong> Đang chờ admin phê duyệt</li>
+                    </ul>
+                    <p>Đội ngũ hỗ trợ của chúng tôi sẽ liên hệ với bạn trong thời gian sớm nhất để hoàn tất quy trình kích hoạt gói.</p>
+                    <br/>
+                    <p>Trân trọng,<br/>Đội ngũ OpPoReview</p>
+                </body>
+                </html>
+                """
+                send_email(employer_email, emp_subject, emp_html)
+        
         return {
             'statusCode': 201,
             'headers': headers,
@@ -1015,6 +1068,33 @@ def withdraw_wallet(body_str, headers):
             'updatedAt': now_dt.isoformat()
         }
         withdrawal_requests_table.put_item(Item=withdrawal_item)
+        
+        # Send withdrawal notification to admin
+        try:
+            admin_email = os.environ.get('ADMIN_EMAIL', 'admin@opporeview.com')
+            admin_subject = f"💸 [Yêu Cầu Rút Tiền] Từ {company_name} ({amount} VND)"
+            formatted_amount = f"{int(amount):,}".replace(",", ".")
+            admin_html = f"""
+            <html>
+            <body>
+                <h3 style="color: #ef4444;">Yêu cầu rút tiền từ tài khoản doanh nghiệp</h3>
+                <p><strong>Doanh nghiệp:</strong> {company_name} ({employer_id})</p>
+                <p><strong>Số tiền yêu cầu:</strong> {formatted_amount} VND</p>
+                <p><strong>Thông tin ngân hàng nhận tiền:</strong></p>
+                <ul>
+                    <li><strong>Ngân hàng:</strong> {bank_name}</li>
+                    <li><strong>Số tài khoản:</strong> {account_number}</li>
+                    <li><strong>Tên chủ tài khoản:</strong> {account_name}</li>
+                </ul>
+                <p><strong>Mã yêu cầu:</strong> {request_id}</p>
+                <br/>
+                <p>Vui lòng xử lý yêu cầu rút tiền này trong Admin Dashboard.</p>
+            </body>
+            </html>
+            """
+            send_email(admin_email, admin_subject, admin_html)
+        except Exception as email_err:
+            print(f"⚠️ Warning: Failed to send withdrawal email to admin: {str(email_err)}")
         
         return {
             'statusCode': 200,
@@ -1247,6 +1327,56 @@ def update_withdrawal_status(request_id, body_str, headers):
                 ':updatedAt': now_dt.isoformat()
             }
         )
+        
+        # Send status email to employer
+        try:
+            employer_email = None
+            emp_resp = employer_profile_table.get_item(Key={'userId': employer_id})
+            if 'Item' in emp_resp:
+                employer_email = emp_resp['Item'].get('email')
+                
+            if employer_email:
+                formatted_amount = f"{int(amount):,}".replace(",", ".")
+                bank_name = request_item.get('bankName', '')
+                account_number = request_item.get('accountNumber', '')
+                account_name = request_item.get('accountName', '')
+                
+                if new_status == 'approved':
+                    emp_subject = f"✅ [OpPoReview] Yêu cầu rút tiền {request_id} đã được chấp nhận"
+                    emp_html = f"""
+                    <html>
+                    <body>
+                        <h3 style="color: #10b981;">Yêu cầu rút tiền của bạn đã được phê duyệt!</h3>
+                        <p>Số tiền <strong>{formatted_amount} VND</strong> đã được chuyển đến tài khoản ngân hàng của bạn:</p>
+                        <ul>
+                            <li><strong>Ngân hàng:</strong> {bank_name}</li>
+                            <li><strong>Số tài khoản:</strong> {account_number}</li>
+                            <li><strong>Tên chủ tài khoản:</strong> {account_name}</li>
+                            <li><strong>Mã yêu cầu:</strong> {request_id}</li>
+                        </ul>
+                        <p>Giao dịch sẽ được hoàn tất trong vòng 1-3 ngày làm việc tùy thuộc vào ngân hàng của bạn.</p>
+                        <br/>
+                        <p>Trân trọng,<br/>Đội ngũ OpPoReview</p>
+                    </body>
+                    </html>
+                    """
+                else:
+                    emp_subject = f"❌ [OpPoReview] Yêu cầu rút tiền {request_id} đã bị từ chối"
+                    emp_html = f"""
+                    <html>
+                    <body>
+                        <h3 style="color: #ef4444;">Yêu cầu rút tiền của bạn không được phê duyệt</h3>
+                        <p>Yêu cầu rút số tiền <strong>{formatted_amount} VND</strong> (Mã YC: {request_id}) đã bị từ chối bởi quản trị viên.</p>
+                        <p>Số tiền đã được hoàn lại đầy đủ vào số dư ví doanh nghiệp của bạn.</p>
+                        <p>Vui lòng kiểm tra lại thông tin ngân hàng hoặc liên hệ bộ phận hỗ trợ để được giải đáp.</p>
+                        <br/>
+                        <p>Trân trọng,<br/>Đội ngũ OpPoReview</p>
+                    </body>
+                    </html>
+                    """
+                send_email(employer_email, emp_subject, emp_html)
+        except Exception as email_err:
+            print(f"⚠️ Warning: Failed to send withdrawal status email: {str(email_err)}")
         
         return {
             'statusCode': 200,
@@ -1669,6 +1799,39 @@ def update_subscription(body_str, subscription_id, headers):
         
         updated_item = response['Attributes']
         print(f"✅ Subscription updated: {subscription_id}")
+        
+        # If approved/active, send activation email to the employer
+        if body.get('approvalStatus') == 'approved' or body.get('status') == 'active':
+            employer_id = updated_item.get('employerId')
+            employer_email = None
+            try:
+                emp_resp = employer_profile_table.get_item(Key={'userId': employer_id})
+                if 'Item' in emp_resp:
+                    employer_email = emp_resp['Item'].get('email')
+            except Exception as email_err:
+                print(f"⚠️ Warning: Failed to fetch employer email for approval notification: {str(email_err)}")
+                
+            if employer_email:
+                emp_subject = f"🎉 [OpPoReview] Gói dịch vụ {updated_item.get('packageName')} đã được kích hoạt!"
+                emp_html = f"""
+                <html>
+                <body>
+                    <h3 style="color: #10b981;">Chúc mừng! Gói dịch vụ của bạn đã được kích hoạt thành công</h3>
+                    <p>Chi tiết gói dịch vụ hoạt động:</p>
+                    <ul>
+                        <li><strong>Gói dịch vụ:</strong> {updated_item.get('packageName')} ({updated_item.get('duration')})</li>
+                        <li><strong>Mã đăng ký:</strong> {subscription_id}</li>
+                        <li><strong>Ngày bắt đầu:</strong> {updated_item.get('purchaseDate')}</li>
+                        <li><strong>Ngày hết hạn:</strong> {updated_item.get('expiryDate')}</li>
+                        <li><strong>Trạng thái:</strong> Đang hoạt động (Active)</li>
+                    </ul>
+                    <p>Bây giờ bạn đã có thể bắt đầu sử dụng các tính năng ưu tiên của gói dịch vụ này.</p>
+                    <br/>
+                    <p>Trân trọng,<br/>Đội ngũ OpPoReview</p>
+                </body>
+                </html>
+                """
+                send_email(employer_email, emp_subject, emp_html)
         
         return {
             'statusCode': 200,

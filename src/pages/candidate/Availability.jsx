@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
 import { useLanguage } from '../../context/LanguageContext';
+import candidateProfileService from '../../services/candidateProfileService';
 import { 
   Power, 
   Search, 
@@ -618,23 +619,72 @@ const Availability = () => {
   });
   const [enableNotifications, setEnableNotifications] = useState(true);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [profileData, setProfileData] = useState(null);
+
+  useEffect(() => {
+    const syncProfileAvailability = async () => {
+      try {
+        const profile = await candidateProfileService.getMyProfile();
+        if (profile) {
+          setProfileData(profile);
+          const activeState = profile.isActive !== false;
+          setIsAvailable(activeState);
+          setEnableJobSearch(activeState);
+          setEnableRecommendations(activeState);
+          localStorage.setItem('candidate_job_search_is_available', JSON.stringify(activeState));
+        }
+      } catch (err) {
+        console.error('Failed to load candidate profile availability:', err);
+      }
+    };
+    syncProfileAvailability();
+  }, []);
 
   const handleToggleAvailability = () => {
     setShowConfirmModal(true);
   };
   
-  const confirmToggle = () => {
+  const confirmToggle = async () => {
     const newStatus = !isAvailable;
-    setIsAvailable(newStatus);
-    localStorage.setItem('candidate_job_search_is_available', JSON.stringify(newStatus));
-    if (newStatus) {
-      setEnableJobSearch(true);
-      setEnableRecommendations(true);
-    } else {
-      setEnableJobSearch(false);
-      setEnableRecommendations(false);
+    setLoading(true);
+    
+    let updates = { ...profileData, isActive: newStatus };
+    
+    if (newStatus && navigator.geolocation) {
+      try {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
+        updates.latitude = position.coords.latitude;
+        updates.longitude = position.coords.longitude;
+        console.log("📍 Syncing search GPS coordinates:", updates.latitude, updates.longitude);
+      } catch (geoErr) {
+        console.warn("Could not retrieve GPS coordinates for profile sync:", geoErr);
+      }
     }
-    setShowConfirmModal(false);
+    
+    try {
+      // Update isActive attribute and GPS coordinates on candidate profile table in DynamoDB
+      const updatedProfile = await candidateProfileService.updateProfile(updates);
+      if (updatedProfile) {
+        setProfileData(updatedProfile);
+      }
+      setIsAvailable(newStatus);
+      localStorage.setItem('candidate_job_search_is_available', JSON.stringify(newStatus));
+      if (newStatus) {
+        setEnableJobSearch(true);
+        setEnableRecommendations(true);
+      } else {
+        setEnableJobSearch(false);
+        setEnableRecommendations(false);
+      }
+    } catch (err) {
+      console.error('Failed to sync search status with backend:', err);
+    } finally {
+      setLoading(false);
+      setShowConfirmModal(false);
+    }
   };
 
 
@@ -680,13 +730,16 @@ const Availability = () => {
               <ToggleButton 
                 onClick={handleToggleAvailability} 
                 $active={isAvailable}
+                disabled={loading}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
                 <Power />
-                {isAvailable 
-                  ? (language === 'vi' ? 'Tắt Tìm Việc' : 'Pause Job Search')
-                  : (language === 'vi' ? 'Bật Tìm Việc' : 'Activate Job Search')}
+                {loading 
+                  ? (language === 'vi' ? 'Đang cập nhật...' : 'Updating...')
+                  : (isAvailable 
+                      ? (language === 'vi' ? 'Tắt Tìm Việc' : 'Pause Job Search')
+                      : (language === 'vi' ? 'Bật Tìm Việc' : 'Activate Job Search'))}
               </ToggleButton>
             </div>
             <motion.div 
@@ -715,7 +768,7 @@ const Availability = () => {
       
       <Modal
         isOpen={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
+        onClose={() => !loading && setShowConfirmModal(false)}
         title=""
       >
         <ConfirmationContent $isActive={isAvailable}>
@@ -741,13 +794,15 @@ const Availability = () => {
                   : 'When you activate job search, your profile will be visible to employers and you will receive relevant job suggestions. Search features will be enabled.')}
           </p>
           <div className="button-group">
-            <button className="cancel" onClick={() => setShowConfirmModal(false)}>
+            <button className="cancel" onClick={() => setShowConfirmModal(false)} disabled={loading}>
               {language === 'vi' ? 'Hủy Bỏ' : 'Cancel'}
             </button>
-            <button className="confirm" onClick={confirmToggle}>
-              {isAvailable 
-                ? (language === 'vi' ? 'Tắt Ngay' : 'Pause Now')
-                : (language === 'vi' ? 'Bật Ngay' : 'Activate Now')}
+            <button className="confirm" onClick={confirmToggle} disabled={loading}>
+              {loading 
+                ? (language === 'vi' ? 'Đang xử lý...' : 'Processing...')
+                : (isAvailable 
+                    ? (language === 'vi' ? 'Tắt Ngay' : 'Pause Now')
+                    : (language === 'vi' ? 'Bật Ngay' : 'Activate Now'))}
             </button>
           </div>
         </ConfirmationContent>

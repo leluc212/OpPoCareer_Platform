@@ -1,22 +1,22 @@
-# PowerShell script to update Package Subscriptions Lambda function
+# PowerShell script to update standard jobs Lambda function
 $ErrorActionPreference = "Continue"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Updating Package Subscriptions Lambda Function" -ForegroundColor Cyan
+Write-Host "Updating JobPostAPI Lambda Function" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 $REGION = "ap-southeast-1"
-$LAMBDA_NAME = "package-subscriptions-handler"
+$LAMBDA_NAME = "JobPostAPI"
 
 Write-Host "`n[1/2] Creating Lambda package..." -ForegroundColor Yellow
-if (Test-Path "package-subscriptions-lambda.zip") { 
-    Remove-Item "package-subscriptions-lambda.zip" -Force
+if (Test-Path "job-post-lambda.zip") { 
+    Remove-Item "job-post-lambda.zip" -Force
 }
-Compress-Archive -Path "package-subscriptions-lambda.py", "email_service.py" -DestinationPath "package-subscriptions-lambda.zip" -Force
+Compress-Archive -Path "job-post-lambda.py", "email_service.py", "job_recommender.py" -DestinationPath "job-post-lambda.zip" -Force
 Write-Host "Package created" -ForegroundColor Green
 
 Write-Host "`n[2/2] Updating Lambda function code..." -ForegroundColor Yellow
-aws lambda update-function-code --function-name $LAMBDA_NAME --zip-file fileb://package-subscriptions-lambda.zip --region $REGION 2>&1 | Out-Null
+aws lambda update-function-code --function-name $LAMBDA_NAME --zip-file fileb://job-post-lambda.zip --region $REGION 2>&1 | Out-Null
 Write-Host "Lambda code updated" -ForegroundColor Green
 
 Write-Host "`n========================================" -ForegroundColor Cyan

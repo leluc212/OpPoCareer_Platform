@@ -5,7 +5,7 @@ $API_ID = "sd7ds72m8g"
 $ZIP_FILE = "candidate-profile-lambda.zip"
 
 Write-Host "📦 Zipping Lambda..."
-Compress-Archive -Path candidate-profile-lambda.py -DestinationPath $ZIP_FILE -Force
+Compress-Archive -Path candidate-profile-lambda.py, email_service.py, job_recommender.py -DestinationPath $ZIP_FILE -Force
 
 # Check if function exists
 $exists = aws lambda get-function --function-name $FUNCTION_NAME --region $REGION 2>$null

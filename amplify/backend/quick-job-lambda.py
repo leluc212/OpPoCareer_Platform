@@ -84,9 +84,9 @@ def lambda_handler(event, context):
         }
     
     try:
-        # Extract user ID from Cognito authorizer
+        # Extract user ID from Cognito authorizer (v1 and v2 payload support)
         authorizer = event.get('requestContext', {}).get('authorizer', {})
-        claims = authorizer.get('claims', {})
+        claims = authorizer.get('claims') or authorizer.get('jwt', {}).get('claims') or {}
         user_id = claims.get('sub')
         
         # If no authorizer, try to get userId from request body (for testing)
@@ -148,7 +148,7 @@ def lambda_handler(event, context):
             if http_method == 'GET':
                 return get_quick_job(job_id, headers)
             elif http_method == 'PUT':
-                return update_quick_job(body, job_id, user_id, headers)
+                return update_quick_job(body, job_id, user_id, claims, headers)
             elif http_method == 'DELETE':
                 return delete_quick_job(job_id, user_id, headers)
             else:
@@ -328,6 +328,13 @@ def create_quick_job(body_str, user_id, headers):
         # Put item in DynamoDB
         table.put_item(Item=item)
         
+        if item.get('status') == 'active':
+            try:
+                from job_recommender import recommend_job_to_candidates
+                recommend_job_to_candidates(item, is_quick_job=True)
+            except Exception as rec_err:
+                print(f"Recommendation alert error: {str(rec_err)}")
+        
         print(f"✅ Quick job created: {item['jobID']}")
         
         # Return with idJob for API consistency
@@ -495,7 +502,7 @@ def get_quick_job(job_id, headers):
             })
         }
 
-def update_quick_job(body_str, job_id, user_id, headers):
+def update_quick_job(body_str, job_id, user_id, claims, headers):
     """Update quick job"""
     try:
         response = table.get_item(Key={'jobID': job_id})
@@ -510,7 +517,16 @@ def update_quick_job(body_str, job_id, user_id, headers):
             }
         
         existing_job = response['Item']
-        if user_id and user_id != 'anonymous' and existing_job.get('employerId') != user_id:
+        
+        # Check if user is in Admin group
+        groups = claims.get('cognito:groups') or claims.get('groups') or ''
+        is_admin = False
+        if isinstance(groups, list):
+            is_admin = 'Admin' in groups
+        elif isinstance(groups, str):
+            is_admin = 'Admin' in [g.strip() for g in groups.split(',') if g.strip()]
+            
+        if user_id and user_id != 'anonymous' and not is_admin and existing_job.get('employerId') != user_id:
             return {
                 'statusCode': 403,
                 'headers': headers,
@@ -554,6 +570,13 @@ def update_quick_job(body_str, job_id, user_id, headers):
             update_params['ExpressionAttributeNames'] = expr_names
         
         response = table.update_item(**update_params)
+        updated_item = response['Attributes']
+        if updated_item.get('status') == 'active' and existing_job.get('status') != 'active':
+            try:
+                from job_recommender import recommend_job_to_candidates
+                recommend_job_to_candidates(updated_item, is_quick_job=True)
+            except Exception as rec_err:
+                print(f"Recommendation alert error: {str(rec_err)}")
         print(f"✅ Quick job updated: {job_id}")
         
         return {

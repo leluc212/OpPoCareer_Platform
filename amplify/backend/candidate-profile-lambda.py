@@ -36,6 +36,17 @@ def response(status_code, body):
     }
 
 
+def float_to_decimal(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: float_to_decimal(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [float_to_decimal(x) for x in obj]
+    return obj
+
+
+
 def lambda_handler(event, context):
     print('Event:', json.dumps(event))
 
@@ -187,7 +198,7 @@ def lambda_handler(event, context):
  
         elif http_method == 'POST':
             # POST /profile - Create profile
-            body = json.loads(event.get('body') or '{}')
+            body = float_to_decimal(json.loads(event.get('body') or '{}'))
             if not user_id:
                 # Get userId from body or token
                 user_id = body.get('userId')
@@ -215,8 +226,16 @@ def lambda_handler(event, context):
             return response(200, {'success': True, 'data': item})
  
         elif http_method == 'PUT' and user_id:
+            # Fetch existing profile to compare active status
+            try:
+                prev_profile_resp = table.get_item(Key={'userId': user_id})
+                prev_profile = prev_profile_resp.get('Item') or {}
+            except Exception as get_err:
+                print(f"Error fetching previous profile: {get_err}")
+                prev_profile = {}
+
             # PUT /profile/{userId} - Update profile
-            body = json.loads(event.get('body') or '{}')
+            body = float_to_decimal(json.loads(event.get('body') or '{}'))
             body.pop('userId', None)
             body.pop('createdAt', None)
             body['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
@@ -232,7 +251,24 @@ def lambda_handler(event, context):
                 ExpressionAttributeValues=attr_values,
                 ReturnValues='ALL_NEW'
             )
-            return response(200, {'success': True, 'data': result.get('Attributes', {})})
+            updated_profile = result.get('Attributes', {})
+
+            # Check if search status is active and should trigger recommendations
+            is_active_now = updated_profile.get('isActive') is True
+            was_active = prev_profile.get('isActive') is True
+            coords_changed = (
+                updated_profile.get('latitude') != prev_profile.get('latitude') or
+                updated_profile.get('longitude') != prev_profile.get('longitude')
+            )
+
+            if is_active_now and (not was_active or coords_changed):
+                try:
+                    from job_recommender import recommend_active_jobs_to_candidate
+                    recommend_active_jobs_to_candidate(updated_profile)
+                except Exception as rec_err:
+                    print(f"Failed to match active jobs for activated candidate: {rec_err}")
+
+            return response(200, {'success': True, 'data': updated_profile})
  
         elif http_method == 'DELETE' and user_id:
             # DELETE /profile/{userId} - Soft delete
@@ -251,7 +287,10 @@ def lambda_handler(event, context):
 
     except Exception as e:
         print(f'Error: {str(e)}')
+        import traceback
+        traceback.print_exc()
         return response(500, {'success': False, 'message': str(e)})
+
 
 
 # ─── Verification Routes (called from the same lambda_handler above) ──────────

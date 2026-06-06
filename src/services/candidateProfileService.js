@@ -112,7 +112,7 @@ class CandidateProfileService {
       // Handle 404 as a special case
       if (response.status === 404) {
         console.warn(`⚠️ API 404 at ${baseUrl}${endpoint}. Please check if the route or stage is correct.`);
-        const errorData = await response.json().catch(() => ({ message: 'Route not found' }));
+        const errorData = await response.json().catch(() => ({ message: 'Not found' }));
         throw new Error(errorData.message || `404 Not Found: ${baseUrl}${endpoint}`);
       }
 
@@ -161,10 +161,13 @@ class CandidateProfileService {
       console.error('❌ Error fetching profile:', error);
       
       // Return null if profile doesn't exist yet (404 or "not found" message)
-      if (error.message.includes('not found') || 
-          error.message.includes('404') ||
-          error.message.includes('No profile exists')) {
-        console.log('ℹ️ No profile found in DynamoDB');
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('not found') || 
+          msg.includes('404') ||
+          msg.includes('no profile exists') ||
+          msg.includes('does not exist') ||
+          msg.includes('item not found')) {
+        console.log('ℹ️ No profile found in DynamoDB - new user');
         return null;
       }
       

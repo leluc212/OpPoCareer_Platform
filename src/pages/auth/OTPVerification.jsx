@@ -329,21 +329,24 @@ const OTPVerification = () => {
   }, [countdown]);
 
   const handleOTPChange = (index, value) => {
+    // Handle paste of multiple digits (e.g., paste full 6-digit code)
     if (value.length > 1) {
       const digits = value.replace(/\D/g, '').slice(0, 6).split('');
       const newOtp = ['', '', '', '', '', ''];
       digits.forEach((d, i) => { newOtp[i] = d; });
       setOtp(newOtp);
-      const next = Math.min(digits.length, 5);
-      document.getElementById(`otp-${next}`)?.focus();
+      const focusIndex = Math.min(digits.length, 5);
+      document.getElementById(`otp-${focusIndex}`)?.focus();
+      setErrorMsg('');
       return;
     }
-    if (!/^\d*$/.test(value)) return;
+    // Only allow single digit
+    const digit = value.replace(/\D/g, '').slice(-1);
     const newOtp = [...otp];
-    newOtp[index] = value;
+    newOtp[index] = digit;
     setOtp(newOtp);
     setErrorMsg('');
-    if (value && index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
+    if (digit && index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
   };
 
   const handleKeyDown = (index, e) => {
@@ -355,6 +358,7 @@ const OTPVerification = () => {
     setIsVerifying(true);
     setErrorMsg('');
     const code = otp.join('');
+    console.log('Verifying OTP:', code, 'for email:', email);
     try {
       const { Auth } = await import('../../utils/amplifyClient');
       await Auth.confirmSignUp({ username: email, confirmationCode: code });
@@ -483,7 +487,7 @@ const OTPVerification = () => {
                   id={`otp-${index}`}
                   type="text"
                   inputMode="numeric"
-                  maxLength="6"
+                  maxLength="1"
                   value={digit}
                   onChange={e => handleOTPChange(index, e.target.value)}
                   onKeyDown={e => handleKeyDown(index, e)}

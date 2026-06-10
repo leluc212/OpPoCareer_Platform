@@ -20,28 +20,28 @@ const normalizePackageItem = (item) => {
     order: normalizeNumber(item.order) || 1,
     subtitle: typeof item.subtitle === 'object'
       ? {
-          vi: item.subtitle.vi || '',
-          en: item.subtitle.en || ''
-        }
+        vi: item.subtitle.vi || '',
+        en: item.subtitle.en || ''
+      }
       : {
-          vi: item.subtitleVi || item.subtitle || '',
-          en: item.subtitleEn || item.subtitle || ''
-        },
+        vi: item.subtitleVi || item.subtitle || '',
+        en: item.subtitleEn || item.subtitle || ''
+      },
     prices: Array.isArray(item.prices)
       ? item.prices.map((price) => ({
-          duration: price.duration || '',
-          amount: normalizeNumber(price.amount)
-        }))
+        duration: price.duration || '',
+        amount: normalizeNumber(price.amount)
+      }))
       : [],
     features: Array.isArray(item.features)
       ? {
-          vi: [...item.features],
-          en: [...item.features]
-        }
+        vi: [...item.features],
+        en: [...item.features]
+      }
       : {
-          vi: Array.isArray(item.features?.vi) ? [...item.features.vi] : [],
-          en: Array.isArray(item.features?.en) ? [...item.features.en] : []
-        },
+        vi: Array.isArray(item.features?.vi) ? [...item.features.vi] : [],
+        en: Array.isArray(item.features?.en) ? [...item.features.en] : []
+      },
     color: item.color || '#1e40af',
     bg: item.bg || '#EFF6FF',
     bd: item.bd || '#BFDBFE',

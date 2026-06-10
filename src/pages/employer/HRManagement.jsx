@@ -346,65 +346,107 @@ const StaffTabButton = styled.button`
 `;
 
 const ChangeRequestBanner = styled.div`
-  background: linear-gradient(135deg, #FFF7ED, #FFEDD5);
-  border: 1.5px solid #FDBA74;
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD550 100%);
+  border: 1.5px solid #FED7AA;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(251, 146, 60, 0.08);
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: #F97316;
+  }
 
   .cr-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
   .cr-urgency-urgent {
-    font-size: 11px;
-    font-weight: 700;
-    color: #991B1B;
-    background: #FEE2E2;
-    border: 1px solid #FCA5A5;
-    padding: 2px 7px;
-    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #DC2626;
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .cr-urgency-normal {
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 800;
     color: #92400E;
-    background: #FEF3C7;
-    border: 1px solid #FCD34D;
-    padding: 2px 7px;
-    border-radius: 5px;
+    background: #FFFBEB;
+    border: 1px solid #FEF3C7;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .cr-shift-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 600;
+    gap: 10px;
+    font-size: 13.5px;
+    font-weight: 700;
     color: #7C2D12;
-    margin-bottom: 6px;
-    svg { width: 14px; height: 14px; color: #F97316; }
+    margin-bottom: 8px;
+    
+    svg { 
+      width: 14px; 
+      height: 14px; 
+      color: #F97316;
+      flex-shrink: 0;
+    }
+
+    .replacement-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #F97316;
+        font-size: 12px;
+        background: #FFF7ED;
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid #FFEDD5;
+    }
   }
 
   .cr-reason {
-    font-size: 12px;
+    font-size: 13px;
     color: #92400E;
     line-height: 1.5;
-    font-style: italic;
-    margin-bottom: 6px;
+    font-weight: 500;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px dashed #FED7AA;
   }
 
   .cr-time {
     font-size: 11px;
     color: #B45309;
+    font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 4px;
-    svg { width: 11px; height: 11px; }
+    gap: 6px;
+    opacity: 0.8;
+    
+    svg { width: 12px; height: 12px; }
   }
 `;
 
@@ -2592,6 +2634,8 @@ const HRManagement = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [requestSending, setRequestSending] = useState(false);
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [viewedChangeRequest, setViewedChangeRequest] = useState(null);
+  const [isProcessingChange, setIsProcessingChange] = useState(false);
 
   // Persist active section to sessionStorage on change
   useEffect(() => {
@@ -2620,7 +2664,7 @@ const HRManagement = () => {
         quickJobStatus: 'pending'
       });
       setProfile(updated);
-      
+
       // Send notification to Admin
       try {
         const empId = updated?.userId || updated?.id || user?.userId || user?.id || user?.email || null;
@@ -2675,13 +2719,13 @@ const HRManagement = () => {
   useEffect(() => {
     if (location.state?.fromNotifications || location.state?.activeSection === 'hr') {
       setActiveSection('hr');
-      
+
       if (location.state?.staffTab) {
         setStaffTabFilter(location.state.staffTab);
       } else if (location.state?.fromNotifications) {
         setStaffTabFilter('pending_confirm');
       }
-      
+
       // Handle automatic chat opening
       if (location.state?.activeApplicationId) {
         handleOpenChat(location.state.activeApplicationId);
@@ -2903,8 +2947,37 @@ const HRManagement = () => {
         }
       }
 
-      console.log('✅ Loaded applications:', allApplications);
-      setRealApplications(allApplications);
+      // Merge with local markers for robust behavior while backend is eventually consistent.
+      const mergedApplications = allApplications.map(app => {
+        const isCancelledLocally = localStorage.getItem(`cr_cancelled_${app.applicationId}`) === '1';
+        const serverCR = app.changeRequest || app.change_request || null;
+        const serverCRStatus = app.changeRequestStatus || app.change_request_status;
+
+        if (isCancelledLocally || serverCRStatus === 'cancelled') {
+          localStorage.removeItem(`cr_${app.applicationId}`);
+          return {
+            ...app,
+            status: 'accepted',
+            changeRequest: null,
+            change_request: null,
+            changeRequestStatus: 'cancelled',
+            change_request_status: 'cancelled'
+          };
+        }
+
+        const savedCR = localStorage.getItem(`cr_${app.applicationId}`);
+        if (savedCR && !serverCR) {
+          try {
+            return { ...app, changeRequest: JSON.parse(savedCR) };
+          } catch (e) {
+            console.error('Error parsing saved change request:', e);
+          }
+        }
+        return app;
+      });
+
+      console.log('✅ Loaded and merged applications:', mergedApplications);
+      setRealApplications(mergedApplications);
     } catch (error) {
       console.error('❌ Error loading applications:', error);
       setRealApplications([]);
@@ -2925,7 +2998,7 @@ const HRManagement = () => {
         let unread = 0;
         let lastMessageText = language === 'vi' ? 'Bắt đầu trò chuyện...' : 'Start conversation...';
         let lastMessageTime = '';
-        
+
         const savedMessages = localStorage.getItem(`chat_${app.applicationId}`);
         if (savedMessages) {
           try {
@@ -2934,7 +3007,7 @@ const HRManagement = () => {
             if (lastMsg) {
               lastMessageText = lastMsg.text;
               lastMessageTime = lastMsg.time;
-              
+
               if (lastMsg.sender === 'them') { // sent by candidate
                 const lastReadId = localStorage.getItem(`chat_read_employer_${app.applicationId}`);
                 if (lastReadId !== String(lastMsg.id)) {
@@ -2978,12 +3051,12 @@ const HRManagement = () => {
   // Poll applications periodically when in 'hr' section to get new chat messages
   useEffect(() => {
     if (activeSection !== 'hr' || quickJobPosts.length === 0) return;
-    
+
     const intervalId = setInterval(() => {
       console.log('🔄 Polling latest applications for chat sync...');
       loadApplicationsFromQuickJobs();
     }, 10000); // refresh applications every 10s
-    
+
     return () => clearInterval(intervalId);
   }, [activeSection, quickJobPosts]);
 
@@ -3035,7 +3108,7 @@ const HRManagement = () => {
   // Convert applications to staff format for display
   const staffFromApplications = useMemo(() => {
     return realApplications
-      .filter(app => app.status === 'pending' || app.status === 'accepted') // Show pending in "Chờ xác nhận" and accepted in "Đang làm"
+      .filter(app => app.status === 'pending' || app.status === 'accepted' || app.status === 'pending_change') // Show pending, accepted and pending_change
       .map(app => {
         // Calculate totalPaid from jobSalary
         let totalPaid = 0;
@@ -3099,10 +3172,17 @@ const HRManagement = () => {
           }
         }
 
-        // Map status: pending -> pending_confirmation, accepted -> active or pending_change (if has changeRequest)
+        const isCancelledLocally = localStorage.getItem(`cr_cancelled_${app.applicationId}`) === '1';
+        const changeRequestStatus = app.changeRequestStatus || app.change_request_status;
+        const effectiveChangeRequest = app.changeRequest || app.change_request || null;
+        const hasPendingChangeRequest = Boolean(effectiveChangeRequest) && !isCancelledLocally && changeRequestStatus !== 'cancelled';
+
+        // Map status: pending -> pending_confirmation, pending_change only when request is still active.
         const mappedStatus = app.status === 'pending'
           ? 'pending_confirmation'
-          : (app.changeRequest ? 'pending_change' : 'active');
+          : ((app.status === 'pending_change' && !isCancelledLocally && changeRequestStatus !== 'cancelled') || hasPendingChangeRequest
+            ? 'pending_change'
+            : 'active');
 
         // Calculate unread count for this application
         let unreadCount = 0;
@@ -3144,7 +3224,7 @@ const HRManagement = () => {
           candidateId: app.candidateId,
           candidateEmail: app.candidateEmail,
           jobId: app.jobId,
-          changeRequest: app.changeRequest || null,
+          changeRequest: hasPendingChangeRequest ? effectiveChangeRequest : null,
           unreadCount: unreadCount
         };
       });
@@ -3152,8 +3232,11 @@ const HRManagement = () => {
 
   // Combine mock staff with real applications
   const allStaff = useMemo(() => {
-    // Keep mock staff for demo purposes, but add real applications
-    return [...hrStaff, ...staffFromApplications];
+    // When real data exists, avoid mixing demo rows to prevent action/status confusion.
+    if (staffFromApplications.length > 0) {
+      return staffFromApplications;
+    }
+    return hrStaff;
   }, [hrStaff, staffFromApplications]);
 
   const staffTabCounts = useMemo(() => {
@@ -3301,7 +3384,7 @@ const HRManagement = () => {
 
   const handleOpenChat = (chatId) => {
     setActiveChatId(chatId);
-    
+
     // Mark as read immediately when opening
     const chatApp = realApplications.find(a => a.applicationId === chatId);
     if (chatApp && chatApp.chatMessages && chatApp.chatMessages.length > 0) {
@@ -3338,8 +3421,8 @@ const HRManagement = () => {
 
     // Sync to DynamoDB
     applicationService.updateApplicationStatus(
-      activeChatId, 
-      activeChat?.isCompleted ? 'completed' : 'accepted', 
+      activeChatId,
+      activeChat?.isCompleted ? 'completed' : 'accepted',
       { chatMessages: updated }
     ).then(() => {
       // Send notification to candidate
@@ -3372,8 +3455,8 @@ const HRManagement = () => {
 
       // Sync deletion to DynamoDB
       applicationService.updateApplicationStatus(
-        activeChatId, 
-        activeChat?.isCompleted ? 'completed' : 'accepted', 
+        activeChatId,
+        activeChat?.isCompleted ? 'completed' : 'accepted',
         { chatMessages: updatedMessages }
       ).catch(err => console.error('Failed to sync deletion to DB:', err));
     }
@@ -3447,6 +3530,94 @@ const HRManagement = () => {
     setHrStaff(prev => prev.map(s =>
       s.id === staffId ? { ...s, status: 'active', changeRequest: null } : s
     ));
+  };
+
+  const handleCancelChangeRequest = async (appId) => {
+    console.log('handleCancelChangeRequest called with appId:', appId);
+    if (!appId) {
+      setErrorNotificationMessage(language === 'vi' ? 'Không tìm thấy mã yêu cầu để hủy' : 'Missing request id to cancel');
+      setShowErrorNotification(true);
+      setTimeout(() => setShowErrorNotification(false), 3000);
+      return;
+    }
+
+    if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn hủy yêu cầu này?' : 'Are you sure you want to cancel this request?')) return;
+    console.log('User confirmed cancellation for appId:', appId);
+
+    const hasRealApplication = realApplications.some(app => String(app.applicationId) === String(appId));
+
+    // Handle mock/local staff rows immediately so the button always has visible effect.
+    if (!hasRealApplication) {
+      setHrStaff(prev => prev.map(s =>
+        String(s.id) === String(appId)
+          ? { ...s, status: 'active', changeRequest: null }
+          : s
+      ));
+      setSuccessToastMessage(language === 'vi' ? 'Đã hủy yêu cầu thành công' : 'Request cancelled successfully');
+      setShowSuccessToast(true);
+      setStaffTabFilter('working');
+      setTimeout(() => setShowSuccessToast(false), 3000);
+      // Refresh from DB to ensure UI reflects server state
+      try {
+        await loadApplicationsFromQuickJobs();
+      } catch (e) {
+        console.warn('Could not reload applications after local cancel:', e);
+      }
+      return;
+    }
+
+    try {
+      setIsProcessingChange(true);
+
+      // Update server: status back to 'accepted' and clear changeRequest
+      await applicationService.updateApplicationStatus(appId, 'accepted', {
+        changeRequest: null,
+        changeRequestStatus: 'cancelled'
+      });
+
+      // Persist local cancellation so polling data does not flip back to pending_change.
+      localStorage.setItem(`cr_cancelled_${appId}`, '1');
+      localStorage.removeItem(`cr_${appId}`);
+
+      // Update local state
+      setRealApplications(prev => prev.map(app =>
+        String(app.applicationId) === String(appId)
+          ? {
+            ...app,
+            status: 'accepted',
+            change_request: null,
+            changeRequest: null,
+            changeRequestStatus: 'cancelled',
+            change_request_status: 'cancelled'
+          }
+          : app
+      ));
+
+      // Keep mock list in sync in case IDs overlap with local/demo rows.
+      setHrStaff(prev => prev.map(s =>
+        String(s.id) === String(appId)
+          ? { ...s, status: 'active', changeRequest: null }
+          : s
+      ));
+      // Refresh DB-backed applications to reflect canonical state
+      try {
+        await loadApplicationsFromQuickJobs();
+      } catch (e) {
+        console.warn('Error reloading applications after cancellation:', e);
+      }
+
+      setSuccessToastMessage(language === 'vi' ? 'Đã hủy yêu cầu thành công' : 'Request cancelled successfully');
+      setShowSuccessToast(true);
+      setStaffTabFilter('working');
+      setTimeout(() => setShowSuccessToast(false), 3000);
+    } catch (err) {
+      console.error('Error cancelling change request:', err);
+      setErrorNotificationMessage(language === 'vi' ? 'Lỗi khi hủy yêu cầu' : 'Error cancelling request');
+      setShowErrorNotification(true);
+      setTimeout(() => setShowErrorNotification(false), 3000);
+    } finally {
+      setIsProcessingChange(false);
+    }
   };
 
   const handleRejectCV = async () => {
@@ -4206,7 +4377,7 @@ const HRManagement = () => {
                                     ))}
                                   </span>
                                 </div>
-                                
+
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 8px', margin: '6px 0', padding: '6px 0', borderTop: '1px dashed rgba(99, 102, 241, 0.2)', borderBottom: '1px dashed rgba(99, 102, 241, 0.2)' }}>
                                   {[
                                     { key: 'environment', label: language === 'vi' ? 'Môi trường' : 'Environment' },
@@ -4265,7 +4436,7 @@ const HRManagement = () => {
                             {staff.changeRequest.type === 'staff_replacement' && (
                               <div className="cr-shift-row">
                                 <User size={16} />
-                                {language === 'vi' ? 'Yêu cầu đổi người làm thay' : 'Requesting a replacement worker'}
+                                {language === 'vi' ? 'Yêu cầu thay đổi' : 'Change request'}
                               </div>
                             )}
                             <div className="cr-reason">"{staff.changeRequest.reason}"</div>
@@ -4323,22 +4494,13 @@ const HRManagement = () => {
                               {staff.status === 'active' && (
                                 <StaffButton
                                   $variant="warning"
-                                  whileHover={{ scale: hasPassedOneHourSinceConfirmed(staff.confirmedAt) ? 1 : 1.02 }}
-                                  whileTap={{ scale: hasPassedOneHourSinceConfirmed(staff.confirmedAt) ? 1 : 0.98 }}
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
                                   onClick={() => {
-                                    if (hasPassedOneHourSinceConfirmed(staff.confirmedAt)) return;
                                     setChangeRequestStaff(staff);
                                     setChangeRequestReason('');
                                     setChangeRequestType('');
                                   }}
-                                  style={{
-                                    opacity: hasPassedOneHourSinceConfirmed(staff.confirmedAt) ? 0.5 : 1,
-                                    cursor: hasPassedOneHourSinceConfirmed(staff.confirmedAt) ? 'not-allowed' : 'pointer',
-                                    pointerEvents: hasPassedOneHourSinceConfirmed(staff.confirmedAt) ? 'none' : 'auto'
-                                  }}
-                                  title={hasPassedOneHourSinceConfirmed(staff.confirmedAt)
-                                    ? (language === 'vi' ? 'Đã quá thời gian cho phép (1 giờ)' : 'Time limit exceeded (1 hour)')
-                                    : ''}
                                 >
                                   <AlertCircle />{language === 'vi' ? 'Yêu cầu thay đổi' : 'Request Change'}
                                 </StaffButton>
@@ -4422,6 +4584,29 @@ const HRManagement = () => {
                             >
                               <Star />{language === 'vi' ? 'Đánh giá ngay' : 'Rate now'}
                             </StaffButton>
+                          )}
+                          {staff.status === 'pending_change' && (
+                            <>
+                              <StaffButton
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setViewedChangeRequest(staff)}
+                                style={{ background: '#FFF7ED', color: '#F97316', border: '1.5px solid #FFEDD5' }}
+                              >
+                                <Eye />{language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                              </StaffButton>
+                              <StaffButton
+                                $variant="danger"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => {
+                                  console.log('Staff list cancel clicked for', staff.applicationId || staff.id);
+                                  handleCancelChangeRequest(staff.applicationId || staff.id);
+                                }}
+                              >
+                                <XCircle />{language === 'vi' ? 'Hủy yêu cầu' : 'Cancel'}
+                              </StaffButton>
+                            </>
                           )}
                         </StaffActions>
                       </StaffCard>
@@ -4853,6 +5038,102 @@ const HRManagement = () => {
         </AnimatePresence>
 
         {/* Change Request Success Modal */}
+        {/* ... existing success modal ... */}
+
+        {/* View Change Request Detail Modal (Employer Side) */}
+        <AnimatePresence>
+          {viewedChangeRequest && (
+            <RateModalOverlay
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewedChangeRequest(null)}
+            >
+              <RateModalContent
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                onClick={e => e.stopPropagation()}
+                style={{ maxWidth: '480px' }}
+              >
+                <RateModalHeader>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ padding: '8px', background: '#FFF7ED', borderRadius: '8px' }}>
+                      <AlertCircle size={18} color="#F97316" />
+                    </div>
+                    <h2>{language === 'vi' ? 'Chi Tiết Yêu Cầu' : 'Request Details'}</h2>
+                  </div>
+                  <button onClick={() => setViewedChangeRequest(null)}><X size={18} /></button>
+                </RateModalHeader>
+                <RateModalBody>
+                  <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1px solid #E2E8F0', marginBottom: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                          {language === 'vi' ? 'Nhân viên' : 'Staff'}
+                        </div>
+                        <div style={{ fontSize: '15px', fontWeight: 700 }}>{viewedChangeRequest.name}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                          {language === 'vi' ? 'Loại yêu cầu' : 'Request Type'}
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
+                          {viewedChangeRequest.changeRequest?.typeLabel || (language === 'vi' ? 'Thay đổi nhân sự' : 'Personnel Change')}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>
+                      {language === 'vi' ? 'Lý do gửi Admin:' : 'Reason sent to Admin:'}
+                    </div>
+                    <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B' }}>
+                      {viewedChangeRequest.changeRequest?.reason}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: '#94A3B8', textAlign: 'center' }}>
+                    {language === 'vi' ? 'Đã gửi lúc:' : 'Sent at:'} {viewedChangeRequest.changeRequest?.requestedAt}
+                  </div>
+                </RateModalBody>
+                <div style={{ padding: '20px 24px 32px' }}>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      const appId = viewedChangeRequest.applicationId || viewedChangeRequest.id;
+                      console.log('Modal cancel clicked for', appId);
+                      setViewedChangeRequest(null);
+                      handleCancelChangeRequest(appId);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '12px',
+                      background: '#FEE2E2',
+                      color: '#DC2626',
+                      border: 'none',
+                      fontWeight: '700',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <XCircle size={16} />
+                    {language === 'vi' ? 'Hủy yêu cầu này' : 'Cancel this request'}
+                  </motion.button>
+                </div>
+              </RateModalContent>
+            </RateModalOverlay>
+          )}
+        </AnimatePresence>
+
+        {/* Change Request Success Modal */}
         <AnimatePresence>
           {showChangeRequestSuccess && (
             <RateModalOverlay
@@ -4906,129 +5187,288 @@ const HRManagement = () => {
               onClick={() => setChangeRequestStaff(null)}
             >
               <RateModalContent
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                initial={{ opacity: 0, scale: 0.95, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                 onClick={e => e.stopPropagation()}
-                style={{ maxWidth: '480px' }}
+                style={{ maxWidth: '520px', padding: '0', overflow: 'hidden' }}
               >
-                <RateModalHeader>
-                  <h2><AlertCircle />{language === 'vi' ? 'Yêu Cầu Thay Đổi' : 'Request Change'}</h2>
-                  <button onClick={() => setChangeRequestStaff(null)}><X size={18} /></button>
-                </RateModalHeader>
-                <RateModalBody>
-                  {/* Staff info */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'linear-gradient(135deg, #FFFBEB, #FEF3C740)', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '12px 14px', marginBottom: '20px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #F59E0B, #D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <User style={{ width: '20px', height: '20px', color: 'white' }} />
+                <RateModalHeader style={{ padding: '24px', borderBottom: '1.5px solid #F1F5F9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
+                      <AlertCircle style={{ color: '#F97316' }} />
                     </div>
                     <div>
-                      <div style={{ fontWeight: '700', fontSize: '14px', color: '#92400E' }}>{changeRequestStaff.name}</div>
-                      <div style={{ fontSize: '12px', color: '#B45309' }}>{changeRequestStaff.position} • {changeRequestStaff.shift}</div>
+                      <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#1E293B', margin: '0' }}>
+                        {language === 'vi' ? 'Yêu Cầu Thay Đổi' : 'Request Change'}
+                      </h2>
+                      <p style={{ fontSize: '12.5px', color: '#64748B', fontWeight: '500', margin: '2px 0 0' }}>
+                        {language === 'vi' ? 'Gửi yêu cầu điều chỉnh về nhân sự/công việc' : 'Send adjustment request for staff/work'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setChangeRequestStaff(null)}
+                    style={{ background: '#F8FAF8', border: '1px solid #E2E8F0', padding: '8px', borderRadius: '10px' }}
+                  >
+                    <X size={18} color="#64748B" />
+                  </button>
+                </RateModalHeader>
+
+                <RateModalBody style={{ padding: '24px' }}>
+                  {/* Staff Info Card */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    background: 'linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)',
+                    border: '1.5px solid #E2E8F0',
+                    borderRadius: '16px',
+                    padding: '16px',
+                    marginBottom: '24px',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '14px',
+                      background: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <User style={{ width: '22px', height: '22px', color: '#1E40AF' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '800', fontSize: '15.5px', color: '#1E293B' }}>{changeRequestStaff.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#64748B', marginTop: '3px', fontWeight: '500' }}>
+                        <span>{changeRequestStaff.position}</span>
+                        <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#CBD5E1' }}></span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={12} /> {changeRequestStaff.shift}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '60px', height: '60px', background: 'rgba(30, 64, 175, 0.03)', borderRadius: '50%' }}></div>
+                  </div>
+
+                  {/* Reason grid - More premium buttons */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '14px' }}>
+                      <RefreshCw size={16} color="#F97316" />
+                      {language === 'vi' ? 'Lý do chính của yêu cầu' : 'Primary reason for request'}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      {[
+                        {
+                          value: 'poor_performance',
+                          label: language === 'vi' ? 'Làm việc không hiệu quả' : 'Poor Performance',
+                          icon: TrendingDown,
+                          color: '#EF4444'
+                        },
+                        {
+                          value: 'attitude_issue',
+                          label: language === 'vi' ? 'Thái độ không phù hợp' : 'Attitude Issue',
+                          icon: AlertCircle,
+                          color: '#F97316'
+                        },
+                        {
+                          value: 'skill_mismatch',
+                          label: language === 'vi' ? 'Kỹ năng không đáp ứng' : 'Skill Mismatch',
+                          icon: XCircle,
+                          color: '#3B82F6'
+                        },
+                        {
+                          value: 'unreliable',
+                          label: language === 'vi' ? 'Không đáng tin cậy' : 'Unreliable',
+                          icon: Clock,
+                          color: '#6366F1'
+                        },
+                      ].map(opt => {
+                        const Icon = opt.icon;
+                        const isSelected = changeRequestType === opt.value;
+                        return (
+                          <motion.button
+                            key={opt.value}
+                            type="button"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setChangeRequestType(opt.value)}
+                            style={{
+                              padding: '12px',
+                              borderRadius: '12px',
+                              border: '2px solid',
+                              borderColor: isSelected ? opt.color : '#F1F5F9',
+                              background: isSelected ? `${opt.color}08` : 'white',
+                              color: isSelected ? opt.color : '#64748B',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: '8px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                              textAlign: 'left',
+                              boxShadow: isSelected ? `0 4px 12px ${opt.color}15` : 'none'
+                            }}
+                          >
+                            <div style={{
+                              width: '30px',
+                              height: '30px',
+                              borderRadius: '8px',
+                              background: isSelected ? `${opt.color}15` : '#F8FAFC',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s ease'
+                            }}>
+                              <Icon size={16} />
+                            </div>
+                            <span style={{ fontSize: '13px', fontWeight: '700' }}>{opt.label}</span>
+                          </motion.button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Change type selector */}
-                  <RateCategory>
-                    <div className="category-label">
-                      <RefreshCw />{language === 'vi' ? 'Lý do yêu cầu thay đổi' : 'Reason for change request'}
+                  {/* Message Detail */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '14px' }}>
+                      <Edit3 size={16} color="#F97316" />
+                      {language === 'vi' ? 'Mô tả chi tiết nguyên nhân' : 'Detailed reason description'}
                     </div>
-                    <ChangeTypeGrid>
-                      {[
-                        { value: 'poor_performance', label: language === 'vi' ? 'Làm việc không hiệu quả' : 'Poor Performance', icon: TrendingDown },
-                        { value: 'attitude_issue', label: language === 'vi' ? 'Thái độ không phù hợp' : 'Attitude Issue', icon: AlertCircle },
-                        { value: 'skill_mismatch', label: language === 'vi' ? 'Kỹ năng không đáp ứng' : 'Skill Mismatch', icon: XCircle },
-                        { value: 'unreliable', label: language === 'vi' ? 'Không đáng tin cậy' : 'Unreliable', icon: Clock },
-                      ].map(opt => {
-                        const Icon = opt.icon;
-                        return (
-                          <ChangeTypeButton
-                            key={opt.value}
-                            type="button"
-                            $selected={changeRequestType === opt.value}
-                            onClick={() => setChangeRequestType(opt.value)}
-                          >
-                            <Icon />{opt.label}
-                          </ChangeTypeButton>
-                        );
-                      })}
-                    </ChangeTypeGrid>
-                  </RateCategory>
-
-                  {/* Reason input */}
-                  <RateCategory>
-                    <div className="category-label">
-                      <Edit3 />{language === 'vi' ? 'Nguyên nhân yêu cầu thay đổi' : 'Reason for change request'}
-                    </div>
-                    <RateTextArea
+                    <textarea
                       rows={4}
-                      placeholder={language === 'vi' ? 'Nhập nguyên nhân bạn muốn thay đổi...' : 'Enter the reason for your change request...'}
+                      placeholder={language === 'vi' ? 'Vui lòng cung cấp thêm chi tiết để admin hỗ trợ bạn tốt nhất...' : 'Please provide more details for admin to assist you best...'}
                       value={changeRequestReason}
                       onChange={e => setChangeRequestReason(e.target.value)}
-                      autoFocus
-                    />
-                  </RateCategory>
-
-                  <RateActions>
-                    <RateActionButton
-                      as={motion.button}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      disabled={!changeRequestReason.trim() || !changeRequestType}
-                      onClick={() => {
-                        if (!changeRequestReason.trim() || !changeRequestType) return;
-
-                        // Update staff status to pending_change in realApplications
-                        // For now, just update the local hrStaff state (for accepted applications from DynamoDB)
-                        const now = new Date();
-                        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                        const dateStr = language === 'vi'
-                          ? `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`
-                          : `${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}/${now.getFullYear()}`;
-
-                        // Map change type to label
-                        const typeLabels = {
-                          'poor_performance': language === 'vi' ? 'Làm việc không hiệu quả' : 'Poor Performance',
-                          'attitude_issue': language === 'vi' ? 'Thái độ không phù hợp' : 'Attitude Issue',
-                          'skill_mismatch': language === 'vi' ? 'Kỹ năng không đáp ứng' : 'Skill Mismatch',
-                          'unreliable': language === 'vi' ? 'Không đáng tin cậy' : 'Unreliable'
-                        };
-
-                        // Update realApplications to add changeRequest
-                        setRealApplications(prev => prev.map(app =>
-                          app.applicationId === changeRequestStaff.applicationId
-                            ? {
-                              ...app,
-                              changeRequest: {
-                                type: changeRequestType,
-                                typeLabel: typeLabels[changeRequestType],
-                                reason: changeRequestReason,
-                                requestedAt: `${dateStr} - ${timeStr}`,
-                                urgency: 'normal',
-                                sentToAdmin: true
-                              }
-                            }
-                            : app
-                        ));
-
-                        setChangeRequestStaff(null);
-                        setChangeRequestReason('');
-                        setChangeRequestType('');
-                        setShowChangeRequestSuccess(true);
-                      }}
                       style={{
-                        background: changeRequestReason.trim() && changeRequestType
-                          ? 'linear-gradient(135deg, #F59E0B, #D97706)'
-                          : undefined,
-                        transition: 'background 0.2s'
+                        width: '100%',
+                        padding: '16px',
+                        borderRadius: '14px',
+                        border: '1.5px solid #E2E8F0',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#1E293B',
+                        resize: 'none',
+                        background: '#FAFAFA',
+                        transition: 'all 0.2s ease',
+                        fontFamily: 'inherit'
                       }}
-                    >
-                      <Send style={{ width: '16px', height: '16px' }} />
-                      {language === 'vi' ? 'Gửi yêu cầu' : 'Submit request'}
-                    </RateActionButton>
-                  </RateActions>
+                      onFocus={(e) => {
+                        e.target.style.borderColor = '#F97316';
+                        e.target.style.background = 'white';
+                        e.target.style.boxShadow = '0 0 0 4px rgba(249, 115, 22, 0.1)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#E2E8F0';
+                        e.target.style.background = '#FAFAFA';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    />
+                  </div>
                 </RateModalBody>
+
+                <div style={{ padding: '20px 24px 32px', background: 'white' }}>
+                  <motion.button
+                    whileHover={changeRequestReason.trim() && changeRequestType ? { scale: 1.02 } : {}}
+                    whileTap={changeRequestReason.trim() && changeRequestType ? { scale: 0.98 } : {}}
+                    disabled={!changeRequestReason.trim() || !changeRequestType}
+                    onClick={() => {
+                      if (!changeRequestReason.trim() || !changeRequestType) return;
+
+                      const now = new Date();
+                      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                      const dateStr = language === 'vi'
+                        ? `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`
+                        : `${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}/${now.getFullYear()}`;
+
+                      const typeLabels = {
+                        'poor_performance': language === 'vi' ? 'Làm việc không hiệu quả' : 'Poor Performance',
+                        'attitude_issue': language === 'vi' ? 'Thái độ không phù hợp' : 'Attitude Issue',
+                        'skill_mismatch': language === 'vi' ? 'Kỹ năng không đáp ứng' : 'Skill Mismatch',
+                        'unreliable': language === 'vi' ? 'Không đáng tin cậy' : 'Unreliable'
+                      };
+
+                      const changeReq = {
+                        type: 'staff_replacement',
+                        reasonCode: changeRequestType,
+                        typeLabel: typeLabels[changeRequestType],
+                        reason: changeRequestReason,
+                        requestedAt: `${dateStr} - ${timeStr}`,
+                        urgency: 'normal',
+                        sentToAdmin: true
+                      };
+
+                      // Save to localStorage for robust persistence despite polling
+                      localStorage.setItem(`cr_${changeRequestStaff.applicationId}`, JSON.stringify(changeReq));
+                      localStorage.removeItem(`cr_cancelled_${changeRequestStaff.applicationId}`);
+
+                      // Sync to server for persistence across reloads/polling
+                      applicationService.updateApplicationStatus(
+                        changeRequestStaff.applicationId,
+                        'pending_change',
+                        { changeRequest: changeReq, change_request: changeReq, extraFields: { changeRequest: changeReq } }
+                      ).catch(err => {
+                        console.warn('⚠️ Server might not support pending_change status, falling back to original status:', err);
+                        // Fallback: update status but keep changeRequest in extraFields
+                        applicationService.updateApplicationStatus(
+                          changeRequestStaff.applicationId,
+                          changeRequestStaff.status === 'pending_confirmation' ? 'pending' : 'accepted',
+                          { changeRequest: changeReq, change_request: changeReq, extraFields: { changeRequest: changeReq } }
+                        ).catch(e => console.error('❌ Failed to sync change request even with fallback:', e));
+                      });
+
+                      setRealApplications(prev => prev.map(app =>
+                        app.applicationId === changeRequestStaff.applicationId
+                          ? {
+                            ...app,
+                            status: 'pending_change',
+                            changeRequest: changeReq
+                          }
+                          : app
+                      ));
+
+                      setChangeRequestStaff(null);
+                      setChangeRequestReason('');
+                      setChangeRequestType('');
+                      setShowChangeRequestSuccess(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '16px',
+                      borderRadius: '14px',
+                      fontSize: '16px',
+                      fontWeight: '800',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '10px',
+                      cursor: (changeRequestReason.trim() && changeRequestType) ? 'pointer' : 'not-allowed',
+                      border: 'none',
+                      background: (changeRequestReason.trim() && changeRequestType)
+                        ? 'linear-gradient(135deg, #1E40AF, #3B82F6)'
+                        : '#E2E8F0',
+                      color: (changeRequestReason.trim() && changeRequestType) ? 'white' : '#94A3B8',
+                      boxShadow: (changeRequestReason.trim() && changeRequestType)
+                        ? '0 8px 20px rgba(30, 64, 175, 0.25)'
+                        : 'none',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <Send size={18} />
+                    {language === 'vi' ? 'Gửi yêu cầu ngay' : 'Submit Request'}
+                  </motion.button>
+                  <p style={{ textAlign: 'center', fontSize: '12px', color: '#94A3B8', marginTop: '16px', fontWeight: '500' }}>
+                    {language === 'vi'
+                      ? 'Yêu cầu sẽ được gửi trực tiếp đến quản trị viên xử lý.'
+                      : 'Request will be sent directly to the administrator.'}
+                  </p>
+                </div>
               </RateModalContent>
             </RateModalOverlay>
           )}
@@ -5201,16 +5641,16 @@ const HRManagement = () => {
 
                                 setHrStaff(prev => prev.map(s =>
                                   s.id === staffId
-                                    ? { 
-                                        ...s, 
-                                        status: 'completed_pending_candidate', 
-                                        rated: true, 
-                                        pendingRating: false, 
-                                        canRequestChange: false, 
-                                        isWithinTimeWindow: false,
-                                        employerRating,
-                                        employerConfirmedAt
-                                      }
+                                    ? {
+                                      ...s,
+                                      status: 'completed_pending_candidate',
+                                      rated: true,
+                                      pendingRating: false,
+                                      canRequestChange: false,
+                                      isWithinTimeWindow: false,
+                                      employerRating,
+                                      employerConfirmedAt
+                                    }
                                     : s
                                 ));
                                 setRatingSubmitted(true);
@@ -5223,7 +5663,7 @@ const HRManagement = () => {
                             }}
                           >
                             <CheckCircle />
-                            {requestSending 
+                            {requestSending
                               ? (language === 'vi' ? 'Đang gửi...' : 'Submitting...')
                               : (language === 'vi' ? 'Gửi đánh giá' : 'Submit Review')}
                           </RateActionButton>

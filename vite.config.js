@@ -31,9 +31,8 @@ export default defineConfig({
         secure: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
-            if (req.headers.authorization) {
-              proxyReq.setHeader('Authorization', req.headers.authorization);
-            }
+            const auth = req.headers['authorization'] || req.headers['Authorization'];
+            if (auth) proxyReq.setHeader('Authorization', auth);
           });
         }
       },
@@ -66,7 +65,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/candidates'),
         secure: true,
-        
+
       },
       '/api-cv': {
         target: 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod',

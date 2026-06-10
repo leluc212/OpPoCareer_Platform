@@ -231,73 +231,35 @@ export async function updateApplicationStatus(applicationId, status, extraFields
  * Automatically handles IAM locks, Cognito auth, and Proxy fallbacks
  */
 async function fetchResiliently({ path, defaultUrl, serviceName = 'Service' }) {
-  // Endpoints in priority: Proxy -> Direct AWS
   const endpoints = [
     { url: path, label: 'Vite Proxy' },
-    { url: defaultUrl, label: 'Direct AWS', isDirect: true }
+    { url: defaultUrl, label: 'Direct AWS' }
   ];
 
-  const errors = [];
-  let iamDetected = false;
-
   for (const endpoint of endpoints) {
-    // Step 1: Try with Cognito Auth
-      try {
-      console.log(`🔍 [${serviceName}] Attempting fetch: ${endpoint.url} (Auth: true)`);
+    try {
+      console.log(`🔍 [${serviceName}] Attempting fetch: ${endpoint.url}`);
       const token = await getAuthTokenForApplications();
       const headers = { 'Content-Type': 'application/json' };
-      // Only attach Authorization header for direct endpoints (not local proxy paths)
       if (token && !endpoint.url.startsWith('/')) headers['Authorization'] = `Bearer ${token}`;
 
-      const response = await fetch(endpoint.url, {
-        method: 'GET',
-        headers,
-        mode: 'cors'
-      });
+      const response = await fetch(endpoint.url, { method: 'GET', headers, mode: 'cors' });
 
       if (response.ok) {
         const data = await response.json();
-        console.log(`✅ [${serviceName}] Success with ${endpoint.label} (Authenticated)`);
+        console.log(`✅ [${serviceName}] Success with ${endpoint.label}`);
         return data.applications || (Array.isArray(data) ? data : []);
       }
 
       const errorBody = await response.text();
-      console.warn(`⚠️ [${serviceName}] ${endpoint.label} failed with ${response.status}: ${errorBody.substring(0, 50)}...`);
-
-      // Detection: "Invalid key=value pair" means IAM is blocking the Cognito token
-      if (response.status === 403 && (errorBody.includes('Invalid key=value pair') || errorBody.includes('Credential='))) {
-        console.warn(`🚨 [${serviceName}] IAM Authorizer detected on ${endpoint.label}! Retrying without headers...`);
-        iamDetected = true;
-      }
+      console.warn(`⚠️ [${serviceName}] ${endpoint.label} failed with ${response.status}: ${errorBody.substring(0, 80)}`);
     } catch (err) {
-      console.error(`❌ [${serviceName}] Network/CORS error on ${endpoint.label}:`, err.message);
-      errors.push({ label: endpoint.label, error: err.message });
-    }
-
-    // Step 2: Try without headers (for public or IAM-optional gateways)
-    try {
-      console.log(`🔍 [${serviceName}] Attempting fetch: ${endpoint.url} (Auth: false)`);
-      const response = await fetch(endpoint.url, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'cors'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ [${serviceName}] Success with ${endpoint.label} (Public)`);
-        return data.applications || (Array.isArray(data) ? data : []);
-      }
-    } catch (publicErr) {
-      console.warn(`❌ [${serviceName}] Public fetch failed on ${endpoint.label}`);
+      console.error(`❌ [${serviceName}] Error on ${endpoint.label}:`, err.message);
     }
   }
 
   console.error(`❌ [${serviceName}] All fetch paths exhausted for ${path}`);
-  const fallback = [];
-  fallback._isBlockedByIam = iamDetected;
-  fallback._errorCount = errors.length;
-  return fallback;
+  return [];
 }
 
 /**

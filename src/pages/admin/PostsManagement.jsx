@@ -9,11 +9,11 @@ import quickJobService from '../../services/quickJobService';
 import { Button } from '../../components/FormElements';
 import notificationService from '../../services/notificationService';
 import adminReportService from '../../services/adminReportService';
-import { 
-  Briefcase, 
-  Zap, 
-  Calendar, 
-  Users, 
+import {
+  Briefcase,
+  Zap,
+  Calendar,
+  Users,
   FileText,
   Eye,
   CheckCircle,
@@ -704,11 +704,11 @@ const PostsManagement = () => {
 
     const msg = action === 'approve'
       ? (language === 'vi'
-          ? 'Bạn có chắc muốn duyệt bài này? Sau khi duyệt, bài sẽ hiển thị cho người tìm việc. Bạn vẫn có thể từ chối/xóa sau này.'
-          : 'Are you sure you want to approve this post? It will be visible to candidates. You can still reject/delete later.')
+        ? 'Bạn có chắc muốn duyệt bài này? Sau khi duyệt, bài sẽ hiển thị cho người tìm việc. Bạn vẫn có thể từ chối/xóa sau này.'
+        : 'Are you sure you want to approve this post? It will be visible to candidates. You can still reject/delete later.')
       : (language === 'vi'
-          ? 'Bạn có chắc muốn từ chối bài này? Sau khi từ chối, trạng thái sẽ là "Đã từ chối".'
-          : 'Are you sure you want to reject this post? It will be marked as rejected.');
+        ? 'Bạn có chắc muốn từ chối bài này? Sau khi từ chối, trạng thái sẽ là "Đã từ chối".'
+        : 'Are you sure you want to reject this post? It will be marked as rejected.');
 
     setConfirmJob(job);
     setConfirmAction(action);
@@ -795,12 +795,12 @@ const PostsManagement = () => {
 
   const filteredJobs = useMemo(() => {
     return currentJobs.filter(job => {
-      const matchesSearch = searchTerm === '' || 
+      const matchesSearch = searchTerm === '' ||
         job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         job.employer.toLowerCase().includes(searchTerm.toLowerCase());
-      
+
       const matchesFilters = filters.length === 0 || filters.includes(job.status);
-      
+
       return matchesSearch && matchesFilters;
     });
   }, [currentJobs, searchTerm, filters]);
@@ -818,8 +818,8 @@ const PostsManagement = () => {
   };
 
   const handleFilterToggle = (filterValue) => {
-    setFilters(prev => 
-      prev.includes(filterValue) 
+    setFilters(prev =>
+      prev.includes(filterValue)
         ? prev.filter(f => f !== filterValue)
         : [...prev, filterValue]
     );
@@ -957,8 +957,8 @@ const PostsManagement = () => {
         </PageHeader>
 
         <TabContainer>
-          <Tab 
-            $active={activeTab === 'longterm'} 
+          <Tab
+            $active={activeTab === 'longterm'}
             onClick={() => {
               setActiveTab('longterm');
               setSearchTerm('');
@@ -968,9 +968,9 @@ const PostsManagement = () => {
           >
             <Briefcase />
             {language === 'vi' ? 'Công việc Tiêu chuẩn' : 'Standard Jobs'}
-            <span style={{ 
-              marginLeft: '4px', 
-              padding: '2px 8px', 
+            <span style={{
+              marginLeft: '4px',
+              padding: '2px 8px',
               background: activeTab === 'longterm' ? '#1e40af' : '#64748b',
               color: 'white',
               borderRadius: '12px',
@@ -980,8 +980,8 @@ const PostsManagement = () => {
               {standardJobs.length}
             </span>
           </Tab>
-          <Tab 
-            $active={activeTab === 'urgent'} 
+          <Tab
+            $active={activeTab === 'urgent'}
             onClick={() => {
               setActiveTab('urgent');
               setSearchTerm('');
@@ -991,9 +991,9 @@ const PostsManagement = () => {
           >
             <Zap />
             {language === 'vi' ? 'Công việc Tuyển gấp' : 'Urgent Jobs'}
-            <span style={{ 
-              marginLeft: '4px', 
-              padding: '2px 8px', 
+            <span style={{
+              marginLeft: '4px',
+              padding: '2px 8px',
               background: activeTab === 'urgent' ? '#1e40af' : '#64748b',
               color: 'white',
               borderRadius: '12px',
@@ -1024,7 +1024,7 @@ const PostsManagement = () => {
               <p>{(stats.approved || 0) + (stats['ai-approved'] || 0)}</p>
             </StatBox>
           </div>
-          
+
           <ChartCard>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <ChartTitle>
@@ -1066,7 +1066,7 @@ const PostsManagement = () => {
                 </button>
               </div>
             </div>
-            
+
             {/* Chart using SVG for better rendering */}
             <div style={{ height: '320px', position: 'relative' }}>
               <svg width="100%" height="100%" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet">
@@ -1080,7 +1080,7 @@ const PostsManagement = () => {
                     <stop offset="100%" stopColor="#10b981" stopOpacity="1" />
                   </linearGradient>
                 </defs>
-                
+
                 {/* Grid lines */}
                 {[0, 1, 2, 3, 4, 5].map((i) => (
                   <line
@@ -1093,37 +1093,37 @@ const PostsManagement = () => {
                     strokeWidth="1"
                   />
                 ))}
-                
+
                 {/* Y-axis labels */}
-                {chartView === 'month' 
+                {chartView === 'month'
                   ? ['7000', '6000', '5000', '4000', '3000', '2000', '1000', '0'].map((val, i) => (
-                      <text
-                        key={i}
-                        x="50"
-                        y={40 + i * 32}
-                        textAnchor="end"
-                        fontSize="11"
-                        fill="#9ca3af"
-                        fontWeight="500"
-                      >
-                        {val}
-                      </text>
-                    ))
+                    <text
+                      key={i}
+                      x="50"
+                      y={40 + i * 32}
+                      textAnchor="end"
+                      fontSize="11"
+                      fill="#9ca3af"
+                      fontWeight="500"
+                    >
+                      {val}
+                    </text>
+                  ))
                   : ['20000', '15000', '10000', '5000', '0'].map((val, i) => (
-                      <text
-                        key={i}
-                        x="50"
-                        y={40 + i * 56}
-                        textAnchor="end"
-                        fontSize="11"
-                        fill="#9ca3af"
-                        fontWeight="500"
-                      >
-                        {val}
-                      </text>
-                    ))
+                    <text
+                      key={i}
+                      x="50"
+                      y={40 + i * 56}
+                      textAnchor="end"
+                      fontSize="11"
+                      fill="#9ca3af"
+                      fontWeight="500"
+                    >
+                      {val}
+                    </text>
+                  ))
                 }
-                
+
                 {/* Bars */}
                 {chartData.map((data, index) => {
                   const barWidth = 35;
@@ -1131,7 +1131,7 @@ const PostsManagement = () => {
                   const centerX = 80 + index * groupWidth + groupWidth / 2;
                   const postsHeight = (data.posts / maxPosts) * 200;
                   const reachHeight = (data.reach / maxReach) * 200;
-                  
+
                   return (
                     <g key={index}>
                       {/* Posts bar (blue) */}
@@ -1144,7 +1144,7 @@ const PostsManagement = () => {
                         rx="4"
                         opacity="0.9"
                       />
-                      
+
                       {/* Reach bar (green) */}
                       <rect
                         x={centerX + 3}
@@ -1155,10 +1155,10 @@ const PostsManagement = () => {
                         rx="4"
                         opacity="0.9"
                       />
-                      
+
                       {/* Posts value */}
                       <text
-                        x={centerX - barWidth/2 - 3}
+                        x={centerX - barWidth / 2 - 3}
                         y={260 - postsHeight - 5}
                         textAnchor="middle"
                         fontSize="11"
@@ -1167,10 +1167,10 @@ const PostsManagement = () => {
                       >
                         {data.posts}
                       </text>
-                      
+
                       {/* Reach value */}
                       <text
-                        x={centerX + barWidth/2 + 3}
+                        x={centerX + barWidth / 2 + 3}
                         y={260 - reachHeight - 5}
                         textAnchor="middle"
                         fontSize="11"
@@ -1179,7 +1179,7 @@ const PostsManagement = () => {
                       >
                         {data.reach}
                       </text>
-                      
+
                       {/* Period label */}
                       <text
                         x={centerX}
@@ -1196,25 +1196,25 @@ const PostsManagement = () => {
                 })}
               </svg>
             </div>
-            
+
             <div style={{ display: 'flex', justifyContent: 'center', gap: '32px', marginTop: '16px', padding: '16px', background: '#f8fafc', borderRadius: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ 
-                  width: '24px', 
-                  height: '16px', 
-                  background: 'linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)', 
-                  borderRadius: '4px' 
+                <div style={{
+                  width: '24px',
+                  height: '16px',
+                  background: 'linear-gradient(180deg, #3b82f6 0%, #1e40af 100%)',
+                  borderRadius: '4px'
                 }}></div>
                 <span style={{ fontSize: '14px', fontWeight: '600', color: '#1e40af' }}>
                   {language === 'vi' ? 'Tổng bài đăng' : 'Total Posts'}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ 
-                  width: '24px', 
-                  height: '16px', 
-                  background: 'linear-gradient(180deg, #34d399 0%, #10b981 100%)', 
-                  borderRadius: '4px' 
+                <div style={{
+                  width: '24px',
+                  height: '16px',
+                  background: 'linear-gradient(180deg, #34d399 0%, #10b981 100%)',
+                  borderRadius: '4px'
                 }}></div>
                 <span style={{ fontSize: '14px', fontWeight: '600', color: '#10b981' }}>
                   {language === 'vi' ? 'Tổng lượt tiếp cận' : 'Total Reach'}
@@ -1236,7 +1236,7 @@ const PostsManagement = () => {
           </div>
         )}
 
-        <TableFilter 
+        <TableFilter
           searchValue={searchTerm}
           onSearchChange={handleSearchChange}
           filterOptions={filterOptions}
@@ -1310,12 +1310,12 @@ const PostsManagement = () => {
                         const cfg = s === 'pending'
                           ? { bg: '#fef3c7', color: '#92400e', text: language === 'vi' ? 'Chờ duyệt' : 'Pending' }
                           : s === 'approved' || s === 'ai-approved'
-                          ? { bg: '#d1fae5', color: '#065f46', text: language === 'vi' ? 'Đã duyệt' : 'Approved' }
-                          : s === 'rejected'
-                          ? { bg: '#fee2e2', color: '#991b1b', text: language === 'vi' ? 'Từ chối' : 'Rejected' }
-                          : s === 'warning'
-                          ? { bg: '#fff7ed', color: '#9a3412', text: language === 'vi' ? 'Cảnh báo' : 'Warning' }
-                          : { bg: '#f1f5f9', color: '#475569', text: s };
+                            ? { bg: '#d1fae5', color: '#065f46', text: language === 'vi' ? 'Đã duyệt' : 'Approved' }
+                            : s === 'rejected'
+                              ? { bg: '#fee2e2', color: '#991b1b', text: language === 'vi' ? 'Từ chối' : 'Rejected' }
+                              : s === 'warning'
+                                ? { bg: '#fff7ed', color: '#9a3412', text: language === 'vi' ? 'Cảnh báo' : 'Warning' }
+                                : { bg: '#f1f5f9', color: '#475569', text: s };
                         return (
                           <span style={{ background: cfg.bg, color: cfg.color, borderRadius: '12px', padding: '3px 10px', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
                             {cfg.text}
@@ -1323,32 +1323,32 @@ const PostsManagement = () => {
                         );
                       })()}
                       <ActionButtons>
-                      <IconButton 
-                        type="button"
-                        onClick={() => handleViewDetails(job)}
-                        title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
-                      >
-                        <Eye size={16} />
-                      </IconButton>
-                      <IconButton
-                        type="button"
-                        $variant="success"
-                        title={language === 'vi' ? 'Phê duyệt' : 'Approve'}
-                        onClick={() => requestModerationAction(job, 'approve')}
-                        disabled={job.status !== 'pending'}
-                      >
-                        <CheckCircle size={16} />
-                      </IconButton>
-                      <IconButton
-                        type="button"
-                        $variant="danger"
-                        title={language === 'vi' ? 'Từ chối' : 'Reject'}
-                        onClick={() => requestModerationAction(job, 'reject')}
-                        disabled={job.status === 'rejected'}
-                      >
-                        <Ban size={16} />
-                      </IconButton>
-                    </ActionButtons>
+                        <IconButton
+                          type="button"
+                          onClick={() => handleViewDetails(job)}
+                          title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                        >
+                          <Eye size={16} />
+                        </IconButton>
+                        <IconButton
+                          type="button"
+                          $variant="success"
+                          title={language === 'vi' ? 'Phê duyệt' : 'Approve'}
+                          onClick={() => requestModerationAction(job, 'approve')}
+                          disabled={job.status !== 'pending'}
+                        >
+                          <CheckCircle size={16} />
+                        </IconButton>
+                        <IconButton
+                          type="button"
+                          $variant="danger"
+                          title={language === 'vi' ? 'Từ chối' : 'Reject'}
+                          onClick={() => requestModerationAction(job, 'reject')}
+                          disabled={job.status === 'rejected'}
+                        >
+                          <Ban size={16} />
+                        </IconButton>
+                      </ActionButtons>
                     </div>
                   </td>
                 </tr>
@@ -1360,12 +1360,12 @@ const PostsManagement = () => {
         {filteredJobs.length > 0 && (
           <PaginationContainer>
             <PaginationInfo>
-              {language === 'vi' 
+              {language === 'vi'
                 ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredJobs.length)} trong tổng số ${filteredJobs.length} bài đăng`
                 : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredJobs.length)} of ${filteredJobs.length} posts`
               }
             </PaginationInfo>
-            
+
             <PaginationButtons>
               <PageButton
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -1373,10 +1373,10 @@ const PostsManagement = () => {
               >
                 {language === 'vi' ? 'Trước' : 'Previous'}
               </PageButton>
-              
+
               {(() => {
                 const pages = [];
-                
+
                 if (totalPages <= 7) {
                   // Show all pages if 7 or fewer
                   for (let i = 1; i <= totalPages; i++) {
@@ -1401,16 +1401,16 @@ const PostsManagement = () => {
                       1
                     </PageButton>
                   );
-                  
+
                   // Show ellipsis after first page if current page is far from start
                   if (currentPage > 3) {
                     pages.push(<PageEllipsis key="ellipsis-start">...</PageEllipsis>);
                   }
-                  
+
                   // Show pages around current page
                   const startPage = Math.max(2, currentPage - 1);
                   const endPage = Math.min(totalPages - 1, currentPage + 1);
-                  
+
                   for (let i = startPage; i <= endPage; i++) {
                     pages.push(
                       <PageButton
@@ -1422,12 +1422,12 @@ const PostsManagement = () => {
                       </PageButton>
                     );
                   }
-                  
+
                   // Show ellipsis before last page if current page is far from end
                   if (currentPage < totalPages - 2) {
                     pages.push(<PageEllipsis key="ellipsis-end">...</PageEllipsis>);
                   }
-                  
+
                   // Always show last page
                   pages.push(
                     <PageButton
@@ -1439,10 +1439,10 @@ const PostsManagement = () => {
                     </PageButton>
                   );
                 }
-                
+
                 return pages;
               })()}
-              
+
               <PageButton
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
@@ -1453,7 +1453,7 @@ const PostsManagement = () => {
           </PaginationContainer>
         )}
 
-        {showDetailModal && selectedJob && ( <>
+        {showDetailModal && selectedJob && (<>
           <Modal
             isOpen={showDetailModal}
             onClose={() => setShowDetailModal(false)}
@@ -1523,8 +1523,8 @@ const PostsManagement = () => {
                   {language === 'vi' ? 'Mô Tả Công Việc (JD)' : 'Job Description (JD)'}
                 </SectionTitle>
                 <InfoItem style={{ marginTop: '12px' }}>
-                  <p style={{ 
-                    lineHeight: '1.8', 
+                  <p style={{
+                    lineHeight: '1.8',
                     whiteSpace: 'pre-line',
                     background: '#ffffff',
                     padding: '16px',
@@ -1532,7 +1532,7 @@ const PostsManagement = () => {
                     border: '1px solid #e5e7eb',
                     fontSize: '14px'
                   }}>
-                    {selectedJob.description || (language === 'vi' 
+                    {selectedJob.description || (language === 'vi'
                       ? `• Thái độ nhiệt tình, thân thiện với khách hàng\n• Nhanh nhẹn, chịu được áp lực công việc cao điểm\n• Có tinh thần trách nhiệm và làm việc nhóm tốt\n• Chấp nhận làm việc theo ca, kể cả cuối tuần và lễ`
                       : `• Enthusiastic and friendly attitude towards customers\n• Quick and able to handle peak hour pressure\n• Responsible and good teamwork spirit\n• Accept shift work, including weekends and holidays`
                     )}
@@ -1543,8 +1543,8 @@ const PostsManagement = () => {
                     <label style={{ fontWeight: '700', fontSize: '15px', color: '#1e293b' }}>
                       {language === 'vi' ? 'CHẾ ĐỘ PHÚC LỢI:' : 'BENEFITS:'}
                     </label>
-                    <p style={{ 
-                      lineHeight: '1.8', 
+                    <p style={{
+                      lineHeight: '1.8',
                       whiteSpace: 'pre-line',
                       background: '#ffffff',
                       padding: '16px',
@@ -1590,9 +1590,9 @@ const PostsManagement = () => {
                 <SectionTitle>
                   <Users size={20} />
                   {language === 'vi' ? 'Danh Sách Ứng Viên' : 'Candidates List'}
-                  <span style={{ 
-                    marginLeft: '8px', 
-                    padding: '2px 10px', 
+                  <span style={{
+                    marginLeft: '8px',
+                    padding: '2px 10px',
                     background: '#1e40af',
                     color: 'white',
                     borderRadius: '12px',
@@ -1638,11 +1638,11 @@ const PostsManagement = () => {
                   )}
                 </CandidateList>
               </DetailSection>
-              </DetailModal>
+            </DetailModal>
           </Modal>
 
-          
-        </> )}
+
+        </>)}
         {/* Confirmation modal for approve/reject actions (global) */}
         <Modal
           isOpen={confirmModalOpen}

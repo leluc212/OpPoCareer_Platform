@@ -4,10 +4,10 @@ import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Building2, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Building2,
+  CheckCircle,
+  XCircle,
   Clock,
   Eye,
   Mail,
@@ -18,9 +18,14 @@ import {
   TrendingUp,
   AlertCircle,
   RefreshCw,
-  Zap
+  Zap,
+  User,
+  Award,
+  Briefcase,
+  FileText
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
+import applicationService from '../../services/applicationService';
 import { getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
 import {
   createWithdrawalApprovedNotification,
@@ -529,7 +534,7 @@ const EmployersManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved' or 'withdrawals'
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved' or 'withdrawals' or 'change_requests'
   const itemsPerPage = 20;
 
   const [employers, setEmployers] = useState([]);
@@ -538,6 +543,10 @@ const EmployersManagement = () => {
   const [error, setError] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [selectedChangeRequest, setSelectedChangeRequest] = useState(null);
+  const [showRawChangePayload, setShowRawChangePayload] = useState(false);
+  const [isProcessingChange, setIsProcessingChange] = useState(false);
 
   const loadWithdrawRequests = async () => {
     try {
@@ -556,7 +565,7 @@ const EmployersManagement = () => {
           const employerRequests = allRequests.filter(req => req.isCandidate !== true);
           setWithdrawRequests(employerRequests);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   };
 
@@ -564,14 +573,14 @@ const EmployersManagement = () => {
     const req = withdrawRequests.find(r => r.id === requestId);
     try {
       await updateWithdrawalStatus(requestId, 'approved');
-      setWithdrawRequests(prev => 
+      setWithdrawRequests(prev =>
         prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r)
       );
       try {
         const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
         const updated = stored.map(r => r.id === requestId ? { ...r, status: 'approved' } : r);
         localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
-      } catch (_) {}
+      } catch (_) { }
 
       // Send notification to employer
       if (req?.employerId) {
@@ -596,14 +605,14 @@ const EmployersManagement = () => {
     const req = withdrawRequests.find(r => r.id === requestId);
     try {
       await updateWithdrawalStatus(requestId, 'rejected');
-      setWithdrawRequests(prev => 
+      setWithdrawRequests(prev =>
         prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r)
       );
       try {
         const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
         const updated = stored.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r);
         localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
-      } catch (_) {}
+      } catch (_) { }
 
       // Send notification to employer
       if (req?.employerId) {
@@ -624,15 +633,170 @@ const EmployersManagement = () => {
     }
   };
 
+  const loadChangeRequests = async () => {
+    try {
+      console.log('📥 Loading personnel change requests...');
+      const allApps = await applicationService.getAllApplications();
+      const pendingChanges = (allApps || []).filter(app => {
+        if (app.status !== 'pending_change') return false;
+
+        // Detect changeRequestStatus under multiple possible keys
+        const crStatus = app.changeRequestStatus || app.change_request_status || app.change_request_status || app.change_request || (app.changeRequest && app.changeRequest.status) || (app.extraFields && (app.extraFields.changeRequestStatus || app.extraFields.change_request_status));
+
+        if (crStatus && ['approved', 'rejected', 'cancelled'].includes(String(crStatus).toLowerCase())) {
+          // Server already finalized this change request — skip it
+          return false;
+        }
+
+        return true;
+      });
+
+      // Enhance with employer info if missing or needed
+      const enhanced = pendingChanges.map(app => {
+        const emp = employers.find(e => e.id === app.employerId);
+
+        // Normalize changeRequest field (support various casing, nested payloads, and stringified payloads)
+        let cr = app.changeRequest || app.change_request || app.change_request_payload || app.change_request?.payload || app.extraFields?.changeRequest || app.extraFields?.change_request || null;
+        if (cr && typeof cr === 'string') {
+          try {
+            cr = JSON.parse(cr);
+          } catch (e) {
+            console.warn('Could not parse changeRequest string for app', app.applicationId, e.message);
+          }
+        }
+
+        // If the structure is nested (e.g. { payload: '{...}' }) try to extract
+        if (cr && typeof cr === 'object') {
+          if (!cr.reason && (cr.payload || cr.data)) {
+            let nested = cr.payload || cr.data;
+            if (typeof nested === 'string') {
+              try {
+                nested = JSON.parse(nested);
+              } catch (e) {
+                nested = null;
+              }
+            }
+            if (nested && typeof nested === 'object') cr = { ...nested, ...cr };
+          }
+        }
+
+        // Pick reason from many possible keys used across backends/clients
+        const reason = cr && (cr.reason || cr.message || cr.detail || cr.description || cr.reasonText || cr.note || cr.reason_code || cr.reasonCode || cr.messageText);
+        const reasonCode = cr && (cr.reasonCode || cr.reason_code || cr.reasonCode || cr.type || cr.reasonType);
+        const typeLabel = cr && (cr.typeLabel || cr.type_label || cr.reasonLabel || cr.reason_label || cr.typeName || cr.typeNameLabel);
+        const requestedAt = cr && (cr.requestedAt || cr.requested_at || cr.time || cr.createdAt || cr.created_at);
+        const urgency = cr && (cr.urgency || cr.priority || 'normal');
+
+        const normalizedCR = cr
+          ? {
+              ...cr,
+              reason: reason || '',
+              reasonCode: reasonCode || '',
+              typeLabel: typeLabel || cr.typeLabel || '',
+              requestedAt: requestedAt || '',
+              urgency: urgency
+            }
+          : null;
+
+        // Fallback: if server returned null, try to load from localStorage (client saved on submit)
+        let finalCR = normalizedCR;
+        if (!finalCR) {
+          try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              const key = `cr_${app.applicationId}`;
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                finalCR = {
+                  ...parsed,
+                  reason: parsed.reason || parsed.message || '',
+                  typeLabel: parsed.typeLabel || parsed.type || '',
+                  requestedAt: parsed.requestedAt || ''
+                };
+                console.log(`Loaded changeRequest from localStorage for ${app.applicationId}`);
+              }
+            }
+          } catch (e) {
+            console.warn('Error reading changeRequest from localStorage', e.message);
+          }
+        }
+
+        return {
+          ...app,
+          companyName: app.companyName || emp?.companyName || 'N/A',
+          companyLogo: app.companyLogo || emp?.companyLogo || '',
+          changeRequest: finalCR
+        };
+      });
+
+      setChangeRequests(enhanced);
+    } catch (e) {
+      console.error('Error loading change requests:', e);
+    }
+  };
+
+  const handleApproveChange = async (appId) => {
+    try {
+      setIsProcessingChange(true);
+
+      await applicationService.updateApplicationStatus(appId, 'accepted', {
+        changeRequestStatus: 'approved',
+        adminNotes: 'Approved by Admin'
+      });
+
+      // Optimistically remove the request, then refresh from server to ensure canonical state
+      setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
+      setSelectedChangeRequest(null);
+      try {
+        await loadChangeRequests();
+      } catch (e) {
+        console.warn('Could not reload change requests after approve:', e.message);
+      }
+
+      alert(language === 'vi' ? 'Đã duyệt yêu cầu thay đổi thành công' : 'Change request approved successfully');
+    } catch (err) {
+      console.error('Error approving change request:', err);
+      alert(language === 'vi' ? 'Lỗi khi duyệt yêu cầu' : 'Error approving request');
+    } finally {
+      setIsProcessingChange(false);
+    }
+  };
+
+  const handleRejectChange = async (appId) => {
+    try {
+      setIsProcessingChange(true);
+      await applicationService.updateApplicationStatus(appId, 'accepted', {
+        changeRequestStatus: 'rejected',
+        adminNotes: 'Rejected by Admin'
+      });
+
+      // Optimistically remove then refresh to reflect server-side changes
+      setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
+      setSelectedChangeRequest(null);
+      try {
+        await loadChangeRequests();
+      } catch (e) {
+        console.warn('Could not reload change requests after reject:', e.message);
+      }
+
+      alert(language === 'vi' ? 'Đã từ chối yêu cầu thay đổi' : 'Change request rejected');
+    } catch (err) {
+      console.error('Error rejecting change request:', err);
+      alert(language === 'vi' ? 'Lỗi khi từ chối yêu cầu' : 'Error rejecting request');
+    } finally {
+      setIsProcessingChange(false);
+    }
+  };
+
   // Load employers from DynamoDB via API
   const loadEmployers = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log('📥 Fetching employer profiles from DynamoDB...');
       const data = await adminEmployerService.getAllEmployers();
-      
+
       // Transform data to match component structure
       const transformedData = data.map(item => ({
         id: item.userId,
@@ -654,7 +818,7 @@ const EmployersManagement = () => {
         createdAt: item.createdAt || '',
         updatedAt: item.updatedAt || ''
       }));
-      
+
       setEmployers(transformedData);
       console.log(`✅ Loaded ${transformedData.length} employer profiles`);
     } catch (err) {
@@ -670,12 +834,16 @@ const EmployersManagement = () => {
   useEffect(() => {
     loadEmployers();
     loadWithdrawRequests();
+    loadChangeRequests();
   }, []);
 
-  // Reload withdraw requests when tab changes to withdrawals
+  // Reload data when tabs change
   useEffect(() => {
     if (activeTab === 'withdrawals') {
       loadWithdrawRequests();
+    }
+    if (activeTab === 'change_requests') {
+      loadChangeRequests();
     }
   }, [activeTab]);
 
@@ -683,7 +851,8 @@ const EmployersManagement = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadEmployers();
-    loadWithdrawRequests();
+    await loadWithdrawRequests();
+    await loadChangeRequests();
   };
 
   const getStatusText = (status) => {
@@ -701,21 +870,21 @@ const EmployersManagement = () => {
   const handleApprove = async (employerId) => {
     try {
       console.log('✅ Approving employer:', employerId);
-      
+
       // Call API to update in DynamoDB
       await adminEmployerService.approveEmployer(employerId);
-      
+
       // Update local state
-      setEmployers(prev => prev.map(employer => 
-        employer.id === employerId 
+      setEmployers(prev => prev.map(employer =>
+        employer.id === employerId
           ? { ...employer, approvalStatus: 'approved' }
           : employer
       ));
-      
+
       setShowSuccessModal(true);
     } catch (error) {
       console.error('❌ Error approving employer:', error);
-      alert(language === 'vi' 
+      alert(language === 'vi'
         ? `Lỗi khi duyệt nhà tuyển dụng: ${error.message}`
         : `Error approving employer: ${error.message}`
       );
@@ -726,7 +895,7 @@ const EmployersManagement = () => {
     try {
       console.log(`⚡ Admin updating quick job status for ${employerId} to ${status}`);
       await adminEmployerService.updateQuickJobStatus(employerId, status);
-      
+
       // Get the employer's company name from current state
       const targetEmployer = employers.find(e => e.id === employerId);
       const companyName = targetEmployer?.companyName || 'Nhà tuyển dụng';
@@ -767,6 +936,10 @@ const EmployersManagement = () => {
     return employers.filter(e => e.quickJobStatus === 'pending').length;
   }, [employers]);
 
+  const pendingChangeCount = useMemo(() => {
+    return changeRequests.length;
+  }, [changeRequests]);
+
   const filteredEmployers = useMemo(() => {
     return employers.filter(employer => {
       // Filter by tab
@@ -779,23 +952,23 @@ const EmployersManagement = () => {
         // Show employers that have requested, approved or rejected status
         matchesTab = (employer.quickJobStatus && employer.quickJobStatus !== 'not_requested');
       }
-      
-      const matchesSearch = searchTerm === '' || 
+
+      const matchesSearch = searchTerm === '' ||
         employer.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         employer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         employer.industry.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesFilters = filters.length === 0 || 
+
+      const matchesFilters = filters.length === 0 ||
         (filters.includes('verified') && employer.isVerified) ||
         (filters.includes('active') && employer.isActive);
-      
+
       return matchesTab && matchesSearch && matchesFilters;
     });
   }, [employers, searchTerm, filters, activeTab]);
 
   const filteredWithdrawRequests = useMemo(() => {
     return withdrawRequests.filter(req => {
-      const matchesSearch = searchTerm === '' || 
+      const matchesSearch = searchTerm === '' ||
         req.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         req.bankName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         req.accountNumber.includes(searchTerm);
@@ -803,16 +976,29 @@ const EmployersManagement = () => {
     });
   }, [withdrawRequests, searchTerm]);
 
+  const filteredChangeRequests = useMemo(() => {
+    return changeRequests.filter(req => {
+      const matchesSearch = searchTerm === '' ||
+        req.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        req.candidateName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        req.changeRequest?.reason?.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    });
+  }, [changeRequests, searchTerm]);
+
   // Pagination
   const totalPages = activeTab === 'withdrawals'
     ? Math.ceil(filteredWithdrawRequests.length / itemsPerPage)
-    : Math.ceil(filteredEmployers.length / itemsPerPage);
+    : activeTab === 'change_requests'
+      ? Math.ceil(filteredChangeRequests.length / itemsPerPage)
+      : Math.ceil(filteredEmployers.length / itemsPerPage);
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  
+
   const currentEmployers = filteredEmployers.slice(startIndex, endIndex);
   const currentWithdrawRequests = filteredWithdrawRequests.slice(startIndex, endIndex);
+  const currentChangeRequests = filteredChangeRequests.slice(startIndex, endIndex);
 
   // Reset to page 1 when search, filters or tab change
   useMemo(() => {
@@ -820,8 +1006,8 @@ const EmployersManagement = () => {
   }, [searchTerm, filters, activeTab]);
 
   const handleFilterToggle = (filterValue) => {
-    setFilters(prev => 
-      prev.includes(filterValue) 
+    setFilters(prev =>
+      prev.includes(filterValue)
         ? prev.filter(f => f !== filterValue)
         : [...prev, filterValue]
     );
@@ -897,21 +1083,21 @@ const EmployersManagement = () => {
             </StatsRow>
 
             <TabsContainer>
-              <Tab 
+              <Tab
                 $active={activeTab === 'pending'}
                 onClick={() => setActiveTab('pending')}
               >
                 <Clock size={18} style={{ marginRight: '8px' }} />
                 {language === 'vi' ? 'Chờ duyệt' : 'Pending Approval'}
               </Tab>
-              <Tab 
+              <Tab
                 $active={activeTab === 'approved'}
                 onClick={() => setActiveTab('approved')}
               >
                 <CheckCircle size={18} style={{ marginRight: '8px' }} />
                 {language === 'vi' ? 'Đã duyệt' : 'Approved'}
               </Tab>
-              <Tab 
+              <Tab
                 $active={activeTab === 'withdrawals'}
                 onClick={() => setActiveTab('withdrawals')}
               >
@@ -919,7 +1105,7 @@ const EmployersManagement = () => {
                 {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
                 {pendingWithdrawCount > 0 && <TabBadge>{pendingWithdrawCount}</TabBadge>}
               </Tab>
-              <Tab 
+              <Tab
                 $active={activeTab === 'quick_jobs'}
                 onClick={() => setActiveTab('quick_jobs')}
               >
@@ -927,11 +1113,19 @@ const EmployersManagement = () => {
                 {language === 'vi' ? 'Duyệt tuyển gấp' : 'Urgent Jobs'}
                 {pendingQuickJobCount > 0 && <TabBadge>{pendingQuickJobCount}</TabBadge>}
               </Tab>
+              <Tab
+                $active={activeTab === 'change_requests'}
+                onClick={() => setActiveTab('change_requests')}
+              >
+                <RefreshCw size={18} style={{ marginRight: '8px' }} />
+                {language === 'vi' ? 'Yêu cầu thay đổi' : 'Change Requests'}
+                {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
+              </Tab>
             </TabsContainer>
 
             <FilterSection>
               <FilterWrapper>
-                <TableFilter 
+                <TableFilter
                   searchValue={searchTerm}
                   onSearchChange={setSearchTerm}
                   filterOptions={filterOptions}
@@ -942,8 +1136,8 @@ const EmployersManagement = () => {
               </FilterWrapper>
               <RefreshButton onClick={handleRefresh} disabled={refreshing} $loading={refreshing}>
                 <RefreshCw size={18} />
-                {refreshing 
-                  ? (language === 'vi' ? 'Đang tải...' : 'Loading...') 
+                {refreshing
+                  ? (language === 'vi' ? 'Đang tải...' : 'Loading...')
                   : (language === 'vi' ? 'Làm mới' : 'Refresh')
                 }
               </RefreshButton>
@@ -966,7 +1160,7 @@ const EmployersManagement = () => {
                     {currentWithdrawRequests.map((req, index) => {
                       const colorScheme = getColorScheme(index);
                       const initials = getCompanyInitials(req.companyName);
-                      
+
                       return (
                         <tr key={req.id}>
                           <td>
@@ -1061,7 +1255,7 @@ const EmployersManagement = () => {
                     {currentEmployers.map((employer, index) => {
                       const colorScheme = getColorScheme(index);
                       const initials = getCompanyInitials(employer.companyName);
-                      
+
                       return (
                         <tr key={employer.id}>
                           <td>
@@ -1141,7 +1335,7 @@ const EmployersManagement = () => {
                                   {language === 'vi' ? 'Kích hoạt' : 'Activate'}
                                 </ApproveButton>
                               )}
-                              <IconButton 
+                              <IconButton
                                 title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
                                 onClick={() => navigate(`/admin/employers/${employer.id}`)}
                               >
@@ -1156,6 +1350,91 @@ const EmployersManagement = () => {
                       <tr>
                         <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
                           {language === 'vi' ? 'Không tìm thấy yêu cầu tuyển gấp nào' : 'No urgent job activation requests found'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              ) : activeTab === 'change_requests' ? (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</th>
+                      <th>{language === 'vi' ? 'Nhân viên ứng tuyển' : 'Candidate'}</th>
+                      <th>{language === 'vi' ? 'Loại thay đổi' : 'Change Type'}</th>
+                      <th>{language === 'vi' ? 'Ngày gửi' : 'Requested At'}</th>
+                      <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentChangeRequests.map((req, index) => {
+                      const colorScheme = getColorScheme(index);
+                      const initials = getCompanyInitials(req.companyName);
+                      const cr = req.changeRequest || {};
+
+                      return (
+                        <tr key={req.applicationId}>
+                          <td>
+                            <CompanyInfo>
+                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                {req.companyLogo ? (
+                                  <img src={req.companyLogo} alt={req.companyName} />
+                                ) : (
+                                  initials
+                                )}
+                              </CompanyLogo>
+                              <CompanyDetails>
+                                <CompanyName>{req.companyName}</CompanyName>
+                                <CompanyMeta>
+                                  <Building2 size={12} />
+                                  ID: {req.employerId}
+                                </CompanyMeta>
+                              </CompanyDetails>
+                            </CompanyInfo>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{req.candidateName || 'N/A'}</div>
+                            <div style={{ fontSize: '12px', color: '#64748B' }}>Job ID: {req.jobId}</div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: cr.urgency === 'urgent' ? '#EF4444' : '#F97316' }}>
+                              {cr.type === 'staff_replacement' ? <User size={14} /> : <Clock size={14} />}
+                              {cr.typeLabel || cr.type}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px' }}>{cr.requestedAt || 'N/A'}</div>
+                          </td>
+                          <td>
+                            <StatusBadge $status='pending'>
+                              <Clock size={12} />
+                              {language === 'vi' ? 'Chờ duyệt' : 'Pending'}
+                            </StatusBadge>
+                          </td>
+                          <td>
+                            <ActionButtons>
+                              <IconButton
+                                title={language === 'vi' ? 'Xem nội dung' : 'View content'}
+                                onClick={() => setSelectedChangeRequest(req)}
+                              >
+                                <Eye size={16} />
+                              </IconButton>
+                              <ApproveButton onClick={() => handleApproveChange(req.applicationId)}>
+                                <CheckCircle size={16} />
+                              </ApproveButton>
+                              <RejectButton onClick={() => handleRejectChange(req.applicationId)}>
+                                <XCircle size={16} />
+                              </RejectButton>
+                            </ActionButtons>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {currentChangeRequests.length === 0 && (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                          {language === 'vi' ? 'Không tìm thấy yêu cầu thay đổi nào' : 'No change requests found'}
                         </td>
                       </tr>
                     )}
@@ -1179,7 +1458,7 @@ const EmployersManagement = () => {
                     {currentEmployers.map((employer, index) => {
                       const colorScheme = getColorScheme(index);
                       const initials = getCompanyInitials(employer.companyName);
-                      
+
                       return (
                         <tr key={employer.id}>
                           <td>
@@ -1241,7 +1520,7 @@ const EmployersManagement = () => {
                           <td>
                             <VerifiedBadge $verified={employer.isVerified}>
                               {employer.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                              {employer.isVerified 
+                              {employer.isVerified
                                 ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
                                 : (language === 'vi' ? 'Chưa xác minh' : 'Not Verified')
                               }
@@ -1255,7 +1534,7 @@ const EmployersManagement = () => {
                           </td>
                           <td>
                             <ActionButtons>
-                              <IconButton 
+                              <IconButton
                                 title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
                                 onClick={() => navigate(`/admin/employers/${employer.id}`)}
                               >
@@ -1274,30 +1553,34 @@ const EmployersManagement = () => {
             <PaginationContainer>
               <PaginationInfo>
                 {activeTab === 'withdrawals' ? (
-                  language === 'vi' 
+                  language === 'vi'
                     ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} trong tổng số ${filteredWithdrawRequests.length} yêu cầu rút tiền`
                     : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} of ${filteredWithdrawRequests.length} withdrawal requests`
                 ) : activeTab === 'quick_jobs' ? (
-                  language === 'vi' 
+                  language === 'vi'
                     ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} yêu cầu tuyển gấp`
                     : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} urgent job requests`
+                ) : activeTab === 'change_requests' ? (
+                  language === 'vi'
+                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredChangeRequests.length)} trong tổng số ${filteredChangeRequests.length} yêu cầu thay đổi`
+                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredChangeRequests.length)} of ${filteredChangeRequests.length} change requests`
                 ) : (
-                  language === 'vi' 
+                  language === 'vi'
                     ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} nhà tuyển dụng`
                     : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} employers`
                 )}
               </PaginationInfo>
               <PaginationButtons>
-                <PageButton 
+                <PageButton
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                 >
                   {language === 'vi' ? 'Trước' : 'Previous'}
                 </PageButton>
-                
+
                 {[...Array(totalPages)].map((_, index) => {
                   const pageNumber = index + 1;
-                  
+
                   if (
                     pageNumber === 1 ||
                     pageNumber === totalPages ||
@@ -1320,8 +1603,8 @@ const EmployersManagement = () => {
                   }
                   return null;
                 })}
-                
-                <PageButton 
+
+                <PageButton
                   onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
                 >
@@ -1344,7 +1627,7 @@ const EmployersManagement = () => {
               {language === 'vi' ? 'Duyệt thành công!' : 'Approved Successfully!'}
             </ModalTitle>
             <ModalMessage>
-              {language === 'vi' 
+              {language === 'vi'
                 ? 'Nhà tuyển dụng đã được duyệt thành công. Họ có thể bắt đầu sử dụng các tính năng của hệ thống.'
                 : 'The employer has been approved successfully. They can now start using the system features.'
               }
@@ -1352,6 +1635,113 @@ const EmployersManagement = () => {
             <ModalButton onClick={() => setShowSuccessModal(false)}>
               {language === 'vi' ? 'Đóng' : 'Close'}
             </ModalButton>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {/* Change Request Detail Modal */}
+      {selectedChangeRequest && (
+        <ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
+                <AlertCircle style={{ color: '#F97316' }} />
+              </div>
+              <div>
+                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                  {language === 'vi' ? 'Chi Tiết Yêu Cầu Thay Đổi' : 'Change Request Details'}
+                </ModalTitle>
+                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                  {selectedChangeRequest.changeRequest?.requestedAt}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.companyName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Ứng viên' : 'Candidate'}
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.candidateName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Loại yêu cầu' : 'Request Type'}
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
+                    {selectedChangeRequest.changeRequest?.typeLabel}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Mức độ' : 'Urgency'}
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: selectedChangeRequest.changeRequest?.urgency === 'urgent' ? '#EF4444' : '#10B981' }}>
+                    {selectedChangeRequest.changeRequest?.urgency === 'urgent' ? (language === 'vi' ? 'Khẩn cấp' : 'Urgent') : (language === 'vi' ? 'Bình thường' : 'Normal')}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={14} />
+                {language === 'vi' ? 'Nội dung chi tiết/Lý do:' : 'Detailed content/Reason:'}
+              </div>
+                  <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B', whiteSpace: 'pre-wrap' }}>
+                    {selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
+                  </div>
+
+                  {/* Debug: show raw payload to help identify missing fields */}
+                  <div style={{ marginTop: '8px', textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        console.log('Selected change request:', selectedChangeRequest);
+                        setShowRawChangePayload(prev => !prev);
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: '#3B82F6', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      {showRawChangePayload ? (language === 'vi' ? 'Ẩn payload' : 'Hide payload') : (language === 'vi' ? 'Hiện payload thô' : 'Show raw payload')}
+                    </button>
+                  </div>
+
+                  {showRawChangePayload && (
+                    <pre style={{ maxHeight: '220px', overflow: 'auto', background: '#0F172A', color: '#E6EEF8', padding: '12px', borderRadius: '8px', marginTop: '12px', fontSize: '12px' }}>
+                      {JSON.stringify(selectedChangeRequest.changeRequest, null, 2)}
+                    </pre>
+                  )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <ModalButton
+                onClick={() => handleRejectChange(selectedChangeRequest.applicationId)}
+                style={{ background: '#ef4444' }}
+                disabled={isProcessingChange}
+              >
+                {isProcessingChange ? '...' : (language === 'vi' ? 'Từ chối' : 'Reject')}
+              </ModalButton>
+              <ModalButton
+                onClick={() => handleApproveChange(selectedChangeRequest.applicationId)}
+                disabled={isProcessingChange}
+              >
+                {isProcessingChange ? '...' : (language === 'vi' ? 'Duyệt yêu cầu' : 'Approve')}
+              </ModalButton>
+            </div>
+
+            <button
+              onClick={() => setSelectedChangeRequest(null)}
+              style={{ width: '100%', marginTop: '12px', background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              {language === 'vi' ? 'Đóng' : 'Close'}
+            </button>
           </ModalContent>
         </ModalOverlay>
       )}

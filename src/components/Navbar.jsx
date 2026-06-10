@@ -7,7 +7,7 @@ import { useLanguage } from '../context/LanguageContext';
 import candidateProfileService from '../services/candidateProfileService';
 import employerProfileService from '../services/employerProfileService';
 import jobPostService from '../services/jobPostService';
-import { getNotifications, getUnreadCount, markAsRead, markAllAsRead, createChatMessageNotification } from '../services/notificationService';
+import { getNotifications, markAsRead, markAllAsRead, createChatMessageNotification } from '../services/notificationService';
 import RelativeTime from './RelativeTime';
 import { s3Images } from '../utils/s3Images';
 
@@ -913,6 +913,10 @@ const Navbar = ({ showSearch = true }) => {
   }, [unreadChatCount]);
 
   useEffect(() => {
+    let intervalId = null;
+    const POLL_INTERVAL_NORMAL = 30000;
+    const POLL_INTERVAL_ERROR = 60000;
+
     const loadNotifications = async () => {
       let effectiveUser = user;
       if (!effectiveUser) {
@@ -924,13 +928,9 @@ const Navbar = ({ showSearch = true }) => {
         }
       }
 
-      if (!effectiveUser) {
-        console.log('⚠️ No user, skipping notification load');
-        return;
-      }
+      if (!effectiveUser) return;
 
       try {
-        // CRITICAL FIX: Ensure we use UUID from Cognito, not email
         let userId;
 
         if (effectiveUser.role === 'admin') {
@@ -938,18 +938,13 @@ const Navbar = ({ showSearch = true }) => {
         } else {
           userId = effectiveUser.userId || effectiveUser.id;
 
-          // If userId looks like an email, fetch the real UUID from Cognito
           if (!userId || userId.includes('@')) {
-            console.warn('⚠️ [Navbar] userId is email, fetching UUID from Cognito...');
             try {
               const { fetchAuthSession } = await import('aws-amplify/auth');
               const session = await fetchAuthSession();
               if (session && session.tokens) {
                 const uuidFromToken = session.tokens.idToken.payload.sub;
-                console.log('✅ [Navbar] Got UUID from Cognito:', uuidFromToken);
                 userId = uuidFromToken;
-
-                // Update user object in localStorage
                 const updatedUser = { ...effectiveUser, userId: uuidFromToken };
                 localStorage.setItem('user', JSON.stringify(updatedUser));
               }
@@ -959,50 +954,44 @@ const Navbar = ({ showSearch = true }) => {
           }
         }
 
-        if (!userId || !effectiveUser.role) {
-          console.log('⚠️ [Navbar] Missing userId or role, skipping notification load');
-          return;
-        }
-
-        console.log('🔔 Loading notifications for:', { userId, role: effectiveUser.role, userObject: effectiveUser });
+        if (!userId || !effectiveUser.role) return;
 
         const notifs = await getNotifications(userId, effectiveUser.role);
-        console.log('📥 Received notifications:', notifs);
-        console.log('📊 Notifications count:', notifs?.length || 0);
-
-        const count = await getUnreadCount(userId, effectiveUser.role);
-        console.log('📬 Unread count:', count);
-
         setRealNotifications(notifs || []);
-        setUnreadCount(count || 0);
+        setUnreadCount((notifs || []).filter(n => !n.read).length);
+
+        // Reset to normal interval on success
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') loadNotifications();
+          }, POLL_INTERVAL_NORMAL);
+        }
       } catch (error) {
-        console.error('❌ Error loading notifications:', error);
-        console.error('Error details:', error.message, error.stack);
+        // Slow down polling on error to avoid hammering a degraded service
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') loadNotifications();
+          }, POLL_INTERVAL_ERROR);
+        }
       }
     };
 
     loadNotifications();
 
-    // Poll every 3 seconds, but only if visible
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadNotifications();
-      }
-    }, 3000);
+    intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') loadNotifications();
+    }, POLL_INTERVAL_NORMAL);
 
-    // Listen for user login events
-    const handleUserLogin = () => {
-      console.log('🔐 [Navbar] User logged in - reloading notifications...');
-      // Wait a bit for user state to be fully updated
-      setTimeout(loadNotifications, 500);
-    };
+    const handleUserLogin = () => setTimeout(loadNotifications, 500);
 
     window.addEventListener('userLoggedIn', handleUserLogin);
     window.addEventListener('visibilitychange', loadNotifications);
     window.addEventListener('focus', loadNotifications);
 
     return () => {
-      clearInterval(interval);
+      clearInterval(intervalId);
       window.removeEventListener('userLoggedIn', handleUserLogin);
       window.removeEventListener('visibilitychange', loadNotifications);
       window.removeEventListener('focus', loadNotifications);
@@ -1504,12 +1493,9 @@ const Navbar = ({ showSearch = true }) => {
         // Persist to DB
         await markAllAsRead(userId, effectiveUser.role);
         // Re-fetch from DB to confirm
-        const [freshNotifs, freshCount] = await Promise.all([
-          getNotifications(userId, effectiveUser.role),
-          getUnreadCount(userId, effectiveUser.role)
-        ]);
+        const freshNotifs = await getNotifications(userId, effectiveUser.role);
         setRealNotifications(freshNotifs || []);
-        setUnreadCount(freshCount || 0);
+        setUnreadCount((freshNotifs || []).filter(n => !n.read).length);
       }
     } catch (err) {
       console.error('Error marking all as read on view all:', err);

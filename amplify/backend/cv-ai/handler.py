@@ -41,6 +41,51 @@ ANALYSIS_SCHEMA = {
 }
 
 
+GENERATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "objective": {"type": "string"},
+        "skills": {"type": "array", "items": {"type": "string"}},
+        "languages": {"type": "array", "items": {"type": "string"}},
+        "experiences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "company": {"type": "string"},
+                    "role": {"type": "string"},
+                    "duration": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["company", "role", "duration", "description"],
+            },
+        },
+        "educations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "school": {"type": "string"},
+                    "degree": {"type": "string"},
+                    "duration": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["school", "degree", "duration", "description"],
+            },
+        },
+    },
+    "required": [
+        "title",
+        "objective",
+        "skills",
+        "languages",
+        "experiences",
+        "educations",
+    ],
+}
+
+
 class RequestError(Exception):
     def __init__(self, status_code, code, message):
         super().__init__(message)
@@ -219,6 +264,74 @@ def validate_payload(body):
         "target_job_title": _clean_text(body.get("target_job_title"), 300),
         "target_job_description": _clean_text(body.get("target_job_description"), 5_000),
         "language": language,
+    }
+
+
+def validate_generate_payload(body):
+    profile = body.get("profile") or {}
+    cleaned_profile = {
+        "title": _clean_text(profile.get("title"), 300),
+        "objective": _clean_text(profile.get("objective"), 2_000),
+        "skills": _clean_list(profile.get("skills"), 20, 100),
+        "languages": _clean_list(profile.get("languages"), 10, 100),
+        "experiences": _clean_entries(
+            profile.get("experiences"),
+            ("company", "role", "duration", "description"),
+        ),
+        "educations": _clean_entries(
+            profile.get("educations"),
+            ("school", "degree", "duration", "description"),
+        ),
+    }
+
+    if not cleaned_profile["title"]:
+        raise RequestError(422, "PROFILE_TITLE_REQUIRED", "Add a career title to your profile before generating a CV.")
+
+    language = body.get("language", "vi")
+    if language not in {"vi", "en"}:
+        language = "vi"
+
+    return {
+        "profile": cleaned_profile,
+        "language": language,
+    }
+
+
+def _generation_system_prompt(language):
+    output_language = "Vietnamese" if language == "vi" else "English"
+    return f"""
+You are an expert CV generator. Return all prose in {output_language}.
+Given the candidate's partial profile, generate a professional, clean, and accurate CV.
+Strict rules for data integrity:
+1. Do not generate or fabricate any personal identification details (like full name, email, phone, or address).
+2. Do not invent, fabricate, or assume any work experiences (experiences) or education entries (educations) that are not explicitly provided in the candidate's profile.
+3. If the candidate's profile does not provide work experiences or education details (e.g. they are empty or null), you MUST return empty lists `[]` for the 'experiences' and 'educations' fields. Never make up fake companies, roles, durations, descriptions, schools, degrees, or courses.
+4. Based on the provided profile, generate:
+   - An engaging professional summary (objective) matching their career title.
+   - An expanded list of highly relevant skills.
+   - A list of languages.
+Ensure all generated text is highly professional, realistic, and suitable for the candidate's target career title.
+""".strip()
+
+
+def _gemini_generate_payload(validated):
+    return {
+        "systemInstruction": {
+            "parts": [{"text": _generation_system_prompt(validated["language"])}]
+        },
+        "contents": [{
+            "role": "user",
+            "parts": [{
+                "text": "Generate a professional CV based on this candidate profile:\n"
+                + json.dumps(validated["profile"], ensure_ascii=False)
+            }],
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 2_500,
+            "responseMimeType": "application/json",
+            "responseSchema": GENERATION_SCHEMA,
+        },
     }
 
 
@@ -433,7 +546,7 @@ def lambda_handler(event, context):
         return _response(event, 200, {"ok": True})
     if method == "GET" and path == "/health":
         return _response(event, 200, {"status": "ok", "provider": "gemini"})
-    if method != "POST" or path != "/cv/analyze":
+    if method != "POST" or path not in {"/cv/analyze", "/cv/generate"}:
         return _response(event, 404, {
             "error": {"code": "NOT_FOUND", "message": "Route not found."},
             "request_id": request_id,
@@ -441,16 +554,70 @@ def lambda_handler(event, context):
 
     try:
         claims = _candidate_claims(event)
-        validated = validate_payload(_parse_body(event))
-        result = analyze(validated, request_id)
-        print(json.dumps({
-            "event": "cv_analysis_completed",
-            "request_id": request_id,
-            "user_id": claims.get("sub"),
-            "score": result["score"],
-            "processing_ms": result["metadata"]["processing_ms"],
-        }))
-        return _response(event, 200, result)
+        if path == "/cv/analyze":
+            validated = validate_payload(_parse_body(event))
+            result = analyze(validated, request_id)
+            print(json.dumps({
+                "event": "cv_analysis_completed",
+                "request_id": request_id,
+                "user_id": claims.get("sub"),
+                "score": result["score"],
+                "processing_ms": result["metadata"]["processing_ms"],
+            }))
+            return _response(event, 200, result)
+        else:
+            validated = validate_generate_payload(_parse_body(event))
+            started = time.monotonic()
+            api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+            if not api_key:
+                raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+
+            model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+            request = urllib.request.Request(
+                f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+                data=json.dumps(_gemini_generate_payload(validated), ensure_ascii=False).encode("utf-8"),
+                headers={
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    provider_response = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as error:
+                status = error.code
+                provider_message = ""
+                try:
+                    error_body = json.loads(error.read().decode("utf-8"))
+                    provider_message = str((error_body.get("error") or {}).get("message") or "")
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    pass
+                if status in {400, 401, 403} and "api key" in provider_message.lower():
+                    raise ProviderError("AI_CREDENTIAL_INVALID", "The Gemini API key is invalid.")
+                retryable = status == 429 or status >= 500
+                code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
+                raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
+            except (urllib.error.URLError, TimeoutError):
+                raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
+            except json.JSONDecodeError:
+                raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
+
+            try:
+                ai_result = json.loads(_extract_gemini_text(provider_response))
+            except json.JSONDecodeError:
+                raise ProviderError("AI_INVALID_RESPONSE", "The AI returned invalid JSON.", True)
+
+            processing_ms = round((time.monotonic() - started) * 1_000)
+            print(json.dumps({
+                "event": "cv_generation_completed",
+                "request_id": request_id,
+                "user_id": claims.get("sub"),
+                "processing_ms": processing_ms,
+            }))
+            return _response(event, 200, ai_result)
     except RequestError as error:
         return _response(event, error.status_code, {
             "error": {"code": error.code, "message": error.message},
@@ -475,7 +642,7 @@ def lambda_handler(event, context):
         return _response(event, 500, {
             "error": {
                 "code": "INTERNAL_ERROR",
-                "message": "Unable to analyze the CV.",
+                "message": "Unable to process CV request.",
             },
             "request_id": request_id,
         })

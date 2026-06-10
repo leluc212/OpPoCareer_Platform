@@ -10,7 +10,7 @@ import {
   Plus, Trash2, ArrowLeft, Download, PlusCircle
 } from 'lucide-react';
 import candidateProfileService from '../../services/candidateProfileService';
-import { analyzeCV } from '../../services/cvAiService';
+import { analyzeCV, generateCV } from '../../services/cvAiService';
 import { uploadCV } from '../../services/cvUploadService';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import html2canvas from 'html2canvas';
@@ -190,6 +190,58 @@ const LoginNote = styled.div`
     font-size: 0.9rem;
     color: ${p => p.$isDark ? '#94a3b8' : '#64748b'};
     margin-bottom: 16px;
+  }
+`;
+
+const AICard = styled.div`
+  text-align: center;
+  padding: 40px 32px;
+  background: ${p => p.$isDark ? 'rgba(30,41,59,0.7)' : '#ffffff'};
+  border: 1.5px solid ${p => p.$isDark ? 'rgba(75,85,99,0.4)' : '#e2e8f0'};
+  border-radius: 20px;
+  margin-top: 8px;
+  box-shadow: ${p => p.$isDark ? '0 10px 30px rgba(0,0,0,0.3)' : '0 10px 30px rgba(26,98,255,0.05)'};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: ${p => p.$isDark ? '#f8fafc' : '#1e293b'};
+    margin: 0;
+  }
+  p {
+    font-size: 0.92rem;
+    color: ${p => p.$isDark ? '#94a3b8' : '#64748b'};
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+`;
+
+const AIGenBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1a62ff 0%, #7c3aed 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 28px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.25);
+  transition: all 0.2s;
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(124,58,237,0.35);
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
   }
 `;
 
@@ -815,6 +867,8 @@ const CVTemplates = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [savingToProfile, setSavingToProfile] = useState(false);
+  const [aiGenLoading, setAiGenLoading] = useState(false);
+  const [aiGenError, setAiGenError] = useState('');
 
   const simpleTemplates = [
     {
@@ -837,12 +891,7 @@ const CVTemplates = () => {
     },
   ];
 
-  const aiTemplates = [
-    { name: vi ? 'Nhân viên pha chế' : 'Barista' },
-    { name: vi ? 'Lập trình viên' : 'Developer' },
-    { name: vi ? 'Nhân viên kế toán' : 'Accountant' },
-    { name: vi ? 'Chuyên viên marketing' : 'Marketing Specialist' },
-  ];
+
 
   const defaultCVData = {
     fullName: vi ? 'Nguyễn Văn An' : 'John Doe',
@@ -879,20 +928,7 @@ const CVTemplates = () => {
         description: vi ? 'GPA: 3.2/4.0. Đạt học bổng sinh viên giỏi năm 2020.' : 'GPA: 3.2/4.0. Earned merit scholarship in 2020.'
       }
     ],
-    customSections: [
-      {
-        id: 'projects',
-        title: vi ? 'Dự án nổi bật' : 'Key Projects',
-        items: [
-          {
-            title: vi ? 'Hệ thống Quản lý Bán hàng' : 'Sales Management System',
-            subtitle: 'ABC Corp',
-            duration: '2023',
-            description: vi ? 'Tối ưu hóa quy trình theo dõi đơn hàng và doanh số bán hàng hàng tháng.' : 'Optimized processing workflows for tracking orders and monthly sales.'
-          }
-        ]
-      }
-    ]
+    customSections: []
   };
 
   const [cvData, setCvData] = useState(defaultCVData);
@@ -1225,6 +1261,49 @@ const CVTemplates = () => {
         : 'Unable to analyze the CV.'));
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleGenerateCV = async () => {
+    if (!cvData.title?.trim()) {
+      setAiGenError(vi
+        ? 'Hãy bổ sung chức danh nghề nghiệp trong Hồ sơ cá nhân của bạn trước khi tạo CV bằng AI.'
+        : 'Please add a career title to your profile before generating a CV.');
+      return;
+    }
+
+    setAiGenLoading(true);
+    setAiGenError('');
+    try {
+      const generated = await generateCV({
+        profile: {
+          title: cvData.title,
+          objective: cvData.objective,
+          skills: cvData.skills,
+          languages: cvData.languages,
+        },
+        language: vi ? 'vi' : 'en',
+      });
+
+      setCvData(prev => ({
+        ...prev,
+        title: generated.title || prev.title,
+        objective: generated.objective || prev.objective,
+        skills: generated.skills?.length ? generated.skills : prev.skills,
+        languages: generated.languages?.length ? generated.languages : prev.languages,
+        experiences: generated.experiences || [],
+        educations: generated.educations || [],
+      }));
+
+      // Open in editing mode with Simple Template (index 0)
+      startEditing(0);
+    } catch (error) {
+      console.error('Error generating AI CV:', error);
+      setAiGenError(error.message || (vi
+        ? 'Không thể tạo CV bằng AI. Vui lòng thử lại.'
+        : 'Unable to generate CV with AI. Please try again.'));
+    } finally {
+      setAiGenLoading(false);
     }
   };
 
@@ -2275,31 +2354,39 @@ const CVTemplates = () => {
           <Star size={18} color="#1a62ff" />
           {vi ? 'Tạo CV bằng AI' : 'Create CV with AI'}
         </SectionTitle>
-        <LoginNote $isDark={isDarkMode}>
-          <p>
-            {vi
-              ? 'Tính năng tạo CV bằng AI yêu cầu đăng nhập. Đăng nhập để tạo CV chuyên nghiệp chỉ trong vài phút với sự hỗ trợ của AI.'
-              : 'AI CV creation requires login. Sign in to create a professional CV in minutes with AI assistance.'}
-          </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-            {aiTemplates.map((t, i) => (
-              <span key={i} style={{
-                background: isDarkMode ? 'rgba(26,98,255,0.15)' : '#eff6ff',
-                color: '#1a62ff',
-                borderRadius: 8,
-                padding: '4px 12px',
-                fontSize: '0.85rem',
-                fontWeight: 600
-              }}>
-                {t.name}
-              </span>
-            ))}
-          </div>
-          <LoginBtn to="/login?redirect=/candidate/profile&role=candidate">
-            <LogIn size={16} />
-            {vi ? 'Đăng nhập để tạo CV bằng AI' : 'Login to Create AI CV'}
-          </LoginBtn>
-        </LoginNote>
+        {isAuthenticated ? (
+          <AICard $isDark={isDarkMode}>
+            <h3>{vi ? 'Tạo nhanh CV của bạn bằng AI' : 'Quickly Create Your CV with AI'}</h3>
+            <p>
+              {vi
+                ? 'Hệ thống AI sẽ tự động điền các thông tin thực tế từ Hồ sơ cá nhân của bạn vào mẫu CV. Các mục thông tin chưa có (như Kinh nghiệm hay Học vấn) sẽ được để trống để bạn tự bổ sung chính xác trong trình biên tập, đảm bảo thông tin trung thực tuyệt đối.'
+                : 'The AI system will automatically fill in real information from your Personal Profile. Missing sections (like Experience or Education) will be left blank for you to fill in accurately in the editor, ensuring absolute integrity of your information.'}
+            </p>
+            {aiGenError && (
+              <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, margin: '8px 0' }}>
+                {aiGenError}
+              </div>
+            )}
+            <AIGenBtn onClick={handleGenerateCV} disabled={aiGenLoading}>
+              <Star size={18} style={{ animation: aiGenLoading ? 'spin 1s linear infinite' : 'none' }} />
+              {aiGenLoading
+                ? (vi ? 'Đang sinh nội dung CV...' : 'Generating CV content...')
+                : (vi ? 'Tạo nhanh CV bằng AI' : 'Quick Create CV with AI')}
+            </AIGenBtn>
+          </AICard>
+        ) : (
+          <LoginNote $isDark={isDarkMode}>
+            <p>
+              {vi
+                ? 'Tính năng tạo CV bằng AI yêu cầu đăng nhập. Đăng nhập để tạo CV chuyên nghiệp chỉ trong vài phút với sự hỗ trợ của AI.'
+                : 'AI CV creation requires login. Sign in to create a professional CV in minutes with AI assistance.'}
+            </p>
+            <LoginBtn to="/login?redirect=/candidate/cv-templates&role=candidate">
+              <LogIn size={16} />
+              {vi ? 'Đăng nhập để tạo CV bằng AI' : 'Login to Create AI CV'}
+            </LoginBtn>
+          </LoginNote>
+        )}
       </Content>
 
       <AnimatePresence>

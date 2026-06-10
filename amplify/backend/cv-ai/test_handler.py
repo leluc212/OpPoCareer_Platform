@@ -139,6 +139,48 @@ class HandlerTests(unittest.TestCase):
         response = handler.lambda_handler(event(method="OPTIONS"), None)
         self.assertEqual(response["statusCode"], 200)
 
+    def test_generate_cv_rejects_missing_job_title(self):
+        response = handler.lambda_handler(
+            event(path="/cv/generate", body={"profile": {}}),
+            None,
+        )
+        self.assertEqual(response["statusCode"], 422)
+
+    def test_generate_cv_rejects_non_candidate(self):
+        response = handler.lambda_handler(
+            event(path="/cv/generate", method="POST", groups=["Employer"], body={"profile": {"title": "Developer"}}),
+            None,
+        )
+        self.assertEqual(response["statusCode"], 403)
+
+    @patch("urllib.request.urlopen")
+    def test_returns_generated_cv(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = json.dumps({
+            "candidates": [{
+                "content": {
+                    "parts": [{"text": json.dumps({
+                        "title": "Software Engineer",
+                        "objective": "Build scalable systems.",
+                        "skills": ["Python", "AWS"],
+                        "languages": ["English"],
+                        "experiences": [],
+                        "educations": [],
+                    })}]
+                }
+            }]
+        }).encode("utf-8")
+        
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}, clear=False):
+            response = handler.lambda_handler(
+                event(path="/cv/generate", body={"profile": {"title": "Developer"}}),
+                None
+            )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["title"], "Software Engineer")
+        self.assertEqual(body["objective"], "Build scalable systems.")
+
 
 if __name__ == "__main__":
     unittest.main()

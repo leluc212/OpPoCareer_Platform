@@ -10,6 +10,9 @@ import {
   Plus, Trash2, ArrowLeft, Download, PlusCircle
 } from 'lucide-react';
 import candidateProfileService from '../../services/candidateProfileService';
+import { analyzeCV, generateCV } from '../../services/cvAiService';
+import { uploadCV } from '../../services/cvUploadService';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { s3Images } from '../../utils/s3Images';
@@ -187,6 +190,58 @@ const LoginNote = styled.div`
     font-size: 0.9rem;
     color: ${p => p.$isDark ? '#94a3b8' : '#64748b'};
     margin-bottom: 16px;
+  }
+`;
+
+const AICard = styled.div`
+  text-align: center;
+  padding: 40px 32px;
+  background: ${p => p.$isDark ? 'rgba(30,41,59,0.7)' : '#ffffff'};
+  border: 1.5px solid ${p => p.$isDark ? 'rgba(75,85,99,0.4)' : '#e2e8f0'};
+  border-radius: 20px;
+  margin-top: 8px;
+  box-shadow: ${p => p.$isDark ? '0 10px 30px rgba(0,0,0,0.3)' : '0 10px 30px rgba(26,98,255,0.05)'};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: ${p => p.$isDark ? '#f8fafc' : '#1e293b'};
+    margin: 0;
+  }
+  p {
+    font-size: 0.92rem;
+    color: ${p => p.$isDark ? '#94a3b8' : '#64748b'};
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+`;
+
+const AIGenBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1a62ff 0%, #7c3aed 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 28px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.25);
+  transition: all 0.2s;
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(124,58,237,0.35);
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
   }
 `;
 
@@ -808,6 +863,12 @@ const CVTemplates = () => {
   
   const [newSkill, setNewSkill] = useState('');
   const [newLanguage, setNewLanguage] = useState('');
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [savingToProfile, setSavingToProfile] = useState(false);
+  const [aiGenLoading, setAiGenLoading] = useState(false);
+  const [aiGenError, setAiGenError] = useState('');
 
   const simpleTemplates = [
     {
@@ -830,12 +891,7 @@ const CVTemplates = () => {
     },
   ];
 
-  const aiTemplates = [
-    { name: vi ? 'Nhân viên pha chế' : 'Barista' },
-    { name: vi ? 'Lập trình viên' : 'Developer' },
-    { name: vi ? 'Nhân viên kế toán' : 'Accountant' },
-    { name: vi ? 'Chuyên viên marketing' : 'Marketing Specialist' },
-  ];
+
 
   const defaultCVData = {
     fullName: vi ? 'Nguyễn Văn An' : 'John Doe',
@@ -872,20 +928,7 @@ const CVTemplates = () => {
         description: vi ? 'GPA: 3.2/4.0. Đạt học bổng sinh viên giỏi năm 2020.' : 'GPA: 3.2/4.0. Earned merit scholarship in 2020.'
       }
     ],
-    customSections: [
-      {
-        id: 'projects',
-        title: vi ? 'Dự án nổi bật' : 'Key Projects',
-        items: [
-          {
-            title: vi ? 'Hệ thống Quản lý Bán hàng' : 'Sales Management System',
-            subtitle: 'ABC Corp',
-            duration: '2023',
-            description: vi ? 'Tối ưu hóa quy trình theo dõi đơn hàng và doanh số bán hàng hàng tháng.' : 'Optimized processing workflows for tracking orders and monthly sales.'
-          }
-        ]
-      }
-    ]
+    customSections: []
   };
 
   const [cvData, setCvData] = useState(defaultCVData);
@@ -1148,6 +1191,138 @@ const CVTemplates = () => {
       console.error('Error generating JPG:', error);
       alert(vi ? 'Có lỗi xảy ra khi tải xuống JPG. Vui lòng thử lại.' : 'Failed to download JPG. Please try again.');
     }
+  };
+
+  const handleSaveToProfile = async () => {
+    setSavingToProfile(true);
+    try {
+      const element = document.getElementById('cv-preview-paper');
+      if (!element) {
+        throw new Error(vi ? 'Không tìm thấy bản xem trước CV.' : 'CV preview not found.');
+      }
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+
+      const session = await fetchAuthSession();
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) {
+        throw new Error(vi ? 'Không tìm thấy phiên đăng nhập.' : 'Login session not found.');
+      }
+      const fileName = cvData.fullName
+        ? `CV_${cvData.fullName.replace(/\s+/g, '_')}.pdf`
+        : 'CV.pdf';
+      const file = new File([pdf.output('blob')], fileName, { type: 'application/pdf' });
+      await uploadCV(userId, file);
+      alert(vi ? 'Đã tạo và lưu CV vào hồ sơ.' : 'CV created and saved to your profile.');
+    } catch (error) {
+      console.error('Error saving CV to profile:', error);
+      alert(error.message || (vi ? 'Không thể lưu CV.' : 'Unable to save CV.'));
+    } finally {
+      setSavingToProfile(false);
+    }
+  };
+
+  const handleAnalyzeCV = async () => {
+    const hasEnoughContent = Boolean(
+      cvData.title?.trim()
+      && (
+        cvData.objective?.trim()
+        || cvData.skills?.length
+        || cvData.experiences?.length
+        || cvData.educations?.length
+      )
+    );
+    if (!hasEnoughContent) {
+      setAiError(vi
+        ? 'Hãy thêm chức danh và ít nhất một phần nội dung CV trước khi phân tích.'
+        : 'Add a title and at least one CV section before analysis.');
+      setAiAnalysis(null);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const result = await analyzeCV({
+        cvData,
+        language: vi ? 'vi' : 'en',
+      });
+      setAiAnalysis(result);
+    } catch (error) {
+      setAiError(error.message || (vi
+        ? 'Không thể phân tích CV.'
+        : 'Unable to analyze the CV.'));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleGenerateCV = async () => {
+    if (!cvData.title?.trim()) {
+      setAiGenError(vi
+        ? 'Hãy bổ sung chức danh nghề nghiệp trong Hồ sơ cá nhân của bạn trước khi tạo CV bằng AI.'
+        : 'Please add a career title to your profile before generating a CV.');
+      return;
+    }
+
+    setAiGenLoading(true);
+    setAiGenError('');
+    try {
+      const generated = await generateCV({
+        profile: {
+          title: cvData.title,
+          objective: cvData.objective,
+          skills: cvData.skills,
+          languages: cvData.languages,
+        },
+        language: vi ? 'vi' : 'en',
+      });
+
+      setCvData(prev => ({
+        ...prev,
+        title: generated.title || prev.title,
+        objective: generated.objective || prev.objective,
+        skills: generated.skills?.length ? generated.skills : prev.skills,
+        languages: generated.languages?.length ? generated.languages : prev.languages,
+        experiences: generated.experiences || [],
+        educations: generated.educations || [],
+      }));
+
+      // Open in editing mode with Simple Template (index 0)
+      startEditing(0);
+    } catch (error) {
+      console.error('Error generating AI CV:', error);
+      setAiGenError(error.message || (vi
+        ? 'Không thể tạo CV bằng AI. Vui lòng thử lại.'
+        : 'Unable to generate CV with AI. Please try again.'));
+    } finally {
+      setAiGenLoading(false);
+    }
+  };
+
+  const applyAiSuggestions = () => {
+    if (!aiAnalysis) return;
+    const confirmed = window.confirm(vi
+      ? 'Áp dụng mục tiêu nghề nghiệp và các kỹ năng được AI đề xuất vào CV?'
+      : 'Apply the AI-suggested objective and skills to your CV?');
+    if (!confirmed) return;
+
+    setCvData((current) => ({
+      ...current,
+      objective: aiAnalysis.suggested_objective || current.objective,
+      skills: Array.from(new Set([
+        ...current.skills,
+        ...(aiAnalysis.suggested_skills || []),
+      ])),
+    }));
+    setAiAnalysis(null);
   };
 
   const startEditing = (index) => {
@@ -1544,6 +1719,26 @@ const CVTemplates = () => {
           </StyleSelector>
           
           <div style={{ display: 'flex', gap: 8 }}>
+            <PrintBtn
+              onClick={handleAnalyzeCV}
+              disabled={aiLoading}
+              style={{ background: '#7c3aed', boxShadow: '0 4px 12px rgba(124,58,237,0.2)' }}
+            >
+              <Star size={16} />
+              {aiLoading
+                ? (vi ? 'AI đang phân tích...' : 'AI is analyzing...')
+                : (vi ? 'Phân tích bằng AI' : 'Analyze with AI')}
+            </PrintBtn>
+            <PrintBtn
+              onClick={handleSaveToProfile}
+              disabled={savingToProfile}
+              style={{ background: '#1a62ff' }}
+            >
+              <PlusCircle size={16} />
+              {savingToProfile
+                ? (vi ? 'Đang lưu...' : 'Saving...')
+                : (vi ? 'Lưu vào hồ sơ' : 'Save to profile')}
+            </PrintBtn>
             <PrintBtn onClick={handleDownloadPDF} style={{ background: '#10b981', boxShadow: '0 4px 12px rgba(16,185,129,0.2)' }}>
               <Download size={16} />
               {vi ? 'Tải xuống PDF' : 'Download PDF'}
@@ -1949,6 +2144,110 @@ const CVTemplates = () => {
             {renderPreview(selectedStyleIndex, cvData)}
           </PreviewPanel>
         </EditorContainer>
+
+        <AnimatePresence>
+          {(aiAnalysis || aiError) && (
+            <ModalOverlay
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setAiAnalysis(null);
+                setAiError('');
+              }}
+            >
+              <ModalBox
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.96, opacity: 0 }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ModalClose onClick={() => {
+                  setAiAnalysis(null);
+                  setAiError('');
+                }}>
+                  <X size={18} />
+                </ModalClose>
+                <ModalHeader>
+                  <h2>{vi ? 'AI phân tích và cải thiện CV' : 'AI CV analysis'}</h2>
+                  <p>
+                    {vi
+                      ? 'AI chỉ đưa ra đề xuất. Bạn luôn là người quyết định nội dung CV.'
+                      : 'AI provides suggestions only. You remain in control of your CV.'}
+                  </p>
+                </ModalHeader>
+                <div style={{ padding: 28 }}>
+                  {aiError ? (
+                    <div>
+                      <div style={{ color: '#dc2626', fontWeight: 600 }}>{aiError}</div>
+                      <ModalUseBtn
+                        onClick={handleAnalyzeCV}
+                        disabled={aiLoading}
+                        style={{ width: '100%', margin: '20px 0 0' }}
+                      >
+                        <Star size={17} />
+                        {aiLoading
+                          ? (vi ? 'Đang thử lại...' : 'Retrying...')
+                          : (vi ? 'Thử lại' : 'Try again')}
+                      </ModalUseBtn>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+                        <div style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: '50%',
+                          background: '#ede9fe',
+                          color: '#7c3aed',
+                          display: 'grid',
+                          placeItems: 'center',
+                          fontSize: 22,
+                          fontWeight: 900,
+                        }}>
+                          {aiAnalysis.score}%
+                        </div>
+                        <div style={{ flex: 1, color: '#475569', lineHeight: 1.6 }}>
+                          {aiAnalysis.summary}
+                        </div>
+                      </div>
+                      {[
+                        [vi ? 'Điểm mạnh' : 'Strengths', aiAnalysis.strengths, '#059669'],
+                        [vi ? 'Cần cải thiện' : 'Improvements', aiAnalysis.improvements, '#d97706'],
+                        [vi ? 'Kỹ năng còn thiếu' : 'Missing skills', aiAnalysis.missing_skills, '#dc2626'],
+                      ].map(([title, items, color]) => items?.length > 0 && (
+                        <div key={title} style={{ marginTop: 16 }}>
+                          <strong style={{ color }}>{title}</strong>
+                          <ul style={{ margin: '8px 0 0', paddingLeft: 20, color: '#475569' }}>
+                            {items.map((item) => <li key={item} style={{ marginBottom: 5 }}>{item}</li>)}
+                          </ul>
+                        </div>
+                      ))}
+                      <div style={{ marginTop: 18 }}>
+                        <strong>{vi ? 'Mục tiêu nghề nghiệp đề xuất' : 'Suggested objective'}</strong>
+                        <p style={{ marginTop: 8, color: '#475569', lineHeight: 1.6 }}>
+                          {aiAnalysis.suggested_objective}
+                        </p>
+                      </div>
+                      {aiAnalysis.suggested_skills?.length > 0 && (
+                        <div style={{ marginTop: 18 }}>
+                          <strong>{vi ? 'Kỹ năng đề xuất thêm' : 'Suggested skills'}</strong>
+                          <p style={{ marginTop: 8, color: '#475569', lineHeight: 1.6 }}>
+                            {aiAnalysis.suggested_skills.join(', ')}
+                          </p>
+                        </div>
+                      )}
+                      <ModalUseBtn onClick={applyAiSuggestions} style={{ width: '100%', margin: '22px 0 0' }}>
+                        <Star size={17} />
+                        {vi ? 'Áp dụng đề xuất vào CV' : 'Apply suggestions'}
+                      </ModalUseBtn>
+                    </>
+                  )}
+                </div>
+              </ModalBox>
+            </ModalOverlay>
+          )}
+        </AnimatePresence>
       </PageWrapper>
     );
   }
@@ -2055,31 +2354,39 @@ const CVTemplates = () => {
           <Star size={18} color="#1a62ff" />
           {vi ? 'Tạo CV bằng AI' : 'Create CV with AI'}
         </SectionTitle>
-        <LoginNote $isDark={isDarkMode}>
-          <p>
-            {vi
-              ? 'Tính năng tạo CV bằng AI yêu cầu đăng nhập. Đăng nhập để tạo CV chuyên nghiệp chỉ trong vài phút với sự hỗ trợ của AI.'
-              : 'AI CV creation requires login. Sign in to create a professional CV in minutes with AI assistance.'}
-          </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-            {aiTemplates.map((t, i) => (
-              <span key={i} style={{
-                background: isDarkMode ? 'rgba(26,98,255,0.15)' : '#eff6ff',
-                color: '#1a62ff',
-                borderRadius: 8,
-                padding: '4px 12px',
-                fontSize: '0.85rem',
-                fontWeight: 600
-              }}>
-                {t.name}
-              </span>
-            ))}
-          </div>
-          <LoginBtn to="/login?redirect=/candidate/profile&role=candidate">
-            <LogIn size={16} />
-            {vi ? 'Đăng nhập để tạo CV bằng AI' : 'Login to Create AI CV'}
-          </LoginBtn>
-        </LoginNote>
+        {isAuthenticated ? (
+          <AICard $isDark={isDarkMode}>
+            <h3>{vi ? 'Tạo nhanh CV của bạn bằng AI' : 'Quickly Create Your CV with AI'}</h3>
+            <p>
+              {vi
+                ? 'Hệ thống AI sẽ tự động điền các thông tin thực tế từ Hồ sơ cá nhân của bạn vào mẫu CV. Các mục thông tin chưa có (như Kinh nghiệm hay Học vấn) sẽ được để trống để bạn tự bổ sung chính xác trong trình biên tập, đảm bảo thông tin trung thực tuyệt đối.'
+                : 'The AI system will automatically fill in real information from your Personal Profile. Missing sections (like Experience or Education) will be left blank for you to fill in accurately in the editor, ensuring absolute integrity of your information.'}
+            </p>
+            {aiGenError && (
+              <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, margin: '8px 0' }}>
+                {aiGenError}
+              </div>
+            )}
+            <AIGenBtn onClick={handleGenerateCV} disabled={aiGenLoading}>
+              <Star size={18} style={{ animation: aiGenLoading ? 'spin 1s linear infinite' : 'none' }} />
+              {aiGenLoading
+                ? (vi ? 'Đang sinh nội dung CV...' : 'Generating CV content...')
+                : (vi ? 'Tạo nhanh CV bằng AI' : 'Quick Create CV with AI')}
+            </AIGenBtn>
+          </AICard>
+        ) : (
+          <LoginNote $isDark={isDarkMode}>
+            <p>
+              {vi
+                ? 'Tính năng tạo CV bằng AI yêu cầu đăng nhập. Đăng nhập để tạo CV chuyên nghiệp chỉ trong vài phút với sự hỗ trợ của AI.'
+                : 'AI CV creation requires login. Sign in to create a professional CV in minutes with AI assistance.'}
+            </p>
+            <LoginBtn to="/login?redirect=/candidate/cv-templates&role=candidate">
+              <LogIn size={16} />
+              {vi ? 'Đăng nhập để tạo CV bằng AI' : 'Login to Create AI CV'}
+            </LoginBtn>
+          </LoginNote>
+        )}
       </Content>
 
       <AnimatePresence>

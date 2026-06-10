@@ -10,6 +10,19 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
+      '/api-cv-ai': {
+        target: process.env.CV_AI_PROXY_TARGET || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-cv-ai/, ''),
+        secure: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
+          });
+        }
+      },
       // Lambda Function URL proxies (bypasses browser CORS)
       '/api-payments': {
         target: 'https://es3yq2niph.execute-api.ap-southeast-1.amazonaws.com/prod',

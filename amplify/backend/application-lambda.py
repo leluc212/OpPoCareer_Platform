@@ -358,6 +358,16 @@ def update_application_status(event, application_id, user_id, create_response):
         new_status = body.get('status')
         if not new_status:
             return create_response(400, {'error': 'Missing status'})
+
+        current_item = applications_table.get_item(
+            Key={'applicationId': application_id},
+            ConsistentRead=True
+        ).get('Item')
+        if not current_item:
+            return create_response(404, {'error': 'Application not found'})
+
+        previous_status = current_item.get('status')
+        status_changed = previous_status != new_status
         
         now_iso = datetime.utcnow().isoformat() + 'Z'
         
@@ -439,9 +449,10 @@ def update_application_status(event, application_id, user_id, create_response):
             ExpressionAttributeValues=expr_attr_values
         )
 
-        # Send status email notification to candidate if status is accepted or rejected
+        # Chat updates preserve the current status. Only a real status transition
+        # should send an application-result email.
         try:
-            if new_status in ['accepted', 'rejected']:
+            if status_changed and new_status in ['accepted', 'rejected']:
                 # Get the full updated application item
                 app_item = applications_table.get_item(Key={'applicationId': application_id}).get('Item', {})
                 if app_item:
@@ -452,7 +463,7 @@ def update_application_status(event, application_id, user_id, create_response):
 
         # Check if we are completing the job and save to a new table "CompletedJobs" if it exists
         try:
-            if new_status == 'completed':
+            if status_changed and new_status == 'completed':
                 completed_jobs_table = dynamodb.Table('CompletedJobs')
                 # Get the latest application info
                 app_item = applications_table.get_item(Key={'applicationId': application_id}).get('Item', {})

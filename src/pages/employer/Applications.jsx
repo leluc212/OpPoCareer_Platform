@@ -2126,8 +2126,7 @@ const Applications = () => {
     if (location.state?.section) {
       return location.state.section;
     }
-    const saved = sessionStorage.getItem('employer_applications_active_section');
-    return saved !== null ? saved : 'posts';
+    return 'posts';
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState([]);
@@ -2162,11 +2161,6 @@ const Applications = () => {
   const [isWalletConnected] = useState(() => {
     return localStorage.getItem('employer_wallet_connected') === 'true';
   });
-
-  // Persist active section to sessionStorage on change
-  useEffect(() => {
-    sessionStorage.setItem('employer_applications_active_section', activeSection);
-  }, [activeSection]);
 
   // Load job posts from DynamoDB
   useEffect(() => {
@@ -2615,7 +2609,7 @@ const Applications = () => {
                   return `${role}${company}${period}`;
                 })
                 .join('; ')
-            : prev.experience;
+            : app.experience;
 
         if (profile) {
           console.log('✅ Full profile loaded:', profile);

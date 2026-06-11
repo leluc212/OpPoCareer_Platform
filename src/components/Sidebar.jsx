@@ -372,12 +372,7 @@ const Sidebar = ({ role, onHoverChange }) => {
       sessionStorage.setItem('sidebarScrollPos', navRef.current.scrollTop.toString());
     }
     
-    // special case for applications section
-    if (link.to === '/employer/standard-jobs') {
-      navigate(link.to, { state: { section: 'applications' } });
-    } else {
-      navigate(link.to);
-    }
+    navigate(link.to);
   };
   
   const candidateLinks = [

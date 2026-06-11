@@ -15,9 +15,8 @@ import { useCompanyProfileCompletion } from '../../hooks/useCompanyProfileComple
 import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
-import { getJobApplications } from '../../services/applicationService';
+import applicationService, { getJobApplications } from '../../services/applicationService';
 import candidateProfileService from '../../services/candidateProfileService';
-import { getCandidateApprovedExperiences } from '../../services/experienceService';
 import { getNotifications } from '../../services/notificationService';
 import { formatRelativeTime } from '../../hooks/useRelativeTime';
 import DynamicTranslate from '../../components/DynamicTranslate';
@@ -534,6 +533,7 @@ const EmployerDashboard = () => {
       bio: app.bio || '-',
       cvUrl: app.cvUrl || '',
       cvFileName: app.cvFileName || '',
+      workHistory: app.workHistory || [],
       reviews: app.reviews || [],
     };
     setPreviewCandidate(basic);
@@ -542,30 +542,66 @@ const EmployerDashboard = () => {
     if (app.candidateId) {
       setPreviewLoading(true);
       try {
-        const [profile, experiences] = await Promise.all([
+        console.log('🔍 Fetching full profile and applications for candidate:', app.candidateId);
+        const [profile, candidateApps, standardJobs, quickJobs] = await Promise.all([
           candidateProfileService.getProfile(app.candidateId),
-          getCandidateApprovedExperiences(app.candidateId).catch(() => []),
+          applicationService.getCandidateApplications(app.candidateId).catch(() => []),
+          jobPostService.getAllActiveJobs().catch(() => []),
+          quickJobService.getAllActiveQuickJobs().catch(() => [])
         ]);
-
-        // Calculate experience summary from approved work history
-        const now = new Date();
-        let totalMonths = 0;
-        (experiences || []).forEach(exp => {
-          const startYear  = Number(exp.startYear)  || 0;
-          const startMonth = Number(exp.startMonth) || 1;
-          const endYear    = exp.isCurrent ? now.getFullYear() : (Number(exp.endYear)  || startYear);
-          const endMonth   = exp.isCurrent ? (now.getMonth() + 1) : (Number(exp.endMonth) || startMonth);
-          const months = (endYear - startYear) * 12 + (endMonth - startMonth);
-          if (months > 0) totalMonths += months;
-        });
-        let experienceSummary = null;
-        if (totalMonths > 0) {
-          const years = Math.floor(totalMonths / 12);
-          const mos   = totalMonths % 12;
-          if (years === 0) experienceSummary = `${mos} tháng`;
-          else if (mos === 0) experienceSummary = `${years} năm`;
-          else experienceSummary = `${years} năm ${mos} tháng`;
+        
+        const allJobs = [...standardJobs, ...quickJobs];
+        
+        // Resolve missing jobs (e.g. inactive or archived)
+        const missingJobIds = [...new Set(candidateApps.map(a => a.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
+        let additionalJobs = [];
+        if (missingJobIds.length > 0) {
+          console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
+          const jobResults = await Promise.all(missingJobIds.map(async (id) => {
+            try {
+              if (id.startsWith('QJOB-')) {
+                return await quickJobService.getQuickJob(id).catch(() => null);
+              }
+              if (/^\d+$/.test(id)) return null;
+              const standard = await jobPostService.getJobPost(id).catch(() => null);
+              if (standard) return standard;
+              return await quickJobService.getQuickJob(id).catch(() => null);
+            } catch (e) {
+              return null;
+            }
+          }));
+          additionalJobs = jobResults.filter(Boolean);
         }
+        const finalAllJobs = [...allJobs, ...additionalJobs];
+
+        // Detailed work history (completed applications)
+        const workHistory = candidateApps
+          .filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate')
+          .map(a => {
+            const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
+            return {
+              id: a.applicationId || a.id,
+              jobTitle: job?.title || a.jobTitle || '---',
+              companyName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
+              completedAt: a.updatedAt || a.appliedAt || a.createdAt,
+              employerRating: a.employerRating || null
+            };
+          })
+          .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+
+        // Reviews list
+        const reviews = candidateApps
+          .filter(a => a.employerRating && typeof a.employerRating.overall === 'number')
+          .map(a => {
+            const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
+            return {
+              rating: a.employerRating.overall,
+              comment: a.employerRating.comment || '',
+              employerName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
+              position: job?.title || a.jobTitle || '---',
+              date: new Date(a.employerConfirmedAt || a.updatedAt || a.appliedAt).toLocaleDateString('vi-VN')
+            };
+          });
 
         if (profile) {
           setPreviewCandidate(prev => ({
@@ -576,21 +612,21 @@ const EmployerDashboard = () => {
             phone: profile.phone || prev.phone,
             location: profile.location || prev.location,
             education: profile.education || prev.education,
-            experience: experienceSummary || profile.experience || prev.experience,
-            approvedExperiences: experiences,
+            experience: profile.experience || prev.experience,
             skills: profile.skills || prev.skills,
             bio: profile.bio || prev.bio,
             // Ưu tiên cvUrl từ application (đã được refresh) thay vì profile (có thể hết hạn)
             cvUrl: prev.cvUrl || profile.cvUrl,
             cvFileName: prev.cvFileName || profile.cvFileName,
             profileImage: profile.profileImage || prev.profileImage,
-            reviews: profile.reviews || prev.reviews,
+            workHistory,
+            reviews
           }));
-        } else if (experienceSummary) {
+        } else {
           setPreviewCandidate(prev => ({
             ...prev,
-            experience: experienceSummary,
-            approvedExperiences: experiences,
+            workHistory,
+            reviews
           }));
         }
       } catch (err) {

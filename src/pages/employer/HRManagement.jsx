@@ -1,17 +1,21 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { Users, UsersRound, FileText, MessageSquare, Clock, MapPin, Phone, Mail, Edit, Edit3, Trash2, Eye, CheckCircle, Send, Search, Calendar, Newspaper, TrendingUp, TrendingDown, AlertCircle, User, Plus, X, XCircle, Wallet, Save, Award, Star, Briefcase, Zap, Banknote, ThumbsUp, ThumbsDown, ArrowRight, RefreshCw } from 'lucide-react';
+import { Users, UsersRound, FileText, MessageSquare, Clock, MapPin, Phone, Mail, Edit, Edit3, Trash2, Eye, CheckCircle, Send, Search, Calendar, Newspaper, TrendingUp, TrendingDown, AlertCircle, User, Plus, X, XCircle, Wallet, Save, Award, Star, Briefcase, Zap, Banknote, ThumbsUp, ThumbsDown, ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
 import Modal from '../../components/Modal';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import quickJobService from '../../services/quickJobService';
 import employerProfileService from '../../services/employerProfileService';
 import applicationService from '../../services/applicationService';
+import cvAiService from '../../services/cvAiService';
+import jobPostService from '../../services/jobPostService';
+import experienceService from '../../services/experienceService';
+import candidateProfileService from '../../services/candidateProfileService';
 import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
@@ -1021,7 +1025,16 @@ const QuickJobPostStats = styled.div`
 
 const QuickJobPostActions = styled.div`
   display: flex;
+  flex-direction: column;
   gap: 8px;
+  margin-top: auto;
+  width: 100%;
+`;
+
+const QuickJobPostButtonsRow = styled.div`
+  display: flex;
+  gap: 8px;
+  width: 100%;
 `;
 
 const QuickJobPostButton = styled(motion.button)`
@@ -1041,13 +1054,15 @@ const QuickJobPostButton = styled(motion.button)`
   background: ${props => {
     if (props.$variant === 'primary') return 'linear-gradient(135deg, #F59E0B 0%, #F97316 100%)';
     if (props.$variant === 'danger') return 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
+    if (props.$variant === 'ai') return 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)';
     return 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)';
   }};
   
-  color: ${props => props.$variant === 'primary' || props.$variant === 'danger' ? 'white' : '#1e40af'};
+  color: ${props => props.$variant === 'primary' || props.$variant === 'danger' || props.$variant === 'ai' ? 'white' : '#1e40af'};
   border: 1.5px solid ${props => {
     if (props.$variant === 'primary') return '#F59E0B';
     if (props.$variant === 'danger') return '#EF4444';
+    if (props.$variant === 'ai') return '#a855f7';
     return '#BFDBFE';
   }};
   
@@ -1059,10 +1074,11 @@ const QuickJobPostButton = styled(motion.button)`
   &:hover {
     transform: translateY(-2px);
     box-shadow: ${props => {
-    if (props.$variant === 'primary') return '0 6px 16px rgba(245, 158, 11, 0.4)';
-    if (props.$variant === 'danger') return '0 6px 16px rgba(239, 68, 68, 0.4)';
-    return '0 6px 16px rgba(30, 64, 175, 0.2)';
-  }};
+      if (props.$variant === 'primary') return '0 6px 16px rgba(245, 158, 11, 0.4)';
+      if (props.$variant === 'danger') return '0 6px 16px rgba(239, 68, 68, 0.4)';
+      if (props.$variant === 'ai') return '0 6px 16px rgba(168, 85, 247, 0.4)';
+      return '0 6px 16px rgba(30, 64, 175, 0.2)';
+    }};
   }
   
   &:active {
@@ -2615,7 +2631,235 @@ const StaffProfileModal = React.memo(({ staff, onClose }) => {
   );
 });
 
-StaffProfileModal.displayName = 'StaffProfileModal';
+const RecommendationModalHeader = styled.div`
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%);
+  padding: 28px 24px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.3) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    svg {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  p {
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+  }
+`;
+
+const RecommendationList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  max-height: 550px;
+  overflow-y: auto;
+`;
+
+const RecommendationCard = styled(motion.div)`
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.04);
+  transition: all 0.25s ease;
+
+  &:hover {
+    border-color: #a78bfa;
+    box-shadow: 0 10px 24px rgba(124, 58, 237, 0.1);
+    transform: translateY(-2px);
+  }
+`;
+
+const RecommendationCardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+`;
+
+const RecommendationCandidateName = styled.h4`
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+`;
+
+const MatchScoreBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 13.5px;
+  font-weight: 800;
+  
+  background: ${props => {
+    if (props.$score >= 80) return '#d1fae5';
+    if (props.$score >= 65) return '#fef3c7';
+    return '#f3f4f6';
+  }};
+  
+  color: ${props => {
+    if (props.$score >= 80) return '#065f46';
+    if (props.$score >= 65) return '#92400e';
+    return '#374151';
+  }};
+
+  border: 1.5px solid ${props => {
+    if (props.$score >= 80) return '#34d399';
+    if (props.$score >= 65) return '#fbbf24';
+    return '#d1d5db';
+  }};
+`;
+
+const ScoreProgressContainer = styled.div`
+  width: 100%;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 100px;
+  overflow: hidden;
+  position: relative;
+`;
+
+const ScoreProgressBar = styled.div`
+  height: 100%;
+  width: ${props => props.$width}%;
+  background: ${props => {
+    if (props.$score >= 80) return 'linear-gradient(90deg, #10b981 0%, #34d399 100%)';
+    if (props.$score >= 65) return 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)';
+    return 'linear-gradient(90deg, #6b7280 0%, #9ca3af 100%)';
+  }};
+  border-radius: 100px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+`;
+
+const RecommendationReason = styled.p`
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #475569;
+  margin: 0;
+  background: #f8fafc;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border-left: 4px solid #7c3aed;
+`;
+
+const RecommendationsLoadingContainer = styled.div`
+  padding: 60px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+`;
+
+const PulseAILogo = styled(motion.div)`
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.35);
+  color: white;
+
+  svg {
+    width: 36px;
+    height: 36px;
+  }
+`;
+
+const LoadingText = styled.p`
+  font-size: 15px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+`;
+
+const WorkHistoryList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const WorkHistoryCard = styled.div`
+  background: ${props => props.theme.colors.bgDark};
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: 14px;
+  padding: 16px 18px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 4px 16px rgba(30, 64, 175, 0.09);
+    border-color: #BFDBFE;
+  }
+`;
+
+const WorkHistoryHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+`;
+
+const WorkHistoryInfo = styled.div`
+  .job-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: ${props => props.theme.colors.text};
+    margin-bottom: 2px;
+  }
+  .company-date {
+    font-size: 12.5px;
+    color: ${props => props.theme.colors.textLight};
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+`;
+
+const EmptyWorkHistory = styled.div`
+  text-align: center;
+  padding: 28px 16px;
+  color: ${props => props.theme.colors.textLight};
+  background: ${props => props.theme.colors.bgDark};
+  border-radius: 12px;
+  border: 1.5px dashed ${props => props.theme.colors.border};
+  
+  .icon { font-size: 28px; margin-bottom: 8px; }
+  p { font-size: 13px; margin: 0; }
+`;
 
 // ─── Component ─────────────────────────────────────────────
 const HRManagement = () => {
@@ -2629,6 +2873,13 @@ const HRManagement = () => {
   }); // Default to 'posts' (Quản lý bài đăng)
   const [hrStaff, setHrStaff] = useState(() => getHRStaff(language).map(s => ({ ...s, rated: false, pendingRating: false })));
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [showRecommendationsModal, setShowRecommendationsModal] = useState(false);
+  const [recommendingJob, setRecommendingJob] = useState(null);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [recommendationError, setRecommendationError] = useState('');
+  const [recommendations, setRecommendations] = useState([]);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
 
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -2637,7 +2888,136 @@ const HRManagement = () => {
   const [viewedChangeRequest, setViewedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
 
+  const handleViewProfile = useCallback(async (app) => {
+    // Set basic info from application immediately
+    setSelectedCandidate(app);
+
+    // Then try to fetch full profile
+    if (app.candidateId) {
+      setIsFetchingProfile(true);
+      try {
+        console.log('🔍 Fetching full profile and applications for candidate:', app.candidateId);
+        const [prof, candidateApps, standardJobs, quickJobs, approvedExperiences] = await Promise.all([
+          candidateProfileService.getProfile(app.candidateId),
+          applicationService.getCandidateApplications(app.candidateId).catch(() => []),
+          jobPostService.getAllActiveJobs().catch(() => []),
+          quickJobService.getAllActiveQuickJobs().catch(() => []),
+          experienceService.getCandidateApprovedExperiences(app.candidateId).catch(() => [])
+        ]);
+
+        const allJobs = [...standardJobs, ...quickJobs];
+
+        // Resolve missing jobs (e.g. inactive or archived)
+        const missingJobIds = [...new Set(candidateApps.map(a => a.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
+        let additionalJobs = [];
+        if (missingJobIds.length > 0) {
+          console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
+          const jobResults = await Promise.all(missingJobIds.map(async (id) => {
+            try {
+              if (id.startsWith('QJOB-')) {
+                return await quickJobService.getQuickJob(id).catch(() => null);
+              }
+              if (/^\d+$/.test(id)) return null;
+              const standard = await jobPostService.getJobPost(id).catch(() => null);
+              if (standard) return standard;
+              return await quickJobService.getQuickJob(id).catch(() => null);
+            } catch (e) {
+              return null;
+            }
+          }));
+          additionalJobs = jobResults.filter(Boolean);
+        }
+        const finalAllJobs = [...allJobs, ...additionalJobs];
+
+        // Detailed work history (completed applications)
+        const workHistory = candidateApps
+          .filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate')
+          .map(a => {
+            const j = finalAllJobs.find(x => (x.idJob || x.id || x.jobID) === a.jobId);
+            return {
+              id: a.applicationId || a.id,
+              jobTitle: j?.title || a.jobTitle || '---',
+              companyName: j?.employerName || j?.companyName || a.employerName || a.companyName || '---',
+              completedAt: a.updatedAt || a.appliedAt || a.createdAt,
+              employerRating: a.employerRating || null
+            };
+          })
+          .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+
+        // Reviews list
+        const reviews = candidateApps
+          .filter(a => a.employerRating && typeof a.employerRating.overall === 'number')
+          .map(a => {
+            const j = finalAllJobs.find(x => (x.idJob || x.id || x.jobID) === a.jobId);
+            return {
+              rating: a.employerRating.overall,
+              comment: a.employerRating.comment || '',
+              employerName: j?.employerName || j?.companyName || a.employerName || a.companyName || '---',
+              position: j?.title || a.jobTitle || '---',
+              date: new Date(a.employerConfirmedAt || a.updatedAt || a.appliedAt).toLocaleDateString('vi-VN')
+            };
+          });
+
+        const experienceSummary = prof?.experience?.trim()
+          ? prof.experience
+          : approvedExperiences.length > 0
+            ? approvedExperiences
+                .slice(0, 3)
+                .map(exp => {
+                  const role = exp.jobTitle || 'Kinh nghiệm';
+                  const company = exp.companyName ? ` tại ${exp.companyName}` : '';
+                  const period = exp.isCurrent
+                    ? ' (Hiện tại)'
+                    : (exp.startMonth && exp.startYear)
+                      ? ` (${exp.startMonth}/${exp.startYear}${exp.endMonth && exp.endYear ? ` - ${exp.endMonth}/${exp.endYear}` : ''})`
+                      : '';
+                  return `${role}${company}${period}`;
+                })
+                .join('; ')
+            : (app.experience || '');
+
+        if (prof) {
+          console.log('✅ Full profile loaded:', prof);
+          // Merge profile info into selectedCandidate
+          setSelectedCandidate(prev => ({
+            ...prev,
+            ...prof,
+            // Keep app-specific fields
+            candidate: prof.fullName || prev.candidate,
+            phone: prof.phone || prev.phone,
+            location: prof.location || prev.location,
+            education: prof.education || prev.education,
+            experience: experienceSummary,
+            skills: prof.skills || prev.skills,
+            bio: prof.bio || prev.bio,
+            profileImage: prof.profileImage || prev.profileImage,
+            cvUrl: prev.cvUrl || prof.cvUrl,
+            cvFileName: prev.cvFileName || prof.cvFileName,
+            workHistory,
+            reviews
+          }));
+        } else {
+          setSelectedCandidate(prev => ({
+            ...prev,
+            workHistory,
+            reviews
+          }));
+        }
+      } catch (error) {
+        console.error('❌ Error fetching candidate profile:', error);
+      } finally {
+        setIsFetchingProfile(false);
+      }
+    }
+  }, []);
+
+  const handleCloseProfile = useCallback(() => {
+    setSelectedCandidate(null);
+    setIsFetchingProfile(false);
+  }, []);
+
   // Persist active section to sessionStorage on change
+
   useEffect(() => {
     sessionStorage.setItem('employer_hr_active_section', activeSection);
   }, [activeSection]);
@@ -4127,6 +4507,40 @@ const HRManagement = () => {
     );
   }
 
+  // Fetch candidate recommendations
+  const handleRecommendCandidates = async (job) => {
+    setRecommendingJob(job);
+    setShowRecommendationsModal(true);
+    setIsLoadingRecommendations(true);
+    setRecommendationError('');
+    setRecommendations([]);
+
+    try {
+      console.log('🔮 Fetching AI candidate recommendations for quick job:', job.title);
+      const result = await cvAiService.recommendCandidates({
+        jobData: {
+          title: job.title,
+          description: job.description || '',
+          requirements: job.requirements || '',
+          responsibilities: '',
+          benefits: '',
+        },
+        isQuickJob: true,
+        language,
+      });
+
+      console.log('✅ AI Recommendations result:', result);
+      setRecommendations(result);
+    } catch (err) {
+      console.error('❌ Error getting AI recommendations:', err);
+      setRecommendationError(err.message || (language === 'vi' ? 'Không thể lấy đề xuất ứng viên.' : 'Failed to fetch candidate recommendations.'));
+    } finally {
+      setIsLoadingRecommendations(false);
+    }
+  };
+
+
+
   return (
     <DashboardLayout role="employer" key={language}>
       <PageContainer
@@ -4783,28 +5197,41 @@ const HRManagement = () => {
 
                       <QuickJobPostActions>
                         <QuickJobPostButton
+                          $variant="ai"
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => handleViewJob(post.id)}
+                          onClick={() => handleRecommendCandidates(post)}
                         >
-                          <Eye />{language === 'vi' ? 'Xem mô tả' : 'View'}
+                          <Sparkles />{language === 'vi' ? 'Gợi ý ứng viên' : 'AI Match'}
                         </QuickJobPostButton>
-                        <QuickJobPostButton
-                          $variant="primary"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleEditJob(post.id)}
-                        >
-                          <Edit />{language === 'vi' ? 'Sửa' : 'Edit'}
-                        </QuickJobPostButton>
-                        <QuickJobPostButton
-                          $variant="danger"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleDeleteJob(post.id)}
-                        >
-                          <Trash2 />
-                        </QuickJobPostButton>
+                        <QuickJobPostButtonsRow>
+                          <QuickJobPostButton
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleViewJob(post.id)}
+                            style={{ flex: 2 }}
+                          >
+                            <Eye />{language === 'vi' ? 'Xem mô tả' : 'View'}
+                          </QuickJobPostButton>
+                          <QuickJobPostButton
+                            $variant="primary"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleEditJob(post.id)}
+                            style={{ flex: 1 }}
+                          >
+                            <Edit />{language === 'vi' ? 'Sửa' : 'Edit'}
+                          </QuickJobPostButton>
+                          <QuickJobPostButton
+                            $variant="danger"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleDeleteJob(post.id)}
+                            style={{ width: '42px', flexShrink: 0, padding: 0 }}
+                          >
+                            <Trash2 />
+                          </QuickJobPostButton>
+                        </QuickJobPostButtonsRow>
                       </QuickJobPostActions>
                     </QuickJobPostCard>
                   ))}
@@ -6476,11 +6903,335 @@ const HRManagement = () => {
             }}
           />
         )}
+
+        {/* AI Candidate Recommendations Modal */}
+        {showRecommendationsModal && recommendingJob && (
+          <Modal
+            isOpen={true}
+            onClose={() => setShowRecommendationsModal(false)}
+            noPadding={true}
+            size="large"
+          >
+            <RecommendationModalHeader>
+              <h2>
+                <Sparkles />
+                {language === 'vi' ? 'Gợi ý ứng viên phù hợp bằng AI' : 'AI Candidate Recommendations'}
+              </h2>
+              <p>
+                {language === 'vi' ? 'Dành cho vị trí:' : 'For position:'} {recommendingJob.title}
+              </p>
+            </RecommendationModalHeader>
+
+            {isLoadingRecommendations ? (
+              <RecommendationsLoadingContainer>
+                <PulseAILogo
+                  animate={{
+                    scale: [1, 1.1, 1],
+                    boxShadow: [
+                      "0 12px 32px rgba(124, 58, 237, 0.35)",
+                      "0 12px 48px rgba(124, 58, 237, 0.6)",
+                      "0 12px 32px rgba(124, 58, 237, 0.35)"
+                    ]
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  <Sparkles />
+                </PulseAILogo>
+                <LoadingText>
+                  {language === 'vi' ? 'Đang phân tích và tìm ứng viên phù hợp nhất...' : 'Analyzing and scanning for the best candidates...'}
+                </LoadingText>
+              </RecommendationsLoadingContainer>
+            ) : recommendationError ? (
+              <div style={{ padding: '40px 24px', textAlign: 'center', color: '#ef4444' }}>
+                <AlertCircle size={48} style={{ margin: '0 auto 16px', color: '#ef4444' }} />
+                <p style={{ fontWeight: '600', marginBottom: '16px' }}>{recommendationError}</p>
+                <ActionButton
+                  onClick={() => handleRecommendCandidates(recommendingJob)}
+                  style={{ margin: '0 auto' }}
+                >
+                  {language === 'vi' ? 'Thử lại' : 'Retry'}
+                </ActionButton>
+              </div>
+            ) : recommendations.length === 0 ? (
+              <div style={{ padding: '60px 24px', textAlign: 'center', color: '#64748b' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>
+                  {language === 'vi' ? 'Không tìm thấy ứng viên phù hợp' : 'No suitable candidates found'}
+                </h3>
+                <p style={{ fontSize: '14px' }}>
+                  {language === 'vi' ? 'Không có ứng viên nào đã kích hoạt dịch vụ tuyển gấp đạt tiêu chuẩn phù hợp với công việc.' : 'No urgent-activated candidates match the criteria for this job.'}
+                </p>
+              </div>
+            ) : (
+              <RecommendationList>
+                {recommendations.map((rec, idx) => (
+                  <RecommendationCard
+                    key={rec.candidateId}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                  >
+                    <RecommendationCardHeader>
+                      <RecommendationCandidateName>{rec.fullName}</RecommendationCandidateName>
+                      <MatchScoreBadge $score={rec.matchScore}>
+                        <Sparkles size={14} />
+                        {rec.matchScore}%
+                      </MatchScoreBadge>
+                    </RecommendationCardHeader>
+
+                    <ScoreProgressContainer>
+                      <ScoreProgressBar $width={rec.matchScore} $score={rec.matchScore} />
+                    </ScoreProgressContainer>
+
+                    <RecommendationReason>{rec.matchReason}</RecommendationReason>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                      <ActionButton
+                        onClick={() => {
+                          handleViewProfile({
+                            id: rec.candidateId,
+                            candidateId: rec.candidateId,
+                            candidate: rec.fullName,
+                            job: recommendingJob.title,
+                            applied: '-',
+                            status: 'pending',
+                            email: '',
+                            phone: '-',
+                            location: '-',
+                            education: '-',
+                            experience: '-',
+                            skills: [],
+                            bio: '-',
+                            reviews: [],
+                            marked: false
+                          });
+                        }}
+                        style={{
+                          background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                          boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)',
+                          margin: 0
+                        }}
+                      >
+                        <Eye />
+                        {language === 'vi' ? 'Xem hồ sơ ứng viên' : 'View Candidate Profile'}
+                      </ActionButton>
+                    </div>
+                  </RecommendationCard>
+                ))}
+              </RecommendationList>
+            )}
+          </Modal>
+        )}
+
+        {selectedCandidate && (
+          <Modal
+            isOpen={true}
+            onClose={handleCloseProfile}
+            size="large"
+            noPadding={true}
+          >
+            <ProfileDetailModal
+              candidate={selectedCandidate}
+              onClose={handleCloseProfile}
+              isLoading={isFetchingProfile}
+            />
+          </Modal>
+        )}
       </PageContainer>
 
       {/* ── Wallet Terms Modal đã được chuyển thành inline terms trong trang intro ── */}
     </DashboardLayout>
   );
 };
+
+// Profile Detail Modal Component
+const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
+  const { language } = useLanguage();
+
+  const initials = candidate.candidate
+    ? candidate.candidate
+        .split(' ')
+        .slice(0, 2)
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+    : 'CN';
+
+  const avgRating = candidate.reviews && candidate.reviews.length > 0
+    ? (candidate.reviews.reduce((s, r) => s + r.rating, 0) / candidate.reviews.length)
+    : null;
+
+  return (
+    <>
+      <ProfileHeader>
+        <ProfileAvatarRow>
+          <ProfileAvatar>
+            {candidate.profileImage ? (
+              <img src={candidate.profileImage} alt={candidate.candidate} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : initials}
+          </ProfileAvatar>
+          <ProfileHeaderInfo>
+            <h2>{candidate.candidate}</h2>
+            <ProfileJobBadge>
+              <Briefcase />
+              {language === 'vi' ? 'Ứng tuyển:' : 'Applied for:'} {candidate.job}
+            </ProfileJobBadge>
+            {avgRating !== null && (
+              <HeaderRatingBadge>
+                <div className="stars">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <span key={i} className="star-char" style={{ color: i <= Math.round(avgRating) ? '#FCD34D' : 'rgba(255,255,255,0.25)' }}>★</span>
+                  ))}
+                </div>
+                <span className="rating-text">{avgRating.toFixed(1)}/5</span>
+                <span className="count-text">({candidate.reviews.length} {language === 'vi' ? 'đánh giá' : 'reviews'})</span>
+              </HeaderRatingBadge>
+            )}
+          </ProfileHeaderInfo>
+        </ProfileAvatarRow>
+      </ProfileHeader>
+
+      <ProfileContent>
+        <ProfileInner>
+          {isLoading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                style={{ display: 'inline-block', marginBottom: '12px' }}
+              >
+                <Clock size={24} />
+              </motion.div>
+              <p style={{ fontSize: '14px', fontWeight: '500' }}>
+                {language === 'vi' ? 'Đang tải thông tin chi tiết...' : 'Loading candidate details...'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Contact Info */}
+              <ProfileSection>
+                <h3><FileText /> {language === 'vi' ? 'Thông tin liên hệ' : 'Contact'}</h3>
+                <InfoGrid>
+                  <InfoCard>
+                    <InfoIconBox><Mail /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Email' : 'Email'}</div>
+                      <div className="value">{candidate.candidateEmail || candidate.email || '---'}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><Phone /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
+                      <div className="value">{candidate.phone && candidate.phone !== '-' ? candidate.phone : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><MapPin /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</div>
+                      <div className="value">{candidate.location && candidate.location !== '-' ? candidate.location : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                </InfoGrid>
+              </ProfileSection>
+
+              {/* Education & Experience */}
+              <ProfileSection>
+                <h3><Award /> {language === 'vi' ? 'Học vấn & Kinh nghiệm' : 'Education & Experience'}</h3>
+                <InfoGrid>
+                  <InfoCard>
+                    <InfoIconBox><Award /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Trình độ học vấn' : 'Education'}</div>
+                      <div className="value">{candidate.education && candidate.education !== '-' ? candidate.education : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                  <InfoCard>
+                    <InfoIconBox><Briefcase /></InfoIconBox>
+                    <InfoItem>
+                      <div className="label">{language === 'vi' ? 'Kinh nghiệm' : 'Experience'}</div>
+                      <div className="value">{candidate.experience && candidate.experience !== '-' ? candidate.experience : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                    </InfoItem>
+                  </InfoCard>
+                </InfoGrid>
+              </ProfileSection>
+
+              {/* Skills */}
+              {(candidate.skills && candidate.skills.length > 0) && (
+                <ProfileSection>
+                  <h3><Star /> {language === 'vi' ? 'Kỹ năng' : 'Skills'}</h3>
+                  <SkillsWrap>
+                    {candidate.skills.map((skill, index) => (
+                      <SkillTag key={index}>{skill}</SkillTag>
+                    ))}
+                  </SkillsWrap>
+                </ProfileSection>
+              )}
+
+              {/* Bio */}
+              {(candidate.bio && candidate.bio !== '-') && (
+                <ProfileSection>
+                  <h3><FileText /> {language === 'vi' ? 'Giới thiệu bản thân' : 'About'}</h3>
+                  <BioText>{candidate.bio}</BioText>
+                </ProfileSection>
+              )}
+
+              {/* Lịch sử việc làm */}
+              <ProfileSection>
+                <h3><Briefcase /> {language === 'vi' ? 'Lịch sử việc làm' : 'Employment History'}</h3>
+                {candidate.workHistory && candidate.workHistory.length > 0 ? (
+                  <WorkHistoryList>
+                    {candidate.workHistory.map((item, idx) => (
+                      <WorkHistoryCard key={item.id || idx}>
+                        <WorkHistoryHeader>
+                          <WorkHistoryInfo>
+                            <div className="job-title">{item.jobTitle}</div>
+                            <div className="company-date">
+                              <span>{item.companyName}</span>
+                              <span>•</span>
+                              <span>
+                                {new Date(item.completedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                          </WorkHistoryInfo>
+                        </WorkHistoryHeader>
+                        {item.employerRating && (
+                          <div style={{ marginTop: '10px' }}>
+                            <StarRating rating={item.employerRating.overall} />
+                            {item.employerRating.comment && (
+                              <p style={{ fontSize: '13px', fontStyle: 'italic', margin: '6px 0 0 0', color: '#475569' }}>
+                                "{item.employerRating.comment}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </WorkHistoryCard>
+                    ))}
+                  </WorkHistoryList>
+                ) : (
+                  <EmptyWorkHistory>
+                    <div className="icon">💼</div>
+                    <p>{language === 'vi' ? 'Chưa có lịch sử làm việc nào.' : 'No work history available.'}</p>
+                  </EmptyWorkHistory>
+                )}
+              </ProfileSection>
+            </>
+          )}
+        </ProfileInner>
+      </ProfileContent>
+    </>
+  );
+});
+
+ProfileDetailModal.displayName = 'ProfileDetailModal';
 
 export default HRManagement;

@@ -583,28 +583,30 @@ def analyze(validated, request_id):
     raise last_error
 
 
-def _fetch_verified_candidates():
+def _fetch_verified_candidates(is_quick_job=False):
     import boto3
     dynamodb = boto3.resource("dynamodb", region_name="ap-southeast-1")
     table = dynamodb.Table("CandidateProfiles")
     try:
+        filter_expr = "kycCompleted = :true OR kycStatus = :verified OR ekycStatus = :verified2"
+        expr_vals = {
+            ":true": True,
+            ":verified": "VERIFIED",
+            ":verified2": "verified"
+        }
+        if is_quick_job:
+            filter_expr = f"({filter_expr}) AND verificationStatus = :approved"
+            expr_vals[":approved"] = "APPROVED"
+
         response = table.scan(
-            FilterExpression="kycCompleted = :true OR kycStatus = :verified OR ekycStatus = :verified2",
-            ExpressionAttributeValues={
-                ":true": True,
-                ":verified": "VERIFIED",
-                ":verified2": "verified"
-            }
+            FilterExpression=filter_expr,
+            ExpressionAttributeValues=expr_vals
         )
         items = response.get("Items", [])
         while "LastEvaluatedKey" in response:
             response = table.scan(
-                FilterExpression="kycCompleted = :true OR kycStatus = :verified OR ekycStatus = :verified2",
-                ExpressionAttributeValues={
-                    ":true": True,
-                    ":verified": "VERIFIED",
-                    ":verified2": "verified"
-                },
+                FilterExpression=filter_expr,
+                ExpressionAttributeValues=expr_vals,
                 ExclusiveStartKey=response["LastEvaluatedKey"]
             )
             items.extend(response.get("Items", []))
@@ -649,17 +651,20 @@ def _validate_recommend_payload(body):
     language = body.get("language", "vi")
     if language not in {"vi", "en"}:
         language = "vi"
+    is_quick_job = bool(body.get("isQuickJob", False))
     return {
         "job": cleaned_job,
-        "language": language
+        "language": language,
+        "isQuickJob": is_quick_job
     }
 
 
-def _recommendation_system_prompt(language):
+def _recommendation_system_prompt(language, is_quick_job=False):
     output_language = "Vietnamese" if language == "vi" else "English"
+    job_type_str = "quick (urgent)" if is_quick_job else "standard"
     return f"""
 You are an expert recruitment assistant. Return all prose in {output_language}.
-Given a standard job posting details and a list of candidate profiles, evaluate the suitability of each candidate for the job.
+Given a {job_type_str} job posting details and a list of candidate profiles, evaluate the suitability of each candidate for the job.
 For each candidate:
 1. Rate their match score as an integer from 0 to 100 based on their skills, experience, title, and bio compared to the job requirements and description.
 2. Provide a brief, professional explanation (matchReason) in {output_language} summarizing why they are or are not a good fit, highlighting relevant skills or gaps. Keep it concise (1-2 sentences).
@@ -674,9 +679,10 @@ def _gemini_recommend_payload(validated, candidates):
         "job": validated["job"],
         "candidates": candidates
     }
+    is_quick_job = validated.get("isQuickJob", False)
     return {
         "systemInstruction": {
-            "parts": [{"text": _recommendation_system_prompt(validated["language"])}]
+            "parts": [{"text": _recommendation_system_prompt(validated["language"], is_quick_job=is_quick_job)}]
         },
         "contents": [{
             "role": "user",
@@ -756,8 +762,10 @@ def lambda_handler(event, context):
     try:
         if path == "/cv/recommend-candidates":
             claims = _employer_claims(event)
-            validated = _validate_recommend_payload(_parse_body(event))
-            candidates = [_summarize_candidate(c) for c in _fetch_verified_candidates()]
+            body_data = _parse_body(event)
+            validated = _validate_recommend_payload(body_data)
+            is_quick_job = validated.get("isQuickJob", False)
+            candidates = [_summarize_candidate(c) for c in _fetch_verified_candidates(is_quick_job=is_quick_job)]
             if not candidates:
                 return _response(event, 200, {"recommendations": []})
             started = time.monotonic()

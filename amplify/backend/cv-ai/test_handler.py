@@ -210,6 +210,15 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(len(body["recommendations"]), 1)
         self.assertEqual(body["recommendations"][0]["matchScore"], 85)
 
+    @patch("handler._fetch_verified_candidates", return_value=[])
+    def test_recommend_passes_is_quick_job_to_fetch_candidates(self, mock_fetch):
+        response = handler.lambda_handler(
+            event(path="/cv/recommend-candidates", method="POST", groups=["Employer"], body={"job": {"title": "Cashier"}, "isQuickJob": True}),
+            None
+        )
+        self.assertEqual(response["statusCode"], 200)
+        mock_fetch.assert_called_once_with(is_quick_job=True)
+
 
 if __name__ == "__main__":
     unittest.main()

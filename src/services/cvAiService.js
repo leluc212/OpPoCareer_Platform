@@ -144,6 +144,7 @@ export const generateCV = async ({
 
 export const recommendCandidates = async ({
   jobData,
+  isQuickJob = false,
   language = 'vi',
 }) => {
   const headers = await getAuthHeaders();
@@ -163,6 +164,7 @@ export const recommendCandidates = async ({
           responsibilities: jobData.responsibilities || '',
           benefits: jobData.benefits || '',
         },
+        isQuickJob,
         language,
       }),
     });

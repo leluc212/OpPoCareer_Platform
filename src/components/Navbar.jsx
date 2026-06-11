@@ -10,6 +10,7 @@ import jobPostService from '../services/jobPostService';
 import { getNotifications, markAsRead, markAllAsRead, createChatMessageNotification } from '../services/notificationService';
 import RelativeTime from './RelativeTime';
 import { s3Images } from '../utils/s3Images';
+import { getIdToken } from '../services/authHeaders';
 
 const NavbarContainer = styled.nav`
   height: 80px;
@@ -918,6 +919,9 @@ const Navbar = ({ showSearch = true }) => {
     const POLL_INTERVAL_ERROR = 60000;
 
     const loadNotifications = async () => {
+      const token = await getIdToken().catch(() => null);
+      if (!token) return;
+
       let effectiveUser = user;
       if (!effectiveUser) {
         try {
@@ -1082,6 +1086,9 @@ const Navbar = ({ showSearch = true }) => {
 
     const loadCandidateChats = async () => {
       try {
+        const token = await getIdToken().catch(() => null);
+        if (!token) return;
+
         const { default: applicationService } = await import('../services/applicationService');
         const apps = await applicationService.getMyCandidateApplications();
         console.log('📥 [Navbar Chat] Raw applications:', apps);
@@ -1238,6 +1245,9 @@ const Navbar = ({ showSearch = true }) => {
 
     const loadEmployerChats = async () => {
       try {
+        const token = await getIdToken().catch(() => null);
+        if (!token) return;
+
         const { default: quickJobService } = await import('../services/quickJobService');
         const { default: applicationService } = await import('../services/applicationService');
 

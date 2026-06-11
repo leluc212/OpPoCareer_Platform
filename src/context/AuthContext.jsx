@@ -49,6 +49,10 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       try {
         console.log('🔍 [AuthContext] Starting authentication check...');
+        const hasToken = !!(
+          localStorage.getItem('OPPO_ID_TOKEN') ||
+          Object.keys(localStorage).some(key => key.startsWith('CognitoIdentityServiceProvider.') && key.endsWith('.idToken'))
+        );
         
         // Try to get current Cognito user
         const currentUser = await getCurrentUser();
@@ -224,7 +228,7 @@ export const AuthProvider = ({ children }) => {
           // No valid Cognito session
           console.log('❌ [AuthContext] No valid Cognito session');
           const savedUser = localStorage.getItem('user');
-          if (savedUser && isMounted) {
+          if (savedUser && hasToken && isMounted) {
             try {
               const userData = JSON.parse(savedUser);
               console.log('✅ [AuthContext] Falling back to saved user in localStorage (no Cognito session):', userData.email);
@@ -246,7 +250,7 @@ export const AuthProvider = ({ children }) => {
         
         // Fallback: Check if we have user in localStorage to keep them logged in
         const savedUser = localStorage.getItem('user');
-        if (savedUser && isMounted) {
+        if (savedUser && hasToken && isMounted) {
           try {
             const userData = JSON.parse(savedUser);
             console.log('✅ [AuthContext] Falling back to saved user in localStorage (Cognito error):', userData.email);

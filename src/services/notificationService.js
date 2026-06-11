@@ -1070,6 +1070,58 @@ export const createCandidateWithdrawalStatusNotification = async (request, statu
   return await saveNotification(notification);
 };
 
+/**
+ * Notify employer when their change request is approved
+ */
+export const createChangeRequestApprovedNotification = async ({ employerId, companyName, candidateName, changeRequestType, applicationId }) => {
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+  const typeText = changeRequestType || 'thay đổi nhân sự';
+  const notification = {
+    type: 'change_request_approved',
+    title: 'Yêu cầu thay đổi nhân sự đã được duyệt',
+    titleEn: 'Personnel Change Request Approved',
+    message: `Yêu cầu thay đổi cho ứng viên "${candidateName || 'N/A'}" (${typeText}) của ${safeCompanyName} đã được admin phê duyệt thành công.`,
+    messageEn: `Your personnel change request for candidate "${candidateName || 'N/A'}" (${typeText}) has been approved by admin.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: { employerId, companyName: safeCompanyName, candidateName, changeRequestType, applicationId },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Xem danh sách',
+    actionTextEn: 'View List'
+  };
+  return await saveNotification(notification);
+};
+
+/**
+ * Notify employer when their change request is rejected
+ */
+export const createChangeRequestRejectedNotification = async ({ employerId, companyName, candidateName, changeRequestType, applicationId, reason }) => {
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+  const typeText = changeRequestType || 'thay đổi nhân sự';
+  const notification = {
+    type: 'change_request_rejected',
+    title: 'Yêu cầu thay đổi nhân sự bị từ chối',
+    titleEn: 'Personnel Change Request Rejected',
+    message: `Yêu cầu thay đổi cho ứng viên "${candidateName || 'N/A'}" (${typeText}) của ${safeCompanyName} đã bị admin từ chối${reason ? `: ${reason}` : ''}.`,
+    messageEn: `Your personnel change request for candidate "${candidateName || 'N/A'}" (${typeText}) has been rejected by admin.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: { employerId, companyName: safeCompanyName, candidateName, changeRequestType, applicationId, reason },
+    icon: 'x-circle',
+    color: '#ef4444',
+    actionUrl: '/employer/quick-jobs',
+    actionText: 'Xem danh sách',
+    actionTextEn: 'View List'
+  };
+  return await saveNotification(notification);
+};
+
 export default {
   getAllNotifications,
   getNotifications,
@@ -1093,6 +1145,8 @@ export default {
   createCandidateQuickJobVerifNotification,
   createCandidateWithdrawalRequestNotification,
   createCandidateWithdrawalStatusNotification,
+  createChangeRequestApprovedNotification,
+  createChangeRequestRejectedNotification,
   markAsRead,
   markAllAsRead,
   deleteNotification,

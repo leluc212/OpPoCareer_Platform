@@ -6,13 +6,15 @@ import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import TableFilter from '../../components/TableFilter';
 import Modal from '../../components/Modal';
-import { Eye, CheckCircle, Star, Mail, Phone, MapPin, Calendar, Award, Briefcase, FileText, Clock, Users, Newspaper, Edit, Trash2, TrendingUp, Plus, X, XCircle, Wallet, Banknote, AlertCircle, Save, Download, MessageSquare, Search } from 'lucide-react';
+import { Eye, CheckCircle, Star, Mail, Phone, MapPin, Calendar, Award, Briefcase, FileText, Clock, Users, Newspaper, Edit, Trash2, TrendingUp, Plus, X, XCircle, Wallet, Banknote, AlertCircle, Save, Download, MessageSquare, Search, Sparkles } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { initializeMultipleSampleCVs } from '../../utils/sampleCVGenerator';
 import jobPostService from '../../services/jobPostService';
+import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import candidateProfileService from '../../services/candidateProfileService';
+import cvAiService from '../../services/cvAiService';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
@@ -190,6 +192,181 @@ const StandardJobDescription = styled.div`
   line-height: 1.5;
 `;
 
+const RecommendationModalHeader = styled.div`
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%);
+  padding: 28px 24px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 140px;
+    height: 140px;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.3) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    svg {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  p {
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+  }
+`;
+
+const RecommendationList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  max-height: 550px;
+  overflow-y: auto;
+`;
+
+const RecommendationCard = styled(motion.div)`
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.04);
+  transition: all 0.25s ease;
+
+  &:hover {
+    border-color: #a78bfa;
+    box-shadow: 0 10px 24px rgba(124, 58, 237, 0.1);
+    transform: translateY(-2px);
+  }
+`;
+
+const RecommendationCardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+`;
+
+const RecommendationCandidateName = styled.h4`
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+`;
+
+const MatchScoreBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 13.5px;
+  font-weight: 800;
+  
+  background: ${props => {
+    if (props.$score >= 80) return '#d1fae5';
+    if (props.$score >= 65) return '#fef3c7';
+    return '#f3f4f6';
+  }};
+  
+  color: ${props => {
+    if (props.$score >= 80) return '#065f46';
+    if (props.$score >= 65) return '#92400e';
+    return '#374151';
+  }};
+
+  border: 1.5px solid ${props => {
+    if (props.$score >= 80) return '#34d399';
+    if (props.$score >= 65) return '#fbbf24';
+    return '#d1d5db';
+  }};
+`;
+
+const ScoreProgressContainer = styled.div`
+  width: 100%;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 100px;
+  overflow: hidden;
+  position: relative;
+`;
+
+const ScoreProgressBar = styled.div`
+  height: 100%;
+  width: ${props => props.$width}%;
+  background: ${props => {
+    if (props.$score >= 80) return 'linear-gradient(90deg, #10b981 0%, #34d399 100%)';
+    if (props.$score >= 65) return 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)';
+    return 'linear-gradient(90deg, #6b7280 0%, #9ca3af 100%)';
+  }};
+  border-radius: 100px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+`;
+
+const RecommendationReason = styled.p`
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #475569;
+  margin: 0;
+  background: #f8fafc;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border-left: 4px solid #7c3aed;
+`;
+
+const RecommendationsLoadingContainer = styled.div`
+  padding: 60px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+`;
+
+const PulseAILogo = styled(motion.div)`
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.35);
+  color: white;
+
+  svg {
+    width: 36px;
+    height: 36px;
+  }
+`;
+
+const LoadingText = styled.p`
+  font-size: 15px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+`;
+
 const EmptyState = styled(motion.div)`
   text-align: center;
   padding: 60px 20px;
@@ -308,49 +485,89 @@ const JobPostStats = styled.div`
 
 const JobPostActions = styled.div`
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-top: auto;
+  width: 100%;
+`;
+
+const JobPostButtonsRow = styled.div`
+  display: flex;
+  gap: 8px;
+  width: 100%;
 `;
 
 const JobPostButton = styled(motion.button)`
-  flex: 1;
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   white-space: nowrap;
+  outline: none;
   
   background: ${props => {
-    if (props.$variant === 'primary') return 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)';
-    if (props.$variant === 'danger') return 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
-    return 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)';
+    if (props.$variant === 'ai') return 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)';
+    if (props.$variant === 'primary' || props.$variant === 'edit') return 'rgba(37, 99, 235, 0.08)';
+    if (props.$variant === 'danger' || props.$variant === 'delete') return 'rgba(239, 68, 68, 0.08)';
+    return '#ffffff';
   }};
   
-  color: ${props => props.$variant === 'primary' || props.$variant === 'danger' ? 'white' : '#1e40af'};
+  color: ${props => {
+    if (props.$variant === 'ai') return '#ffffff';
+    if (props.$variant === 'primary' || props.$variant === 'edit') return '#2563eb';
+    if (props.$variant === 'danger' || props.$variant === 'delete') return '#ef4444';
+    return '#475569';
+  }};
+  
   border: 1.5px solid ${props => {
-    if (props.$variant === 'primary') return '#1e40af';
-    if (props.$variant === 'danger') return '#EF4444';
-    return '#BFDBFE';
+    if (props.$variant === 'ai') return 'transparent';
+    if (props.$variant === 'primary' || props.$variant === 'edit') return 'rgba(37, 99, 235, 0.25)';
+    if (props.$variant === 'danger' || props.$variant === 'delete') return 'rgba(239, 68, 68, 0.25)';
+    return '#e2e8f0';
   }};
   
   svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
+    transition: transform 0.2s ease;
   }
   
   &:hover {
     transform: translateY(-2px);
+    background: ${props => {
+      if (props.$variant === 'ai') return 'linear-gradient(135deg, #4f46e5 0%, #9333ea 100%)';
+      if (props.$variant === 'primary' || props.$variant === 'edit') return 'rgba(37, 99, 235, 0.15)';
+      if (props.$variant === 'danger' || props.$variant === 'delete') return 'rgba(239, 68, 68, 0.15)';
+      return '#f8fafc';
+    }};
+    border-color: ${props => {
+      if (props.$variant === 'ai') return 'transparent';
+      if (props.$variant === 'primary' || props.$variant === 'edit') return '#2563eb';
+      if (props.$variant === 'danger' || props.$variant === 'delete') return '#ef4444';
+      return '#cbd5e1';
+    }};
+    color: ${props => {
+      if (props.$variant === 'ai') return '#ffffff';
+      if (props.$variant === 'primary' || props.$variant === 'edit') return '#1d4ed8';
+      if (props.$variant === 'danger' || props.$variant === 'delete') return '#dc2626';
+      return '#1e293b';
+    }};
     box-shadow: ${props => {
-    if (props.$variant === 'primary') return '0 6px 16px rgba(30, 64, 175, 0.4)';
-    if (props.$variant === 'danger') return '0 6px 16px rgba(239, 68, 68, 0.4)';
-    return '0 6px 16px rgba(30, 64, 175, 0.2)';
-  }};
+      if (props.$variant === 'ai') return '0 4px 14px rgba(168, 85, 247, 0.35)';
+      if (props.$variant === 'primary' || props.$variant === 'edit') return '0 4px 12px rgba(37, 99, 235, 0.12)';
+      if (props.$variant === 'danger' || props.$variant === 'delete') return '0 4px 12px rgba(239, 68, 68, 0.12)';
+      return '0 4px 12px rgba(0, 0, 0, 0.05)';
+    }};
+    
+    svg {
+      transform: scale(1.15);
+    }
   }
   
   &:active {
@@ -962,6 +1179,62 @@ const EmptyReviews = styled.div`
   p { font-size: 13px; margin: 0; }
 `;
 
+// --- Work History styled components ---
+const WorkHistoryList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const WorkHistoryCard = styled.div`
+  background: ${props => props.theme.colors.bgDark};
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: 14px;
+  padding: 16px 18px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 4px 16px rgba(30, 64, 175, 0.09);
+    border-color: #BFDBFE;
+  }
+`;
+
+const WorkHistoryHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+`;
+
+const WorkHistoryInfo = styled.div`
+  .job-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: ${props => props.theme.colors.text};
+    margin-bottom: 2px;
+  }
+  .company-date {
+    font-size: 12.5px;
+    color: ${props => props.theme.colors.textLight};
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+`;
+
+const EmptyWorkHistory = styled.div`
+  text-align: center;
+  padding: 28px 16px;
+  color: ${props => props.theme.colors.textLight};
+  background: ${props => props.theme.colors.bgDark};
+  border-radius: 12px;
+  border: 1.5px dashed ${props => props.theme.colors.border};
+  
+  .icon { font-size: 28px; margin-bottom: 8px; }
+  p { font-size: 13px; margin: 0; }
+`;
+
 // --- CV styled components ---
 const CVCard = styled.div`
   background: white;
@@ -1319,10 +1592,8 @@ const StarRating = ({ rating }) => (
 );
 
 // Profile Detail Modal Component
-const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFreshCvUrl }) => {
+const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
   const { language } = useLanguage();
-  const [showCVPreview, setShowCVPreview] = useState(false);
-  const [freshCvUrl, setFreshCvUrl] = useState(null);
 
   const initials = candidate.candidate
     .split(' ')
@@ -1334,29 +1605,6 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFre
   const avgRating = candidate.reviews && candidate.reviews.length > 0
     ? (candidate.reviews.reduce((s, r) => s + r.rating, 0) / candidate.reviews.length)
     : null;
-
-  // Check if candidate has CV from S3
-  const hasCV = candidate.cvUrl && candidate.cvUrl.trim() !== '';
-
-  // State for feedback
-  const [feedback, setFeedback] = useState(() => {
-    const savedFeedback = localStorage.getItem(`feedback_${candidate.id}`);
-    return savedFeedback ? JSON.parse(savedFeedback) : { note: '', date: null };
-  });
-
-  const handleCVDownload = () => {
-    if (!hasCV) return;
-    window.open(freshCvUrl || candidate.cvUrl, '_blank');
-  };
-
-  const handleGetFreshUrl = async () => {
-    if (onGetFreshCvUrl) {
-      const url = await onGetFreshCvUrl(candidate);
-      if (url) setFreshCvUrl(url);
-      return url;
-    }
-    return null;
-  };
 
   return (
     <>
@@ -1480,55 +1728,52 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFre
                   <BioText>{candidate.bio}</BioText>
                 </ProfileSection>
               )}
+
+              {/* Lịch sử việc làm */}
+              <ProfileSection>
+                <h3><Briefcase /> {language === 'vi' ? 'Lịch sử việc làm' : 'Employment History'}</h3>
+                {candidate.workHistory && candidate.workHistory.length > 0 ? (
+                  <WorkHistoryList>
+                    {candidate.workHistory.map((item, idx) => (
+                      <WorkHistoryCard key={item.id || idx}>
+                        <WorkHistoryHeader>
+                          <WorkHistoryInfo>
+                            <div className="job-title">{item.jobTitle}</div>
+                            <div className="company-date">
+                              <span>{item.companyName}</span>
+                              <span>•</span>
+                              <span>
+                                {new Date(item.completedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                          </WorkHistoryInfo>
+                        </WorkHistoryHeader>
+                        {item.employerRating && (
+                          <div style={{ marginTop: '10px' }}>
+                            <StarRating rating={item.employerRating.overall} />
+                            {item.employerRating.comment && (
+                              <p style={{ fontSize: '13px', fontStyle: 'italic', margin: '6px 0 0 0', color: '#475569' }}>
+                                "{item.employerRating.comment}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </WorkHistoryCard>
+                    ))}
+                  </WorkHistoryList>
+                ) : (
+                  <EmptyWorkHistory>
+                    <div className="icon">💼</div>
+                    <p>{language === 'vi' ? 'Chưa có lịch sử làm việc nào.' : 'No work history available.'}</p>
+                  </EmptyWorkHistory>
+                )}
+              </ProfileSection>
             </>
           )}
-
-          {/* CV SECTION - Always visible regardless of loading if candidate.cvUrl is already in basic info */}
-          <ProfileSection>
-            <h3><FileText /> {language === 'vi' ? 'Hồ sơ CV' : 'CV Document'}</h3>
-            {hasCV ? (
-              <>
-                <CVCard>
-                  <CVIconBox>
-                    <FileText />
-                  </CVIconBox>
-                  <CVInfo>
-                    <div className="cv-name">{candidate.cvFileName || 'CV.pdf'}</div>
-                    <div className="cv-meta">
-                      <span>{language === 'vi' ? 'Từ ứng viên' : 'From candidate'}</span>
-                      <span>•</span>
-                      <span>{language === 'vi' ? 'Đã tải lên' : 'Uploaded'}</span>
-                    </div>
-                  </CVInfo>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <CVDownloadButton
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowCVPreview(true)}
-                    >
-                      <Eye />
-                      {language === 'vi' ? 'Xem hồ sơ' : 'View CV'}
-                    </CVDownloadButton>
-                  </div>
-                </CVCard>
-
-                {showCVPreview && (
-                  <CVPreviewModal
-                    cvUrl={freshCvUrl || candidate.cvUrl}
-                    fileName={candidate.cvFileName || 'CV.pdf'}
-                    onClose={() => setShowCVPreview(false)}
-                    onDownload={handleCVDownload}
-                    onGetFreshUrl={handleGetFreshUrl}
-                  />
-                )}
-              </>
-            ) : (
-              <EmptyCV>
-                <div className="icon">📄</div>
-                <p>{language === 'vi' ? 'Ứng viên chưa tải lên CV.' : 'Candidate has not uploaded CV yet.'}</p>
-              </EmptyCV>
-            )}
-          </ProfileSection>
         </ProfileInner>
       </ProfileContent>
     </>
@@ -1537,12 +1782,14 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFre
 
 ProfileDetailModal.displayName = 'ProfileDetailModal';
 
-export { ProfileDetailModal,
+export {
+  ProfileDetailModal,
   ProfileHeader, ProfileAvatarRow, ProfileAvatar, ProfileHeaderInfo, ProfileJobBadge, HeaderRatingBadge,
   ProfileContent, ProfileInner, ProfileSection,
   InfoGrid, InfoCard, InfoIconBox, InfoItem,
   SkillsWrap, SkillTag, BioText,
-  CVCard, CVIconBox, CVInfo, CVDownloadButton, EmptyCV
+  CVCard, CVIconBox, CVInfo, CVDownloadButton, EmptyCV,
+  WorkHistoryList, WorkHistoryCard, WorkHistoryHeader, WorkHistoryInfo, EmptyWorkHistory
 };
 
 // Application Card Component
@@ -1904,6 +2151,11 @@ const Applications = () => {
   const [postTimeFilter, setPostTimeFilter] = useState('all'); // 'all' | 'today' | 'week' | 'month'
   const [postSearchTerm, setPostSearchTerm] = useState('');
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [showRecommendationsModal, setShowRecommendationsModal] = useState(false);
+  const [recommendingJob, setRecommendingJob] = useState(null);
+  const [recommendationError, setRecommendationError] = useState('');
 
   // Mock wallet connection status - in real app, get from user context or API
   const [isWalletConnected] = useState(() => {
@@ -2007,16 +2259,16 @@ const Applications = () => {
     if (location.state?.candidateId && (applications.length > 0 || realApplications.length > 0)) {
       const targetId = location.state.candidateId;
       const transformedApp = applications.find(a => a.id === targetId);
-      
+
       if (transformedApp && !selectedCandidate) {
         console.log('🎯 Auto-opening profile for candidate:', targetId);
         handleViewProfile(transformedApp);
-        
+
         // Clear candidateId from state to prevent re-opening on language switch etc
         // but keep section state
-        navigate(location.pathname, { 
-          replace: true, 
-          state: { ...location.state, candidateId: null } 
+        navigate(location.pathname, {
+          replace: true,
+          state: { ...location.state, candidateId: null }
         });
       }
     }
@@ -2073,6 +2325,7 @@ const Applications = () => {
             experience: '-',
             skills: [],
             bio: '-',
+            workHistory: [],
             reviews: [],
             marked: false
           }));
@@ -2163,7 +2416,7 @@ const Applications = () => {
       // Search in both mock and real applications
       const allApps = [...applications, ...realApplications];
       const candidate = allApps.find(app => app.id === location.state.candidateId);
-      
+
       if (candidate) {
         // First switch to applications tab
         setActiveSection('applications');
@@ -2189,8 +2442,8 @@ const Applications = () => {
     } else {
       // By default it starts on posts, which might be what they wanted but let's handle if it comes from notification and we want applications to be default
       if (location.state?.fromNotifications) {
-          setActiveSection('applications');
-          navigate(location.pathname, { replace: true, state: {} });
+        setActiveSection('applications');
+        navigate(location.pathname, { replace: true, state: {} });
       }
     }
   }, [location.state, applications, realApplications, navigate, location.pathname]);
@@ -2278,14 +2531,72 @@ const Applications = () => {
   const handleViewProfile = useCallback(async (app) => {
     // Set basic info from application immediately
     setSelectedCandidate(app);
-    
+
     // Then try to fetch full profile
     if (app.candidateId) {
       setIsFetchingProfile(true);
       try {
-        console.log('🔍 Fetching full profile for candidate:', app.candidateId);
-        const profile = await candidateProfileService.getProfile(app.candidateId);
-        
+        console.log('🔍 Fetching full profile and applications for candidate:', app.candidateId);
+        const [profile, candidateApps, standardJobs, quickJobs] = await Promise.all([
+          candidateProfileService.getProfile(app.candidateId),
+          applicationService.getCandidateApplications(app.candidateId).catch(() => []),
+          jobPostService.getAllActiveJobs().catch(() => []),
+          quickJobService.getAllActiveQuickJobs().catch(() => [])
+        ]);
+
+        const allJobs = [...standardJobs, ...quickJobs];
+
+        // Resolve missing jobs (e.g. inactive or archived)
+        const missingJobIds = [...new Set(candidateApps.map(a => a.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
+        let additionalJobs = [];
+        if (missingJobIds.length > 0) {
+          console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
+          const jobResults = await Promise.all(missingJobIds.map(async (id) => {
+            try {
+              if (id.startsWith('QJOB-')) {
+                return await quickJobService.getQuickJob(id).catch(() => null);
+              }
+              if (/^\d+$/.test(id)) return null;
+              const standard = await jobPostService.getJobPost(id).catch(() => null);
+              if (standard) return standard;
+              return await quickJobService.getQuickJob(id).catch(() => null);
+            } catch (e) {
+              return null;
+            }
+          }));
+          additionalJobs = jobResults.filter(Boolean);
+        }
+        const finalAllJobs = [...allJobs, ...additionalJobs];
+
+        // Detailed work history (completed applications)
+        const workHistory = candidateApps
+          .filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate')
+          .map(a => {
+            const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
+            return {
+              id: a.applicationId || a.id,
+              jobTitle: job?.title || a.jobTitle || '---',
+              companyName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
+              completedAt: a.updatedAt || a.appliedAt || a.createdAt,
+              employerRating: a.employerRating || null
+            };
+          })
+          .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+
+        // Reviews list
+        const reviews = candidateApps
+          .filter(a => a.employerRating && typeof a.employerRating.overall === 'number')
+          .map(a => {
+            const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
+            return {
+              rating: a.employerRating.overall,
+              comment: a.employerRating.comment || '',
+              employerName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
+              position: job?.title || a.jobTitle || '---',
+              date: new Date(a.employerConfirmedAt || a.updatedAt || a.appliedAt).toLocaleDateString('vi-VN')
+            };
+          });
+
         if (profile) {
           console.log('✅ Full profile loaded:', profile);
           // Merge profile info into selectedCandidate
@@ -2304,6 +2615,14 @@ const Applications = () => {
             // Ưu tiên cvUrl từ application (đã refresh) thay vì profile (có thể hết hạn)
             cvUrl: prev.cvUrl || profile.cvUrl,
             cvFileName: prev.cvFileName || profile.cvFileName,
+            workHistory,
+            reviews
+          }));
+        } else {
+          setSelectedCandidate(prev => ({
+            ...prev,
+            workHistory,
+            reviews
           }));
         }
       } catch (error) {
@@ -2419,6 +2738,37 @@ const Applications = () => {
       return true;
     });
   }, [jobPosts, postTimeFilter, postSearchTerm]);
+
+  // Fetch candidate recommendations
+  const handleRecommendCandidates = async (job) => {
+    setRecommendingJob(job);
+    setShowRecommendationsModal(true);
+    setIsLoadingRecommendations(true);
+    setRecommendationError('');
+    setRecommendations([]);
+
+    try {
+      console.log('🔮 Fetching AI candidate recommendations for job:', job.title);
+      const result = await cvAiService.recommendCandidates({
+        jobData: {
+          title: job.title,
+          description: job.description || '',
+          requirements: job.requirements || '',
+          responsibilities: job.responsibilities || '',
+          benefits: job.benefits || '',
+        },
+        language,
+      });
+
+      console.log('✅ AI Recommendations result:', result);
+      setRecommendations(result);
+    } catch (err) {
+      console.error('❌ Error getting AI recommendations:', err);
+      setRecommendationError(err.message || (language === 'vi' ? 'Không thể lấy đề xuất ứng viên.' : 'Failed to fetch candidate recommendations.'));
+    } finally {
+      setIsLoadingRecommendations(false);
+    }
+  };
 
   // View job details
   const handleViewJob = (jobId) => {
@@ -2640,28 +2990,41 @@ const Applications = () => {
 
                       <JobPostActions>
                         <JobPostButton
+                          $variant="ai"
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => handleViewJob(post.id)}
+                          onClick={() => handleRecommendCandidates(post)}
                         >
-                          <Eye />{language === 'vi' ? 'Xem mô tả' : 'View'}
+                          <Sparkles />{language === 'vi' ? 'Gợi ý ứng viên' : 'AI Match'}
                         </JobPostButton>
-                        <JobPostButton
-                          $variant="primary"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleEditJob(post.id)}
-                        >
-                          <Edit />{language === 'vi' ? 'Sửa' : 'Edit'}
-                        </JobPostButton>
-                        <JobPostButton
-                          $variant="danger"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleDeleteJob(post.id)}
-                        >
-                          <Trash2 />
-                        </JobPostButton>
+                        <JobPostButtonsRow>
+                          <JobPostButton
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleViewJob(post.id)}
+                            style={{ flex: 2 }}
+                          >
+                            <Eye />{language === 'vi' ? 'Xem mô tả' : 'View'}
+                          </JobPostButton>
+                          <JobPostButton
+                            $variant="edit"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleEditJob(post.id)}
+                            style={{ flex: 1 }}
+                          >
+                            <Edit />{language === 'vi' ? 'Sửa' : 'Edit'}
+                          </JobPostButton>
+                          <JobPostButton
+                            $variant="delete"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => handleDeleteJob(post.id)}
+                            style={{ width: '42px', flexShrink: 0, padding: 0 }}
+                          >
+                            <Trash2 />
+                          </JobPostButton>
+                        </JobPostButtonsRow>
                       </JobPostActions>
                     </JobPostCard>
                   ))}
@@ -2742,22 +3105,6 @@ const Applications = () => {
           </>
         )}
       </ApplicationsContainer>
-
-      {selectedCandidate && (
-        <Modal
-          isOpen={true}
-          onClose={handleCloseProfile}
-          size="large"
-          noPadding={true}
-        >
-          <ProfileDetailModal
-            candidate={selectedCandidate}
-            onClose={handleCloseProfile}
-            isLoading={isFetchingProfile}
-            onGetFreshCvUrl={handleGetFreshCvUrl}
-          />
-        </Modal>
-      )}
 
       <AnimatePresence>
         {deleteJobId && jobToDelete && (
@@ -3067,6 +3414,143 @@ const Applications = () => {
               </motion.button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* AI Candidate Recommendations Modal */}
+      {showRecommendationsModal && recommendingJob && (
+        <Modal
+          isOpen={true}
+          onClose={() => setShowRecommendationsModal(false)}
+          noPadding={true}
+          size="large"
+        >
+          <RecommendationModalHeader>
+            <h2>
+              <Sparkles />
+              {language === 'vi' ? 'Gợi ý ứng viên phù hợp bằng AI' : 'AI Candidate Recommendations'}
+            </h2>
+            <p>
+              {language === 'vi' ? 'Dành cho vị trí:' : 'For position:'} {recommendingJob.title}
+            </p>
+          </RecommendationModalHeader>
+
+          {isLoadingRecommendations ? (
+            <RecommendationsLoadingContainer>
+              <PulseAILogo
+                animate={{
+                  scale: [1, 1.1, 1],
+                  boxShadow: [
+                    "0 12px 32px rgba(124, 58, 237, 0.35)",
+                    "0 12px 48px rgba(124, 58, 237, 0.6)",
+                    "0 12px 32px rgba(124, 58, 237, 0.35)"
+                  ]
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              >
+                <Sparkles />
+              </PulseAILogo>
+              <LoadingText>
+                {language === 'vi' ? 'Đang phân tích và tìm ứng viên phù hợp nhất...' : 'Analyzing and scanning for the best candidates...'}
+              </LoadingText>
+            </RecommendationsLoadingContainer>
+          ) : recommendationError ? (
+            <div style={{ padding: '40px 24px', textAlign: 'center', color: '#ef4444' }}>
+              <AlertCircle size={48} style={{ margin: '0 auto 16px', color: '#ef4444' }} />
+              <p style={{ fontWeight: '600', marginBottom: '16px' }}>{recommendationError}</p>
+              <ActionButton
+                onClick={() => handleRecommendCandidates(recommendingJob)}
+                style={{ margin: '0 auto' }}
+              >
+                {language === 'vi' ? 'Thử lại' : 'Retry'}
+              </ActionButton>
+            </div>
+          ) : recommendations.length === 0 ? (
+            <div style={{ padding: '60px 24px', textAlign: 'center', color: '#64748b' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>
+                {language === 'vi' ? 'Không tìm thấy ứng viên phù hợp' : 'No suitable candidates found'}
+              </h3>
+              <p style={{ fontSize: '14px' }}>
+                {language === 'vi' ? 'Không có ứng viên nào đã KYC đạt tiêu chuẩn phù hợp với công việc.' : 'No KYC-verified candidates match the criteria for this job.'}
+              </p>
+            </div>
+          ) : (
+            <RecommendationList>
+              {recommendations.map((rec, idx) => (
+                <RecommendationCard
+                  key={rec.candidateId}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                >
+                  <RecommendationCardHeader>
+                    <RecommendationCandidateName>{rec.fullName}</RecommendationCandidateName>
+                    <MatchScoreBadge $score={rec.matchScore}>
+                      <Sparkles size={14} />
+                      {rec.matchScore}%
+                    </MatchScoreBadge>
+                  </RecommendationCardHeader>
+
+                  <ScoreProgressContainer>
+                    <ScoreProgressBar $width={rec.matchScore} $score={rec.matchScore} />
+                  </ScoreProgressContainer>
+
+                  <RecommendationReason>{rec.matchReason}</RecommendationReason>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <ActionButton
+                      onClick={() => {
+                        handleViewProfile({
+                          id: rec.candidateId,
+                          candidateId: rec.candidateId,
+                          candidate: rec.fullName,
+                          job: recommendingJob.title,
+                          applied: '-',
+                          status: 'pending',
+                          email: '',
+                          phone: '-',
+                          location: '-',
+                          education: '-',
+                          experience: '-',
+                          skills: [],
+                          bio: '-',
+                          reviews: [],
+                          marked: false
+                        });
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                        boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)'
+                      }}
+                    >
+                      <Eye />
+                      {language === 'vi' ? 'Xem hồ sơ ứng viên' : 'View Candidate Profile'}
+                    </ActionButton>
+                  </div>
+                </RecommendationCard>
+              ))}
+            </RecommendationList>
+          )}
+        </Modal>
+      )}
+
+      {selectedCandidate && (
+        <Modal
+          isOpen={true}
+          onClose={handleCloseProfile}
+          size="large"
+          noPadding={true}
+        >
+          <ProfileDetailModal
+            candidate={selectedCandidate}
+            onClose={handleCloseProfile}
+            isLoading={isFetchingProfile}
+          />
         </Modal>
       )}
     </DashboardLayout>

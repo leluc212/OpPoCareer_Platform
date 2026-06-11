@@ -142,4 +142,51 @@ export const generateCV = async ({
   }
 };
 
-export default { analyzeCV, generateCV };
+export const recommendCandidates = async ({
+  jobData,
+  language = 'vi',
+}) => {
+  const headers = await getAuthHeaders();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 35_000);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/cv/recommend-candidates`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        job: {
+          title: jobData.title || '',
+          description: jobData.description || '',
+          requirements: jobData.requirements || '',
+          responsibilities: jobData.responsibilities || '',
+          benefits: jobData.benefits || '',
+        },
+        language,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(errorMessage(response.status, payload?.error?.code, language));
+    }
+    return payload?.recommendations || [];
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(language === 'vi'
+        ? 'Yêu cầu gợi ý ứng viên đã hết thời gian chờ. Vui lòng thử lại.'
+        : 'The recommendation request timed out. Please try again.');
+    }
+    if (error instanceof TypeError) {
+      throw new Error(language === 'vi'
+        ? 'Không thể kết nối tới dịch vụ gợi ý ứng viên.'
+        : 'Could not connect to the recommendation service.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
+export default { analyzeCV, generateCV, recommendCandidates };

@@ -169,6 +169,8 @@ Ensure-Route "POST /cv/analyze" $true
 Ensure-Route "OPTIONS /cv/analyze" $false
 Ensure-Route "POST /cv/generate" $true
 Ensure-Route "OPTIONS /cv/generate" $false
+Ensure-Route "POST /cv/recommend-candidates" $true
+Ensure-Route "OPTIONS /cv/recommend-candidates" $false
 Ensure-Route "GET /health" $false
 
 $PreviousErrorActionPreference = $ErrorActionPreference

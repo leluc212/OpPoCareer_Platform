@@ -138,11 +138,42 @@ def get_auth(creds):
         print(f'Token OK exp in {exp-now}s')
         return token, tid, tkey
 
-    # Refresh bằng username/password (VNPT IDG dùng password grant)
     print('Token expired, refreshing...')
+    
+    # Thử client_credentials grant type trước (cho tk thật tế, scope=idgv2 hoặc read)
+    for scope in ['idgv2', 'read']:
+        try:
+            print(f'Trying client_credentials refresh with scope {scope}...')
+            form     = urllib.parse.urlencode({
+                'grant_type': 'client_credentials',
+                'scope':      scope
+            }).encode()
+            cred_b64 = base64.b64encode(f'{tid}:{tkey}'.encode()).decode()
+            r = req_lib.post(VNPT_TOKEN_URL, data=form, timeout=10,
+                headers={'Content-Type': 'application/x-www-form-urlencoded',
+                         'Authorization': f'Basic {cred_b64}'})
+            print(f'client_credentials ({scope}) status={r.status_code} body={r.text[:300]}')
+            if r.status_code == 200:
+                tr = r.json()
+                new_token = tr.get('access_token')
+                if new_token:
+                    new_exp = now + int(tr.get('expires_in', 3600))
+                    _token_cache.update({'bearer': new_token, 'exp': new_exp, 'token_id': tid, 'token_key': tkey})
+                    try:
+                        creds['bearer_token'] = new_token
+                        secrets_client.update_secret(SecretId=SECRET_NAME, SecretString=json.dumps(creds))
+                    except Exception as e:
+                        print(f'Secret update warn: {e}')
+                    print(f'Token refreshed via client_credentials, exp in {tr.get("expires_in")}s')
+                    return new_token, tid, tkey
+        except Exception as e:
+            print(f'client_credentials ({scope}) failed: {e}')
+
+    # Fallback sang password grant type (cho môi trường mock/dev cũ)
     try:
+        print('Falling back to password grant type...')
         username = creds.get('username', '')
-        password = creds.get('password', '') or creds.get('token_key', '')
+        password = creds.get('password', '') or tkey
         form     = urllib.parse.urlencode({
             'grant_type': 'password',
             'username':   username,
@@ -150,12 +181,10 @@ def get_auth(creds):
             'scope':      'read'
         }).encode()
         cred_b64 = base64.b64encode(f'{tid}:{tkey}'.encode()).decode()
-        print(f'Refresh URL: {VNPT_TOKEN_URL}')
-        print(f'username: {username[:20]}...')
         r = req_lib.post(VNPT_TOKEN_URL, data=form, timeout=10,
             headers={'Content-Type': 'application/x-www-form-urlencoded',
                      'Authorization': f'Basic {cred_b64}'})
-        print(f'Refresh response: {r.status_code} body={r.text[:300]}')
+        print(f'password grant status={r.status_code} body={r.text[:300]}')
         if r.status_code == 200:
             tr = r.json()
             new_token = tr.get('access_token')
@@ -167,13 +196,14 @@ def get_auth(creds):
                     secrets_client.update_secret(SecretId=SECRET_NAME, SecretString=json.dumps(creds))
                 except Exception as e:
                     print(f'Secret update warn: {e}')
-                print(f'Token refreshed, exp in {tr.get("expires_in")}s')
+                print(f'Token refreshed via password grant, exp in {tr.get("expires_in")}s')
                 return new_token, tid, tkey
     except Exception as e:
-        print(f'Token refresh failed: {e}')
+        print(f'password grant failed: {e}')
 
     _token_cache.update({'bearer': token, 'exp': now + 60, 'token_id': tid, 'token_key': tkey})
     return token, tid, tkey
+
 
 def vnpt_headers(bearer, tid, tkey):
     """Headers chuẩn theo VNPT docs."""

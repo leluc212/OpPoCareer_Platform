@@ -181,6 +181,35 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(body["title"], "Software Engineer")
         self.assertEqual(body["objective"], "Build scalable systems.")
 
+    def test_recommend_rejects_candidate(self):
+        response = handler.lambda_handler(
+            event(path="/cv/recommend-candidates", method="POST", groups=["Candidate"], body={"job": {"title": "Cashier"}}),
+            None
+        )
+        self.assertEqual(response["statusCode"], 403)
+
+    @patch("handler._fetch_verified_candidates", return_value=[])
+    def test_recommend_returns_empty_when_no_candidates(self, mock_fetch):
+        response = handler.lambda_handler(
+            event(path="/cv/recommend-candidates", method="POST", groups=["Employer"], body={"job": {"title": "Cashier"}}),
+            None
+        )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["recommendations"], [])
+
+    @patch("handler._fetch_verified_candidates", return_value=[{"userId": "123", "fullName": "Alice"}])
+    @patch("handler.call_gemini_recommend", return_value={"recommendations": [{"candidateId": "123", "fullName": "Alice", "matchScore": 85, "matchReason": "Good fit."}]})
+    def test_recommend_returns_matches(self, mock_gemini, mock_fetch):
+        response = handler.lambda_handler(
+            event(path="/cv/recommend-candidates", method="POST", groups=["Employer"], body={"job": {"title": "Cashier"}}),
+            None
+        )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(len(body["recommendations"]), 1)
+        self.assertEqual(body["recommendations"][0]["matchScore"], 85)
+
 
 if __name__ == "__main__":
     unittest.main()

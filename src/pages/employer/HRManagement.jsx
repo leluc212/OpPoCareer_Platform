@@ -5208,7 +5208,7 @@ const HRManagement = () => {
                 exit={{ opacity: 0, scale: 0.95, y: 30 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                 onClick={e => e.stopPropagation()}
-                style={{ maxWidth: '520px', padding: '0', overflow: 'hidden' }}
+                style={{ maxWidth: '520px', padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
               >
                 <RateModalHeader style={{ padding: '24px', borderBottom: '1.5px solid #F1F5F9' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -5232,7 +5232,7 @@ const HRManagement = () => {
                   </button>
                 </RateModalHeader>
 
-                <RateModalBody style={{ padding: '24px' }}>
+                <RateModalBody style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
                   {/* Staff Info Card */}
                   <div style={{
                     display: 'flex',
@@ -5389,7 +5389,7 @@ const HRManagement = () => {
                   </div>
                 </RateModalBody>
 
-                <div style={{ padding: '20px 24px 32px', background: 'white' }}>
+                <div style={{ padding: '20px 24px 32px', background: 'white', borderTop: '1.5px solid #F1F5F9' }}>
                   <motion.button
                     whileHover={changeRequestReason.trim() && changeRequestType ? { scale: 1.02 } : {}}
                     whileTap={changeRequestReason.trim() && changeRequestType ? { scale: 0.98 } : {}}

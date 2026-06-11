@@ -55,6 +55,6 @@ export async function getAuthHeaders(retries = 3) {
   }
 
   const err = new Error('No authentication token available');
-  console.error('Error getting auth headers:', err);
+  console.warn('⚠️ No authentication token available');
   throw err;
 }

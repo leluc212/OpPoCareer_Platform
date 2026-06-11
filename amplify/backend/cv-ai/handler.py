@@ -86,6 +86,27 @@ GENERATION_SCHEMA = {
 }
 
 
+RECOMMENDATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "recommendations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "candidateId": {"type": "string"},
+                    "fullName": {"type": "string"},
+                    "matchScore": {"type": "integer"},
+                    "matchReason": {"type": "string"},
+                },
+                "required": ["candidateId", "fullName", "matchScore", "matchReason"],
+            },
+        }
+    },
+    "required": ["recommendations"],
+}
+
+
 class RequestError(Exception):
     def __init__(self, status_code, code, message):
         super().__init__(message)
@@ -168,6 +189,30 @@ def _candidate_claims(event):
     profile_role = str(claims.get("profile") or "").lower()
     if "candidate" not in normalized and profile_role != "candidate":
         raise RequestError(403, "FORBIDDEN", "Only candidates can analyze a CV.")
+    return claims
+
+
+def _employer_claims(event):
+    claims = _claims(event)
+    if not claims.get("sub"):
+        raise RequestError(401, "UNAUTHORIZED", "Missing or invalid authentication token.")
+
+    groups = claims.get("cognito:groups") or claims.get("groups") or []
+    if isinstance(groups, str):
+        try:
+            parsed = json.loads(groups)
+            groups = parsed if isinstance(parsed, list) else [groups]
+        except json.JSONDecodeError:
+            groups = [
+                group.strip().strip("[]'\"")
+                for group in groups.split(",")
+                if group.strip().strip("[]'\"")
+            ]
+
+    normalized = {str(group).lower() for group in groups}
+    profile_role = str(claims.get("profile") or "").lower()
+    if "employer" not in normalized and profile_role != "employer" and "admin" not in normalized:
+        raise RequestError(403, "FORBIDDEN", "Only employers can request candidate recommendations.")
     return claims
 
 
@@ -538,6 +583,162 @@ def analyze(validated, request_id):
     raise last_error
 
 
+def _fetch_verified_candidates():
+    import boto3
+    dynamodb = boto3.resource("dynamodb", region_name="ap-southeast-1")
+    table = dynamodb.Table("CandidateProfiles")
+    try:
+        response = table.scan(
+            FilterExpression="kycCompleted = :true OR kycStatus = :verified OR ekycStatus = :verified2",
+            ExpressionAttributeValues={
+                ":true": True,
+                ":verified": "VERIFIED",
+                ":verified2": "verified"
+            }
+        )
+        items = response.get("Items", [])
+        while "LastEvaluatedKey" in response:
+            response = table.scan(
+                FilterExpression="kycCompleted = :true OR kycStatus = :verified OR ekycStatus = :verified2",
+                ExpressionAttributeValues={
+                    ":true": True,
+                    ":verified": "VERIFIED",
+                    ":verified2": "verified"
+                },
+                ExclusiveStartKey=response["LastEvaluatedKey"]
+            )
+            items.extend(response.get("Items", []))
+        return items
+    except Exception as e:
+        print(f"Error scanning candidates: {str(e)}")
+        return []
+
+
+def _summarize_candidate(cand):
+    uid = cand.get("userId")
+    name = cand.get("fullName") or cand.get("email") or "Anonymous"
+    title = cand.get("title") or ""
+    bio = cand.get("bio") or ""
+    skills = cand.get("skills") or []
+    experience = cand.get("experience") or ""
+    education = cand.get("education") or ""
+    return {
+        "candidateId": uid,
+        "fullName": name,
+        "title": title,
+        "bio": bio,
+        "skills": skills,
+        "experience": experience,
+        "education": education
+    }
+
+
+def _validate_recommend_payload(body):
+    job = body.get("job")
+    if not isinstance(job, dict):
+        raise RequestError(400, "INVALID_JOB", "The job field is required.")
+    cleaned_job = {
+        "title": _clean_text(job.get("title"), 300),
+        "description": _clean_text(job.get("description"), 5000),
+        "requirements": _clean_text(job.get("requirements"), 3000),
+        "responsibilities": _clean_text(job.get("responsibilities"), 3000),
+        "benefits": _clean_text(job.get("benefits"), 2000),
+    }
+    if not cleaned_job["title"]:
+        raise RequestError(400, "JOB_TITLE_REQUIRED", "Job title is required.")
+    language = body.get("language", "vi")
+    if language not in {"vi", "en"}:
+        language = "vi"
+    return {
+        "job": cleaned_job,
+        "language": language
+    }
+
+
+def _recommendation_system_prompt(language):
+    output_language = "Vietnamese" if language == "vi" else "English"
+    return f"""
+You are an expert recruitment assistant. Return all prose in {output_language}.
+Given a standard job posting details and a list of candidate profiles, evaluate the suitability of each candidate for the job.
+For each candidate:
+1. Rate their match score as an integer from 0 to 100 based on their skills, experience, title, and bio compared to the job requirements and description.
+2. Provide a brief, professional explanation (matchReason) in {output_language} summarizing why they are or are not a good fit, highlighting relevant skills or gaps. Keep it concise (1-2 sentences).
+Return a JSON object containing a list of recommendations, sorted by matchScore in descending order.
+Only include candidates that have a matchScore >= 50. If no candidates match, return an empty list.
+Do not invent any information about the candidates or the job.
+""".strip()
+
+
+def _gemini_recommend_payload(validated, candidates):
+    user_payload = {
+        "job": validated["job"],
+        "candidates": candidates
+    }
+    return {
+        "systemInstruction": {
+            "parts": [{"text": _recommendation_system_prompt(validated["language"])}]
+        },
+        "contents": [{
+            "role": "user",
+            "parts": [{
+                "text": "Recommend candidates for this job:\n"
+                + json.dumps(user_payload, ensure_ascii=False)
+            }],
+        }],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 2500,
+            "responseMimeType": "application/json",
+            "responseSchema": RECOMMENDATION_SCHEMA,
+        },
+    }
+
+
+def call_gemini_recommend(validated, candidates, urlopen=urllib.request.urlopen):
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    request = urllib.request.Request(
+        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+        data=json.dumps(_gemini_recommend_payload(validated, candidates), ensure_ascii=False).encode("utf-8"),
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            provider_response = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        status = error.code
+        provider_message = ""
+        try:
+            error_body = json.loads(error.read().decode("utf-8"))
+            provider_message = str((error_body.get("error") or {}).get("message") or "")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        print(f"DEBUG_GEMINI_ERROR - status: {status}, message: {provider_message}")
+        if status in {400, 401, 403} and "api key" in provider_message.lower():
+            raise ProviderError(
+                "AI_CREDENTIAL_INVALID",
+                "The Gemini API key is invalid.",
+            )
+        retryable = status == 429 or status >= 500
+        code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
+        raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
+    except (urllib.error.URLError, TimeoutError):
+        raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
+    except json.JSONDecodeError:
+        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
+    try:
+        return json.loads(_extract_gemini_text(provider_response))
+    except json.JSONDecodeError:
+        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned invalid JSON.", True)
+
+
 def lambda_handler(event, context):
     request_id = getattr(context, "aws_request_id", None) or str(uuid.uuid4())
     method, path = _method_and_path(event)
@@ -546,13 +747,31 @@ def lambda_handler(event, context):
         return _response(event, 200, {"ok": True})
     if method == "GET" and path == "/health":
         return _response(event, 200, {"status": "ok", "provider": "gemini"})
-    if method != "POST" or path not in {"/cv/analyze", "/cv/generate"}:
+    if method != "POST" or path not in {"/cv/analyze", "/cv/generate", "/cv/recommend-candidates"}:
         return _response(event, 404, {
             "error": {"code": "NOT_FOUND", "message": "Route not found."},
             "request_id": request_id,
         })
 
     try:
+        if path == "/cv/recommend-candidates":
+            claims = _employer_claims(event)
+            validated = _validate_recommend_payload(_parse_body(event))
+            candidates = [_summarize_candidate(c) for c in _fetch_verified_candidates()]
+            if not candidates:
+                return _response(event, 200, {"recommendations": []})
+            started = time.monotonic()
+            ai_result = call_gemini_recommend(validated, candidates)
+            processing_ms = round((time.monotonic() - started) * 1_000)
+            print(json.dumps({
+                "event": "cv_recommendation_completed",
+                "request_id": request_id,
+                "user_id": claims.get("sub"),
+                "candidates_count": len(candidates),
+                "processing_ms": processing_ms,
+            }))
+            return _response(event, 200, ai_result)
+
         claims = _candidate_claims(event)
         if path == "/cv/analyze":
             validated = validate_payload(_parse_body(event))

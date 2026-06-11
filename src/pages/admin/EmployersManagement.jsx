@@ -22,7 +22,8 @@ import {
   User,
   Award,
   Briefcase,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
 import applicationService from '../../services/applicationService';
@@ -32,7 +33,9 @@ import {
   createWithdrawalRejectedNotification,
   createQuickJobActivationApprovedNotification,
   createQuickJobActivationRejectedNotification,
-  createQuickJobActivationDeactivatedNotification
+  createQuickJobActivationDeactivatedNotification,
+  createChangeRequestApprovedNotification,
+  createChangeRequestRejectedNotification
 } from '../../services/notificationService';
 
 const PageContainer = styled.div``;
@@ -290,6 +293,14 @@ const IconButton = styled.button`
   &:hover {
     transform: scale(1.1);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const DeleteButton = styled(IconButton)`
+  background: #fee2e2;
+  color: #dc2626;
+  &:hover {
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
   }
 `;
 
@@ -754,9 +765,26 @@ const EmployersManagement = () => {
         adminNotes: 'Approved by Admin'
       });
 
-      // Optimistically remove the request, then refresh from server to ensure canonical state
-      setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
+      // Optimistically update status locally
+      setChangeRequests(prev => prev.map(r => r.applicationId === appId ? { ...r, changeRequestStatus: 'approved' } : r));
       setSelectedChangeRequest(null);
+
+      // Trigger notification to employer
+      const reqItem = changeRequests.find(r => r.applicationId === appId);
+      if (reqItem) {
+        try {
+          await createChangeRequestApprovedNotification({
+            employerId: reqItem.employerId,
+            companyName: reqItem.companyName,
+            candidateName: reqItem.candidateName,
+            changeRequestType: reqItem.changeRequest?.typeLabel || reqItem.changeRequest?.type || '',
+            applicationId: appId
+          });
+        } catch (notifErr) {
+          console.warn('Failed to send change request approval notification:', notifErr.message);
+        }
+      }
+
       try {
         await loadChangeRequests();
       } catch (e) {
@@ -780,9 +808,27 @@ const EmployersManagement = () => {
         adminNotes: 'Rejected by Admin'
       });
 
-      // Optimistically remove then refresh to reflect server-side changes
-      setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
+      // Optimistically update status locally
+      setChangeRequests(prev => prev.map(r => r.applicationId === appId ? { ...r, changeRequestStatus: 'rejected' } : r));
       setSelectedChangeRequest(null);
+
+      // Trigger notification to employer
+      const reqItem = changeRequests.find(r => r.applicationId === appId);
+      if (reqItem) {
+        try {
+          await createChangeRequestRejectedNotification({
+            employerId: reqItem.employerId,
+            companyName: reqItem.companyName,
+            candidateName: reqItem.candidateName,
+            changeRequestType: reqItem.changeRequest?.typeLabel || reqItem.changeRequest?.type || '',
+            applicationId: appId,
+            reason: 'Admin rejected the request'
+          });
+        } catch (notifErr) {
+          console.warn('Failed to send change request rejection notification:', notifErr.message);
+        }
+      }
+
       try {
         await loadChangeRequests();
       } catch (e) {
@@ -793,6 +839,33 @@ const EmployersManagement = () => {
     } catch (err) {
       console.error('Error rejecting change request:', err);
       alert(language === 'vi' ? 'Lỗi khi từ chối yêu cầu' : 'Error rejecting request');
+    } finally {
+      setIsProcessingChange(false);
+    }
+  };
+
+  const handleDeleteChangeRequest = async (appId) => {
+    const confirmDelete = window.confirm(
+      language === 'vi' 
+        ? 'Bạn có chắc chắn muốn xóa yêu cầu thay đổi này?' 
+        : 'Are you sure you want to delete this change request?'
+    );
+    if (!confirmDelete) return;
+
+    try {
+      setIsProcessingChange(true);
+      await applicationService.updateApplicationStatus(appId, 'accepted', {
+        changeRequestStatus: 'deleted'
+      });
+
+      // Remove from local list
+      setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
+      setSelectedChangeRequest(null);
+      
+      alert(language === 'vi' ? 'Đã xóa yêu cầu thay đổi thành công' : 'Change request deleted successfully');
+    } catch (err) {
+      console.error('Error deleting change request:', err);
+      alert(language === 'vi' ? 'Lỗi khi xóa yêu cầu' : 'Error deleting request');
     } finally {
       setIsProcessingChange(false);
     }
@@ -1439,14 +1512,26 @@ const EmployersManagement = () => {
                               </IconButton>
                               {(!req.changeRequestStatus || req.changeRequestStatus === 'pending') && (
                                 <>
-                                  <ApproveButton onClick={() => handleApproveChange(req.applicationId)}>
+                                  <ApproveButton 
+                                    title={language === 'vi' ? 'Duyệt' : 'Approve'}
+                                    onClick={() => handleApproveChange(req.applicationId)}
+                                  >
                                     <CheckCircle size={16} />
                                   </ApproveButton>
-                                  <RejectButton onClick={() => handleRejectChange(req.applicationId)}>
+                                  <RejectButton 
+                                    title={language === 'vi' ? 'Từ chối' : 'Reject'}
+                                    onClick={() => handleRejectChange(req.applicationId)}
+                                  >
                                     <XCircle size={16} />
                                   </RejectButton>
                                 </>
                               )}
+                              <DeleteButton
+                                title={language === 'vi' ? 'Xóa' : 'Delete'}
+                                onClick={() => handleDeleteChangeRequest(req.applicationId)}
+                              >
+                                <Trash2 size={16} />
+                              </DeleteButton>
                             </ActionButtons>
                           </td>
                         </tr>

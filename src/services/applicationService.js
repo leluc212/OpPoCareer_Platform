@@ -127,11 +127,56 @@ export async function getMyCandidateApplications() {
 }
 
 /**
+ * Get all applications for a specific candidate (employer only)
+ * @param {string} candidateId - Candidate ID
+ * @returns {Promise<Array>} List of applications
+ */
+export async function getCandidateApplications(candidateId) {
+  try {
+    if (!candidateId) return [];
+    
+    const headers = await getAuthHeaders();
+    const urls = import.meta.env.DEV
+      ? [
+          `${API_BASE_URL}/applications/candidate/${candidateId}`,
+          `/api-applications/candidate/${candidateId}`
+        ]
+      : [`${API_BASE_URL}/applications/candidate/${candidateId}`];
+      
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { 
+          method: 'GET', 
+          headers,
+          mode: 'cors'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          return data.applications || [];
+        }
+      } catch (fetchErr) {
+        console.warn(`⚠️ Failed to fetch candidate applications from ${url}:`, fetchErr.message);
+        continue;
+      }
+    }
+    return [];
+  } catch (error) {
+    console.error('❌ Error getting candidate applications:', error);
+    return [];
+  }
+}
+
+
+/**
  * Get all applications for a specific job (employer only)
  * @param {string} jobId - Job ID
  * @returns {Promise<Array>} List of applications
  */
 export async function getJobApplications(jobId) {
+  if (!jobId) {
+    return [];
+  }
   const maxRetries = 2;
   let lastError;
 
@@ -279,6 +324,7 @@ async function getAuthTokenForApplications() {
 const applicationService = {
   submitApplication,
   getMyCandidateApplications,
+  getCandidateApplications,
   getJobApplications,
   updateApplicationStatus,
   

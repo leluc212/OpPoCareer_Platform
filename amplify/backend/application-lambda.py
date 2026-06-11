@@ -419,27 +419,30 @@ def update_application_status(event, application_id, user_id, create_response):
                 # leave as string if can't parse
                 pass
 
-        # If a changeRequestStatus was provided, persist it
-        if change_req_status is not None:
+        # If a changeRequestStatus was provided, persist it (unless deleted)
+        if change_req_status is not None and change_req_status.lower() != 'deleted':
             update_expr += ', changeRequestStatus = :changeRequestStatus'
             expr_attr_values[':changeRequestStatus'] = change_req_status
 
         # Decide whether to persist or remove the changeRequest payload
         # Keep changeRequestStatus so finalized requests can still be tracked.
         remove_change_request = False
+        remove_change_request_status = False
         if change_req_raw is not None:
             update_expr += ', changeRequest = :changeRequest'
             expr_attr_values[':changeRequest'] = change_req_raw
-        elif isinstance(change_req_status, str) and change_req_status.lower() in ['approved', 'rejected', 'cancelled']:
+        elif isinstance(change_req_status, str) and change_req_status.lower() == 'deleted':
             remove_change_request = True
+            remove_change_request_status = True
 
         print(f"DEBUG: change_req_raw present={change_req_raw is not None}, change_req_status={change_req_status}, remove_change_request={remove_change_request}")
         print(f"DEBUG: updating item with expression: {update_expr}")
         print(f"DEBUG: values: {expr_attr_values}")
 
         # DynamoDB requires SET and REMOVE as separate clauses in the same expression.
-        # Only remove the payload; the status stays in the item.
-        if remove_change_request:
+        if remove_change_request_status:
+            update_expr = update_expr + ' REMOVE changeRequest, changeRequestStatus'
+        elif remove_change_request:
             update_expr = update_expr + ' REMOVE changeRequest'
 
         applications_table.update_item(

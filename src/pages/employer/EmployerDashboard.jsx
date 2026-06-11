@@ -15,7 +15,7 @@ import { useCompanyProfileCompletion } from '../../hooks/useCompanyProfileComple
 import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
-import { getJobApplications } from '../../services/applicationService';
+import applicationService, { getJobApplications } from '../../services/applicationService';
 import candidateProfileService from '../../services/candidateProfileService';
 import { getNotifications } from '../../services/notificationService';
 import { formatRelativeTime } from '../../hooks/useRelativeTime';
@@ -533,6 +533,7 @@ const EmployerDashboard = () => {
       bio: app.bio || '-',
       cvUrl: app.cvUrl || '',
       cvFileName: app.cvFileName || '',
+      workHistory: app.workHistory || [],
       reviews: app.reviews || [],
     };
     setPreviewCandidate(basic);
@@ -541,7 +542,67 @@ const EmployerDashboard = () => {
     if (app.candidateId) {
       setPreviewLoading(true);
       try {
-        const profile = await candidateProfileService.getProfile(app.candidateId);
+        console.log('🔍 Fetching full profile and applications for candidate:', app.candidateId);
+        const [profile, candidateApps, standardJobs, quickJobs] = await Promise.all([
+          candidateProfileService.getProfile(app.candidateId),
+          applicationService.getCandidateApplications(app.candidateId).catch(() => []),
+          jobPostService.getAllActiveJobs().catch(() => []),
+          quickJobService.getAllActiveQuickJobs().catch(() => [])
+        ]);
+        
+        const allJobs = [...standardJobs, ...quickJobs];
+        
+        // Resolve missing jobs (e.g. inactive or archived)
+        const missingJobIds = [...new Set(candidateApps.map(a => a.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
+        let additionalJobs = [];
+        if (missingJobIds.length > 0) {
+          console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
+          const jobResults = await Promise.all(missingJobIds.map(async (id) => {
+            try {
+              if (id.startsWith('QJOB-')) {
+                return await quickJobService.getQuickJob(id).catch(() => null);
+              }
+              if (/^\d+$/.test(id)) return null;
+              const standard = await jobPostService.getJobPost(id).catch(() => null);
+              if (standard) return standard;
+              return await quickJobService.getQuickJob(id).catch(() => null);
+            } catch (e) {
+              return null;
+            }
+          }));
+          additionalJobs = jobResults.filter(Boolean);
+        }
+        const finalAllJobs = [...allJobs, ...additionalJobs];
+
+        // Detailed work history (completed applications)
+        const workHistory = candidateApps
+          .filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate')
+          .map(a => {
+            const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
+            return {
+              id: a.applicationId || a.id,
+              jobTitle: job?.title || a.jobTitle || '---',
+              companyName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
+              completedAt: a.updatedAt || a.appliedAt || a.createdAt,
+              employerRating: a.employerRating || null
+            };
+          })
+          .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+
+        // Reviews list
+        const reviews = candidateApps
+          .filter(a => a.employerRating && typeof a.employerRating.overall === 'number')
+          .map(a => {
+            const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
+            return {
+              rating: a.employerRating.overall,
+              comment: a.employerRating.comment || '',
+              employerName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
+              position: job?.title || a.jobTitle || '---',
+              date: new Date(a.employerConfirmedAt || a.updatedAt || a.appliedAt).toLocaleDateString('vi-VN')
+            };
+          });
+
         if (profile) {
           setPreviewCandidate(prev => ({
             ...prev,
@@ -558,7 +619,14 @@ const EmployerDashboard = () => {
             cvUrl: prev.cvUrl || profile.cvUrl,
             cvFileName: prev.cvFileName || profile.cvFileName,
             profileImage: profile.profileImage || prev.profileImage,
-            reviews: profile.reviews || prev.reviews,
+            workHistory,
+            reviews
+          }));
+        } else {
+          setPreviewCandidate(prev => ({
+            ...prev,
+            workHistory,
+            reviews
           }));
         }
       } catch (err) {

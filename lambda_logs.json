@@ -1,0 +1,27 @@
+﻿{
+    "events": [
+        {
+            "logStreamName": "2026/06/11/[$LATEST]e88712bf80d94addb374dd5c8b809ed2",
+            "timestamp": 1781149248037,
+            "message": "INIT_START Runtime Version: python:3.12.mainlinev2.v11\tRuntime Version ARN: arn:aws:lambda:ap-southeast-1::runtime:0eb6fb00a97c1a17d2e3014b04c79bfc9bea4301466439e3458f985dc75cadcc\n",
+            "ingestionTime": 1781149249401,
+            "eventId": "39720955541027557688016652538892552576360982053356306432"
+        },
+        {
+            "logStreamName": "2026/06/11/[$LATEST]e88712bf80d94addb374dd5c8b809ed2",
+            "timestamp": 1781149248588,
+            "message": "START RequestId: aa0a9070-2e1a-43a3-b1d9-502104f56cf8 Version: $LATEST\n",
+            "ingestionTime": 1781149249401,
+            "eventId": "39720955553315268292407025889878733344590229243151515649"
+        },
+        {
+            "logStreamName": "2026/06/11/[$LATEST]e88712bf80d94addb374dd5c8b809ed2",
+            "timestamp": 1781149248589,
+            "message": "Event: {\"version\": \"2.0\", \"routeKey\": \"GET /admin/experiences\", \"rawPath\": \"/prod/admin/experiences\", \"rawQueryString\": \"\", \"headers\": {\"content-length\": \"0\", \"host\": \"6fgpp0z6k3.execute-api.ap-southeast-1.amazonaws.com\", \"user-agent\": \"Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8521\", \"x-amzn-trace-id\": \"Root=1-6a2a2e3f-0dee10d2763f474364fceb8a\", \"x-forwarded-for\": \"118.69.182.149\", \"x-forwarded-port\": \"443\", \"x-forwarded-proto\": \"https\"}, \"requestContext\": {\"accountId\": \"726911960757\", \"apiId\": \"6fgpp0z6k3\", \"domainName\": \"6fgpp0z6k3.execute-api.ap-southeast-1.amazonaws.com\", \"domainPrefix\": \"6fgpp0z6k3\", \"http\": {\"method\": \"GET\", \"path\": \"/prod/admin/experiences\", \"protocol\": \"HTTP/1.1\", \"sourceIp\": \"118.69.182.149\", \"userAgent\": \"Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8521\"}, \"requestId\": \"exwqCha4SQ0EM7w=\", \"routeKey\": \"GET /admin/experiences\", \"stage\": \"prod\", \"time\": \"11/Jun/2026:03:40:47 +0000\", \"timeEpoch\": 1781149247883}, \"isBase64Encoded\": false}\n",
+            "ingestionTime": 1781149249401,
+            "eventId": "39720955553337569037605556513020269062862877604657496066"
+        },
+        {
+            "logStreamName": "2026/06/11/[$LATEST]e88712bf80d94addb374dd5c8b809ed2",
+            "timestamp": 1781149248589,
+            "message": 

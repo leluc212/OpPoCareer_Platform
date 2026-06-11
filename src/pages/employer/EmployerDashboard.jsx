@@ -17,6 +17,7 @@ import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import { getJobApplications } from '../../services/applicationService';
 import candidateProfileService from '../../services/candidateProfileService';
+import { getCandidateApprovedExperiences } from '../../services/experienceService';
 import { getNotifications } from '../../services/notificationService';
 import { formatRelativeTime } from '../../hooks/useRelativeTime';
 import DynamicTranslate from '../../components/DynamicTranslate';
@@ -541,7 +542,31 @@ const EmployerDashboard = () => {
     if (app.candidateId) {
       setPreviewLoading(true);
       try {
-        const profile = await candidateProfileService.getProfile(app.candidateId);
+        const [profile, experiences] = await Promise.all([
+          candidateProfileService.getProfile(app.candidateId),
+          getCandidateApprovedExperiences(app.candidateId).catch(() => []),
+        ]);
+
+        // Calculate experience summary from approved work history
+        const now = new Date();
+        let totalMonths = 0;
+        (experiences || []).forEach(exp => {
+          const startYear  = Number(exp.startYear)  || 0;
+          const startMonth = Number(exp.startMonth) || 1;
+          const endYear    = exp.isCurrent ? now.getFullYear() : (Number(exp.endYear)  || startYear);
+          const endMonth   = exp.isCurrent ? (now.getMonth() + 1) : (Number(exp.endMonth) || startMonth);
+          const months = (endYear - startYear) * 12 + (endMonth - startMonth);
+          if (months > 0) totalMonths += months;
+        });
+        let experienceSummary = null;
+        if (totalMonths > 0) {
+          const years = Math.floor(totalMonths / 12);
+          const mos   = totalMonths % 12;
+          if (years === 0) experienceSummary = `${mos} tháng`;
+          else if (mos === 0) experienceSummary = `${years} năm`;
+          else experienceSummary = `${years} năm ${mos} tháng`;
+        }
+
         if (profile) {
           setPreviewCandidate(prev => ({
             ...prev,
@@ -551,7 +576,8 @@ const EmployerDashboard = () => {
             phone: profile.phone || prev.phone,
             location: profile.location || prev.location,
             education: profile.education || prev.education,
-            experience: profile.experience || prev.experience,
+            experience: experienceSummary || profile.experience || prev.experience,
+            approvedExperiences: experiences,
             skills: profile.skills || prev.skills,
             bio: profile.bio || prev.bio,
             // Ưu tiên cvUrl từ application (đã được refresh) thay vì profile (có thể hết hạn)
@@ -559,6 +585,12 @@ const EmployerDashboard = () => {
             cvFileName: prev.cvFileName || profile.cvFileName,
             profileImage: profile.profileImage || prev.profileImage,
             reviews: profile.reviews || prev.reviews,
+          }));
+        } else if (experienceSummary) {
+          setPreviewCandidate(prev => ({
+            ...prev,
+            experience: experienceSummary,
+            approvedExperiences: experiences,
           }));
         }
       } catch (err) {

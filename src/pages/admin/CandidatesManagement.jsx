@@ -27,6 +27,9 @@ import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
+import ExperienceManagement from './ExperienceManagement';
+import { getAllExperiences } from '../../services/experienceService';
+
 
 const API_URL = import.meta.env.VITE_CANDIDATE_API_URL;
 
@@ -686,7 +689,8 @@ const CandidatesManagement = () => {
   const [apiChartData, setApiChartData] = useState([]);
   const [apiJobChartData, setApiJobChartData] = useState([]);
 
-  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates', 'withdrawals', 'verifications'
+  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates', 'withdrawals', 'verifications', 'experiences'
+  const [pendingExpCount, setPendingExpCount] = useState(0);
   const [withdrawRequests, setWithdrawRequests] = useState([]);
   const [verifications, setVerifications] = useState([]);
   const [verifLoading, setVerifLoading] = useState(false);
@@ -1035,6 +1039,8 @@ const CandidatesManagement = () => {
 
   useEffect(() => {
     loadData();
+    // Load pending experience count for badge
+    getAllExperiences('PENDING').then(data => setPendingExpCount(data.length)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1287,6 +1293,16 @@ const CandidatesManagement = () => {
               <TabBadge>{verifications.filter(v => v.verificationStatus === 'SUBMITTED').length}</TabBadge>
             )}
           </Tab>
+          <Tab
+            $active={activeTab === 'experiences'}
+            onClick={() => setActiveTab('experiences')}
+          >
+            <Briefcase size={18} style={{ marginRight: '8px' }} />
+            {language === 'vi' ? 'Duyệt Kinh Nghiệm' : 'Experience Review'}
+            {pendingExpCount > 0 && (
+              <TabBadge>{pendingExpCount}</TabBadge>
+            )}
+          </Tab>
         </TabsContainer>
 
         {activeTab === 'candidates' && (
@@ -1525,9 +1541,9 @@ const CandidatesManagement = () => {
           </ChartsSection>
         )}
 
+        {activeTab !== 'experiences' && (
         <FilterSection>
-          <SearchBox>
-            <Search />
+          <SearchBox>            <Search />
             <input
               type="text"
               placeholder={language === 'vi' ? 'Tìm kiếm theo tên hoặc email...' : 'Search by name or email...'}
@@ -1543,7 +1559,11 @@ const CandidatesManagement = () => {
             }
           </ReloadButton>
         </FilterSection>
+        )}
 
+        {activeTab === 'experiences' ? (
+          <ExperienceManagement embedded />
+        ) : (
         <TableWrapper>
           {activeTab === 'candidates' ? (
             <Table>
@@ -1780,7 +1800,9 @@ const CandidatesManagement = () => {
             </Table>
           )}
         </TableWrapper>
+        )}
 
+        {activeTab !== 'experiences' && (
         <PaginationContainer>
           <PaginationInfo>
             {language === 'vi'
@@ -1841,6 +1863,7 @@ const CandidatesManagement = () => {
             </PageButton>
           </PaginationButtons>
         </PaginationContainer>
+        )}
       </PageContainer>
     </DashboardLayout>
   );

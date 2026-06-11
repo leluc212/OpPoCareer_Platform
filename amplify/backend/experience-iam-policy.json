@@ -1,0 +1,42 @@
+{
+  "Comment": "IAM inline policy for OpPoExperienceLambdaRole",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DynamoDBExperiences",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:ap-southeast-1:*:table/CandidateExperiences",
+        "arn:aws:dynamodb:ap-southeast-1:*:table/CandidateProfiles",
+        "arn:aws:dynamodb:ap-southeast-1:*:table/Notifications"
+      ]
+    },
+    {
+      "Sid": "S3ExperienceProofs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::opporeview-cv-storage/experience-proofs/*"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:ap-southeast-1:*:*"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { Button, Input, TextArea, FormGroup, Label, DateInput } from '../../comp
 import { useLanguage } from '../../context/LanguageContext';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import CVUpload from '../../components/CVUpload';
+import WorkExperienceSection from '../../components/WorkExperienceSection';
 import candidateProfileService from '../../services/candidateProfileService';
 import applicationService from '../../services/applicationService';
 import jobPostService from '../../services/jobPostService';
@@ -2382,6 +2383,9 @@ const CandidateProfile = () => {
             <CVUpload />
           </Sidebar>
         </ContentGrid>
+
+        {/* Work Experience Section (self-declared, admin-approved) */}
+        <WorkExperienceSection />
 
         {/* Work History Section */}
         <Card

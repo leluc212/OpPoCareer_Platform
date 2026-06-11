@@ -444,7 +444,6 @@ function AppRoutes() {
           <AdminManagement />
         </ProtectedRoute>
       } />
-
       {/* Catch-all: redirect mọi URL không khớp về trang chủ */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

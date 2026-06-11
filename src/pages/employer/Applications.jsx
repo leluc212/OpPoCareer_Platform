@@ -13,6 +13,7 @@ import { initializeMultipleSampleCVs } from '../../utils/sampleCVGenerator';
 import jobPostService from '../../services/jobPostService';
 import applicationService from '../../services/applicationService';
 import candidateProfileService from '../../services/candidateProfileService';
+import { getCandidateApprovedExperiences } from '../../services/experienceService';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
@@ -28,6 +29,42 @@ const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận') => {
   const num = parseInt(str.replace(/\D/g, ''), 10);
   if (isNaN(num) || num === 0) return fallback;
   return `${num.toLocaleString('vi-VN')} VNĐ/giờ`;
+};
+
+/**
+ * Calculate total years of experience from a list of approved work experiences.
+ * Returns a display string, e.g. "2 năm 3 tháng" / "< 1 năm"
+ */
+const calcExperienceSummary = (experiences, lang = 'vi') => {
+  if (!experiences || experiences.length === 0) return null;
+
+  const now = new Date();
+  let totalMonths = 0;
+
+  experiences.forEach(exp => {
+    const startYear  = Number(exp.startYear)  || 0;
+    const startMonth = Number(exp.startMonth) || 1;
+    const endYear    = exp.isCurrent ? now.getFullYear() : (Number(exp.endYear)  || startYear);
+    const endMonth   = exp.isCurrent ? (now.getMonth() + 1) : (Number(exp.endMonth) || startMonth);
+
+    const months = (endYear - startYear) * 12 + (endMonth - startMonth);
+    if (months > 0) totalMonths += months;
+  });
+
+  if (totalMonths <= 0) return null;
+
+  const years  = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+
+  if (lang === 'vi') {
+    if (years === 0) return `${months} tháng`;
+    if (months === 0) return `${years} năm`;
+    return `${years} năm ${months} tháng`;
+  } else {
+    if (years === 0) return `${months} month${months > 1 ? 's' : ''}`;
+    if (months === 0) return `${years} year${years > 1 ? 's' : ''}`;
+    return `${years} yr ${months} mo`;
+  }
 };
 
 // Mock job posts data
@@ -838,6 +875,78 @@ const InfoItem = styled.div`
   }
 `;
 
+/* ── Work Experience Timeline (employer view) ───────────────────────────── */
+const ExpTimeline = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+`;
+
+const ExpTimelineItem = styled.div`
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  background: ${props => props.theme.colors.bgDark};
+  border-radius: 12px;
+  border: 1px solid ${props => props.theme.colors.border};
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: ${props => props.theme.colors.primary}30;
+    background: #EFF6FF;
+  }
+`;
+
+const ExpTimelineIcon = styled.div`
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1e40af15, #3b82f620);
+  border: 1px solid ${props => props.theme.colors.primary}20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg {
+    width: 17px;
+    height: 17px;
+    color: ${props => props.theme.colors.primary};
+  }
+`;
+
+const ExpTimelineBody = styled.div`
+  flex: 1;
+  min-width: 0;
+
+  .company {
+    font-size: 14px;
+    font-weight: 700;
+    color: ${props => props.theme.colors.text};
+    margin-bottom: 2px;
+  }
+
+  .job-title {
+    font-size: 13px;
+    color: ${props => props.theme.colors.textLight};
+    margin-bottom: 5px;
+  }
+
+  .period {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: ${props => props.theme.colors.textLight};
+    background: ${props => props.theme.colors.border}50;
+    padding: 2px 8px;
+    border-radius: 20px;
+
+    svg { width: 12px; height: 12px; }
+  }
+`;
+
 const SkillsWrap = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -1323,6 +1432,7 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFre
   const { language } = useLanguage();
   const [showCVPreview, setShowCVPreview] = useState(false);
   const [freshCvUrl, setFreshCvUrl] = useState(null);
+  const [showExpDetail, setShowExpDetail] = useState(false);
 
   const initials = candidate.candidate
     .split(' ')
@@ -1443,7 +1553,8 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFre
               {/* Education & Experience */}
               <ProfileSection>
                 <h3><Award /> {language === 'vi' ? 'Học vấn & Kinh nghiệm' : 'Education & Experience'}</h3>
-                <InfoGrid>
+                {/* Summary row */}
+                <InfoGrid style={{ marginBottom: candidate.approvedExperiences?.length ? 14 : 0 }}>
                   <InfoCard>
                     <InfoIconBox><Award /></InfoIconBox>
                     <InfoItem>
@@ -1451,14 +1562,56 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onGetFre
                       <div className="value">{candidate.education && candidate.education !== '-' ? candidate.education : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
                     </InfoItem>
                   </InfoCard>
-                  <InfoCard>
+                  {/* Clickable experience card */}
+                  <InfoCard
+                    onClick={() => candidate.approvedExperiences?.length && setShowExpDetail(v => !v)}
+                    style={{
+                      cursor: candidate.approvedExperiences?.length ? 'pointer' : 'default',
+                      borderColor: showExpDetail ? '#3b82f6' : undefined,
+                      background: showExpDetail ? '#EFF6FF' : undefined,
+                    }}
+                  >
                     <InfoIconBox><Briefcase /></InfoIconBox>
                     <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Kinh nghiệm' : 'Experience'}</div>
-                      <div className="value">{candidate.experience && candidate.experience !== '-' ? candidate.experience : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                      <div className="label">{language === 'vi' ? 'Tổng kinh nghiệm' : 'Total experience'}</div>
+                      <div className="value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {candidate.experience && candidate.experience !== '-' ? candidate.experience : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}
+                        {candidate.approvedExperiences?.length > 0 && (
+                          <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 700 }}>
+                            ({candidate.approvedExperiences.length})&nbsp;{showExpDetail ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </div>
                     </InfoItem>
                   </InfoCard>
                 </InfoGrid>
+                {/* Work history timeline — expand on click */}
+                {candidate.approvedExperiences?.length > 0 && showExpDetail && (
+                  <ExpTimeline>
+                    {candidate.approvedExperiences.map((exp, idx) => {
+                      const MO_VI = ['','Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'];
+                      const MO_EN = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                      const mo = language === 'vi' ? MO_VI : MO_EN;
+                      const start = `${mo[exp.startMonth] || exp.startMonth}/${exp.startYear}`;
+                      const end = exp.isCurrent
+                        ? (language === 'vi' ? 'Hiện tại' : 'Present')
+                        : (exp.endMonth && exp.endYear ? `${mo[exp.endMonth] || exp.endMonth}/${exp.endYear}` : '');
+                      return (
+                        <ExpTimelineItem key={exp.experienceId || idx}>
+                          <ExpTimelineIcon><Briefcase /></ExpTimelineIcon>
+                          <ExpTimelineBody>
+                            <div className="company">{exp.companyName}</div>
+                            <div className="job-title">{exp.jobTitle}</div>
+                            {exp.description && (
+                              <p style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>{exp.description}</p>
+                            )}
+                            <span className="period"><Calendar size={12} />{end ? `${start} – ${end}` : start}</span>
+                          </ExpTimelineBody>
+                        </ExpTimelineItem>
+                      );
+                    })}
+                  </ExpTimeline>
+                )}
               </ProfileSection>
 
               {/* Skills */}
@@ -1541,6 +1694,7 @@ export { ProfileDetailModal,
   ProfileHeader, ProfileAvatarRow, ProfileAvatar, ProfileHeaderInfo, ProfileJobBadge, HeaderRatingBadge,
   ProfileContent, ProfileInner, ProfileSection,
   InfoGrid, InfoCard, InfoIconBox, InfoItem,
+  ExpTimeline, ExpTimelineItem, ExpTimelineIcon, ExpTimelineBody,
   SkillsWrap, SkillTag, BioText,
   CVCard, CVIconBox, CVInfo, CVDownloadButton, EmptyCV
 };
@@ -2279,13 +2433,19 @@ const Applications = () => {
     // Set basic info from application immediately
     setSelectedCandidate(app);
     
-    // Then try to fetch full profile
+    // Then try to fetch full profile + approved experiences in parallel
     if (app.candidateId) {
       setIsFetchingProfile(true);
       try {
         console.log('🔍 Fetching full profile for candidate:', app.candidateId);
-        const profile = await candidateProfileService.getProfile(app.candidateId);
-        
+        const [profile, experiences] = await Promise.all([
+          candidateProfileService.getProfile(app.candidateId),
+          getCandidateApprovedExperiences(app.candidateId).catch(() => []),
+        ]);
+
+        // Calculate experience summary from approved work history
+        const experienceSummary = calcExperienceSummary(experiences);
+
         if (profile) {
           console.log('✅ Full profile loaded:', profile);
           // Merge profile info into selectedCandidate
@@ -2297,13 +2457,22 @@ const Applications = () => {
             phone: profile.phone || prev.phone,
             location: profile.location || prev.location,
             education: profile.education || prev.education,
-            experience: profile.experience || prev.experience,
+            // Prefer calculated experience from work history over profile text field
+            experience: experienceSummary || profile.experience || prev.experience,
+            approvedExperiences: experiences,
             skills: profile.skills || prev.skills,
             bio: profile.bio || prev.bio,
             profileImage: profile.profileImage || prev.profileImage,
             // Ưu tiên cvUrl từ application (đã refresh) thay vì profile (có thể hết hạn)
             cvUrl: prev.cvUrl || profile.cvUrl,
             cvFileName: prev.cvFileName || profile.cvFileName,
+          }));
+        } else if (experienceSummary) {
+          // No profile but has approved experiences
+          setSelectedCandidate(prev => ({
+            ...prev,
+            experience: experienceSummary,
+            approvedExperiences: experiences,
           }));
         }
       } catch (error) {

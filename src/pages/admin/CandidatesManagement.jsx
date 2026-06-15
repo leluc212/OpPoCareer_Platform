@@ -1556,7 +1556,6 @@ const CandidatesManagement = () => {
         )}
 
         {activeTab !== 'experiences' && (
-<<<<<<< HEAD
         <FilterSection>
           <SearchBox>            <Search />
             <input
@@ -1618,25 +1617,6 @@ const CandidatesManagement = () => {
             }
           </ReloadButton>
         </FilterSection>
-=======
-          <FilterSection>
-            <SearchBox>            <Search />
-              <input
-                type="text"
-                placeholder={language === 'vi' ? 'Tìm kiếm theo tên hoặc email...' : 'Search by name or email...'}
-                value={searchTerm}
-                onChange={handleSearchChange}
-              />
-            </SearchBox>
-            <ReloadButton onClick={handleRefresh} disabled={loading || verifLoading}>
-              <RefreshCw size={18} className={(loading || verifLoading) ? 'spinning' : ''} />
-              {(loading || verifLoading)
-                ? (language === 'vi' ? 'Đang tải...' : 'Loading...')
-                : (language === 'vi' ? 'Làm mới' : 'Refresh')
-              }
-            </ReloadButton>
-          </FilterSection>
->>>>>>> 0de1f3d48cd0f557ab036522b81fc782fcc529d1
         )}
 
         {activeTab === 'experiences' ? (

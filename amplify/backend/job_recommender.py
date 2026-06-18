@@ -1,6 +1,7 @@
 import os
 import re
 import math
+import json
 import boto3
 from botocore.exceptions import ClientError
 from email_service import send_email
@@ -314,22 +315,21 @@ def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
                                 </table>
                             </td>
                         </tr>
-                        
-                        <!-- Footer -->
-                        <tr>
-                            <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 30px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">
-                                <p style="margin: 0 0 8px 0;">Email này được gửi tự động từ hệ thống Ốp Pờ.</p>
-                                <p style="margin: 0 0 8px 0;">Địa chỉ liên hệ: <a href="mailto:tuyendung.oppo@oppocareer.com" style="color: #3b82f6; text-decoration: none; font-weight: 500;">tuyendung.oppo@oppocareer.com</a></p>
-                                <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; 2026 Ốp Pờ. All rights reserved.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
+# Footer
+                                <tr>
+                                    <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 30px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">
+                                        <p style="margin: 0 0 8px 0;">Email này được gửi tự động từ hệ thống Ốp Pờ.</p>
+                                        <p style="margin: 0 0 8px 0;">Địa chỉ liên hệ: <a href="mailto:tuyendung.oppo@oppocareer.com" style="color: #3b82f6; text-decoration: none; font-weight: 500;">tuyendung.oppo@oppocareer.com</a>
+                                        <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; 2026 Ốp Pờ. All rights reserved.</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+            """
     
     safe_print(f"[Recommender] Dispatching email to {email}")
     res = send_email(email, subject, html_content)
@@ -338,32 +338,106 @@ def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
 def recommend_job_to_candidates(job_item, is_quick_job=False):
     try:
         job_id = job_item.get('jobID') if is_quick_job else job_item.get('idJob')
-        safe_print(f"[Recommender] Matching candidates for job {job_id}")
+        safe_print(f"[Recommender] Matching candidates for job {job_id} (is_quick={is_quick_job})")
         
+        # Paginated scan CandidateProfiles table
+        candidates = []
         response = candidate_table.scan()
-        candidates = response.get('Items', [])
-        
+        candidates.extend(response.get('Items', []))
+        while 'LastEvaluatedKey' in response:
+            response = candidate_table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            candidates.extend(response.get('Items', []))
+            
         active_candidates = []
         for cand in candidates:
+            # Must have isActive == True or 'true'
             is_active = cand.get('isActive')
-            if is_active is False or str(is_active).lower() == 'false':
+            if not is_active or str(is_active).lower() == 'false':
                 continue
             email = cand.get('email')
             if not email or '@' not in email:
                 continue
             active_candidates.append(cand)
             
-        safe_print(f"[Recommender] Total candidates to match: {len(active_candidates)}")
-        
+        safe_print(f"[Recommender] Total active candidates scanned: {len(active_candidates)}")
+            
         emails_sent = 0
-        for cand in active_candidates:
-            matched, reasons = is_match(cand, job_item, is_quick_job)
-            if matched:
-                safe_print(f"[Recommender] Candidate matched: {cand.get('fullName')} ({cand.get('email')})")
-                success = send_recommendation_email(cand, job_item, reasons, is_quick_job)
-                if success:
-                    emails_sent += 1
+        
+        if is_quick_job:
+            # Gemini-based recommendation logic for quick/urgent jobs
+            job_lat = job_item.get('latitude')
+            job_lng = job_item.get('longitude')
+            
+            # Step 1: Distance filtering (<= 3.0 km) & Deduplication check
+            candidates_within_radius = []
+            for cand in active_candidates:
+                cand_id = cand.get('userId')
+                
+                # Check if already recommended in Candidate Profile
+                if is_job_already_recommended(cand, job_id):
+                    safe_print(f"[Recommender] Skipping candidate {cand_id} (already recommended).")
+                    continue
                     
+                cand_lat = cand.get('latitude')
+                cand_lng = cand.get('longitude')
+                
+                if cand_lat is None or cand_lng is None or job_lat is None or job_lng is None:
+                    safe_print(f"[Recommender] Skipping candidate {cand_id} (missing coordinates).")
+                    continue
+                    
+                dist = get_distance_km(cand_lat, cand_lng, job_lat, job_lng)
+                if dist is None or dist > 3.0:
+                    safe_print(f"[Recommender] Skipping candidate {cand_id} (distance {dist:.2f} km > 3.0 km).")
+                    continue
+                    
+                candidates_within_radius.append(cand)
+                
+            safe_print(f"[Recommender] Candidates within 3.0 km radius: {len(candidates_within_radius)}")
+            
+            if not candidates_within_radius:
+                return 0
+                
+            # Step 2: Summarize candidate profiles for Gemini
+            summarized_candidates = [_summarize_candidate(c) for c in candidates_within_radius]
+            
+            # Step 3: Invoke Gemini AI matching
+            safe_print(f"[Recommender] Invoking Gemini to analyze {len(summarized_candidates)} candidates...")
+            recommendations = call_gemini_recommend_via_api(job_item, summarized_candidates, is_quick_job=True)
+            safe_print(f"[Recommender] Gemini returned {len(recommendations)} recommendations.")
+            
+            # Step 4: Process Gemini results and send emails
+            candidate_map = {c.get('userId'): c for c in candidates_within_radius}
+            for rec in recommendations:
+                cand_id = rec.get('candidateId')
+                match_score = rec.get('matchScore', 0)
+                match_reason = rec.get('matchReason', '')
+                
+                if match_score >= 50 and cand_id in candidate_map:
+                    cand = candidate_map[cand_id]
+                    safe_print(f"[Recommender] Candidate matched by Gemini (score={match_score}): {cand.get('fullName')}")
+                    success = send_recommendation_email(cand, job_item, [match_reason], is_quick_job=True)
+                    if success:
+                        emails_sent += 1
+                        mark_job_as_recommended(cand_id, job_id)
+                        
+        else:
+            # Traditional matching logic for standard jobs
+            for cand in active_candidates:
+                cand_id = cand.get('userId')
+                
+                # Check if already recommended in Candidate Profile
+                if is_job_already_recommended(cand, job_id):
+                    safe_print(f"[Recommender] Skipping candidate {cand_id} (already recommended for standard job).")
+                    continue
+                    
+                matched, reasons = is_match(cand, job_item, is_quick_job=False)
+                if matched:
+                    safe_print(f"[Recommender] Candidate matched (traditional): {cand.get('fullName')} ({cand.get('email')})")
+                    success = send_recommendation_email(cand, job_item, reasons, is_quick_job=False)
+                    if success:
+                        emails_sent += 1
+                        mark_job_as_recommended(cand_id, job_id)
+                        
         safe_print(f"[Recommender] Processed. Emails sent: {emails_sent}")
         return emails_sent
     except Exception as e:
@@ -414,3 +488,188 @@ def recommend_active_jobs_to_candidate(candidate):
         import traceback
         traceback.print_exc()
         return 0
+
+# ==========================================
+# Gemini AI Recommendation Helpers
+# ==========================================
+
+RECOMMENDATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "recommendations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "candidateId": {"type": "string"},
+                    "fullName": {"type": "string"},
+                    "matchScore": {"type": "integer"},
+                    "matchReason": {"type": "string"},
+                },
+                "required": ["candidateId", "fullName", "matchScore", "matchReason"],
+            },
+        },
+    },
+    "required": ["recommendations"],
+}
+
+def get_gemini_credentials():
+    import os
+    import json
+    import boto3
+    # Try Env variables first
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite").strip()
+    if api_key:
+        return api_key, model
+    
+    # Fallback to AWS Secrets Manager
+    try:
+        secrets_client = boto3.client('secretsmanager', region_name='ap-southeast-1')
+        secret = secrets_client.get_secret_value(SecretId='opporeview/gemini')
+        secret_json = json.loads(secret['SecretString'])
+        key = secret_json.get('GEMINI_API_KEY', '').strip()
+        mdl = secret_json.get('GEMINI_MODEL', 'gemini-3.1-flash-lite').strip()
+        if key:
+            return key, mdl
+    except Exception as e:
+        safe_print(f"[Gemini Credentials] Failed to retrieve secret from Secrets Manager: {e}")
+    return None, "gemini-3.1-flash-lite"
+
+def _recommendation_system_prompt(language, is_quick_job=False):
+    output_language = "Vietnamese" if language == "vi" else "English"
+    job_type_str = "quick (urgent)" if is_quick_job else "standard"
+    return f"""
+You are an expert recruitment assistant. Return all prose in {output_language}.
+Given a {job_type_str} job posting details and a list of candidate profiles, evaluate the suitability of each candidate for the job.
+For each candidate:
+1. Rate their match score as an integer from 0 to 100 based on their skills, experience, title, and bio compared to the job requirements and description.
+2. Provide a brief, professional explanation (matchReason) in {output_language} summarizing why they are or are not a good fit, highlighting relevant skills or gaps. Keep it concise (1-2 sentences).
+Return a JSON object containing a list of recommendations, sorted by matchScore in descending order.
+Only include candidates that have a matchScore >= 50. If no candidates match, return an empty list.
+Do not invent any information about the candidates or the job.
+""".strip()
+
+def _gemini_recommend_payload(validated, candidates):
+    is_quick_job = validated.get("isQuickJob", False)
+    user_payload = {
+        "job": validated["job"],
+        "candidates": candidates
+    }
+    return {
+        "systemInstruction": {
+            "parts": [{"text": _recommendation_system_prompt(validated["language"], is_quick_job=is_quick_job)}]
+        },
+        "contents": [{
+            "role": "user",
+            "parts": [{
+                "text": "Recommend candidates for this job:\n" + json.dumps(user_payload, ensure_ascii=False)
+            }],
+        }],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 2500,
+            "responseMimeType": "application/json",
+            "responseSchema": RECOMMENDATION_SCHEMA,
+        },
+    }
+
+def _extract_gemini_text(response):
+    candidates = response.get("candidates") or []
+    if candidates:
+        candidate = candidates[0]
+        parts = (candidate.get("content") or {}).get("parts") or []
+        for part in parts:
+            if part.get("text"):
+                return part["text"]
+    return ""
+
+def call_gemini_recommend_via_api(job_item, candidate_summaries, is_quick_job=True):
+    import urllib.request
+    import urllib.error
+    import json
+    
+    api_key, model = get_gemini_credentials()
+    if not api_key:
+        safe_print("[Gemini] API Key not found. Skipping AI recommendation.")
+        return []
+    
+    validated = {
+        "job": {
+            "title": job_item.get("title", ""),
+            "description": job_item.get("description", ""),
+            "requirements": job_item.get("requirements", ""),
+            "responsibilities": job_item.get("responsibilities", ""),
+            "benefits": job_item.get("benefits", ""),
+        },
+        "language": "vi",
+        "isQuickJob": is_quick_job
+    }
+    
+    payload = _gemini_recommend_payload(validated, candidate_summaries)
+    
+    request = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            res_json = json.loads(response.read().decode("utf-8"))
+            candidates_json_str = _extract_gemini_text(res_json)
+            if not candidates_json_str:
+                safe_print(f"[Gemini] Empty AI response text. Raw response keys: {list(res_json.keys())}")
+                return []
+            candidates_res = json.loads(candidates_json_str)
+            return candidates_res.get("recommendations", [])
+    except Exception as e:
+        safe_print(f"[Gemini] Error calling Gemini API: {e}")
+        return []
+
+def _summarize_candidate(cand):
+    uid = cand.get("userId")
+    name = cand.get("fullName") or cand.get("email") or "Anonymous"
+    title = cand.get("title") or ""
+    bio = cand.get("bio") or ""
+    skills = cand.get("skills") or []
+    experience = cand.get("experience") or ""
+    education = cand.get("education") or ""
+    return {
+        "candidateId": uid,
+        "fullName": name,
+        "title": title,
+        "bio": bio,
+        "skills": skills,
+        "experience": experience,
+        "education": education
+    }
+def is_job_already_recommended(candidate, job_id):
+    rec_jobs = candidate.get('recommendedJobs')
+    if not rec_jobs:
+        return False
+    if isinstance(rec_jobs, set):
+        return job_id in rec_jobs
+    if isinstance(rec_jobs, list):
+        return job_id in rec_jobs
+    return False
+
+def mark_job_as_recommended(candidate_id, job_id):
+    try:
+        candidate_table.update_item(
+            Key={'userId': candidate_id},
+            UpdateExpression="SET recommendedJobs = list_append(if_not_exists(recommendedJobs, :empty_list), :job_id)",
+            ExpressionAttributeValues={
+                ':empty_list': [],
+                ':job_id': [job_id]
+            }
+        )
+        safe_print(f"[Recommender] Successfully saved recommendation of job {job_id} to candidate {candidate_id} in CandidateProfiles")
+        return True
+    except Exception as e:
+        safe_print(f"[Recommender] Failed to mark job as recommended in CandidateProfiles: {e}")
+        return False

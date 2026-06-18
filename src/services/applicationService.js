@@ -26,9 +26,9 @@ function decodeJwtPayload(token) {
  * @param {string} [cvS3Key] - S3 key of the CV (used for reliable URL refresh)
  * @returns {Promise<Object>} Application data
  */
-export async function submitApplication(jobId, cvUrl, cvFilename, cvS3Key) {
+export async function submitApplication(jobId, cvUrl, cvFilename, cvS3Key, extraFields = {}) {
   try {
-    console.log('📤 Submitting application:', { jobId, cvUrl, cvFilename });
+    console.log('📤 Submitting application:', { jobId, cvUrl, cvFilename, extraFields });
     
     const headers = await getAuthHeaders();
     
@@ -39,7 +39,8 @@ export async function submitApplication(jobId, cvUrl, cvFilename, cvS3Key) {
         jobId,
         cvUrl,
         cvFilename,
-        ...(cvS3Key && { cvS3Key })
+        ...(cvS3Key && { cvS3Key }),
+        ...extraFields
       })
     });
     

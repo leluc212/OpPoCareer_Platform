@@ -452,6 +452,11 @@ const VerificationModalContent = styled.div`
   }
 `;
 
+const AnimatedFormGroup = styled(FormGroup)`
+  animation: ${fadeIn} 0.3s ease-out;
+  margin-bottom: 20px;
+`;
+
 const PostJob = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
@@ -494,7 +499,9 @@ const PostJob = () => {
     tags: '',
     description: '',
     requirements: '',
-    benefits: ''
+    benefits: '',
+    isAiScreeningEnabled: false,
+    customQuestions: ''
   });
 
   // Check verification status on mount — fetch real isVerified from API
@@ -541,7 +548,9 @@ const PostJob = () => {
         tags: editingJob.tags || '',
         description: editingJob.description || '',
         requirements: editingJob.requirements || '',
-        benefits: editingJob.benefits || ''
+        benefits: editingJob.benefits || '',
+        isAiScreeningEnabled: editingJob.isAiScreeningEnabled || false,
+        customQuestions: editingJob.customQuestions ? editingJob.customQuestions.join('\n') : ''
       });
     }
   }, [editingJob]);
@@ -554,10 +563,14 @@ const PostJob = () => {
   }, [workHoursList]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
 
     // Update formData
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const val = type === 'checkbox' ? checked : value;
+      const updated = { ...prev, [name]: val };
+      return updated;
+    });
   };
 
   const handleWorkHourChange = (index, field, value) => {
@@ -642,6 +655,16 @@ const PostJob = () => {
     console.log('📝 Editing job:', editingJob);
 
     try {
+      const customQuestionsArray = formData.customQuestions
+        ? formData.customQuestions.split('\n').map(q => q.trim()).filter(q => q.length > 0)
+        : [];
+
+      // Tạo payload sạch để loại bỏ customQuestions kiểu string cũ
+      const cleanFormData = {
+        ...formData,
+        customQuestions: customQuestionsArray
+      };
+
       if (isEditing) {
         // Update existing job in DynamoDB
         const jobId = editingJob.idJob || editingJob.id;
@@ -651,7 +674,7 @@ const PostJob = () => {
           throw new Error('Job ID not found');
         }
 
-        await jobPostService.updateJobPost(jobId, formData);
+        await jobPostService.updateJobPost(jobId, cleanFormData);
         console.log('✅ Job post updated successfully');
       } else {
         // Get authenticated user info
@@ -703,7 +726,7 @@ const PostJob = () => {
           employerId: employerId,
           employerEmail: employerEmail,
           employerName: employerName,
-          ...formData,
+          ...cleanFormData,
           // Require admin moderation for standard jobs
           status: 'pending',
           applicants: 0,
@@ -929,6 +952,57 @@ const PostJob = () => {
                     : 'Enter tags separated by commas. Example: Barista, F&B, Coffee'}
                 </p>
               </FormGroup>
+            </FormRow>
+
+            {/* AI Screening & Custom Interview Questions */}
+            <FormRow $columns="1fr">
+              <FormGroup style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F5F3FF', padding: '18px', borderRadius: '12px', border: '2px solid #DDD6FE', transition: 'all 0.3s ease' }}>
+                  <input
+                    type="checkbox"
+                    id="isAiScreeningEnabled"
+                    name="isAiScreeningEnabled"
+                    checked={formData.isAiScreeningEnabled}
+                    onChange={handleChange}
+                    style={{ width: '22px', height: '22px', cursor: 'pointer', accentColor: '#8b5cf6' }}
+                  />
+                  <label htmlFor="isAiScreeningEnabled" style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer', flex: 1 }}>
+                    <span style={{ fontWeight: '700', fontSize: '15px', color: '#4C1D95', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Sparkles size={16} color="#8b5cf6" />
+                      {language === 'vi' ? 'Chọn lọc ứng viên qua AI (Vòng 1 Sàng lọc CV & Vòng 2 Phỏng vấn)' : 'Screen Candidates with AI (Round 1 CV & Round 2 Interview)'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#6D28D9', marginTop: '4px', fontWeight: '500' }}>
+                      {language === 'vi'
+                        ? 'Kích hoạt tự động phân tích CV khi ứng tuyển và mở khóa phòng phỏng vấn chat trực tuyến với AI.'
+                        : 'Enable auto-analysis of candidate CVs and unlock the live chat interview simulator with AI.'}
+                    </span>
+                  </label>
+                </div>
+              </FormGroup>
+
+              {formData.isAiScreeningEnabled && (
+                <AnimatedFormGroup>
+                  <Label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', color: '#4C1D95' }}>
+                    <ClipboardList size={16} color="#8b5cf6" />
+                    {language === 'vi' ? 'Câu hỏi phỏng vấn riêng từ bạn dành cho AI học (Mỗi câu hỏi một dòng) *' : 'Custom Interview Questions for AI to Learn (One question per line) *'}
+                  </Label>
+                  <TextArea
+                    name="customQuestions"
+                    placeholder={language === 'vi'
+                      ? "Ví dụ:\nBạn có sẵn sàng tăng ca hoặc làm ca đêm khi cửa hàng đông khách không?\nBạn đã có chứng chỉ pha chế chuyên nghiệp nào chưa?"
+                      : "Example:\nAre you willing to work overtime or night shifts if the store gets busy?\nDo you have any professional barista certifications?"}
+                    value={formData.customQuestions}
+                    onChange={handleChange}
+                    rows={4}
+                    style={{ border: '1px solid #C084FC', focusBorderColor: '#8B5CF6' }}
+                  />
+                  <p style={{ fontSize: '12px', color: '#7C3AED', marginTop: '6px', fontWeight: '500' }}>
+                    {language === 'vi'
+                      ? 'AI Interviewer sẽ học các câu hỏi này và đưa vào cuộc phỏng vấn trực tiếp với Candidate ở Vòng 2.'
+                      : 'The AI Interviewer will learn these questions and include them in the live interview with candidates.'}
+                  </p>
+                </AnimatedFormGroup>
+              )}
             </FormRow>
 
             <FormGroup style={{ marginTop: '8px' }}>

@@ -11,7 +11,7 @@ import candidateProfileService from '../../services/candidateProfileService';
 import {
   Search, MapPin, Briefcase, Clock, Building2,
   Zap, Filter, ChevronRight, ChevronDown, X, DollarSign,
-  Calendar, Users, Globe, FileText, LogIn, Bookmark
+  Calendar, Users, Globe, FileText, LogIn, Bookmark, Sparkles
 } from 'lucide-react';
 
 const fadeUp = keyframes`
@@ -951,7 +951,27 @@ const PublicJobListing = () => {
                     }
                   </LogoBox>
                   <JobInfo>
-                    <JobTitle $isDark={isDarkMode}>{job.title}</JobTitle>
+                    <JobTitle $isDark={isDarkMode} style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{job.title}</span>
+                      {job.isAiScreeningEnabled && (
+                        <span style={{
+                          background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+                          color: '#6d28d9',
+                          border: '1px solid #c084fc',
+                          padding: '2px 6px',
+                          borderRadius: '9999px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                          flexShrink: 0
+                        }}>
+                          <Sparkles size={10} style={{ color: '#7c3aed' }} />
+                          {language === 'vi' ? 'Phỏng vấn AI' : 'AI Interview'}
+                        </span>
+                      )}
+                    </JobTitle>
                     <Company>{job.companyName || job.employerName || 'Công ty'}</Company>
                     <Tags>
                       {job._type === 'urgent' && (
@@ -1048,6 +1068,32 @@ const PublicJobListing = () => {
                   </Section>
                 )}
               </ModalBody>
+
+              {selectedJob.isAiScreeningEnabled && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 14px',
+                  background: '#f5f3ff',
+                  border: '1px dashed #7c3aed',
+                  borderRadius: '12px',
+                  color: '#6d28d9',
+                  fontSize: '0.82rem',
+                  fontWeight: '600',
+                  textAlign: 'left',
+                  width: 'calc(100% - 56px)',
+                  boxSizing: 'border-box',
+                  margin: '0 28px 16px',
+                }}>
+                  <Sparkles size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    {language === 'vi' 
+                      ? 'Lưu ý: Công việc này yêu cầu Phỏng vấn chọn lọc qua AI sau khi gửi CV.'
+                      : 'Note: This job requires an AI screening interview after sending CV.'}
+                  </span>
+                </div>
+              )}
 
               <ModalFooter $isDark={isDarkMode}>
                 <ApplyNowBtn to={`/login?redirect=/candidate/jobs&role=candidate`}>

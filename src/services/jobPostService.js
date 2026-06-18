@@ -173,6 +173,8 @@ class JobPostService {
         description: jobData.description,
         requirements: jobData.requirements || '',
         benefits: jobData.benefits || '',
+        isAiScreeningEnabled: jobData.isAiScreeningEnabled || false,
+        customQuestions: jobData.customQuestions || [],
         // New posts should require admin moderation; set to 'pending' by default
         status: 'pending',
         applicants: 0,

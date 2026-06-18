@@ -290,19 +290,21 @@ def lambda_handler(event, context):
             updated_profile = result.get('Attributes', {})
 
             # Check if search status is active and should trigger recommendations
-            is_active_now = updated_profile.get('isActive') is True
-            was_active = prev_profile.get('isActive') is True
-            coords_changed = (
-                updated_profile.get('latitude') != prev_profile.get('latitude') or
-                updated_profile.get('longitude') != prev_profile.get('longitude')
-            )
-
-            if is_active_now and (not was_active or coords_changed):
-                try:
-                    from job_recommender import recommend_active_jobs_to_candidate
-                    recommend_active_jobs_to_candidate(updated_profile)
-                except Exception as rec_err:
-                    print(f"Failed to match active jobs for activated candidate: {rec_err}")
+            # DEACTIVATED: Toggle-based recommendations removed per request.
+            # We now only send push-based recommendations when new jobs are posted/activated.
+            # is_active_now = updated_profile.get('isActive') is True
+            # was_active = prev_profile.get('isActive') is True
+            # coords_changed = (
+            #     updated_profile.get('latitude') != prev_profile.get('latitude') or
+            #     updated_profile.get('longitude') != prev_profile.get('longitude')
+            # )
+            #
+            # if is_active_now and (not was_active or coords_changed):
+            #     try:
+            #         from job_recommender import recommend_active_jobs_to_candidate
+            #         recommend_active_jobs_to_candidate(updated_profile)
+            #     except Exception as rec_err:
+            #         print(f"Failed to match active jobs for activated candidate: {rec_err}")
 
             return response(200, {'success': True, 'data': updated_profile})
  

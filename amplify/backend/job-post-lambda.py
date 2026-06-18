@@ -19,10 +19,11 @@ def get_cors_headers():
         'Content-Type': 'application/json'
     }
 
-# Helper function to convert Decimal to int/float for JSON serialization
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
+    if isinstance(obj, set):
+        return list(obj)
     raise TypeError
 
 def lambda_handler(event, context):
@@ -147,6 +148,27 @@ def lambda_handler(event, context):
 
         # E. Routes based on idJob (e.g. /jobs/JOB-123)
         elif '/jobs/' in normalized_path:
+            if '/views' in normalized_path:
+                parts = [s for s in normalized_path.split('/') if s]
+                jid = None
+                try:
+                    views_idx = parts.index('views')
+                    if views_idx > 0:
+                        jid = parts[views_idx - 1]
+                except ValueError:
+                    pass
+                if not jid:
+                    jid = path_parameters.get('idJob')
+                
+                if http_method == 'POST':
+                    return increment_views(jid, headers)
+                else:
+                    return {
+                        'statusCode': 405,
+                        'headers': headers,
+                        'body': json.dumps({'success': False, 'message': f'Method {http_method} not allowed for views'})
+                    }
+            
             jid = path_parameters.get('idJob') or (path_segments[-1] if path_segments else None)
             if jid == 'active': # Safety catch
                  return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'data': []})} # Handled above

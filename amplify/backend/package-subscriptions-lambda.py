@@ -24,10 +24,11 @@ withdrawal_requests_table = dynamodb.Table(withdrawal_requests_table_name)
 
 VN_TZ = timezone(timedelta(hours=7))
 
-# Helper function to convert Decimal to int/float for JSON serialization
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
+    if isinstance(obj, set):
+        return list(obj)
     raise TypeError
 
 def float_to_decimal(obj):
@@ -111,6 +112,9 @@ def lambda_handler(event, context):
     try:
         # Route requests
         if http_method == 'GET' and path == '/packages':
+            query_params = event.get('queryStringParameters') or {}
+            if query_params and query_params.get('type') == 'banners':
+                return get_all_banners(headers)
             return get_all_packages(headers)
 
         elif http_method == 'PUT' and '/packages/' in path:
@@ -582,6 +586,29 @@ def build_pre_expiry_notification(recipient_id, recipient_role, subscription, no
         'actionText': action_text,
         'actionTextEn': action_text_en
     }
+
+def get_all_banners(headers):
+    try:
+        banners_table = dynamodb.Table('Banners')
+        response = banners_table.scan()
+        items = response.get('Items', [])
+        active_items = [item for item in items if item.get('isActive') == True]
+        active_items.sort(key=lambda x: float(x.get('order', 999)))
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps(active_items, default=decimal_default)
+        }
+    except Exception as e:
+        print(f"Error getting banners: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'success': False,
+                'message': f'Error getting banners: {str(e)}'
+            })
+        }
 
 def process_expired_subscriptions():
     now_dt = get_vn_now()

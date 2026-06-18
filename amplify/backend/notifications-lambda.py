@@ -25,6 +25,8 @@ def get_cors_headers():
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
+    if isinstance(obj, set):
+        return list(obj)
     raise TypeError
 
 def lambda_handler(event, context):

@@ -13,6 +13,8 @@ table = dynamodb.Table(table_name)
 def decimal_default(obj):
     if isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
+    if isinstance(obj, set):
+        return list(obj)
     raise TypeError
 
 
@@ -131,6 +133,14 @@ def lambda_handler(event, context):
         # 5. POST /views (Tăng lượt xem)
         elif http_method == 'POST' and '/views' in normalized_path:
             job_id = path_parameters.get('idJob')
+            if not job_id:
+                parts = [s for s in normalized_path.split('/') if s]
+                try:
+                    v_idx = parts.index('views')
+                    if v_idx > 0:
+                        job_id = parts[v_idx - 1]
+                except ValueError:
+                    pass
             return increment_views(job_id, headers)
         
         # 6. BULK CLEANUP (BY SPECIFIC IDs) - Ưu tiên trên các route idJob
@@ -663,7 +673,8 @@ def increment_views(job_id, headers):
         
         table.update_item(
             Key={'jobID': job_id},
-            UpdateExpression='SET views = :v, updatedAt = :u',
+            UpdateExpression='SET #views = :v, updatedAt = :u',
+            ExpressionAttributeNames={'#views': 'views'},
             ExpressionAttributeValues={
                 ':v': new_views,
                 ':u': datetime.utcnow().isoformat() + 'Z'

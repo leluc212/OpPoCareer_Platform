@@ -200,6 +200,18 @@ def submit_application(event, candidate_id, candidate_email, create_response):
             'updatedAt': now_iso
         }
 
+        # Save AI screening/interview results if provided
+        ai_fields = [
+            'aiScreeningScore',
+            'aiScreeningResult',
+            'aiScreeningReason',
+            'aiInterviewScore',
+            'aiInterviewReport'
+        ]
+        for field in ai_fields:
+            if field in body:
+                application[field] = body[field]
+
         if cv_s3_key:
             application['cvS3Key'] = cv_s3_key
         

@@ -1705,7 +1705,7 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
                         {language === 'vi' ? 'Vòng 1: Chọn lọc CV' : 'Round 1: CV Screening'}
                       </h4>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '28px', fontWeight: '800', color: candidate.aiScreeningScore >= 70 ? '#059669' : '#DC2626' }}>
+                        <div style={{ fontSize: '28px', fontWeight: '800', color: candidate.aiScreeningScore >= 60 ? '#059669' : '#DC2626' }}>
                           {candidate.aiScreeningScore || '---'}
                           <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>
                         </div>
@@ -1727,18 +1727,18 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
                         {language === 'vi' ? 'Vòng 2: Phỏng vấn AI' : 'Round 2: AI Interview'}
                       </h4>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '28px', fontWeight: '800', color: (candidate.aiInterviewScore && candidate.aiInterviewScore >= 70) ? '#059669' : '#DC2626' }}>
+                        <div style={{ fontSize: '28px', fontWeight: '800', color: (candidate.aiInterviewScore && candidate.aiInterviewScore >= 60) ? '#059669' : '#DC2626' }}>
                           {candidate.aiInterviewScore || '---'}
                           {candidate.aiInterviewScore && <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>}
                         </div>
                         {candidate.aiInterviewScore && (
                           <span style={{
                             padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                            background: candidate.aiInterviewScore >= 70 ? '#D1FAE5' : '#FEE2E2',
-                            color: candidate.aiInterviewScore >= 70 ? '#065F46' : '#991B1B',
-                            border: `1.5px solid ${candidate.aiInterviewScore >= 70 ? '#34D399' : '#F87171'}`
+                            background: candidate.aiInterviewScore >= 60 ? '#D1FAE5' : '#FEE2E2',
+                            color: candidate.aiInterviewScore >= 60 ? '#065F46' : '#991B1B',
+                            border: `1.5px solid ${candidate.aiInterviewScore >= 60 ? '#34D399' : '#F87171'}`
                           }}>
-                            {candidate.aiInterviewScore >= 70 ? (language === 'vi' ? 'KHUYÊN DÙNG' : 'RECOMMEND') : (language === 'vi' ? 'CÂN NHẮC' : 'HOLD')}
+                            {candidate.aiInterviewScore >= 60 ? (language === 'vi' ? 'KHUYÊN DÙNG' : 'RECOMMEND') : (language === 'vi' ? 'CÂN NHẮC' : 'HOLD')}
                           </span>
                         )}
                       </div>

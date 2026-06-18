@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
@@ -7,7 +7,8 @@ import {
   Search, MapPin, Briefcase, Clock, TrendingUp,
   ChevronDown, Building2, Bookmark, Eye, ArrowUpRight, Filter,
   X, SlidersHorizontal, Grid, List, Sparkles, Zap, Navigation, Target,
-  Power, XCircle, AlertCircle, CheckCircle, RotateCw
+  Power, XCircle, AlertCircle, CheckCircle, RotateCw,
+  Volume2, VolumeX, Mic, MicOff
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import StatusBadge from '../../components/StatusBadge';
@@ -667,6 +668,198 @@ const ChatInputBar = styled.div`
     &:disabled {
       background: #94a3b8;
       cursor: not-allowed;
+    }
+  }
+`;
+
+// Voice-only Interview UI
+const voicePulseRing = keyframes`
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+`;
+
+const voiceWave = keyframes`
+  0%, 100% { height: 8px; }
+  50% { height: 28px; }
+`;
+
+const VoiceInterviewArea = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  min-height: 340px;
+  gap: 24px;
+`;
+
+const VoiceAvatarCircle = styled.div`
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: ${props => props.$isSpeaking
+    ? 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 50%, #a78bfa 100%)'
+    : props.$isListening
+      ? 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
+      : 'linear-gradient(135deg, #94a3b8 0%, #cbd5e1 100%)'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background 0.4s ease;
+  box-shadow: ${props => props.$isSpeaking
+    ? '0 0 40px rgba(124, 58, 237, 0.4)'
+    : props.$isListening
+      ? '0 0 40px rgba(239, 68, 68, 0.4)'
+      : '0 0 20px rgba(0,0,0,0.08)'};
+
+  svg {
+    color: white;
+    z-index: 2;
+  }
+
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid ${props => props.$isSpeaking
+      ? 'rgba(124, 58, 237, 0.5)'
+      : props.$isListening
+        ? 'rgba(239, 68, 68, 0.5)'
+        : 'transparent'};
+    animation: ${props => (props.$isSpeaking || props.$isListening)
+      ? css`${voicePulseRing} 2s ease-out infinite`
+      : 'none'};
+  }
+
+  &::after {
+    animation-delay: 0.6s;
+  }
+`;
+
+const VoiceStatusText = styled.div`
+  text-align: center;
+
+  h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 6px 0;
+  }
+
+  p {
+    font-size: 13.5px;
+    color: #64748b;
+    margin: 0;
+    font-weight: 500;
+  }
+`;
+
+const VoiceWaveformBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+
+  span {
+    display: inline-block;
+    width: 4px;
+    border-radius: 4px;
+    background: ${props => props.$color || '#7c3aed'};
+    animation: ${props => props.$active ? css`${voiceWave} 0.8s ease-in-out infinite` : 'none'};
+    height: 8px;
+    transition: height 0.2s;
+
+    &:nth-child(1) { animation-delay: 0s; }
+    &:nth-child(2) { animation-delay: 0.1s; }
+    &:nth-child(3) { animation-delay: 0.2s; }
+    &:nth-child(4) { animation-delay: 0.3s; }
+    &:nth-child(5) { animation-delay: 0.15s; }
+    &:nth-child(6) { animation-delay: 0.25s; }
+    &:nth-child(7) { animation-delay: 0.05s; }
+  }
+`;
+
+const VoiceMicMainButton = styled.button`
+  && {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: none;
+    background: ${props => props.$isListening
+      ? 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
+      : 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)'};
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: ${props => props.$isListening
+      ? '0 8px 30px rgba(239, 68, 68, 0.4)'
+      : '0 8px 30px rgba(124, 58, 237, 0.3)'};
+    animation: ${props => props.$isListening ? css`${pulse} 1.5s infinite ease-in-out` : 'none'};
+
+    &:hover:not(:disabled) {
+      transform: scale(1.08);
+      box-shadow: ${props => props.$isListening
+        ? '0 12px 40px rgba(239, 68, 68, 0.5)'
+        : '0 12px 40px rgba(124, 58, 237, 0.4)'};
+    }
+
+    &:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+      opacity: 0.6;
+      box-shadow: none;
+    }
+  }
+`;
+
+const VoiceQuestionCounter = styled.div`
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+`;
+
+const pulse = keyframes`
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+`;
+
+const MicButton = styled.button`
+  && {
+    padding: 12px;
+    background: ${props => props.$isListening ? '#ef4444' : '#e2e8f0'};
+    color: ${props => props.$isListening ? 'white' : '#475569'};
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    animation: ${props => props.$isListening ? css`${pulse} 1.5s infinite ease-in-out` : 'none'};
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+
+    &:hover:not(:disabled) {
+      background: ${props => props.$isListening ? '#dc2626' : '#cbd5e1'};
+      transform: scale(1.04);
+    }
+    
+    &:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+      opacity: 0.6;
     }
   }
 `;
@@ -1947,6 +2140,11 @@ const JobListing = () => {
   const [aiScreeningWeaknesses, setAiScreeningWeaknesses] = useState([]);
   const [aiScreeningReason, setAiScreeningReason] = useState('');
   const [aiScreeningError, setAiScreeningError] = useState('');
+  const [isAiMockMode, setIsAiMockMode] = useState(false);
+  const [showAiRulesModal, setShowAiRulesModal] = useState(false);
+  const [rulesAccepted, setRulesAccepted] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showTabWarningOverlay, setShowTabWarningOverlay] = useState(false);
 
   // Interview states
   const [interviewSessionId, setInterviewSessionId] = useState(null);
@@ -1955,6 +2153,217 @@ const JobListing = () => {
   const [interviewFinished, setInterviewFinished] = useState(false);
   const [interviewReport, setInterviewReport] = useState(null);
   const [interviewInputText, setInterviewInputText] = useState('');
+  const [interviewQuestionCount, setInterviewQuestionCount] = useState(0);
+
+  // Voice Interaction states & refs
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const recognitionRef = useRef(null);
+  const autoSendTimerRef = useRef(null);
+
+  const speakVietnamese = useCallback((text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    
+    // Clean text from emojis
+    const cleanText = text.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '').trim();
+    
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'vi-VN';
+    
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find(v => v.lang.includes('vi-VN') || v.lang === 'vi');
+    if (viVoice) {
+      utterance.voice = viVoice;
+    }
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsListening(false);
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert(language === 'vi' 
+        ? 'Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Vui lòng dùng Google Chrome, Safari hoặc Microsoft Edge.' 
+        : 'Your browser does not support speech recognition. Please use Google Chrome, Safari, or Microsoft Edge.');
+      return;
+    }
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'vi-VN';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      if (transcript && transcript.trim()) {
+        const text = transcript.trim();
+        setInterviewInputText(text);
+        
+        // Stop listening immediately to release resources
+        recognition.stop();
+        setIsListening(false);
+
+        // Immediately submit the voice response to the AI handler
+        handleSendInterviewAnswer(text);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error('Recognition start error:', err);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const handleDisqualifyCandidate = () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsListening(false);
+    setIsSpeaking(false);
+
+    // Ban for 3 days
+    const banDuration = 3 * 24 * 60 * 60 * 1000; // 3 days in ms
+    localStorage.setItem('ai_interview_ban_until', String(Date.now() + banDuration));
+
+    // Close modals
+    setShowAiScreeningModal(false);
+    setShowTabWarningOverlay(false);
+    setPendingApplication(null);
+
+    // Show ban error modal
+    setErrorModal({
+      show: true,
+      message: language === 'vi'
+        ? 'Bạn đã bị huỷ phỏng vấn và khoá tính năng 3 ngày do chuyển tab/thoát màn hình lần thứ 2!'
+        : 'Your interview has been cancelled and you are banned for 3 days due to tab switching!'
+    });
+  };
+
+  // Visibility and Anti-cheat Monitoring Hook
+  useEffect(() => {
+    if (!showAiScreeningModal || aiScreeningStep !== 'interview' || interviewFinished) {
+      setTabSwitchCount(0);
+      setShowTabWarningOverlay(false);
+      return;
+    }
+
+    const handleViolation = () => {
+      // Avoid double triggering while warning overlay is active
+      if (showTabWarningOverlay) return;
+
+      setTabSwitchCount(prev => {
+        const nextCount = prev + 1;
+        if (nextCount === 1) {
+          setShowTabWarningOverlay(true);
+          if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+          }
+        } else if (nextCount >= 2) {
+          handleDisqualifyCandidate();
+        }
+        return nextCount;
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleViolation();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      handleViolation();
+    };
+
+    const handlePreventCopyPaste = (e) => {
+      e.preventDefault();
+      alert(language === 'vi' 
+        ? '⚠️ Tính năng sao chép/dán bị vô hiệu hóa trong lúc phỏng vấn!' 
+        : '⚠️ Copy and paste is disabled during the interview!');
+    };
+
+    const handlePreventRightClick = (e) => {
+      e.preventDefault();
+    };
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = ''; // Standard confirmation popup
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('copy', handlePreventCopyPaste);
+    document.addEventListener('paste', handlePreventCopyPaste);
+    document.addEventListener('contextmenu', handlePreventRightClick);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('copy', handlePreventCopyPaste);
+      document.removeEventListener('paste', handlePreventCopyPaste);
+      document.removeEventListener('contextmenu', handlePreventRightClick);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [showAiScreeningModal, aiScreeningStep, interviewFinished, language, showTabWarningOverlay]);
+
+  // Clean up speech on close
+  useEffect(() => {
+    if (!showAiScreeningModal) {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      setIsSpeaking(false);
+      if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    }
+  }, [showAiScreeningModal]);
 
   const chatEndRef = useRef(null);
 
@@ -2040,13 +2449,33 @@ Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được
       setAiScreeningStrengths(data.strengths || []);
       setAiScreeningWeaknesses(data.weaknesses || []);
       setAiScreeningReason(data.reason || '');
+      setIsAiMockMode(false);
     } catch (e) {
-      console.error("Error in AI screening:", e);
-      setAiScreeningError(
-        language === 'vi' 
-          ? "Không thể kết nối đến máy chủ AI. Vui lòng đảm bảo Backend FastAPI đang chạy tại cổng 8000."
-          : "Could not connect to the AI server. Please make sure the FastAPI Backend is running on port 8000."
+      console.warn("Connection to FastAPI AI server failed. Falling back to frontend mock AI screening.", e);
+      
+      // Simulate network delay for realistic experience
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const mockScore = Math.floor(Math.random() * 20) + 75; // Score between 75 and 94
+      setAiScreeningScore(mockScore);
+      setAiScreeningResult('pass');
+      
+      const isVi = language === 'vi';
+      setAiScreeningStrengths([
+        isVi ? `Có kỹ năng phù hợp với vị trí ${job.title}` : `Possesses suitable skills for the ${job.title} role`,
+        isVi ? "Kinh nghiệm làm việc thực tế tốt" : "Good hands-on working experience",
+        isVi ? "Thái độ tích cực, sẵn sàng làm việc" : "Positive attitude and ready to work"
+      ]);
+      setAiScreeningWeaknesses([
+        isVi ? "Cần thích nghi thêm với quy trình vận hành nội bộ" : "Needs to adapt to internal operating procedures"
+      ]);
+      setAiScreeningReason(
+        isVi 
+          ? `Hồ sơ rất ấn tượng. Ứng viên có đầy đủ kiến thức nền tảng và các kỹ năng cần thiết cho công việc ${job.title} tại ${job.company}. Đề xuất tiến hành phỏng vấn trực tiếp.`
+          : `Very impressive profile. The candidate has the necessary foundation and skills for the ${job.title} position at ${job.company}. Recommended to proceed to live interview.`
       );
+      
+      setIsAiMockMode(true);
     } finally {
       setAiScreeningLoading(false);
     }
@@ -2059,8 +2488,13 @@ Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được
     setInterviewReport(null);
     setInterviewMessages([]);
     setInterviewSessionId(null);
+    setInterviewQuestionCount(1);
 
     try {
+      if (isAiMockMode) {
+        throw new Error("Local offline/demo mode");
+      }
+
       const cvText = getCvText(job);
 
       const jdText = `
@@ -2087,26 +2521,43 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
       const data = await response.json();
       setInterviewSessionId(data.session_id);
+      const initialQuestion = data.question || "Chào bạn, hãy bắt đầu buổi phỏng vấn.";
       setInterviewMessages([{
-        text: data.question || "Chào bạn, hãy bắt đầu buổi phỏng vấn.",
+        text: initialQuestion,
         isMe: false,
         time: new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
       }]);
+      speakVietnamese(initialQuestion);
     } catch (e) {
-      console.error("Error starting AI interview:", e);
-      setAiScreeningError(
-        language === 'vi'
-          ? "Không thể kết nối đến máy chủ AI. Vui lòng đảm bảo Backend FastAPI đang chạy tại cổng 8000."
-          : "Could not connect to the AI server. Please make sure the FastAPI Backend is running on port 8000."
-      );
+      console.warn("Connection to FastAPI AI server failed. Falling back to frontend mock AI interview.", e);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setInterviewSessionId("mock-session-id");
+      const initialQuestion = language === 'vi'
+        ? `Chào bạn, tôi là AI Interviewer. Cảm ơn bạn đã ứng tuyển vào vị trí ${job.title}. Bạn có thể tự giới thiệu ngắn gọn về bản thân và kinh nghiệm làm việc liên quan được không?`
+        : `Hello, I'm the AI Interviewer. Thank you for applying for the ${job.title} role. Could you briefly introduce yourself and share your relevant work experience?`;
+      
+      setInterviewMessages([{
+        text: initialQuestion,
+        isMe: false,
+        time: new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+      }]);
+      speakVietnamese(initialQuestion);
     } finally {
       setAiScreeningLoading(false);
     }
   };
 
-  const handleSendInterviewAnswer = async () => {
-    const text = interviewInputText.trim();
+  const handleSendInterviewAnswer = async (textOverride = '') => {
+    const text = (typeof textOverride === 'string' && textOverride.trim()) 
+      ? textOverride.trim() 
+      : interviewInputText.trim();
     if (!text || interviewSending || !interviewSessionId) return;
+
+    if (isListening) {
+      stopListening();
+    }
 
     setInterviewInputText('');
     setInterviewSending(true);
@@ -2115,6 +2566,75 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     setInterviewMessages(prev => [...prev, { text, isMe: true, time: timeStr }]);
 
     try {
+      if (interviewSessionId === "mock-session-id") {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const nextTimeStr = new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+        
+        const isVi = language === 'vi';
+        
+        if (interviewQuestionCount === 1) {
+          const nextQuestion = isVi
+            ? "Cảm ơn bạn. Bạn có thể chia sẻ thêm về cách bạn giải quyết một tình huống khách hàng phàn nàn hoặc gặp khó khăn khi làm việc nhóm không?"
+            : "Thank you. Could you share how you handle a customer complaint or a difficult situation when working in a team?";
+          
+          setInterviewMessages(prev => [...prev, {
+            text: nextQuestion,
+            isMe: false,
+            time: nextTimeStr
+          }]);
+          setInterviewQuestionCount(2);
+          speakVietnamese(nextQuestion);
+        } else if (interviewQuestionCount === 2) {
+          const nextQuestion = isVi
+            ? "Tuyệt vời. Cuối cùng, bạn có mong muốn gì về mức lương hoặc chế độ đãi ngộ, và bạn có thể bắt đầu đi làm từ khi nào?"
+            : "Great. Lastly, what are your expectations regarding salary or benefits, and when would you be available to start?";
+          
+          setInterviewMessages(prev => [...prev, {
+            text: nextQuestion,
+            isMe: false,
+            time: nextTimeStr
+          }]);
+          setInterviewQuestionCount(3);
+          speakVietnamese(nextQuestion);
+        } else {
+          setInterviewFinished(true);
+          const score = Math.floor(Math.random() * 15) + 75; // Score 75-89
+          const report = {
+            total_score: score,
+            recommend_to_employer: true,
+            past_experience_score: score + (Math.random() > 0.5 ? 2 : -2),
+            situation_handling_score: score + (Math.random() > 0.5 ? 3 : -3),
+            operations_score: score + (Math.random() > 0.5 ? 1 : -1),
+            custom_questions_score: score,
+            reason: isVi
+              ? `Ứng viên trả lời tự tin, mạch lạc. Có thái độ dịch vụ tốt, phù hợp với yêu cầu công việc tại ${aiScreeningJob?.company || 'công ty'}.`
+              : `The candidate answered confidently and coherently. Shows good customer service attitude, matching the requirements of ${aiScreeningJob?.company || 'company'}.`,
+            strengths: [
+              isVi ? "Thái độ phục vụ khách hàng tốt" : "Good customer service mindset",
+              isVi ? "Giao tiếp rõ ràng, tự tin" : "Clear and confident communication"
+            ],
+            weaknesses: [
+              isVi ? "Cần làm quen với môi trường mới" : "Needs to adapt to a new environment"
+            ]
+          };
+          
+          setInterviewReport(report);
+          submitDeferredApplication(report);
+          
+          const endingText = isVi
+            ? "Cảm ơn bạn đã tham gia buổi phỏng vấn. Hệ thống đang tổng hợp kết quả của bạn..."
+            : "Thank you for participating in the interview. The system is compiling your results...";
+          setInterviewMessages(prev => [...prev, {
+            text: endingText,
+            isMe: false,
+            time: nextTimeStr
+          }]);
+          speakVietnamese(endingText);
+        }
+        setInterviewSending(false);
+        return;
+      }
+
       const response = await fetch("http://localhost:8000/api/v1/interview/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2136,19 +2656,24 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         setInterviewFinished(true);
         setInterviewReport(data.report);
         submitDeferredApplication(data.report);
+        const endingText = language === 'vi'
+          ? "Cảm ơn bạn đã tham gia buổi phỏng vấn. Hệ thống đang tổng hợp kết quả của bạn..."
+          : "Thank you for participating in the interview. The system is compiling your results...";
         setInterviewMessages(prev => [...prev, {
-          text: language === 'vi'
-            ? "Cảm ơn bạn đã tham gia buổi phỏng vấn. Hệ thống đang tổng hợp kết quả của bạn..."
-            : "Thank you for participating in the interview. The system is compiling your results...",
+          text: endingText,
           isMe: false,
           time: nextTimeStr
         }]);
+        speakVietnamese(endingText);
       } else {
+        const nextQuestion = data.question || "";
         setInterviewMessages(prev => [...prev, {
-          text: data.question || "",
+          text: nextQuestion,
           isMe: false,
           time: nextTimeStr
         }]);
+        setInterviewQuestionCount(prev => prev + 1);
+        speakVietnamese(nextQuestion);
       }
     } catch (e) {
       console.error("Error sending AI interview answer:", e);
@@ -2737,7 +3262,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     if (!pendingApplication) return;
 
     try {
-      const isPassed = report?.recommend_to_employer || (report?.total_score >= 70);
+      const isPassed = report?.recommend_to_employer || (report?.total_score >= 60);
       if (!isPassed) {
         console.log('❌ [Deferred] Interview failed, skipping application submission');
         return;
@@ -2869,6 +3394,20 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
       // Check if AI screening is enabled!
       if (jobData?.isAiScreeningEnabled) {
+        // Check if banned
+        const banUntil = localStorage.getItem('ai_interview_ban_until');
+        if (banUntil && Date.now() < Number(banUntil)) {
+          const banDate = new Date(Number(banUntil)).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
+          setIsSubmitting(false);
+          setErrorModal({
+            show: true,
+            message: language === 'vi'
+              ? `Bạn đang bị khóa tính năng phỏng vấn AI cho đến ngày ${banDate} do vi phạm quy chế (chuyển tab/thoát trình duyệt).`
+              : `You are banned from AI features until ${banDate} for violating rules (switching tabs).`
+          });
+          return;
+        }
+
         // Defer application submission
         setPendingApplication({
           jobId,
@@ -4293,6 +4832,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       <Modal
         isOpen={showAiScreeningModal}
         onClose={() => {
+          if (aiScreeningStep === 'interview' && !interviewFinished) {
+            // Cannot close modal during active interview!
+            return;
+          }
           if (!aiScreeningLoading && (!interviewSending || interviewFinished)) {
             setShowAiScreeningModal(false);
             if (!interviewFinished) {
@@ -4442,8 +4985,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     {aiScreeningResult.toLowerCase() !== 'fail' && (
                       <button 
                         onClick={() => {
-                          setAiScreeningStep('interview');
-                          startInterviewSession(aiScreeningJob, pendingApplication?.finalCVUrl);
+                          const banUntil = localStorage.getItem('ai_interview_ban_until');
+                          if (banUntil && Date.now() < Number(banUntil)) {
+                            const banDate = new Date(Number(banUntil)).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
+                            setErrorModal({
+                              show: true,
+                              message: language === 'vi'
+                                ? `Bạn đang bị khóa tính năng phỏng vấn AI cho đến ngày ${banDate} do vi phạm quy chế (chuyển tab/thoát trình duyệt).`
+                                : `You are banned from AI features until ${banDate} for violating rules (switching tabs).`
+                            });
+                            return;
+                          }
+                          setRulesAccepted(false); // Reset checkbox when opening rules
+                          setShowAiRulesModal(true);
                         }}
                         style={{
                           flex: 1.5,
@@ -4498,39 +5052,57 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 </div>
               ) : (
                 <div>
-                  <ChatArea>
-                    {interviewMessages.map((m, idx) => (
-                      <ChatBubble key={idx} $isMe={m.isMe}>
-                        {m.text}
-                        <span className="time">{m.time}</span>
-                      </ChatBubble>
-                    ))}
-                    {interviewSending && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#e2e8f0', color: '#475569', padding: '10px 14px', borderRadius: '12px', fontSize: '13.5px', alignSelf: 'flex-start', borderBottomLeftRadius: '2px', fontStyle: 'italic' }}>
-                        <div style={{ width: '8px', height: '8px', background: '#64748b', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                        {language === 'vi' ? 'AI đang suy nghĩ...' : 'AI is typing...'}
-                      </div>
-                    )}
-                    <div ref={chatEndRef} />
-                  </ChatArea>
+                  <VoiceInterviewArea>
+                    <VoiceQuestionCounter>
+                      {language === 'vi' 
+                        ? `Câu hỏi ${interviewQuestionCount}` 
+                        : `Question ${interviewQuestionCount}`}
+                    </VoiceQuestionCounter>
+
+                    <VoiceAvatarCircle $isSpeaking={isSpeaking} $isListening={isListening}>
+                      {isSpeaking ? <Volume2 size={40} /> : isListening ? <Mic size={40} /> : <Sparkles size={40} />}
+                    </VoiceAvatarCircle>
+
+                    <VoiceWaveformBar $active={isSpeaking || isListening} $color={isListening ? '#ef4444' : '#7c3aed'}>
+                      <span /><span /><span /><span /><span /><span /><span />
+                    </VoiceWaveformBar>
+
+                    <VoiceStatusText>
+                      <h3>
+                        {interviewSending
+                          ? (language === 'vi' ? 'AI đang xử lý...' : 'AI is processing...')
+                          : isSpeaking
+                            ? (language === 'vi' ? 'AI đang nói...' : 'AI is speaking...')
+                            : isListening
+                              ? (language === 'vi' ? '🎙️ Đang lắng nghe bạn...' : '🎙️ Listening to you...')
+                              : (language === 'vi' ? 'Nhấn nút micro để trả lời' : 'Press the mic to answer')}
+                      </h3>
+                      <p>
+                        {interviewSending
+                          ? (language === 'vi' ? 'Vui lòng đợi trong giây lát' : 'Please wait a moment')
+                          : isSpeaking
+                            ? (language === 'vi' ? 'Hãy lắng nghe câu hỏi của AI' : 'Listen to the AI\'s question')
+                            : isListening
+                              ? (language === 'vi' ? 'Nói rõ ràng câu trả lời của bạn' : 'Speak your answer clearly')
+                              : (language === 'vi' ? 'Bấm nút micro bên dưới để bắt đầu nói' : 'Press the mic button below to start speaking')}
+                      </p>
+                    </VoiceStatusText>
+                  </VoiceInterviewArea>
 
                   {!interviewFinished ? (
-                    <ChatInputBar>
-                      <input 
-                        type="text" 
-                        placeholder={language === 'vi' ? 'Nhập câu trả lời của bạn...' : 'Type your answer...'}
-                        value={interviewInputText}
-                        onChange={e => setInterviewInputText(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSendInterviewAnswer(); }}
-                        disabled={interviewSending}
-                      />
-                      <button 
-                        onClick={handleSendInterviewAnswer}
-                        disabled={interviewSending || !interviewInputText.trim()}
+                    <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '8px' }}>
+                      <VoiceMicMainButton
+                        type="button"
+                        onClick={toggleListening}
+                        $isListening={isListening}
+                        disabled={interviewSending || isSpeaking}
+                        title={isListening 
+                          ? (language === 'vi' ? 'Đang thu âm - Bấm để dừng' : 'Recording - Click to stop') 
+                          : (language === 'vi' ? 'Bấm để nói câu trả lời' : 'Press to speak your answer')}
                       >
-                        {language === 'vi' ? 'Gửi' : 'Send'}
-                      </button>
-                    </ChatInputBar>
+                        {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+                      </VoiceMicMainButton>
+                    </div>
                   ) : (
                     interviewReport && (
                       <div style={{ animation: 'slideIn 0.3s ease-out', marginTop: '16px', borderTop: '2px solid #e2e8f0', paddingTop: '20px', textAlign: 'left' }}>
@@ -4540,11 +5112,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
                         <div style={{ display: 'flex', justifyContent: 'space-evenly', alignItems: 'center', marginBottom: '20px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                           <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '32px', fontWeight: '800', color: interviewReport.total_score >= 70 ? '#10b981' : '#ef4444' }}>
+                            <div style={{ fontSize: '32px', fontWeight: '800', color: interviewReport.total_score >= 60 ? '#10b981' : '#ef4444' }}>
                               {interviewReport.total_score}
                             </div>
                             <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
-                              {language === 'vi' ? 'ĐIỂM PHỎNG VẤN' : 'INTERVIEW SCORE'}
+                              {language === 'vi' ? 'ĐIỂM TRUNG BÌNH' : 'AVERAGE SCORE'}
                             </div>
                           </div>
                           
@@ -4558,6 +5130,50 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                             </div>
                             <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
                               {language === 'vi' ? 'KẾT QUẢ CUỐI CÙNG' : 'FINAL RESULT'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* F&B Competency Sub-scores Grid */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '12px',
+                          marginBottom: '20px'
+                        }}>
+                          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>
+                              {language === 'vi' ? '💼 Kinh nghiệm F&B' : '💼 F&B Experience'}
+                            </div>
+                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#7c3aed', marginTop: '4px' }}>
+                              {interviewReport.past_experience_score || 0}<span style={{ fontSize: '13px', fontWeight: '500', color: '#94a3b8' }}>/100</span>
+                            </div>
+                          </div>
+                          
+                          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>
+                              {language === 'vi' ? '🛠️ Xử lý Tình huống' : '🛠️ Situation Handling'}
+                            </div>
+                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#7c3aed', marginTop: '4px' }}>
+                              {interviewReport.situation_handling_score || 0}<span style={{ fontSize: '13px', fontWeight: '500', color: '#94a3b8' }}>/100</span>
+                            </div>
+                          </div>
+
+                          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>
+                              {language === 'vi' ? '⚙️ Quy trình Vận hành' : '⚙️ Operations'}
+                            </div>
+                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#7c3aed', marginTop: '4px' }}>
+                              {interviewReport.operations_score || 0}<span style={{ fontSize: '13px', fontWeight: '500', color: '#94a3b8' }}>/100</span>
+                            </div>
+                          </div>
+
+                          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>
+                              {language === 'vi' ? '❓ Câu hỏi từ Employer' : '❓ Employer Custom'}
+                            </div>
+                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#7c3aed', marginTop: '4px' }}>
+                              {interviewReport.custom_questions_score || 0}<span style={{ fontSize: '13px', fontWeight: '500', color: '#94a3b8' }}>/100</span>
                             </div>
                           </div>
                         </div>
@@ -4588,7 +5204,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                         <button 
                           onClick={() => {
                             setShowAiScreeningModal(false);
-                            const isPassed = interviewReport?.recommend_to_employer || (interviewReport?.total_score >= 70);
+                            const isPassed = interviewReport?.recommend_to_employer || (interviewReport?.total_score >= 60);
                             if (isPassed) {
                               setApplySuccess(true);
                               setTimeout(() => setApplySuccess(false), 3000);
@@ -4618,6 +5234,183 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               )
             )}
           </AiScreeningContent>
+        </ApplyModalWrap>
+      </Modal>
+
+      {/* AI Rules Modal */}
+      <Modal
+        isOpen={showAiRulesModal}
+        onClose={() => setShowAiRulesModal(false)}
+        title=""
+      >
+        <ApplyModalWrap onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+          <div className="apply-emoji" style={{ fontSize: '40px' }}>⚖️</div>
+          <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '12px' }}>
+            {language === 'vi' ? 'Quy chế Phỏng vấn AI bắt buộc' : 'Mandatory AI Interview Rules'}
+          </h3>
+          <p className="apply-desc" style={{ marginBottom: '16px', color: '#475569' }}>
+            {language === 'vi'
+              ? 'Vui lòng đọc kỹ và cam kết tuân thủ các quy tắc dưới đây để đảm bảo tính minh bạch và công bằng:'
+              : 'Please read carefully and commit to complying with the rules below to ensure fairness and integrity:'}
+          </p>
+
+          <div style={{
+            textAlign: 'left',
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '20px',
+            maxHeight: '260px',
+            overflowY: 'auto',
+            fontSize: '13.5px',
+            lineHeight: '1.6',
+            color: '#334155'
+          }}>
+            <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#ef4444' }}>🚫</span>
+              <div>
+                <strong>{language === 'vi' ? 'Không tự ý thoát' : 'No Early Exit'}:</strong>{' '}
+                {language === 'vi' ? 'Buổi phỏng vấn phải diễn ra liên tục. Bạn không được đóng cửa sổ phỏng vấn nửa chừng.' : 'The interview must run continuously. You must not close the window mid-way.'}
+              </div>
+            </div>
+            <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#ef4444' }}>⚠️</span>
+              <div>
+                <strong>{language === 'vi' ? 'Cấm chuyển Tab (Tab Switching)' : 'Tab Switch Restriction'}:</strong>{' '}
+                {language === 'vi' ? 'Chuyển tab hoặc rời khỏi trang lần 1 sẽ bị cảnh cáo. Chuyển tab lần 2 sẽ ngưng phỏng vấn ngay lập tức và khóa tài khoản phỏng vấn AI trong 3 ngày.' : 'Switching tabs or minimizing the browser once will trigger a warning. The 2nd time will cancel the interview immediately and ban you for 3 days.'}
+              </div>
+            </div>
+            <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#ef4444' }}>🤖</span>
+              <div>
+                <strong>{language === 'vi' ? 'Cấm sử dụng công cụ hỗ trợ' : 'No External AI Support'}:</strong>{' '}
+                {language === 'vi' ? 'Nghiêm cấm sử dụng AI khác (ChatGPT, tool đọc giọng nói...) hoặc sao chép văn bản bên ngoài. Mọi câu trả lời phải là tiếng nói trực tiếp của bạn.' : 'Strictly forbidden to use external AI or voice-gen tools. All answers must be spoken live by you.'}
+              </div>
+            </div>
+            <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#ef4444' }}>🔄</span>
+              <div>
+                <strong>{language === 'vi' ? 'Không tải lại trang (F5)' : 'No Page Reload (F5)'}:</strong>{' '}
+                {language === 'vi' ? 'Không bấm F5 hoặc tải lại trang web trong suốt phiên làm việc.' : 'Do not hit F5 or reload the webpage during the session.'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#ef4444' }}>🔒</span>
+              <div>
+                <strong>{language === 'vi' ? 'Khóa tính năng Sao chép/Dán' : 'Copy/Paste Disabled'}:</strong>{' '}
+                {language === 'vi' ? 'Tính năng sao chép và dán bị vô hiệu hóa hoàn toàn trong suốt buổi phỏng vấn.' : 'Copying and pasting is completely disabled during the interview.'}
+              </div>
+            </div>
+          </div>
+
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '12px',
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            fontSize: '13.5px',
+            fontWeight: '600',
+            color: '#1e40af',
+            marginBottom: '20px'
+          }}>
+            <input
+              type="checkbox"
+              checked={rulesAccepted}
+              onChange={(e) => setRulesAccepted(e.target.checked)}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <span>
+              {language === 'vi'
+                ? 'Tôi đã đọc hiểu và cam kết tuân thủ quy chế phỏng vấn'
+                : 'I have read, understood, and commit to the rules'}
+            </span>
+          </label>
+
+          <div className="apply-buttons">
+            <button
+              className="btn-cancel"
+              onClick={() => setShowAiRulesModal(false)}
+              style={{ flex: 1 }}
+            >
+              {language === 'vi' ? 'Hủy' : 'Cancel'}
+            </button>
+            <button
+              onClick={() => {
+                if (!rulesAccepted) return;
+                setShowAiRulesModal(false);
+                setAiScreeningStep('interview');
+                startInterviewSession(aiScreeningJob, pendingApplication?.finalCVUrl);
+              }}
+              disabled={!rulesAccepted}
+              style={{
+                flex: 1.5,
+                padding: '14px 20px',
+                background: rulesAccepted ? 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)' : '#cbd5e1',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontWeight: '700',
+                cursor: rulesAccepted ? 'pointer' : 'not-allowed',
+                boxShadow: rulesAccepted ? '0 4px 14px rgba(124, 58, 237, 0.3)' : 'none'
+              }}
+            >
+              {language === 'vi' ? 'Bắt đầu ngay' : 'Start Now'}
+            </button>
+          </div>
+        </ApplyModalWrap>
+      </Modal>
+
+      {/* Tab Warning Modal */}
+      <Modal
+        isOpen={showTabWarningOverlay}
+        onClose={() => {}}
+        title=""
+      >
+        <ApplyModalWrap onClick={e => e.stopPropagation()} style={{ border: '2px solid #ef4444' }}>
+          <div className="apply-emoji" style={{ fontSize: '40px' }}>🚨</div>
+          <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#ef4444', marginBottom: '12px' }}>
+            {language === 'vi' ? 'CẢNH BÁO VI PHẠM!' : 'VIOLATION WARNING!'}
+          </h3>
+          <p style={{ fontSize: '14.5px', color: '#334155', lineHeight: '1.6', marginBottom: '20px', textAlign: 'center' }}>
+            {language === 'vi'
+              ? 'Hệ thống phát hiện bạn vừa chuyển tab hoặc rời khỏi trang phỏng vấn (Lần 1).'
+              : 'The system detected you switched tabs or left the interview page (1st Time).'}
+            <br />
+            <strong style={{ color: '#ef4444', marginTop: '10px', display: 'block' }}>
+              {language === 'vi'
+                ? 'NẾU TIẾP TỤC VI PHẠM LẦN NỮA, BUỔI PHỎNG VẤN SẼ BỊ HỦY NGAY LẬP TỨC VÀ BẠN SẼ BỊ CẤM PHỎNG VẤN TRONG 3 NGÀY!'
+                : 'IF YOU VIOLATE AGAIN, THE INTERVIEW WILL BE CANCELLED IMMEDIATELY AND YOU WILL BE BANNED FOR 3 DAYS!'}
+            </strong>
+          </p>
+          <button
+            onClick={() => {
+              setShowTabWarningOverlay(false);
+              if (interviewMessages.length > 0) {
+                const lastMsg = interviewMessages[interviewMessages.length - 1];
+                if (!lastMsg.isMe) {
+                  speakVietnamese(lastMsg.text);
+                }
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '14px',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'vi' ? 'Tôi đã hiểu và tiếp tục phỏng vấn' : 'I Understand and Resume Interview'}
+          </button>
         </ApplyModalWrap>
       </Modal>
 

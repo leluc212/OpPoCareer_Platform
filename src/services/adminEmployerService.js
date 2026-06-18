@@ -58,17 +58,9 @@ class AdminEmployerService {
 
       const headers = {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cleanToken}`,
         ...options.headers
       };
-
-      // Only attach Authorization when communicating with a direct API endpoint
-      // (not when API_BASE_URL is a local proxy path like '/api-...'). Forwarding
-      // Cognito tokens to API Gateway via the proxy can cause SigV4 parsing errors.
-      if (!API_BASE_URL.startsWith('/')) {
-        headers['Authorization'] = `Bearer ${cleanToken}`;
-      } else {
-        console.log('ℹ️ Skipping Authorization header for local proxy request (admin)');
-      }
 
       console.log(`📤 Admin request: ${options.method || 'GET'} ${API_BASE_URL}${endpoint}`);
 
@@ -119,6 +111,7 @@ class AdminEmployerService {
 
   /**
    * Approve employer profile (Admin only)
+   * Also sets isVerified = true so the employer can post jobs and view CVs.
    */
   async approveEmployer(userId) {
     try {
@@ -128,7 +121,8 @@ class AdminEmployerService {
         method: 'POST',
         body: JSON.stringify({
           approvalStatus: 'approved',
-          approvedAt: new Date().toISOString()
+          approvedAt: new Date().toISOString(),
+          isVerified: true          // gate check in PostJob / Applications uses isVerified
         })
       });
 
@@ -200,10 +194,27 @@ class AdminEmployerService {
   }
 
   /**
+   * Get verification data for a specific employer (Admin only)
+   * Returns verificationData, status, submittedAt
+   */
+  async getVerificationData(userId) {
+    try {
+      console.log(`📋 Fetching verification data for employer: ${userId}`);
+      const result = await this.makeRequest(`/profile/${userId}/verification`);
+      if (result.success && result.data) {
+        return result.data; // { verificationData, submittedAt, status }
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error fetching verification data:', error);
+      return null;
+    }
+  }
+
+  /**
    * Update employer's quick job activation status (Admin only)
    */
-  async updateQuickJobStatus(userId, status) {
-    try {
+  async updateQuickJobStatus(userId, status) {    try {
       console.log(`⚡ Updating quick job status for ${userId}: ${status}`);
 
       const result = await this.makeRequest(`/admin/employers/${userId}/quick-job-status`, {

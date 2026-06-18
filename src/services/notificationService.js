@@ -1154,3 +1154,59 @@ export default {
   setNotificationDeleted,
   clearAllNotifications
 };
+
+/**
+ * Notify candidate when employer submits a review/rating for them
+ * @param {object} payload - { candidateId, candidateName, employerId, companyName, jobTitle, rating, comment }
+ */
+export const createEmployerReviewNotification = async (payload) => {
+  const {
+    candidateId,
+    candidateName,
+    employerId,
+    companyName,
+    jobTitle,
+    rating,
+    comment
+  } = payload;
+
+  if (!candidateId) {
+    console.error('❌ candidateId is required for employer review notification');
+    return null;
+  }
+
+  const safeCandidateName = candidateName || 'Ứng viên';
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+  const safeJobTitle = jobTitle || 'công việc';
+  const safeRating = Number(rating) || 0;
+
+  const stars = '★'.repeat(safeRating) + '☆'.repeat(5 - safeRating);
+
+  const notification = {
+    type: 'employer_review',
+    title: 'Bạn đã nhận được đánh giá mới',
+    titleEn: 'You received a new review',
+    message: `${safeCompanyName} đã đánh giá bạn ${stars} (${safeRating}/5) cho công việc "${safeJobTitle}".${comment ? ` Nhận xét: "${comment}"` : ''}`,
+    messageEn: `${safeCompanyName} rated you ${stars} (${safeRating}/5) for "${safeJobTitle}".${comment ? ` Comment: "${comment}"` : ''}`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: employerId || 'employer',
+    senderName: safeCompanyName,
+    data: {
+      employerId: employerId || null,
+      companyName: safeCompanyName,
+      jobTitle: safeJobTitle,
+      rating: safeRating,
+      comment: comment || '',
+      candidateId,
+      candidateName: safeCandidateName
+    },
+    icon: 'star',
+    color: '#F59E0B',
+    actionUrl: '/candidate/profile',
+    actionText: 'Xem hồ sơ của bạn',
+    actionTextEn: 'View your profile'
+  };
+
+  return await saveNotification(notification);
+};

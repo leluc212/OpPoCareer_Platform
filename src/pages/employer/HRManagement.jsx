@@ -16,7 +16,7 @@ import cvAiService from '../../services/cvAiService';
 import jobPostService from '../../services/jobPostService';
 import experienceService from '../../services/experienceService';
 import candidateProfileService from '../../services/candidateProfileService';
-import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification } from '../../services/notificationService';
+import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification, createEmployerReviewNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
 
 // Helper: tính số giờ từ chuỗi shift "HH:MM - HH:MM"
@@ -4323,11 +4323,11 @@ const HRManagement = () => {
               <CardIconBox $bgColor="#eff6ff" $borderColor="#bfdbfe" $color="#2563eb">
                 <Wallet />
               </CardIconBox>
-              <CardTitle>{language === 'vi' ? 'Ký quỹ an toàn' : 'Secure Escrow'}</CardTitle>
+              <CardTitle>{language === 'vi' ? 'Thanh toán an toàn' : 'Secure Payment'}</CardTitle>
               <CardText>
                 {language === 'vi'
-                  ? 'Lương được giữ an toàn qua tài khoản ký quỹ (Escrow) và tự động giải ngân cho ứng viên ngay sau khi hoàn thành công việc.'
-                  : 'Funds are securely held in escrow and automatically released to the worker once the shift is completed.'}
+                  ? 'Lương được giữ an toàn và tự động giải ngân cho ứng viên ngay sau khi hoàn thành công việc.'
+                  : 'Funds are securely held and automatically released to the worker once the shift is completed.'}
               </CardText>
             </IntroCard>
           </IntroGrid>
@@ -4350,11 +4350,11 @@ const HRManagement = () => {
 
             <StepItem>
               <div className="step-num">2</div>
-              <div className="step-title">{language === 'vi' ? 'Ký quỹ tin đăng' : 'Escrow Shift Pay'}</div>
+              <div className="step-title">{language === 'vi' ? 'Nạp tiền lương' : 'Deposit Shift Pay'}</div>
               <div className="step-desc">
                 {language === 'vi'
-                  ? 'Nạp tiền lương tương ứng vào ví điện tử Ốp Pờ. Hệ thống sẽ ký quỹ để đảm bảo quyền lợi ứng viên.'
-                  : 'Deposit the shift salary into your Op Po wallet. The system holds it in escrow to secure candidates.'}
+                  ? 'Nạp tiền lương tương ứng vào ví điện tử Ốp Pờ. Hệ thống sẽ giữ an toàn để đảm bảo quyền lợi ứng viên.'
+                  : 'Deposit the shift salary into your Op Po wallet. The system holds it to secure candidates.'}
               </div>
             </StepItem>
 
@@ -4373,8 +4373,8 @@ const HRManagement = () => {
               <div className="step-title">{language === 'vi' ? 'Xác nhận & Thanh toán' : 'Complete & Pay'}</div>
               <div className="step-desc">
                 {language === 'vi'
-                  ? 'Xác nhận công việc hoàn thành. Hệ thống sẽ tự động chuyển khoản từ tài khoản ký quỹ vào ví của ứng viên.'
-                  : 'Confirm job completion. The system automatically releases escrowed funds to the worker\'s wallet.'}
+                  ? 'Xác nhận công việc hoàn thành. Hệ thống sẽ tự động chuyển khoản vào ví của ứng viên.'
+                  : 'Confirm job completion. The system automatically releases held funds to the worker\'s wallet.'}
               </div>
             </StepItem>
           </StepsTimeline>
@@ -4412,11 +4412,11 @@ const HRManagement = () => {
             <FaqItem>
               <CheckCircle />
               <div>
-                <div className="faq-q">{language === 'vi' ? 'Chính sách hoàn tiền ký quỹ ra sao?' : 'What is the refund policy?'}</div>
+                <div className="faq-q">{language === 'vi' ? 'Chính sách hoàn tiền ra sao?' : 'What is the refund policy?'}</div>
                 <div className="faq-a">
                   {language === 'vi'
-                    ? 'Nếu ca làm việc không diễn ra hoặc chưa có ứng viên phù hợp (sau lần Yêu cầu thay đổi ứng viên đầu tiên) chúng tôi sẽ giữ 15% phí sàn, 85% số tiền đã ký quỹ sẽ được hoàn trả lại ví của bạn.'
-                    : 'If the shift does not occur or no worker accepts it (after the first shift change request), 100% of the escrowed funds are returned to your wallet.'}
+                    ? 'Nếu ca làm việc không diễn ra hoặc chưa có ứng viên phù hợp (sau lần Yêu cầu thay đổi ứng viên đầu tiên) chúng tôi sẽ giữ 15% phí sàn, 85% số tiền sẽ được hoàn trả lại ví của bạn.'
+                    : 'If the shift does not occur or no worker accepts it (after the first shift change request), 100% of the held funds are returned to your wallet.'}
                 </div>
               </div>
             </FaqItem>
@@ -4471,7 +4471,7 @@ const HRManagement = () => {
                   <label htmlFor="inline-terms-check" style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.55, cursor: 'pointer', fontWeight: 500 }}>
                     {language === 'vi' ? 'Tôi đã đọc và đồng ý với ' : 'I have read and agree to the '}
                     <a href="/terms-urgent-jobs" target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontWeight: 700, textDecoration: 'underline' }}>
-                      {language === 'vi' ? 'Điều khoản sử dụng Job Gấp & Ví ký quỹ' : 'Quick Job & Escrow Wallet Terms'}
+                      {language === 'vi' ? 'Điều khoản sử dụng Job Gấp' : 'Quick Job Terms'}
                     </a>
                     {language === 'vi' ? ' của Ốp Pờ.' : ' of Ốp Pờ.'}
                   </label>
@@ -4620,30 +4620,11 @@ const HRManagement = () => {
                   fontSize: '13px',
                   color: '#64748B',
                   marginTop: '8px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
+                  fontWeight: '500'
                 }}>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
-                    color: '#B45309',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    letterSpacing: '0.3px',
-                    border: '1px solid #FCD34D'
-                  }}>
-                    <Zap style={{ width: '11px', height: '11px' }} />
-                    REALTIME
-                  </span>
                   {language === 'vi'
                     ? 'Tự động ẩn sau khi hoàn thành'
-                    : 'Real-time data'}
+                    : 'Auto-hidden after completion'}
                 </p>
               </div>
             </SectionHeader>
@@ -5070,30 +5051,9 @@ const HRManagement = () => {
                   fontSize: '13px',
                   color: '#64748B',
                   marginTop: '8px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
+                  fontWeight: '500'
                 }}>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
-                    color: '#B45309',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    letterSpacing: '0.3px',
-                    border: '1px solid #FCD34D'
-                  }}>
-                    <Zap style={{ width: '11px', height: '11px' }} />
-                    REALTIME
-                  </span>
-                  {language === 'vi'
-                    ? 'Bài đăng tuyển gấp • Hiệu lực 7 ngày'
-                    : 'Shift posts • Valid for 7 days'}
+                  {language === 'vi' ? 'Bài đăng tuyển gấp' : 'Shift posts'}
                 </p>
               </div>
               <PostJobButton
@@ -5294,24 +5254,7 @@ const HRManagement = () => {
                           }}>
                             🔒 {language === 'vi' ? 'ĐÃ HOÀN THÀNH' : 'COMPLETED'}
                           </span>
-                        ) : (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
-                            color: '#B45309',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            letterSpacing: '0.3px',
-                            border: '1px solid #FCD34D'
-                          }}>
-                            <Zap style={{ width: '11px', height: '11px' }} />
-                            REALTIME
-                          </span>
-                        )}
+                        ) : null}
                       </div>
                       <p>{activeChat.role} • {activeChat.position}</p>
                     </ChatModalHeaderText>
@@ -6113,6 +6056,22 @@ const HRManagement = () => {
                                     : s
                                 ));
                                 setRatingSubmitted(true);
+
+                                // Notify candidate about the review
+                                try {
+                                  const employerProfile = await employerProfileService.getMyProfile().catch(() => null);
+                                  await createEmployerReviewNotification({
+                                    candidateId: rateStaff.candidateId,
+                                    candidateName: rateStaff.name || rateStaff.candidate,
+                                    employerId: user?.userId || user?.id,
+                                    companyName: employerProfile?.companyName || user?.companyName || 'Nhà tuyển dụng',
+                                    jobTitle: rateStaff.position || rateStaff.jobTitle,
+                                    rating: employerRating.overall,
+                                    comment: ratingComment
+                                  });
+                                } catch (notifErr) {
+                                  console.warn('⚠️ Failed to send review notification to candidate:', notifErr.message);
+                                }
                               } catch (err) {
                                 console.error('Failed to submit employer rating:', err);
                                 alert(language === 'vi' ? 'Đánh giá thất bại, vui lòng thử lại!' : 'Failed to submit rating, please try again!');

@@ -359,10 +359,10 @@ const QuickJobLockedIntro = ({ verifStatus }) => {
     {
       icon: Wallet,
       color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', dur: '3.8s',
-      title: t('Ký quỹ an toàn', 'Secure Escrow'),
+      title: t('Thanh toán an toàn', 'Secure Payment'),
       text: t(
-        'Lương được giữ an toàn qua tài khoản ký quỹ (Escrow) và tự động giải ngân cho ứng viên ngay sau khi hoàn thành công việc.',
-        'Funds are securely held in escrow and automatically released to the worker once the shift is completed.'
+        'Lương được giữ an toàn và tự động giải ngân cho ứng viên ngay sau khi hoàn thành công việc.',
+        'Funds are securely held and automatically released to the worker once the shift is completed.'
       ),
     },
   ];
@@ -373,8 +373,8 @@ const QuickJobLockedIntro = ({ verifStatus }) => {
       desc: t('Đăng ký sử dụng tính năng và chờ hệ thống kiểm duyệt hồ sơ doanh nghiệp của bạn.', 'Submit an activation request and wait for the system to verify your profile.'),
     },
     {
-      title: t('Ký quỹ tin đăng', 'Escrow Shift Pay'),
-      desc: t('Nạp tiền lương tương ứng vào ví điện tử Ốp Pờ. Hệ thống sẽ ký quỹ để đảm bảo quyền lợi ứng viên.', 'Deposit the shift salary into your Op Po wallet. The system holds it in escrow to protect candidates.'),
+      title: t('Nạp tiền lương', 'Deposit Shift Pay'),
+      desc: t('Nạp tiền lương tương ứng vào ví điện tử Ốp Pờ. Hệ thống sẽ giữ an toàn để đảm bảo quyền lợi ứng viên.', 'Deposit the shift salary into your Op Po wallet. The system holds it to protect candidates.'),
     },
     {
       title: t('Chat Real-time', 'Real-time Chat'),
@@ -382,7 +382,7 @@ const QuickJobLockedIntro = ({ verifStatus }) => {
     },
     {
       title: t('Xác nhận & Thanh toán', 'Complete & Pay'),
-      desc: t('Xác nhận công việc hoàn thành. Hệ thống sẽ tự động chuyển khoản từ tài khoản ký quỹ vào ví của ứng viên.', 'Confirm job completion. The system auto-releases escrowed funds to the worker\'s wallet.'),
+      desc: t('Xác nhận công việc hoàn thành. Hệ thống sẽ tự động chuyển khoản vào ví của ứng viên.', 'Confirm job completion. The system auto-releases held funds to the worker\'s wallet.'),
     },
   ];
 
@@ -405,9 +405,9 @@ const QuickJobLockedIntro = ({ verifStatus }) => {
     },
     {
       icon: CheckCircle,
-      q: t('Chính sách hoàn tiền ký quỹ ra sao?', 'What is the refund policy?'),
+      q: t('Chính sách hoàn tiền ra sao?', 'What is the refund policy?'),
       a: t(
-        'Nếu ca làm việc không diễn ra hoặc chưa có ứng viên phù hợp (sau lần Yêu cầu thay đổi ứng viên đầu tiên) chúng tôi sẽ giữ 15% phí sàn, 85% số tiền đã ký quỹ sẽ được hoàn trả lại ví của bạn.',
+        'Nếu ca làm việc không diễn ra hoặc chưa có ứng viên phù hợp (sau lần Yêu cầu thay đổi ứng viên đầu tiên) chúng tôi sẽ giữ 15% phí sàn, 85% số tiền sẽ được hoàn trả lại ví của bạn.',
         'If the shift does not proceed or no suitable candidate is found (after the first replacement request), we retain 15% as a platform fee and refund 85% to your wallet.'
       ),
     },

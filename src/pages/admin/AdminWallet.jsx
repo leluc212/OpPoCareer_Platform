@@ -7,6 +7,7 @@ import { Button, Input } from '../../components/FormElements';
 import adminReportService from '../../services/adminReportService';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
+import { getWithdrawalRequests } from '../../services/packageCatalogService';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import {
   Wallet as WalletIcon,
@@ -643,10 +644,11 @@ const AdminWallet = () => {
     try {
       setIsLoading(true);
       
-      const [subscriptions, realJobs, apps] = await Promise.all([
+      const [subscriptions, realJobs, apps, withdrawalRequests] = await Promise.all([
         adminReportService.getAllSubscriptions().catch(() => []),
         quickJobService.getAllQuickJobs().catch(() => []),
-        applicationService.getAllApplications().catch(() => [])
+        applicationService.getAllApplications().catch(() => []),
+        getWithdrawalRequests().catch(() => [])
       ]);
 
       // 1. Process Subscription Purchases as Income Transactions
@@ -688,7 +690,7 @@ const AdminWallet = () => {
             title: language === 'vi'
               ? `Hoa hồng dịch vụ (15%) - ${job?.title || 'Công việc tuyển gấp'}`
               : `Service commission (15%) - ${job?.title || 'Urgent job'}`,
-            meta: language === 'vi' ? 'Ví Escrow' : 'Escrow Wallet',
+            meta: language === 'vi' ? 'Ví điện tử' : 'Digital Wallet',
             amount: adminCommission,
             date: new Date(app.candidateConfirmedAt || app.updatedAt || app.createdAt || Date.now()).toLocaleDateString('vi-VN'),
             time: new Date(app.candidateConfirmedAt || app.updatedAt || app.createdAt || Date.now()).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
@@ -698,24 +700,24 @@ const AdminWallet = () => {
         })
         .filter(Boolean);
 
-      // 3. Process Approved Withdrawal Requests from Candidate E-wallet as Expense Transactions
-      const adminRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-      const withdrawalTransactions = adminRequests.map(w => {
+      // 3. Process Withdrawal Requests (both employer and candidate) as Expense Transactions
+      const withdrawalTransactions = (Array.isArray(withdrawalRequests) ? withdrawalRequests : []).map(w => {
         const isApproved = w.status === 'approved';
         const isRejected = w.status === 'rejected';
-        
+        const rawDate = w.createdAt || w.updatedAt || new Date().toISOString();
+
         return {
-          id: `withdraw-${w.id}`,
+          id: `withdraw-${w.requestId || w.id}`,
           type: 'expense',
           title: language === 'vi'
             ? `Giải ngân cho ${w.companyName || 'Ứng viên'}`
             : `Payout to ${w.companyName || 'Candidate'}`,
           meta: language === 'vi' ? 'Chuyển khoản ngân hàng' : 'Bank transfer',
           amount: parseFloat(w.amount || 0),
-          date: w.date ? new Date(w.date).toLocaleDateString('vi-VN') : '',
-          time: w.date ? new Date(w.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '00:00',
+          date: new Date(rawDate).toLocaleDateString('vi-VN'),
+          time: new Date(rawDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
           status: isApproved ? 'completed' : (isRejected ? 'failed' : 'pending'),
-          rawDate: w.date || new Date().toISOString(),
+          rawDate,
           rawStatus: w.status
         };
       });
@@ -990,10 +992,10 @@ const AdminWallet = () => {
                                 : <ArrowUpRight />}
                             </div>
                             <div className="details">
-                              <h4>{tx.title}</h4>
+                              <h4>{(tx.title || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim()}</h4>
                               <p>
                                 <CreditCard style={{ width: '14px', height: '14px' }} />
-                                {tx.meta}
+                                {(tx.meta || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim()}
                                 {' • '}
                                 <Clock style={{ width: '14px', height: '14px' }} />
                                 {tx.date} {tx.time}

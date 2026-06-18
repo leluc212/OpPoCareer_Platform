@@ -21,6 +21,8 @@ const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
  * - foundedYear: String - Year company was founded
  * - description: String - Company description/about
  * - companyLogo: String - Base64 encoded logo image or S3 URL
+ * - companyVideo: String - YouTube or video URL for company intro (optional)
+ * - companyImages: List - Array of base64/S3 URL images showcasing the company (optional, max 5)
  * - taxCode: String - Business tax code (locked after first set)
  * - businessLicense: String - Business license number (locked after first set)
  * - createdAt: String - ISO timestamp when profile was created
@@ -56,6 +58,8 @@ class EmployerProfileService {
       foundedYear: profileData.foundedYear || '',
       description: profileData.description || '',
       companyLogo: profileData.companyLogo || '',
+      companyVideo: profileData.companyVideo || '',
+      companyImages: profileData.companyImages || [],
       taxCode: profileData.taxCode || '',
       businessLicense: profileData.businessLicense || '',
       createdAt: timestamp,

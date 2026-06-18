@@ -83,9 +83,7 @@ class CandidateProfileService {
         ...options.headers
       };
 
-      // Attach Authorization only for direct AWS calls.
-      const shouldAttachAuth = !baseUrl.startsWith('/');
-      if (token && shouldAttachAuth) {
+      if (token) {
         headers['Authorization'] = `Bearer ${token}`;
 
         // Decode token to get userId for logging
@@ -98,7 +96,6 @@ class CandidateProfileService {
       }
       
       // If no token and it's a GET request, don't send any headers to keep it a "simple request"
-      // BUT if it's a list API, we probably NEED the token now.
       if (!token && (!options.method || options.method === 'GET')) {
         delete headers['Content-Type'];
       }
@@ -579,13 +576,9 @@ class CandidateProfileService {
    */
   async approveVerification(candidateId, note = '') {
     try {
-      const result = await this.makeRequest(`/profile/${candidateId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          verificationStatus: 'APPROVED',
-          verificationApprovedAt: new Date().toISOString(),
-          verificationNote: note
-        })
+      const result = await this.makeRequest(`/admin/candidate-verifications/${candidateId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ note })
       });
       return result;
     } catch (error) {
@@ -599,13 +592,9 @@ class CandidateProfileService {
    */
   async rejectVerification(candidateId, note = '') {
     try {
-      const result = await this.makeRequest(`/profile/${candidateId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          verificationStatus: 'REJECTED',
-          verificationRejectedAt: new Date().toISOString(),
-          verificationNote: note
-        })
+      const result = await this.makeRequest(`/admin/candidate-verifications/${candidateId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ note })
       });
       return result;
     } catch (error) {

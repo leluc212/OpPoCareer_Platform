@@ -464,6 +464,64 @@ def update_application_status(event, application_id, user_id, create_response):
         except Exception as email_err:
             print(f"Error sending application status result email: {str(email_err)}")
 
+        # ── Credit candidate wallet when employer submits rating ──────────────────
+        # Status: completed_pending_candidate = employer has rated, waiting for candidate confirm
+        # Guard: only credit if previous status was NOT already completed_pending_candidate
+        try:
+            if status_changed and new_status == 'completed_pending_candidate' \
+                    and previous_status not in ('completed_pending_candidate', 'completed'):
+                app_item = applications_table.get_item(
+                    Key={'applicationId': application_id},
+                    ConsistentRead=True
+                ).get('Item', {})
+
+                candidate_id_to_credit = app_item.get('candidateId')
+                job_id_to_credit = app_item.get('jobId')
+
+                if candidate_id_to_credit and job_id_to_credit:
+                    # Fetch job to get salary — try both standard and quick jobs tables
+                    job_salary = Decimal('0')
+                    try:
+                        qj_resp = quick_jobs_table.get_item(Key={'idJob': str(job_id_to_credit)})
+                        if 'Item' in qj_resp:
+                            ji = qj_resp['Item']
+                            total_salary = Decimal(str(ji.get('totalSalary') or 0))
+                            hourly_rate = Decimal(str(ji.get('hourlyRate') or 0))
+                            total_hours = Decimal(str(ji.get('totalHours') or 0))
+                            job_salary = total_salary if total_salary > 0 else (hourly_rate * total_hours)
+                        else:
+                            # Fallback: check standard jobs table
+                            sj_resp = jobs_table.get_item(Key={'idJob': str(job_id_to_credit)})
+                            if 'Item' in sj_resp:
+                                ji = sj_resp['Item']
+                                total_salary = Decimal(str(ji.get('totalSalary') or ji.get('salary') or 0))
+                                job_salary = total_salary
+                    except Exception as je:
+                        print(f"⚠️ Could not fetch job for wallet credit: {je}")
+
+                    candidate_income = (job_salary * Decimal('0.85')).to_integral_value()
+
+                    if candidate_income > 0:
+                        candidate_table = dynamodb.Table('CandidateProfiles')
+                        try:
+                            # Atomic increment — safe against concurrent calls
+                            candidate_table.update_item(
+                                Key={'userId': candidate_id_to_credit},
+                                UpdateExpression='SET walletBalance = if_not_exists(walletBalance, :zero) + :income, updatedAt = :ts',
+                                ExpressionAttributeValues={
+                                    ':income': candidate_income,
+                                    ':zero': Decimal('0'),
+                                    ':ts': now_iso
+                                }
+                            )
+                            print(f"✅ Credited {candidate_income} VND to candidate {candidate_id_to_credit}")
+                        except Exception as we:
+                            print(f"⚠️ Could not update candidate walletBalance: {we}")
+                    else:
+                        print(f"⚠️ Job salary is 0 or not found for jobId={job_id_to_credit}, skipping credit")
+        except Exception as credit_err:
+            print(f"⚠️ Wallet credit step failed (non-fatal): {credit_err}")
+
         # Check if we are completing the job and save to a new table "CompletedJobs" if it exists
         try:
             if status_changed and new_status == 'completed':

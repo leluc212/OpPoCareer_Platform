@@ -56,6 +56,8 @@ class EmployerProfileService {
       foundedYear: profileData.foundedYear || '',
       description: profileData.description || '',
       companyLogo: profileData.companyLogo || '',
+      companyVideo: profileData.companyVideo || '',
+      companyImages: profileData.companyImages || [],
       taxCode: profileData.taxCode || '',
       businessLicense: profileData.businessLicense || '',
       createdAt: timestamp,

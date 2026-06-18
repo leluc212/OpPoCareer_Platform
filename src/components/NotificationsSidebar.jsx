@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Bell, Package, CheckCircle, AlertCircle, DollarSign, Users, Briefcase, Zap, XCircle } from 'lucide-react';
+import { Bell, Package, CheckCircle, AlertCircle, DollarSign, Users, Briefcase, Zap, XCircle, Star } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { getNotifications, markAsRead, markAllAsRead } from '../services/notificationService';
@@ -308,6 +308,8 @@ const NotificationsSidebar = () => {
         return AlertCircle;
       case 'quick_job_activation_request':
         return Zap;
+      case 'employer_review':
+        return Star;
       default:
         return Bell;
     }

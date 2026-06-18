@@ -239,6 +239,42 @@ def lambda_handler(event, context):
             body.pop('userId', None)
             body.pop('createdAt', None)
             body['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+
+            # ── Guard: prevent negative wallet balance when adding NEW withdrawals ─
+            if 'withdrawals' in body:
+                from decimal import Decimal as _D
+                new_withdrawals = body.get('withdrawals') or []
+                old_withdrawals = prev_profile.get('withdrawals') or []
+
+                # Build a set of existing withdrawal IDs to detect new entries
+                old_ids = {str(w.get('id', '')) for w in old_withdrawals if w.get('id')}
+
+                # Sum only withdrawals that are NEW (not in old list) and non-rejected
+                new_pending_amount = _D('0')
+                for w in new_withdrawals:
+                    wid = str(w.get('id', ''))
+                    status = (w.get('status') or 'pending').lower()
+                    if wid not in old_ids and status != 'rejected':
+                        raw_amt = w.get('amount', 0)
+                        # amount may be negative (expense) or positive — take abs
+                        try:
+                            new_pending_amount += _D(str(abs(float(str(raw_amt)))))
+                        except Exception:
+                            pass
+
+                if new_pending_amount > _D('0'):
+                    current_balance = _D(str(prev_profile.get('walletBalance') or '0'))
+                    if new_pending_amount > current_balance:
+                        return response(400, {
+                            'success': False,
+                            'message': 'Số dư không đủ để thực hiện yêu cầu rút tiền này.',
+                            'messageEn': 'Insufficient balance for this withdrawal request.',
+                            'currentBalance': float(current_balance),
+                            'requestedAmount': float(new_pending_amount)
+                        })
+                    # Deduct from walletBalance immediately so subsequent requests can't overdraw
+                    body['walletBalance'] = current_balance - new_pending_amount
+            # ─────────────────────────────────────────────────────────────────────────
  
             update_expr = 'SET ' + ', '.join(f'#k{i} = :v{i}' for i, k in enumerate(body))
             attr_names = {f'#k{i}': k for i, k in enumerate(body)}

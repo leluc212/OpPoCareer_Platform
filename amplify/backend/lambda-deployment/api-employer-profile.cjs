@@ -1,6 +1,12 @@
 // API Gateway Lambda handler for Employer Profile operations
 const employerProfileService = require('./employer-profile.cjs');
 const jwt = require('jsonwebtoken');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+const s3Client = new S3Client({ region: 'ap-southeast-1' });
+const VERIFICATION_BUCKET = 'opporeview-cv-storage';
+const VERIFICATION_PREFIX = 'employer-verification';
 
 /**
  * Extract userId from JWT token
@@ -109,7 +115,22 @@ exports.handler = async (event) => {
     // POST /admin/employers/{userId}/approve
     if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/approve')) {
       const body = JSON.parse(event.body || '{}');
+      // Approve = set approvalStatus AND isVerified so employer can post jobs / view CVs
       const result = await employerProfileService.updateApprovalStatus(pathUserId, 'approved', body);
+      // Also flip isVerified if the request carries it (or always set true on approve)
+      const { DynamoDB } = require('@aws-sdk/client-dynamodb');
+      const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
+      const ddb = DynamoDBDocument.from(new DynamoDB({ region: 'ap-southeast-1' }));
+      await ddb.update({
+        TableName: 'EmployerProfiles',
+        Key: { userId: pathUserId },
+        UpdateExpression: 'SET isVerified = :v, verifiedAt = :t, verificationStatus = :vs, updatedAt = :t',
+        ExpressionAttributeValues: {
+          ':v': true,
+          ':vs': 'approved',
+          ':t': new Date().toISOString()
+        }
+      });
       return {
         statusCode: 200,
         headers: corsHeaders,
@@ -120,7 +141,21 @@ exports.handler = async (event) => {
     // POST /admin/employers/{userId}/reject
     if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/reject')) {
       const body = JSON.parse(event.body || '{}');
+      // Reject = set approvalStatus AND revoke isVerified
       const result = await employerProfileService.updateApprovalStatus(pathUserId, 'rejected', body);
+      const { DynamoDB } = require('@aws-sdk/client-dynamodb');
+      const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
+      const ddb = DynamoDBDocument.from(new DynamoDB({ region: 'ap-southeast-1' }));
+      await ddb.update({
+        TableName: 'EmployerProfiles',
+        Key: { userId: pathUserId },
+        UpdateExpression: 'SET isVerified = :v, verificationStatus = :vs, updatedAt = :t',
+        ExpressionAttributeValues: {
+          ':v': false,
+          ':vs': 'rejected',
+          ':t': new Date().toISOString()
+        }
+      });
       return {
         statusCode: 200,
         headers: corsHeaders,
@@ -186,12 +221,60 @@ exports.handler = async (event) => {
       }
     }
 
+    // POST /profile/{userId}/verification/upload-url - Get presigned S3 upload URL
+    if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/verification/upload-url')) {
+      if (userId !== pathUserId) {
+        return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'Access denied' }) };
+      }
+      const body = JSON.parse(event.body || '{}');
+      const { fileName, fileType, field } = body;
+      if (!fileName || !fileType || !field) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'fileName, fileType, field required' }) };
+      }
+      const allowedFields = ['businessLicense', 'idFrontImage', 'idBackImage', 'authorizationLetter'];
+      if (!allowedFields.includes(field)) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'Invalid field' }) };
+      }
+      const ext = fileName.split('.').pop() || 'bin';
+      const s3Key = `${VERIFICATION_PREFIX}/${pathUserId}/${field}-${Date.now()}.${ext}`;
+      const command = new PutObjectCommand({
+        Bucket: VERIFICATION_BUCKET,
+        Key: s3Key,
+        ContentType: fileType
+      });
+      const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+      const fileUrl = `https://${VERIFICATION_BUCKET}.s3.ap-southeast-1.amazonaws.com/${s3Key}`;
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: true, data: { uploadUrl, fileUrl, s3Key } })
+      };
+    }
+
     // POST /profile/{userId}/verification - Submit verification
     if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/verification')) {
       if (userId !== pathUserId) {
         return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'Access denied' }) };
       }
       const body = JSON.parse(event.body || '{}');
+
+      // Strip base64 image data — only store S3 URLs / metadata to keep DynamoDB item small
+      const stripBase64 = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj;
+        const clean = {};
+        for (const [k, v] of Object.entries(obj)) {
+          if (typeof v === 'string' && v.length > 500 && (v.startsWith('data:') || /^[A-Za-z0-9+/]{100}/.test(v))) {
+            clean[k] = '[base64-stripped]';
+          } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+            clean[k] = stripBase64(v);
+          } else {
+            clean[k] = v;
+          }
+        }
+        return clean;
+      };
+
+      const safeVerificationData = stripBase64(body.verificationData);
       const { DynamoDB } = require('@aws-sdk/client-dynamodb');
       const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
       const ddb = DynamoDBDocument.from(new DynamoDB({ region: 'ap-southeast-1' }));
@@ -200,7 +283,7 @@ exports.handler = async (event) => {
         Key: { userId: pathUserId },
         UpdateExpression: 'SET verificationData = :vd, verificationStatus = :vs, verificationSubmittedAt = :sa, updatedAt = :ua',
         ExpressionAttributeValues: {
-          ':vd': body.verificationData,
+          ':vd': safeVerificationData,
           ':vs': 'pending',
           ':sa': body.submittedAt || new Date().toISOString(),
           ':ua': new Date().toISOString()

@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import TableFilter from '../../components/TableFilter';
 import Modal from '../../components/Modal';
-import { Eye, CheckCircle, Star, Mail, Phone, MapPin, Calendar, Award, Briefcase, FileText, Clock, Users, Newspaper, Edit, Trash2, TrendingUp, Plus, X, XCircle, Wallet, Banknote, AlertCircle, Save, Download, MessageSquare, Search, Sparkles } from 'lucide-react';
+import { Eye, CheckCircle, Star, Mail, Phone, MapPin, Calendar, Award, Briefcase, FileText, Clock, Users, Newspaper, Edit, Trash2, TrendingUp, Plus, X, XCircle, Wallet, Banknote, AlertCircle, Save, Download, MessageSquare, Search, Sparkles, ShieldCheck } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { initializeMultipleSampleCVs } from '../../utils/sampleCVGenerator';
@@ -18,6 +18,7 @@ import experienceService from '../../services/experienceService';
 import cvAiService from '../../services/cvAiService';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import DynamicTranslate from '../../components/DynamicTranslate';
+import employerProfileService from '../../services/employerProfileService';
 
 /**
  * Format salary from DynamoDB — prevents double-appending VNĐ/h.
@@ -2157,6 +2158,28 @@ const Applications = () => {
   const [recommendingJob, setRecommendingJob] = useState(null);
   const [recommendationError, setRecommendationError] = useState('');
 
+  // Verification gate — check isVerified from API
+  const [isVerified, setIsVerified] = useState(null); // null = checking, true/false = result
+  const [verificationPending, setVerificationPending] = useState(false);
+
+  useEffect(() => {
+    const checkVerification = async () => {
+      try {
+        const profile = await employerProfileService.getMyProfile();
+        if (profile?.isVerified === true) {
+          setIsVerified(true);
+        } else {
+          setIsVerified(false);
+          setVerificationPending(profile?.verificationStatus === 'pending');
+        }
+      } catch (err) {
+        console.error('Error checking employer verification:', err);
+        setIsVerified(false);
+      }
+    };
+    checkVerification();
+  }, []);
+
   // Mock wallet connection status - in real app, get from user context or API
   const [isWalletConnected] = useState(() => {
     return localStorage.getItem('employer_wallet_connected') === 'true';
@@ -2227,11 +2250,18 @@ const Applications = () => {
   };
 
   // Helper function to calculate deadline
+  // Compare by calendar date only (ignore time-of-day) so a job with
+  // workDays = "today" is shown as "Hôm nay" all day long, not "Đã hết hạn"
+  // the moment the clock passes midnight UTC.
   const calculateDeadline = (workDays, lang) => {
+    if (!workDays) return '';
+    // Strip time component from both sides so comparison is purely date-based
     const workDate = new Date(workDays);
+    const workDateOnly = new Date(workDate.getFullYear(), workDate.getMonth(), workDate.getDate());
     const now = new Date();
-    const diffTime = workDate - now;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffTime = workDateOnly - todayOnly;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) return lang === 'vi' ? 'Đã hết hạn' : 'Expired';
     if (diffDays === 0) return lang === 'vi' ? 'Hôm nay' : 'Today';
@@ -2245,9 +2275,16 @@ const Applications = () => {
 
   // Update activeSection and handle auto-modal if state changes externally
   useEffect(() => {
-    // 1. Handle section change
-    if (location.state?.section && location.state.section !== activeSection) {
+    // 1. Handle section change — only apply once then clear from state to prevent
+    //    overriding manual tab switches (e.g. clicking "Hồ sơ ứng tuyển" card).
+    if (location.state?.section) {
       setActiveSection(location.state.section);
+      // Clear section from state immediately so further re-renders of this effect
+      // don't keep resetting the tab back to the initial value.
+      navigate(location.pathname, {
+        replace: true,
+        state: { ...location.state, section: undefined }
+      });
     }
 
     // 2. Handle auto-opening profile modal
@@ -2260,10 +2297,9 @@ const Applications = () => {
         handleViewProfile(transformedApp);
 
         // Clear candidateId from state to prevent re-opening on language switch etc
-        // but keep section state
         navigate(location.pathname, {
           replace: true,
-          state: { ...location.state, candidateId: null }
+          state: { ...location.state, candidateId: null, section: undefined }
         });
       }
     }
@@ -2273,6 +2309,8 @@ const Applications = () => {
   useEffect(() => {
     const loadApplications = async () => {
       if (activeSection !== 'applications') return;
+      // Wait for jobs to finish loading first
+      if (isLoadingJobs) return;
 
       try {
         setIsLoadingApplications(true);
@@ -2336,10 +2374,10 @@ const Applications = () => {
       }
     };
 
-    if (jobPosts.length > 0) {
+    if (activeSection === 'applications') {
       loadApplications();
     }
-  }, [activeSection, jobPosts, language]);
+  }, [activeSection, jobPosts, isLoadingJobs, language]);
 
   // Comprehensive screenshot prevention
   useEffect(() => {
@@ -2812,6 +2850,53 @@ const Applications = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       >
+        {/* Verification loading */}
+        {isVerified === null && (
+          <div style={{ textAlign: 'center', padding: '80px 20px', color: '#64748B' }}>
+            <div style={{ fontSize: '16px', fontWeight: 600 }}>
+              {language === 'vi' ? 'Đang kiểm tra trạng thái tài khoản...' : 'Checking account status...'}
+            </div>
+          </div>
+        )}
+
+        {/* Not verified — block access */}
+        {isVerified === false && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center' }}>
+            <div style={{ width: '72px', height: '72px', borderRadius: '20px', background: '#FEF3C7', border: '2px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+              <ShieldCheck style={{ width: 36, height: 36, color: '#D97706' }} />
+            </div>
+            <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1E293B', marginBottom: '12px' }}>
+              {language === 'vi' ? 'Tài khoản chưa được xác thực' : 'Account Not Verified'}
+            </h2>
+            <p style={{ fontSize: '15px', color: '#64748B', maxWidth: '480px', lineHeight: 1.6, marginBottom: '8px' }}>
+              {verificationPending
+                ? (language === 'vi'
+                  ? 'Hồ sơ xác thực của bạn đang được admin xem xét. Bạn sẽ có thể đăng bài và xem CV ứng viên ngay khi được phê duyệt.'
+                  : 'Your verification is under admin review. You will be able to post jobs and view applicant CVs once approved.')
+                : (language === 'vi'
+                  ? 'Bạn cần hoàn tất xác thực hồ sơ công ty và được admin phê duyệt trước khi đăng tin tuyển dụng và xem CV ứng viên tiêu chuẩn.'
+                  : 'You need to complete company verification and get admin approval before posting jobs and viewing standard applicant CVs.')
+              }
+            </p>
+            {verificationPending ? (
+              <div style={{ marginTop: '20px', padding: '14px 28px', background: '#FEF3C7', border: '1.5px solid #FDE68A', borderRadius: '12px', fontSize: '14px', fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock style={{ width: 18, height: 18 }} />
+                {language === 'vi' ? 'Đang chờ admin duyệt — thường trong 24-48 giờ' : 'Pending admin approval — usually within 24-48 hours'}
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate('/employer/verification')}
+                style={{ marginTop: '20px', padding: '14px 32px', background: 'linear-gradient(135deg,#1e40af,#2563eb)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: 700, fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <ShieldCheck style={{ width: 18, height: 18 }} />
+                {language === 'vi' ? 'Xác thực hồ sơ ngay' : 'Verify Now'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Verified — show full content */}
+        {isVerified === true && (<>
         <PageHeader>
           <PageTitleGroup>
             <PageIconBox><Briefcase /></PageIconBox>
@@ -2828,6 +2913,7 @@ const Applications = () => {
             <StandardJobCard
               $color="#10B981"
               $active={activeSection === 'posts'}
+              type="button"
               onClick={() => setActiveSection('posts')}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
@@ -2844,6 +2930,7 @@ const Applications = () => {
             <StandardJobCard
               $color="#1e40af"
               $active={activeSection === 'applications'}
+              type="button"
               onClick={() => setActiveSection('applications')}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
@@ -3084,7 +3171,7 @@ const Applications = () => {
               ))}
             </div>
 
-            {isLoadingApplications ? (
+            {(isLoadingApplications || isLoadingJobs) ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
                 <div style={{ fontSize: '14px' }}>{language === 'vi' ? 'Đang tải hồ sơ...' : 'Loading applications...'}</div>
               </div>
@@ -3118,6 +3205,7 @@ const Applications = () => {
             )}
           </>
         )}
+        </>)}
       </ApplicationsContainer>
 
       <AnimatePresence>

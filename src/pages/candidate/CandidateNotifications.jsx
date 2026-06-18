@@ -15,7 +15,8 @@ import {
   X,
   TrendingUp,
   Inbox,
-  Mail
+  Mail,
+  Star
 } from 'lucide-react';
 
 const NotificationsContainer = styled.div`
@@ -452,6 +453,8 @@ function CandidateNotifications() {
         return CheckCircle;
       case 'application':
         return Briefcase;
+      case 'employer_review':
+        return Star;
       case 'system':
         return AlertCircle;
       default:
@@ -465,6 +468,8 @@ function CandidateNotifications() {
         return '#10B981';
       case 'application':
         return '#1e40af';
+      case 'employer_review':
+        return '#F59E0B';
       case 'system':
         return '#ef4444';
       default:

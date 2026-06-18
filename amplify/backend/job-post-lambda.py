@@ -100,10 +100,31 @@ def lambda_handler(event, context):
         # D. POST /jobs (Create)
         elif http_method == 'POST' and normalized_path == '/jobs':
             body = json.loads(event.get('body', '{}'))
+            employer_id = body.get('employerId', user_id)
+
+            # ── Verify employer is approved before allowing job post ──────────
+            if employer_id:
+                try:
+                    employer_table = dynamodb.Table('EmployerProfiles')
+                    emp_item = employer_table.get_item(Key={'userId': employer_id}).get('Item', {})
+                    if not emp_item.get('isVerified', False):
+                        return {
+                            'statusCode': 403,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'success': False,
+                                'message': 'Tài khoản chưa được xác thực. Vui lòng hoàn tất xác thực hồ sơ công ty và chờ admin phê duyệt trước khi đăng tin.'
+                            })
+                        }
+                except Exception as verify_err:
+                    print(f"Warning: could not verify employer status: {verify_err}")
+                    # Fail open only if DynamoDB lookup itself errors — still create the job
+            # ─────────────────────────────────────────────────────────────────
+
             # Simple fallback for missing fields in demo
             item = {
                 'idJob': body.get('idJob', f"JOB-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"),
-                'employerId': body.get('employerId', user_id),
+                'employerId': employer_id,
                 'title': body.get('title', 'Untitled Job'),
                 'status': 'pending',
                 'createdAt': datetime.utcnow().isoformat() + 'Z',

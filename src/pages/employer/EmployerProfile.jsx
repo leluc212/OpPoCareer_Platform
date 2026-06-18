@@ -32,6 +32,8 @@ import {
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import employerProfileService from '../../services/employerProfileService';
+import jobPostService from '../../services/jobPostService';
+import { getJobApplications } from '../../services/applicationService';
 
 const fadeIn = keyframes`
   from {
@@ -761,6 +763,8 @@ const EmployerProfile = () => {
   
   const [originalFormData, setOriginalFormData] = useState({});
   const [companyLogo, setCompanyLogo] = useState('');
+  const [companyVideo, setCompanyVideo] = useState('');
+  const [companyImages, setCompanyImages] = useState([]);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isLockedFields, setIsLockedFields] = useState({
     taxCode: false,
@@ -770,6 +774,12 @@ const EmployerProfile = () => {
   const [verificationDocuments, setVerificationDocuments] = useState([]);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [profileStats, setProfileStats] = useState({
+    totalJobs: 0,
+    totalApplicants: 0,
+    totalHired: 0,
+  });
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   
   // Load profile data on mount
   useEffect(() => {
@@ -823,6 +833,8 @@ const EmployerProfile = () => {
           setFormData(profileData);
           setOriginalFormData(profileData);
           setCompanyLogo(profile.companyLogo || '');
+          setCompanyVideo(profile.companyVideo || '');
+          setCompanyImages(profile.companyImages || []);
           
           // Set locked fields
           setIsLockedFields({
@@ -959,11 +971,51 @@ const EmployerProfile = () => {
     };
     loadVerificationDocs();
   }, [user?.username]); // Only depend on user.username to prevent infinite loops
+
+  // Load stats from real data
+  useEffect(() => {
+    if (!user) return;
+    const loadStats = async () => {
+      try {
+        setIsLoadingStats(true);
+        const jobs = await jobPostService.getMyJobPosts();
+        const totalJobs = jobs.length;
+        const totalApplicants = jobs.reduce((sum, j) => sum + (j.applicants || 0), 0);
+
+        // Count accepted applications across all jobs
+        let totalHired = 0;
+        await Promise.all(
+          jobs.map(async (job) => {
+            try {
+              const apps = await getJobApplications(job.idJob);
+              totalHired += apps.filter(a => a.status === 'accepted').length;
+            } catch {
+              // ignore per-job errors
+            }
+          })
+        );
+
+        setProfileStats({ totalJobs, totalApplicants, totalHired });
+      } catch (err) {
+        console.error('❌ Error loading profile stats:', err);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+    loadStats();
+  }, [user]);
   
   // Handle save profile
   const handleSave = async () => {
     try {
       setIsLoadingProfile(true);
+      
+      // Validate required field: description
+      if (!formData.description?.trim()) {
+        toast.error(language === 'vi' ? 'Vui lòng nhập mô tả công ty (bắt buộc)' : 'Please enter company description (required)');
+        setIsLoadingProfile(false);
+        return;
+      }
       
       // Check if taxCode or businessLicense are being set for the first time
       const newLockedFields = { ...isLockedFields };
@@ -984,7 +1036,9 @@ const EmployerProfile = () => {
       // Prepare data for saving
       const profileData = {
         ...formData,
-        companyLogo
+        companyLogo,
+        companyVideo,
+        companyImages
       };
       
       // Try to save to DynamoDB first, fallback to localStorage if API fails
@@ -1018,6 +1072,8 @@ const EmployerProfile = () => {
             taxCode: savedProfile.taxCode || '',
             businessLicense: savedProfile.businessLicense || ''
           });
+          setCompanyVideo(savedProfile.companyVideo || '');
+          setCompanyImages(savedProfile.companyImages || []);
         }
         
         setIsEditing(false);
@@ -1200,6 +1256,36 @@ const EmployerProfile = () => {
     // Remove from localStorage
     localStorage.removeItem('companyLogo');
     console.log('✅ Company logo removed from localStorage');
+  };
+
+  // Handle company images upload
+  const handleCompanyImagesUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    const remaining = 5 - companyImages.length;
+    if (remaining <= 0) {
+      toast.error(language === 'vi' ? 'Tối đa 5 hình ảnh công ty' : 'Maximum 5 company images allowed');
+      return;
+    }
+
+    const filesToProcess = files.slice(0, remaining);
+    filesToProcess.forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(language === 'vi' ? `File "${file.name}" vượt quá 5MB` : `File "${file.name}" exceeds 5MB`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setCompanyImages(prev => [...prev, { id: Date.now() + Math.random(), data: ev.target.result, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle delete company image
+  const handleDeleteCompanyImage = (id) => {
+    setCompanyImages(prev => prev.filter(img => img.id !== id));
   };
 
   const handleDocumentUpload = (e) => {
@@ -1406,19 +1492,19 @@ const EmployerProfile = () => {
             <StatsCard>
               <StatGrid>
                 <StatItem>
-                  <span className="value">24</span>
+                  <span className="value">{isLoadingStats ? '...' : profileStats.totalJobs}</span>
                   <span className="label">{language === 'vi' ? 'Tin tuyển dụng' : 'Job posts'}</span>
                 </StatItem>
                 <StatItem>
-                  <span className="value">156</span>
+                  <span className="value">{isLoadingStats ? '...' : profileStats.totalApplicants}</span>
                   <span className="label">{language === 'vi' ? 'Ứng viên' : 'Candidates'}</span>
                 </StatItem>
                 <StatItem>
-                  <span className="value">89</span>
+                  <span className="value">{isLoadingStats ? '...' : profileStats.totalHired}</span>
                   <span className="label">{language === 'vi' ? 'Đã tuyển' : 'Hired'}</span>
                 </StatItem>
                 <StatItem>
-                  <span className="value">4.5</span>
+                  <span className="value">—</span>
                   <span className="label">{language === 'vi' ? 'Đánh giá' : 'Rating'}</span>
                 </StatItem>
               </StatGrid>
@@ -1731,7 +1817,10 @@ const EmployerProfile = () => {
 
               <FormRow $columns="1fr">
                 <FormGroup>
-                  <Label htmlFor="description">{language === 'vi' ? 'Mô tả công ty' : 'Company description'}</Label>
+                  <Label htmlFor="description">
+                    {language === 'vi' ? 'Mô tả công ty' : 'Company description'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <TextArea
                     id="description"
                     name="description"
@@ -1740,7 +1829,111 @@ const EmployerProfile = () => {
                     placeholder={language === 'vi' ? 'Mô tả về công ty, sản phẩm/dịch vụ, văn hóa làm việc...' : 'Describe your company, products/services, work culture...'}
                     rows={5}
                     disabled={!isEditing}
+                    style={{
+                      borderColor: isEditing && !formData.description?.trim() ? '#FCA5A5' : undefined
+                    }}
                   />
+                  {isEditing && !formData.description?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Mô tả công ty là bắt buộc' : 'Company description is required'}
+                    </p>
+                  )}
+                </FormGroup>
+              </FormRow>
+
+              {/* Company Video */}
+              <FormRow $columns="1fr">
+                <FormGroup>
+                  <Label htmlFor="companyVideo">
+                    {language === 'vi' ? 'Video giới thiệu công ty' : 'Company intro video'}
+                    <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '400', marginLeft: '8px' }}>
+                      ({language === 'vi' ? 'không bắt buộc' : 'optional'})
+                    </span>
+                  </Label>
+                  <InputWrapper>
+                    <Globe className="input-icon" />
+                    <Input
+                      id="companyVideo"
+                      name="companyVideo"
+                      value={companyVideo}
+                      onChange={(e) => setCompanyVideo(e.target.value)}
+                      placeholder={language === 'vi' ? 'Dán link YouTube hoặc URL video...' : 'Paste YouTube link or video URL...'}
+                      disabled={!isEditing}
+                    />
+                  </InputWrapper>
+                  {companyVideo && (
+                    <div style={{ marginTop: '12px', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #E8EFFF' }}>
+                      <iframe
+                        src={companyVideo.includes('youtube.com/watch?v=')
+                          ? companyVideo.replace('watch?v=', 'embed/')
+                          : companyVideo.includes('youtu.be/')
+                            ? `https://www.youtube.com/embed/${companyVideo.split('youtu.be/')[1]?.split('?')[0]}`
+                            : companyVideo}
+                        width="100%"
+                        height="220"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        title={language === 'vi' ? 'Video công ty' : 'Company video'}
+                        style={{ display: 'block' }}
+                      />
+                    </div>
+                  )}
+                </FormGroup>
+              </FormRow>
+
+              {/* Company Images */}
+              <FormRow $columns="1fr">
+                <FormGroup>
+                  <Label>
+                    {language === 'vi' ? 'Hình ảnh công ty' : 'Company images'}
+                    <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '400', marginLeft: '8px' }}>
+                      ({language === 'vi' ? `không bắt buộc • tối đa 5 ảnh` : `optional • max 5 images`})
+                    </span>
+                  </Label>
+                  {companyImages.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                      {companyImages.map(img => (
+                        <div key={img.id} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #E8EFFF', aspectRatio: '4/3' }}>
+                          <img src={img.data} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          {isEditing && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCompanyImage(img.id)}
+                              style={{
+                                position: 'absolute', top: '6px', right: '6px',
+                                width: '28px', height: '28px', borderRadius: '50%',
+                                background: 'rgba(239,68,68,0.9)', border: 'none',
+                                color: 'white', cursor: 'pointer', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', padding: 0
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isEditing && companyImages.length < 5 && (
+                    <label style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '10px 16px', borderRadius: '10px',
+                      border: '1.5px dashed #BFDBFE', background: '#EFF6FF',
+                      color: '#1e40af', cursor: 'pointer', fontSize: '14px', fontWeight: '600',
+                      width: 'fit-content'
+                    }}>
+                      <Upload size={16} />
+                      {language === 'vi' ? `Tải ảnh lên (${companyImages.length}/5)` : `Upload images (${companyImages.length}/5)`}
+                      <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleCompanyImagesUpload} />
+                    </label>
+                  )}
+                  {!isEditing && companyImages.length === 0 && (
+                    <p style={{ fontSize: '13px', color: '#9CA3AF', fontStyle: 'italic' }}>
+                      {language === 'vi' ? 'Chưa có hình ảnh công ty' : 'No company images yet'}
+                    </p>
+                  )}
                 </FormGroup>
               </FormRow>
 

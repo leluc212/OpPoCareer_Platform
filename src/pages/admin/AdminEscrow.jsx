@@ -570,13 +570,7 @@ const AdminEscrow = () => {
   const [selectedJob, setSelectedJob] = useState(null);
 
   useEffect(() => {
-    // 1. Initial load from localStorage (instant rendering)
-    const savedJobs = JSON.parse(localStorage.getItem('escrow_jobs') || '[]');
-    const savedTx = JSON.parse(localStorage.getItem('escrow_transactions') || '[]');
-    setEscrowJobs(savedJobs);
-    setEscrowTx(savedTx);
-
-    // 2. Fetch live data from AWS DynamoDB database and update
+    // Fetch live data from AWS DynamoDB database
     const loadLiveData = async () => {
       try {
         const [realJobs, realApps] = await Promise.all([
@@ -642,69 +636,12 @@ const AdminEscrow = () => {
             }
           });
 
-          // Merge local storage + live database (avoiding duplicates, prioritizing database data)
-          const mergedJobsMap = new Map();
-          
-          // First add local storage jobs
-          savedJobs.forEach(job => {
-            if (job && job.jobId) {
-              mergedJobsMap.set(String(job.jobId), job);
-            }
-          });
-          
-          // Then add/overwrite with database jobs, which are ground truth
-          dbEscrowJobs.forEach(dbJob => {
-            if (dbJob && dbJob.jobId) {
-              const key = String(dbJob.jobId);
-              if (mergedJobsMap.has(key)) {
-                // If it already exists, merge fields; database values override local storage
-                const localJob = mergedJobsMap.get(key);
-                mergedJobsMap.set(key, {
-                  ...localJob,
-                  ...dbJob,
-                  // Ensure if either version says 'released' (database taking precedence), status resolves to it
-                  status: dbJob.status !== 'held' ? dbJob.status : (localJob.status !== 'held' ? localJob.status : 'held')
-                });
-              } else {
-                mergedJobsMap.set(key, dbJob);
-              }
-            }
-          });
-          
-          const finalJobs = Array.from(mergedJobsMap.values());
-
-          // Merge transaction lists (avoiding duplicates, prioritizing database transactions)
-          const mergedTxMap = new Map();
-          
-          savedTx.forEach(tx => {
-            if (tx && (tx.jobId || tx.id)) {
-              mergedTxMap.set(String(tx.jobId || tx.id), tx);
-            }
-          });
-          
-          dbEscrowTx.forEach(dbTx => {
-            if (dbTx && (dbTx.jobId || dbTx.id)) {
-              const key = String(dbTx.jobId || dbTx.id);
-              if (mergedTxMap.has(key)) {
-                const localTx = mergedTxMap.get(key);
-                mergedTxMap.set(key, {
-                  ...localTx,
-                  ...dbTx
-                });
-              } else {
-                mergedTxMap.set(key, dbTx);
-              }
-            }
-          });
-          
-          const finalTx = Array.from(mergedTxMap.values());
-
           // Sort chronologically (newest first)
-          finalJobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-          finalTx.sort((a, b) => new Date(b.date) - new Date(a.date));
+          dbEscrowJobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          dbEscrowTx.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-          setEscrowJobs(finalJobs);
-          setEscrowTx(finalTx);
+          setEscrowJobs(dbEscrowJobs);
+          setEscrowTx(dbEscrowTx);
         }
       } catch (err) {
         console.error("❌ Error fetching live escrow data from database:", err);
@@ -821,8 +758,8 @@ const AdminEscrow = () => {
               <ShieldCheck />
             </PageIconBox>
             <PageTitleText>
-              <h1>{language === 'vi' ? 'Qu\u1EA3n L\u00FD Escrow' : 'Escrow Management'}</h1>
-              <p>{language === 'vi' ? 'Gi\u00E1m s\u00E1t to\u00E0n b\u1ED9 giao d\u1ECBch escrow tr\u00EAn n\u1EC1n t\u1EA3ng' : 'Monitor all escrow transactions on the platform'}</p>
+              <h1>{language === 'vi' ? 'Quản Lý Thanh Toán' : 'Payment Management'}</h1>
+              <p>{language === 'vi' ? 'Giám sát toàn bộ giao dịch trên nền tảng' : 'Monitor all payment transactions on the platform'}</p>
             </PageTitleText>
           </PageTitleGroup>
         </PageHeader>
@@ -835,7 +772,7 @@ const AdminEscrow = () => {
           <BalanceHeader>
             <BalanceInfo>
               <div className="label">
-                {language === 'vi' ? 'T\u1ED5ng ti\u1EC1n trong Escrow' : 'Total in Escrow'}
+                {language === 'vi' ? 'Tổng tiền đang giữ' : 'Total Funds Held'}
               </div>
               <div className="amount">
                 {showBalance ? formatCurrency(totalHeld) : '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
@@ -925,7 +862,7 @@ const AdminEscrow = () => {
         {/* All Escrow Jobs */}
         <SectionTitle>
           <Briefcase size={18} />
-          {language === 'vi' ? 'T\u1EA5t c\u1EA3 c\u00F4ng vi\u1EC7c Escrow' : 'All Escrow Jobs'}
+          {language === 'vi' ? 'Tất cả công việc' : 'All Jobs'}
         </SectionTitle>
 
         <FilterRow>
@@ -944,8 +881,8 @@ const AdminEscrow = () => {
           {filteredJobs.length === 0 ? (
             <EmptyState>
               <div className="icon-wrap"><ShieldCheck /></div>
-              <h3>{language === 'vi' ? 'Ch\u01B0a c\u00F3 giao d\u1ECBch escrow' : 'No escrow transactions'}</h3>
-              <p>{language === 'vi' ? 'C\u00E1c giao d\u1ECBch escrow s\u1EBD xu\u1EA5t hi\u1EC7n khi nh\u00E0 tuy\u1EC3n d\u1EE5ng \u0111\u0103ng b\u00E0i tuy\u1EC3n g\u1EA5p.' : 'Escrow transactions will appear when employers post urgent jobs.'}</p>
+              <h3>{language === 'vi' ? 'Chưa có giao dịch' : 'No transactions'}</h3>
+              <p>{language === 'vi' ? 'Các giao dịch sẽ xuất hiện khi nhà tuyển dụng đăng bài tuyển gấp.' : 'Transactions will appear when employers post urgent jobs.'}</p>
             </EmptyState>
           ) : (
             filteredJobs.map((job, i) => (
@@ -1020,7 +957,7 @@ const AdminEscrow = () => {
               <ModalBody>
                 <DetailGrid>
                   <DetailBox bg="#FEF3C7" borderColor="#FCD34D" valueColor="#D97706">
-                    <div className="detail-label"><Lock size={14} /> {language === 'vi' ? 'S\u1ED1 ti\u1EC1n escrow' : 'Escrow Amount'}</div>
+                    <div className="detail-label"><Lock size={14} /> {language === 'vi' ? 'Số tiền' : 'Amount'}</div>
                     <div className="detail-value">{formatCurrency(selectedJob.amount)}</div>
                   </DetailBox>
                   <DetailBox>
@@ -1085,7 +1022,7 @@ const AdminEscrow = () => {
                     <TrendingUp /> {language === 'vi' ? 'Ph\u00E2n b\u1ED5 d\u00F2ng ti\u1EC1n' : 'Fund Distribution'}
                   </div>
                   <FlowRow>
-                    <span className="flow-label"><DollarSign /> {language === 'vi' ? 'T\u1ED5ng escrow' : 'Total Escrow'}</span>
+                    <span className="flow-label"><DollarSign /> {language === 'vi' ? 'Tổng tiền' : 'Total'}</span>
                     <span className="flow-value">{formatCurrency(selectedJob.amount)}</span>
                   </FlowRow>
                   <FlowRow color="#059669">

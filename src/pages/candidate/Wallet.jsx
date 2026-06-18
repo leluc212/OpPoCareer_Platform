@@ -765,18 +765,13 @@ const Wallet = () => {
         })
         .filter(t => t.amount > 0);
 
-      // Get withdrawal transactions from database candidate profile and sync status with admin requests
-      const adminRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
+      // Get withdrawal transactions from database candidate profile
+      // Status is authoritative from DB (profile.withdrawals[].status) — no localStorage sync needed
       const savedWithdrawals = profile?.withdrawals || [];
       const withdrawalTransactions = [];
 
       savedWithdrawals.forEach(w => {
-        const adminReq = adminRequests.find(r => String(r.id) === String(w.id));
-        // Prioritize actual database status w.status if it is approved/rejected.
-        // Fallback to local storage adminReq.status if present, and finally 'pending'.
-        const currentStatus = (w.status && w.status !== 'pending')
-          ? w.status
-          : (adminReq && adminReq.status ? adminReq.status : (w.status || 'pending'));
+        const currentStatus = w.status || 'pending';
 
         // Add the main withdrawal transaction (expense)
         withdrawalTransactions.push({
@@ -814,16 +809,15 @@ const Wallet = () => {
       // Sums calculation - correctly compute available balance by only counting approved/pending withdrawals
       const sumIncome = incomeTransactions.reduce((sum, tx) => sum + tx.amount, 0);
       const sumWithdrawn = savedWithdrawals
-        .filter(w => {
-          const adminReq = adminRequests.find(r => String(r.id) === String(w.id));
-          const currentStatus = (w.status && w.status !== 'pending')
-            ? w.status
-            : (adminReq && adminReq.status ? adminReq.status : (w.status || 'pending'));
-          return currentStatus !== 'rejected';
-        })
+        .filter(w => (w.status || 'pending') !== 'rejected')
         .reduce((sum, w) => sum + Math.abs(Number(w.amount || 0)), 0);
 
-      const currentBalance = sumIncome - sumWithdrawn;
+      // Prefer DB walletBalance (credited by backend when employer rates).
+      // Fall back to dynamic calculation if field not yet populated.
+      const dbBalance = profile?.walletBalance != null ? Number(profile.walletBalance) : null;
+      const currentBalance = dbBalance != null
+        ? Math.max(0, dbBalance)
+        : Math.max(0, sumIncome - sumWithdrawn);
 
       setBalance(currentBalance);
       setTotalIncome(sumIncome);
@@ -870,30 +864,16 @@ const Wallet = () => {
       const existingWithdrawals = candidateProfile?.withdrawals || [];
       const updatedWithdrawals = [newWithdrawal, ...existingWithdrawals];
 
+      // NOTE: walletBalance is managed by backend:
+      //   - Credited by application-lambda when employer submits rating
+      //   - Debited by candidate-profile-lambda when new withdrawal is added (validated server-side)
+      //   - Refunded by admin when rejection happens
+      // We send only the updated withdrawals list; backend validates and blocks if balance insufficient.
       await candidateProfileService.updateProfile({
         withdrawals: updatedWithdrawals
       });
 
-      // 2. Save request to localStorage so Admin can view it in Admin Panel
-      const newAdminRequest = {
-        id: newWithdrawal.id,
-        employerId: candidateProfile?.userId || 'candidate-user',
-        companyName: candidateProfile?.fullName || 'Ứng viên',
-        companyLogo: candidateProfile?.profileImage || '',
-        amount: amountNum,
-        bankName: withdrawBankName,
-        accountNumber: withdrawAccountNumber,
-        accountName: withdrawAccountName,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        isCandidate: true // Flag to distinguish candidate from employer in Admin Panel
-      };
-
-      const adminRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-      adminRequests.unshift(newAdminRequest);
-      localStorage.setItem('admin_withdraw_requests', JSON.stringify(adminRequests));
-
-      // 3. Send notification to admin
+      // 2. Send notification to admin
       try {
         await notificationService.createCandidateWithdrawalRequestNotification({
           id: newWithdrawal.id,
@@ -950,11 +930,13 @@ const Wallet = () => {
               : (language === 'vi' ? 'Đang xử lý' : 'Pending'))
           : (language === 'vi' ? 'Thành công' : 'Success');
 
+        const cleanText = (s) => (s || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim();
+
         return [
           tx.id,
           txType,
-          tx.title,
-          tx.description ? tx.description.replace(/,/g, ';') : '', // Replace commas in description to avoid CSV cell splitting
+          cleanText(tx.title),
+          tx.description ? cleanText(tx.description).replace(/,/g, ';') : '',
           tx.amount,
           new Date(tx.date).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US'),
           txStatus
@@ -1183,10 +1165,10 @@ const Wallet = () => {
                               {transaction.type === 'income' ? <ArrowDownLeft /> : <ArrowUpRight />}
                             </div>
                             <div className="details">
-                              <h4>{transaction.title}</h4>
+                              <h4>{(transaction.title || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim()}</h4>
                               <p>
                                 <Receipt style={{ width: '14px', height: '14px' }} />
-                                {transaction.description}
+                                {(transaction.description || (language === 'vi' ? 'Giao dịch ví' : 'Wallet transaction')).replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim()}
                                 {transaction.status && (
                                   <span style={{
                                     marginLeft: '8px',
@@ -1213,7 +1195,10 @@ const Wallet = () => {
                             </div>
                             <div className="date">
                               <Calendar />
-                              {new Date(transaction.date).toLocaleDateString('vi-VN')}
+                              {new Date(transaction.date).toLocaleString('vi-VN', {
+                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit'
+                              })}
                             </div>
                           </div>
                         </TransactionItem>

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useLanguage } from '../context/LanguageContext';
@@ -220,7 +220,7 @@ const TermsUrgentJobs = () => {
           {vi ? 'Quay lại' : 'Back'}
         </BackBtn>
         <Logo>
-          <img src={s3Images.system.logo} alt="Ốp Pờ" style={{ height: 52, objectFit: 'contain' }} onError={e => { e.target.style.display = 'none'; }} />
+          <img src={s3Images.system.logo} alt="Ốp Pờ" style={{ height: 64, objectFit: 'contain', display: 'block', background: '#fff', borderRadius: '16px', padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }} onError={e => { e.target.style.display = 'none'; }} />
         </Logo>
         <HeaderTitle>
           {vi ? 'CHÍNH SÁCH 05: PHÍ & THANH TOÁN' : 'POLICY 05: FEES & PAYMENTS'}

@@ -559,6 +559,9 @@ const EmployersManagement = () => {
   const [changeRequests, setChangeRequests] = useState([]);
   const [selectedChangeRequest, setSelectedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
+  const [selectedVerification, setSelectedVerification] = useState(null); // { employer, verificationData, submittedAt, status }
+  const [loadingVerification, setLoadingVerification] = useState(false);
+  const [isProcessingVerification, setIsProcessingVerification] = useState(false);
 
   const loadWithdrawRequests = async () => {
     try {
@@ -570,14 +573,6 @@ const EmployersManagement = () => {
       setWithdrawRequests(mapped);
     } catch (e) {
       console.error('Error loading withdraw requests:', e);
-      try {
-        const stored = localStorage.getItem('admin_withdraw_requests');
-        if (stored) {
-          const allRequests = JSON.parse(stored);
-          const employerRequests = allRequests.filter(req => req.isCandidate !== true);
-          setWithdrawRequests(employerRequests);
-        }
-      } catch (_) { }
     }
   };
 
@@ -588,11 +583,6 @@ const EmployersManagement = () => {
       setWithdrawRequests(prev =>
         prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r)
       );
-      try {
-        const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-        const updated = stored.map(r => r.id === requestId ? { ...r, status: 'approved' } : r);
-        localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
-      } catch (_) { }
 
       // Send notification to employer
       if (req?.employerId) {
@@ -620,11 +610,6 @@ const EmployersManagement = () => {
       setWithdrawRequests(prev =>
         prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r)
       );
-      try {
-        const stored = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-        const updated = stored.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r);
-        localStorage.setItem('admin_withdraw_requests', JSON.stringify(updated));
-      } catch (_) { }
 
       // Send notification to employer
       if (req?.employerId) {
@@ -900,7 +885,9 @@ const EmployersManagement = () => {
         quickJobStatus: item.quickJobStatus || 'not_requested',
         profileCompletion: item.profileCompletion || 0,
         createdAt: item.createdAt || '',
-        updatedAt: item.updatedAt || ''
+        updatedAt: item.updatedAt || '',
+        verificationStatus: item.verificationStatus || null,
+        verificationSubmittedAt: item.verificationSubmittedAt || null
       }));
 
       setEmployers(transformedData);
@@ -955,13 +942,13 @@ const EmployersManagement = () => {
     try {
       console.log('✅ Approving employer:', employerId);
 
-      // Call API to update in DynamoDB
+      // Call API to update in DynamoDB (also sets isVerified = true)
       await adminEmployerService.approveEmployer(employerId);
 
-      // Update local state
+      // Update local state — reflect both approvalStatus and isVerified
       setEmployers(prev => prev.map(employer =>
         employer.id === employerId
-          ? { ...employer, approvalStatus: 'approved' }
+          ? { ...employer, approvalStatus: 'approved', isVerified: true, verificationStatus: 'approved' }
           : employer
       ));
 
@@ -1012,10 +999,41 @@ const EmployersManagement = () => {
     }
   };
 
+  const handleViewVerification = async (employer) => {
+    setLoadingVerification(true);
+    setSelectedVerification({ employer, verificationData: null, submittedAt: null, status: null });
+    try {
+      const result = await adminEmployerService.getVerificationData(employer.id);
+      if (result) {
+        setSelectedVerification({ employer, verificationData: result.verificationData, submittedAt: result.submittedAt, status: result.status });
+      } else {
+        setSelectedVerification({ employer, verificationData: null, submittedAt: null, status: null });
+      }
+    } catch (e) {
+      console.error('Error loading verification data:', e);
+    } finally {
+      setLoadingVerification(false);
+    }
+  };
+
+  const handleAdminVerify = async (employerId, isVerified) => {
+    setIsProcessingVerification(true);
+    try {
+      await adminEmployerService.updateVerificationStatus(employerId, isVerified);
+      setEmployers(prev => prev.map(e => e.id === employerId ? { ...e, isVerified } : e));
+      if (selectedVerification?.employer?.id === employerId) {
+        setSelectedVerification(prev => ({ ...prev, employer: { ...prev.employer, isVerified }, status: isVerified ? 'approved' : 'rejected' }));
+      }
+    } catch (err) {
+      alert(language === 'vi' ? `Lỗi: ${err.message}` : `Error: ${err.message}`);
+    } finally {
+      setIsProcessingVerification(false);
+    }
+  };
+
   const pendingWithdrawCount = useMemo(() => {
     return withdrawRequests.filter(req => req.status === 'pending').length;
   }, [withdrawRequests]);
-
   const pendingQuickJobCount = useMemo(() => {
     return employers.filter(e => e.quickJobStatus === 'pending').length;
   }, [employers]);
@@ -1023,6 +1041,10 @@ const EmployersManagement = () => {
   const pendingChangeCount = useMemo(() => {
     return changeRequests.filter(r => !r.changeRequestStatus || r.changeRequestStatus === 'pending').length;
   }, [changeRequests]);
+
+  const pendingVerificationCount = useMemo(() => {
+    return employers.filter(e => e.verificationStatus === 'pending' && !e.isVerified).length;
+  }, [employers]);
 
   const filteredEmployers = useMemo(() => {
     return employers.filter(employer => {
@@ -1035,6 +1057,9 @@ const EmployersManagement = () => {
       } else if (activeTab === 'quick_jobs') {
         // Show employers that have requested, approved or rejected status
         matchesTab = (employer.quickJobStatus && employer.quickJobStatus !== 'not_requested');
+      } else if (activeTab === 'verifications') {
+        // Show employers that have submitted verification (pending or already verified)
+        matchesTab = !!(employer.verificationStatus || employer.isVerified);
       }
 
       const matchesSearch = searchTerm === '' ||
@@ -1216,6 +1241,14 @@ const EmployersManagement = () => {
                 <RefreshCw size={18} style={{ marginRight: '8px' }} />
                 {language === 'vi' ? 'Yêu cầu thay đổi' : 'Change Requests'}
                 {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
+              </Tab>
+              <Tab
+                $active={activeTab === 'verifications'}
+                onClick={() => setActiveTab('verifications')}
+              >
+                <FileText size={18} style={{ marginRight: '8px' }} />
+                {language === 'vi' ? 'Xác thực hồ sơ' : 'Verifications'}
+                {pendingVerificationCount > 0 && <TabBadge>{pendingVerificationCount}</TabBadge>}
               </Tab>
             </TabsContainer>
 
@@ -1603,6 +1636,98 @@ const EmployersManagement = () => {
                     )}
                   </tbody>
                 </Table>
+              ) : activeTab === 'verifications' ? (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
+                      <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
+                      <th>{language === 'vi' ? 'Ngày gửi' : 'Submitted At'}</th>
+                      <th>{language === 'vi' ? 'Trạng thái xác thực' : 'Verification Status'}</th>
+                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentEmployers.map((employer, index) => {
+                      const colorScheme = getColorScheme(index);
+                      const initials = getCompanyInitials(employer.companyName);
+                      return (
+                        <tr key={employer.id}>
+                          <td>
+                            <CompanyInfo>
+                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                {employer.companyLogo ? (
+                                  <img src={employer.companyLogo} alt={employer.companyName} />
+                                ) : initials}
+                              </CompanyLogo>
+                              <CompanyDetails>
+                                <CompanyName>{employer.companyName}</CompanyName>
+                                <CompanyMeta><Building2 size={12} />ID: {employer.id}</CompanyMeta>
+                              </CompanyDetails>
+                            </CompanyInfo>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                                <Mail size={12} />{employer.email}
+                              </div>
+                              {employer.phone !== 'N/A' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                                  <Phone size={12} />{employer.phone}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Calendar size={12} />
+                              {employer.verificationSubmittedAt
+                                ? new Date(employer.verificationSubmittedAt).toLocaleDateString('vi-VN')
+                                : 'N/A'}
+                            </div>
+                          </td>
+                          <td>
+                            <VerifiedBadge $verified={employer.isVerified}>
+                              {employer.isVerified ? <CheckCircle size={12} /> : <Clock size={12} />}
+                              {employer.isVerified
+                                ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
+                                : (language === 'vi' ? 'Chờ xác minh' : 'Pending')}
+                            </VerifiedBadge>
+                          </td>
+                          <td>
+                            <ActionButtons>
+                              <IconButton
+                                title={language === 'vi' ? 'Xem hồ sơ xác thực' : 'View verification docs'}
+                                onClick={() => handleViewVerification(employer)}
+                              >
+                                <Eye size={16} />
+                              </IconButton>
+                              {!employer.isVerified && (
+                                <ApproveButton onClick={() => handleAdminVerify(employer.id, true)}>
+                                  <CheckCircle size={16} />
+                                  {language === 'vi' ? 'Xác minh' : 'Verify'}
+                                </ApproveButton>
+                              )}
+                              {employer.isVerified && (
+                                <RejectButton onClick={() => handleAdminVerify(employer.id, false)}>
+                                  <XCircle size={16} />
+                                  {language === 'vi' ? 'Hủy xác minh' : 'Unverify'}
+                                </RejectButton>
+                              )}
+                            </ActionButtons>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {currentEmployers.length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                          {language === 'vi' ? 'Không có hồ sơ xác thực nào' : 'No verification submissions found'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
               ) : (
                 <Table>
                   <thead>
@@ -1702,6 +1827,13 @@ const EmployersManagement = () => {
                                 onClick={() => navigate(`/admin/employers/${employer.id}`)}
                               >
                                 <Eye size={16} />
+                              </IconButton>
+                              <IconButton
+                                title={language === 'vi' ? 'Xem hồ sơ xác thực' : 'View verification docs'}
+                                onClick={() => handleViewVerification(employer)}
+                                style={{ color: '#2563EB' }}
+                              >
+                                <FileText size={16} />
                               </IconButton>
                             </ActionButtons>
                           </td>
@@ -1803,8 +1935,7 @@ const EmployersManagement = () => {
       )}
 
       {/* Change Request Detail Modal */}
-      {selectedChangeRequest && (
-        <ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
+      {selectedChangeRequest && (        <ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
           <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
@@ -1887,6 +2018,259 @@ const EmployersManagement = () => {
             >
               {language === 'vi' ? 'Đóng' : 'Close'}
             </button>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {/* Verification Detail Modal */}
+      {selectedVerification && (
+        <ModalOverlay onClick={() => setSelectedVerification(null)}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '680px', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #BFDBFE', flexShrink: 0 }}>
+                <FileText style={{ color: '#2563EB' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                  {language === 'vi' ? 'Hồ Sơ Xác Thực Doanh Nghiệp' : 'Business Verification Docs'}
+                </ModalTitle>
+                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                  {selectedVerification.employer.companyName}
+                  {selectedVerification.submittedAt && ` • ${new Date(selectedVerification.submittedAt).toLocaleDateString('vi-VN')}`}
+                </div>
+              </div>
+              <VerifiedBadge $verified={selectedVerification.employer.isVerified}>
+                {selectedVerification.employer.isVerified ? <CheckCircle size={12} /> : <Clock size={12} />}
+                {selectedVerification.employer.isVerified
+                  ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
+                  : (language === 'vi' ? 'Chờ xác minh' : 'Pending')}
+              </VerifiedBadge>
+            </div>
+
+            {loadingVerification && (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>
+                {language === 'vi' ? 'Đang tải hồ sơ...' : 'Loading documents...'}
+              </div>
+            )}
+
+            {!loadingVerification && !selectedVerification.verificationData && (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '14px' }}>
+                {language === 'vi' ? 'Nhà tuyển dụng chưa gửi hồ sơ xác thực.' : 'No verification submission found.'}
+              </div>
+            )}
+
+            {!loadingVerification && selectedVerification.verificationData && (() => {
+              const vd = selectedVerification.verificationData;
+              const s1 = vd.step1 || {};
+              const s2 = vd.step2 || {};
+              const s3 = vd.step3 || {};
+              const s4 = vd.step4 || {};
+              const sectionStyle = { background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '16px' };
+              const labelStyle = { fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' };
+              const valueStyle = { fontSize: '14px', fontWeight: 600, color: '#1E293B' };
+              const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' };
+
+              return (
+                <>
+                  {/* Step 1: Giấy phép kinh doanh */}
+                  <div style={sectionStyle}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <FileText size={14} />
+                      {language === 'vi' ? 'Bước 1: Giấy phép kinh doanh' : 'Step 1: Business License'}
+                    </div>
+                    <div style={gridStyle}>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Số giấy phép' : 'License Number'}</div>
+                        <div style={valueStyle}>{s1.licenseNumber || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Cơ quan cấp' : 'Issuing Authority'}</div>
+                        <div style={valueStyle}>{s1.issuingAuthority || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Ngày cấp' : 'Issue Date'}</div>
+                        <div style={valueStyle}>{s1.issueDate || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Ngày hết hạn' : 'Expiry Date'}</div>
+                        <div style={valueStyle}>{s1.expiryDate || 'N/A'}</div>
+                      </div>
+                    </div>
+                    {s1.businessLicense?.data && (
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={labelStyle}>{language === 'vi' ? 'File giấy phép' : 'License File'}</div>
+                        {s1.businessLicense.type === 'application/pdf' ? (
+                          <a
+                            href={s1.businessLicense.data}
+                            download={s1.businessLicense.name || 'business-license.pdf'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', padding: '8px 14px', background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', color: '#2563EB', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}
+                          >
+                            <FileText size={14} /> {s1.businessLicense.name || 'business-license.pdf'}
+                          </a>
+                        ) : (
+                          <img src={s1.businessLicense.data} alt="Business License" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0' }} />
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 2: Thông tin doanh nghiệp */}
+                  <div style={sectionStyle}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#7C3AED', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Building2 size={14} />
+                      {language === 'vi' ? 'Bước 2: Thông tin doanh nghiệp' : 'Step 2: Company Information'}
+                    </div>
+                    <div style={gridStyle}>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Tên công ty (VI)' : 'Company Name (VI)'}</div>
+                        <div style={valueStyle}>{s2.companyName || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Tên công ty (EN)' : 'Company Name (EN)'}</div>
+                        <div style={valueStyle}>{s2.companyNameEn || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Mã số thuế' : 'Tax Code'}</div>
+                        <div style={valueStyle}>{s2.taxCode || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Năm thành lập' : 'Founded Year'}</div>
+                        <div style={valueStyle}>{s2.foundedYear || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Ngành' : 'Industry'}</div>
+                        <div style={valueStyle}>{s2.industry || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Quy mô' : 'Company Size'}</div>
+                        <div style={valueStyle}>{s2.companySize || 'N/A'}</div>
+                      </div>
+                      {s2.website && (
+                        <div>
+                          <div style={labelStyle}>Website</div>
+                          <div style={valueStyle}><a href={s2.website} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{s2.website}</a></div>
+                        </div>
+                      )}
+                      {s2.fanpage && (
+                        <div>
+                          <div style={labelStyle}>Fanpage</div>
+                          <div style={valueStyle}><a href={s2.fanpage} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{s2.fanpage}</a></div>
+                        </div>
+                      )}
+                    </div>
+                    {s2.description && (
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={labelStyle}>{language === 'vi' ? 'Mô tả' : 'Description'}</div>
+                        <div style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', marginTop: '4px' }}>{s2.description}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 3: Người đại diện */}
+                  <div style={sectionStyle}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#059669', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <User size={14} />
+                      {language === 'vi' ? 'Bước 3: Người đại diện' : 'Step 3: Representative'}
+                    </div>
+                    <div style={gridStyle}>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Họ và tên' : 'Full Name'}</div>
+                        <div style={valueStyle}>{s3.representativeName || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Chức vụ' : 'Position'}</div>
+                        <div style={valueStyle}>{s3.position || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Số CMND/CCCD' : 'ID Number'}</div>
+                        <div style={valueStyle}>{s3.idNumber || 'N/A'}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                      {s3.idFrontImage?.data && (
+                        <div>
+                          <div style={labelStyle}>{language === 'vi' ? 'CMND mặt trước' : 'ID Front'}</div>
+                          <img src={s3.idFrontImage.data} alt="ID Front" style={{ maxWidth: '200px', maxHeight: '130px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0', objectFit: 'cover' }} />
+                        </div>
+                      )}
+                      {s3.idBackImage?.data && (
+                        <div>
+                          <div style={labelStyle}>{language === 'vi' ? 'CMND mặt sau' : 'ID Back'}</div>
+                          <img src={s3.idBackImage.data} alt="ID Back" style={{ maxWidth: '200px', maxHeight: '130px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0', objectFit: 'cover' }} />
+                        </div>
+                      )}
+                    </div>
+                    {s3.authorizationLetter?.data && (
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={labelStyle}>{language === 'vi' ? 'Giấy uỷ quyền' : 'Authorization Letter'}</div>
+                        <a
+                          href={s3.authorizationLetter.data}
+                          download={s3.authorizationLetter.name || 'authorization.pdf'}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', padding: '8px 14px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', color: '#059669', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}
+                        >
+                          <FileText size={14} /> {s3.authorizationLetter.name || 'authorization.pdf'}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 4: Thông tin liên hệ */}
+                  <div style={sectionStyle}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#EA580C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Phone size={14} />
+                      {language === 'vi' ? 'Bước 4: Thông tin liên hệ' : 'Step 4: Contact Information'}
+                    </div>
+                    <div style={gridStyle}>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Địa chỉ' : 'Address'}</div>
+                        <div style={valueStyle}>{[s4.address, s4.ward, s4.district, s4.city].filter(Boolean).join(', ') || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
+                        <div style={valueStyle}>{s4.phone || 'N/A'}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Email</div>
+                        <div style={valueStyle}>{(s4.emails || []).filter(Boolean).join(', ') || 'N/A'}</div>
+                      </div>
+                      {s4.emergencyContact && (
+                        <div>
+                          <div style={labelStyle}>{language === 'vi' ? 'Liên hệ khẩn cấp' : 'Emergency Contact'}</div>
+                          <div style={valueStyle}>{s4.emergencyContact} {s4.emergencyPhone ? `• ${s4.emergencyPhone}` : ''}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              {!selectedVerification.employer.isVerified && selectedVerification.verificationData && (
+                <ModalButton
+                  onClick={() => handleAdminVerify(selectedVerification.employer.id, true)}
+                  disabled={isProcessingVerification}
+                  style={{ flex: 1 }}
+                >
+                  {isProcessingVerification ? '...' : (language === 'vi' ? '✓ Xác minh doanh nghiệp' : '✓ Verify Business')}
+                </ModalButton>
+              )}
+              {selectedVerification.employer.isVerified && (
+                <ModalButton
+                  onClick={() => handleAdminVerify(selectedVerification.employer.id, false)}
+                  disabled={isProcessingVerification}
+                  style={{ flex: 1, background: '#ef4444' }}
+                >
+                  {isProcessingVerification ? '...' : (language === 'vi' ? 'Hủy xác minh' : 'Unverify')}
+                </ModalButton>
+              )}
+              <button
+                onClick={() => setSelectedVerification(null)}
+                style={{ flex: 1, padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {language === 'vi' ? 'Đóng' : 'Close'}
+              </button>
+            </div>
           </ModalContent>
         </ModalOverlay>
       )}

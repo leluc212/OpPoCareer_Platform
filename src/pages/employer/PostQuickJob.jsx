@@ -1091,7 +1091,6 @@ const PostQuickJob = () => {
       return;
     }
 
-    const walletData = JSON.parse(localStorage.getItem('employer_wallet') || '{"balance": 0}');
     let newBalance = 0;
     let didDeductRealWallet = false;
 
@@ -1099,8 +1098,8 @@ const PostQuickJob = () => {
       // Deduct fee from wallet (backend database)
       try {
         const description = language === 'vi' 
-          ? `Escrow - Đăng bài: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VNĐ)`
-          : `Escrow - Post job: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VND)`;
+          ? `Nạp tiền - Đăng bài: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VNĐ)`
+          : `Deposit - Post job: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VND)`;
 
         const result = await createWalletTransaction(
           employerId,
@@ -1117,28 +1116,9 @@ const PostQuickJob = () => {
         setRealBalance(newBalance);
         didDeductRealWallet = true;
       } catch (apiError) {
-        console.warn('⚠️ API wallet debit failed, falling back to simulated localStorage wallet:', apiError);
-        newBalance = currentBalance - totalFee;
-        
-        // Update mock local wallet
-        walletData.balance = newBalance;
-        localStorage.setItem('employer_wallet', JSON.stringify(walletData));
-
-        // Save mock local transaction
-        const transaction = {
-          id: Date.now(),
-          type: 'debit',
-          amount: totalFee,
-          description: language === 'vi' 
-            ? `Escrow - Đăng bài: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VNĐ)`
-            : `Escrow - Post job: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VND)`,
-          date: new Date().toISOString(),
-          balanceAfter: newBalance
-        };
-
-        const transactions = JSON.parse(localStorage.getItem('employer_transactions') || '[]');
-        transactions.unshift(transaction);
-        localStorage.setItem('employer_transactions', JSON.stringify(transactions));
+        console.warn('⚠️ API wallet debit failed:', apiError);
+        // Re-throw so the outer catch handles it properly
+        throw apiError;
       }
 
       // Get company name from employer profile
@@ -1186,23 +1166,6 @@ const PostQuickJob = () => {
 
       console.log('✅ Quick job saved:', savedJob);
 
-      // Save to escrow - hold the funds by job ID
-      const escrowJob = {
-        jobId: savedJob.idJob || savedJob.id,
-        jobTitle: formData.title,
-        amount: totalFee,
-        status: 'held',
-        employerConfirmed: false,
-        candidateConfirmed: false,
-        createdAt: new Date().toISOString(),
-        totalHours: calculation.hours,
-        hourlyRate: rate
-      };
-
-      const escrowJobs = JSON.parse(localStorage.getItem('escrow_jobs') || '[]');
-      escrowJobs.unshift(escrowJob);
-      localStorage.setItem('escrow_jobs', JSON.stringify(escrowJobs));
-
       // Clear draft
       localStorage.removeItem('quickJobDraft');
 
@@ -1221,7 +1184,7 @@ const PostQuickJob = () => {
     } catch (error) {
       console.error('❌ Error creating quick job:', error);
       
-      // Rollback wallet deduction
+      // Rollback wallet deduction if API had deducted balance
       if (didDeductRealWallet) {
         try {
           const description = language === 'vi'
@@ -1232,17 +1195,12 @@ const PostQuickJob = () => {
             totalFee,
             'credit',
             description,
-            {
-              error: error.message
-            }
+            { error: error.message }
           );
           setRealBalance(result.walletBalance || 0);
         } catch (refundError) {
           console.error('❌ Failed to refund wallet balance:', refundError);
         }
-      } else {
-        walletData.balance = currentBalance;
-        localStorage.setItem('employer_wallet', JSON.stringify(walletData));
       }
       
       setModalType('error');

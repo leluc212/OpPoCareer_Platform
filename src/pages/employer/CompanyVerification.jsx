@@ -17,6 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import employerProfileService from '../../services/employerProfileService';
 
 const VerificationContainer = styled.div`
   max-width: 1200px;
@@ -589,36 +590,54 @@ const CompanyVerification = () => {
     return true;
   };
 
-  const submitVerification = () => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const submitVerification = async () => {
     const verificationData = {
-      step1: step1Data,
+      step1: {
+        licenseNumber: step1Data.licenseNumber,
+        issueDate: step1Data.issueDate,
+        expiryDate: step1Data.expiryDate,
+        issuingAuthority: step1Data.issuingAuthority,
+        businessLicense: step1Data.businessLicense
+          ? { name: step1Data.businessLicense.name, data: step1Data.businessLicense.data, type: step1Data.businessLicense.type }
+          : null
+      },
       step2: step2Data,
-      step3: step3Data,
+      step3: {
+        representativeName: step3Data.representativeName,
+        position: step3Data.position,
+        idNumber: step3Data.idNumber,
+        idFrontImage: step3Data.idFrontImage
+          ? { name: step3Data.idFrontImage.name, data: step3Data.idFrontImage.data, type: step3Data.idFrontImage.type }
+          : null,
+        idBackImage: step3Data.idBackImage
+          ? { name: step3Data.idBackImage.name, data: step3Data.idBackImage.data, type: step3Data.idBackImage.type }
+          : null,
+        authorizationLetter: step3Data.authorizationLetter
+          ? { name: step3Data.authorizationLetter.name, data: step3Data.authorizationLetter.data, type: step3Data.authorizationLetter.type }
+          : null
+      },
       step4: step4Data,
       submittedAt: new Date().toISOString()
     };
 
-    console.log('Verification submitted:', verificationData);
+    console.log('Submitting verification to API...');
+    setSubmitting(true);
 
     try {
-      // Save to localStorage (in production, send to API)
-      localStorage.setItem('companyVerificationStatus', 'pending');
-      localStorage.setItem('companyVerificationData', JSON.stringify(verificationData));
+      await employerProfileService.submitVerification(verificationData);
 
       // Mark all steps as completed
       setCompletedSteps([0, 1, 2, 3]);
       setCurrentStep(4); // Show completion screen
     } catch (error) {
-      if (error.name === 'QuotaExceededError') {
-        alert(language === 'vi'
-          ? 'Lỗi: Dung lượng lưu trữ không đủ. Vui lòng sử dụng ảnh có kích thước nhỏ hơn hoặc xóa dữ liệu cũ.'
-          : 'Error: Storage quota exceeded. Please use smaller images or clear old data.');
-      } else {
-        alert(language === 'vi'
-          ? 'Đã xảy ra lỗi khi lưu dữ liệu. Vui lòng thử lại.'
-          : 'An error occurred while saving data. Please try again.');
-      }
-      console.error('Error saving verification data:', error);
+      console.error('Error submitting verification:', error);
+      alert(language === 'vi'
+        ? `Đã xảy ra lỗi khi gửi hồ sơ xác thực: ${error.message}. Vui lòng thử lại.`
+        : `Error submitting verification: ${error.message}. Please try again.`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1108,9 +1127,12 @@ const CompanyVerification = () => {
                   <ArrowLeft size={18} />
                   {language === 'vi' ? 'Quay lại' : 'Back'}
                 </Button>
-                <Button $variant="success" onClick={handleNext}>
+                <Button $variant="success" onClick={handleNext} disabled={submitting}>
                   <CheckCircle size={18} />
-                  {language === 'vi' ? 'Hoàn tất & Gửi xác thực' : 'Complete & Submit'}
+                  {submitting
+                    ? (language === 'vi' ? 'Đang gửi...' : 'Submitting...')
+                    : (language === 'vi' ? 'Hoàn tất & Gửi xác thực' : 'Complete & Submit')
+                  }
                 </Button>
               </ButtonGroup>
             </FormCard>

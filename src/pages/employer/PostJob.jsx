@@ -497,23 +497,33 @@ const PostJob = () => {
     benefits: ''
   });
 
-  // Check verification status on mount
+  // Check verification status on mount — fetch real isVerified from API
   useEffect(() => {
-    const status = localStorage.getItem('companyVerificationStatus') || 'not_started';
-
-    // AUTO-APPROVE for development
-    if (status === 'pending' || status === 'not_started') {
-      console.log('🚀 AUTO-APPROVE: Setting verification status to approved for development');
-      localStorage.setItem('companyVerificationStatus', 'approved');
-      setVerificationStatus('approved');
-    } else {
-      setVerificationStatus(status);
-    }
-
-    // If not verified and not editing, show modal
-    if (status !== 'approved' && !isEditing) {
-      setShowVerificationModal(true);
-    }
+    const checkVerification = async () => {
+      try {
+        const profile = await employerProfileService.getMyProfile();
+        if (profile && profile.isVerified === true) {
+          setVerificationStatus('approved');
+        } else {
+          // Check if pending (submitted but not yet approved)
+          const verificationData = profile?.verificationStatus || null;
+          if (verificationData === 'pending') {
+            setVerificationStatus('pending');
+          } else {
+            setVerificationStatus('not_started');
+          }
+          if (!isEditing) {
+            setShowVerificationModal(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error checking verification status:', err);
+        // Fallback: block access
+        setVerificationStatus('not_started');
+        if (!isEditing) setShowVerificationModal(true);
+      }
+    };
+    checkVerification();
   }, [isEditing]);
 
   // Pre-fill form if editing
@@ -618,6 +628,12 @@ const PostJob = () => {
           : 'Work date cannot be in the past.');
         return;
       }
+    }
+
+    // Block new job posting if not verified
+    if (!isEditing && verificationStatus !== 'approved') {
+      setShowVerificationModal(true);
+      return;
     }
 
     console.log('🔥🔥🔥 SUBMIT BUTTON CLICKED');

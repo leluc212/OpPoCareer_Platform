@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 import styled from 'styled-components';
 import { useLanguage } from '../context/LanguageContext';
@@ -92,7 +92,7 @@ const PrivacyPolicyPage = () => {
     <Wrapper $isDark={isDarkMode}>
       <Header>
         <Logo>
-          <img src={s3Images.system.logo} alt="Ốp Pờ" style={{ height: 52, objectFit: 'contain' }} />
+          <img src={s3Images.system.logo} alt="Ốp Pờ" style={{ height: 64, objectFit: 'contain', display: 'block', background: '#fff', borderRadius: '16px', padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }} />
         </Logo>
         <HeaderTitle>
           {vi ? 'CHÍNH SÁCH BẢO MẬT' : 'PRIVACY POLICY'}

@@ -80,7 +80,35 @@ class EmployerProfileService {
         throw new Error(errorBody.message || `HTTP ${response.status}`);
       }
 
-      const data = await response.json();
+      let data = await response.json();
+
+      // Handle double-wrapped Lambda proxy responses:
+      // Some API Gateway integrations return the Lambda proxy response object
+      // as the HTTP body with statusCode/body nested inside (HTTP 200 outer).
+      if (
+        data &&
+        typeof data.statusCode === 'number' &&
+        typeof data.body === 'string'
+      ) {
+        console.warn('⚠️ Detected double-wrapped Lambda response, unwrapping...');
+        const innerStatus = data.statusCode;
+        let innerBody;
+        try {
+          innerBody = JSON.parse(data.body);
+        } catch {
+          innerBody = { message: data.body };
+        }
+        if (innerStatus === 401 || innerStatus === 403) {
+          console.error(`❌ Auth error from Lambda (${innerStatus}):`, innerBody);
+          throw new Error(innerBody.message || `Unauthorized (${innerStatus})`);
+        }
+        if (innerStatus >= 400) {
+          console.error(`❌ API Error from Lambda (${innerStatus}):`, innerBody);
+          throw new Error(innerBody.message || `HTTP ${innerStatus}`);
+        }
+        data = innerBody;
+      }
+
       console.log('✅ API request successful');
       return data;
     } catch (error) {
@@ -279,7 +307,46 @@ class EmployerProfileService {
   }
 
   /**
-   * Submit verification request
+   * Upload a verification file to S3 via presigned URL.
+   * @param {string} userId
+   * @param {string} field  - e.g. 'businessLicense', 'idFrontImage'
+   * @param {{ name:string, data:string, type:string }} fileObj - data is base64 string (with or without data: prefix)
+   * @returns {string} - public S3 URL
+   */
+  async uploadVerificationFile(userId, field, fileObj) {
+    // 1. Get presigned URL from Lambda
+    const presignRes = await this.makeRequest(`/profile/${userId}/verification/upload-url`, {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: fileObj.name,
+        fileType: fileObj.type,
+        field
+      })
+    });
+    if (!presignRes.success) throw new Error(`Failed to get upload URL for ${field}`);
+    const { uploadUrl, fileUrl } = presignRes.data;
+
+    // 2. Decode base64 → Blob
+    const base64 = fileObj.data.includes(',') ? fileObj.data.split(',')[1] : fileObj.data;
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const blob = new Blob([bytes], { type: fileObj.type });
+
+    // 3. PUT directly to S3
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': fileObj.type }
+    });
+    if (!uploadRes.ok) throw new Error(`S3 upload failed for ${field}: ${uploadRes.status}`);
+
+    console.log(`✅ Uploaded ${field} → ${fileUrl}`);
+    return fileUrl;
+  }
+
+  /**
+   * Submit verification request — uploads images to S3, stores only URLs in DynamoDB
    */
   async submitVerification(verificationData) {
     try {
@@ -296,11 +363,48 @@ class EmployerProfileService {
         throw new Error('User not authenticated - no userId in token');
       }
 
+      // Upload each file field to S3 and replace with URL
+      const uploadFileField = async (obj, field) => {
+        if (obj?.[field]?.data) {
+          console.log(`📤 Uploading ${field} to S3...`);
+          const url = await this.uploadVerificationFile(userId, field, obj[field]);
+          return { ...obj[field], data: null, url };
+        }
+        return obj?.[field] || null;
+      };
+
+      const step1 = verificationData?.step1 || {};
+      const step3 = verificationData?.step3 || {};
+
+      const [businessLicenseUploaded, idFrontUploaded, idBackUploaded, authLetterUploaded] = await Promise.all([
+        uploadFileField(step1, 'businessLicense'),
+        uploadFileField(step3, 'idFrontImage'),
+        uploadFileField(step3, 'idBackImage'),
+        uploadFileField(step3, 'authorizationLetter')
+      ]);
+
+      // Build clean verificationData with S3 URLs, no base64
+      const cleanVerificationData = {
+        ...verificationData,
+        step1: {
+          ...step1,
+          businessLicense: businessLicenseUploaded
+        },
+        step3: {
+          ...step3,
+          idFrontImage: idFrontUploaded,
+          idBackImage: idBackUploaded,
+          authorizationLetter: authLetterUploaded
+        }
+      };
+
       const payload = {
-        verificationData,
+        verificationData: cleanVerificationData,
         status: 'pending',
         submittedAt: new Date().toISOString()
       };
+
+      console.log('🔑 Submitting verification for userId:', userId);
 
       const result = await this.makeRequest(`/profile/${userId}/verification`, {
         method: 'POST',
@@ -312,9 +416,9 @@ class EmployerProfileService {
         return result.data;
       }
 
-      throw new Error('Failed to submit verification');
+      throw new Error(result.message || `Failed to submit verification (success=false, raw=${JSON.stringify(result)})`);
     } catch (error) {
-      console.error('❌ Error submitting verification:', error);
+      console.error('❌ Error submitting verification — type:', typeof error, '— name:', error?.name, '— message:', error?.message, '— full:', error);
       throw error;
     }
   }

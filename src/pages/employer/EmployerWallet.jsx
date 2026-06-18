@@ -1267,14 +1267,6 @@ const EmployerWallet = () => {
         companyLogo
       );
 
-      // Save to localStorage so Admin can view it
-      const existingRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-      existingRequests.unshift({
-        ...newRequest,
-        id: result.requestId || newRequest.id
-      });
-      localStorage.setItem('admin_withdraw_requests', JSON.stringify(existingRequests));
-
       setBalance(result.walletBalance || 0);
       const txs = (result.walletTransactions || []).map((t, idx) => ({
         id: t.transactionId || idx,
@@ -1308,47 +1300,9 @@ const EmployerWallet = () => {
         setWithdrawSuccess(false);
       }, 2400);
     } catch (error) {
-      console.warn('API withdrawal failed, using local simulation fallback:', error);
-      
-      // Local Storage fallback: Save request anyway so Admin receives it
-      const existingRequests = JSON.parse(localStorage.getItem('admin_withdraw_requests') || '[]');
-      existingRequests.unshift(newRequest);
-      localStorage.setItem('admin_withdraw_requests', JSON.stringify(existingRequests));
-
-      // Locally deduct balance and record a mock transaction
-      setBalance(prev => Math.max(0, prev - parsedWithdrawAmount));
-      
-      const localTx = {
-        id: `TX_${Date.now()}`,
-        type: 'expense',
-        amount: parsedWithdrawAmount,
-        description: `Rút tiền về ${withdrawBankName}`,
-        date: new Date().toISOString(),
-        paymentDetails: { bankName: withdrawBankName, accountNumber: withdrawAccountNumber }
-      };
-      setTransactions(prev => [localTx, ...prev]);
-
-      // Notify admin even on fallback
-      try {
-        await createWithdrawalRequestNotification({
-          employerId,
-          companyName,
-          amount: parsedWithdrawAmount,
-          bankName: withdrawBankName,
-          accountNumber: withdrawAccountNumber,
-          accountName: withdrawAccountName,
-        });
-      } catch (notifErr) {
-        console.warn('Notification error (withdrawal request fallback):', notifErr.message);
-      }
-
+      console.error('API withdrawal failed:', error);
       setWithdrawLoading(false);
-      setWithdrawSuccess(true);
-
-      setTimeout(() => {
-        setShowWithdrawModal(false);
-        setWithdrawSuccess(false);
-      }, 2400);
+      alert(language === 'vi' ? 'Yêu cầu rút tiền thất bại, vui lòng thử lại!' : 'Withdrawal request failed, please try again!');
     }
   };
 
@@ -1399,10 +1353,12 @@ const EmployerWallet = () => {
           ? (language === 'vi' ? 'Nạp tiền / Thu nhập' : 'Deposit / Income')
           : (language === 'vi' ? 'Rút tiền / Chi tiêu' : 'Withdrawal / Expense');
           
+        const cleanText = (s) => (s || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim();
+
         return [
           tx.id,
           txType,
-          tx.description ? tx.description.replace(/,/g, ';') : '',
+          tx.description ? cleanText(tx.description).replace(/,/g, ';') : '',
           formattedAmount,
           tx.date ? new Date(tx.date).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : ''
         ];
@@ -1658,10 +1614,10 @@ const EmployerWallet = () => {
                         {(transaction.type === 'income' || transaction.type === 'credit') ? <ArrowDownLeft /> : <ArrowUpRight />}
                       </div>
                       <div className="details">
-                        <h4>{transaction.description || transaction.title}</h4>
+                        <h4>{(transaction.description || transaction.title || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim()}</h4>
                         <p>
                           <Receipt style={{ width: '14px', height: '14px' }} />
-                          {transaction.description}
+                          {(transaction.description || '').replace(/^(Escrow|escrow)\s*[-–]\s*/i, '').replace(/qua SePay/gi, '').replace(/SePay/gi, '').trim()}
                         </p>
                       </div>
                     </div>

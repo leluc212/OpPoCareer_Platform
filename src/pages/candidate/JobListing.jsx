@@ -8,7 +8,7 @@ import {
   ChevronDown, Building2, Bookmark, Eye, ArrowUpRight, Filter,
   X, SlidersHorizontal, Grid, List, Sparkles, Zap, Navigation, Target,
   Power, XCircle, AlertCircle, CheckCircle, RotateCw,
-  Volume2, VolumeX, Mic, MicOff
+  Volume2, VolumeX, Mic, MicOff, ChevronRight
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import StatusBadge from '../../components/StatusBadge';
@@ -2246,7 +2246,10 @@ const JobListing = () => {
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     
-    window.speechSynthesis.speak(utterance);
+    // Wrap speak in setTimeout to work around Chrome SpeechSynthesis bugs after cancel()
+    setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 100);
   }, []);
 
   const stopListening = () => {
@@ -2270,7 +2273,7 @@ const JobListing = () => {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = 'vi-VN';
 
@@ -2279,17 +2282,18 @@ const JobListing = () => {
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript && transcript.trim()) {
-        const text = transcript.trim();
-        setInterviewInputText(text);
-        
-        // Stop listening immediately to release resources
-        recognition.stop();
-        setIsListening(false);
-
-        // Immediately submit the voice response to the AI handler
-        handleSendInterviewAnswer(text);
+      let accumulatedText = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          accumulatedText += event.results[i][0].transcript + ' ';
+        }
+      }
+      if (accumulatedText.trim()) {
+        const text = accumulatedText.trim();
+        setInterviewInputText(prev => {
+          const current = prev.trim();
+          return current ? `${current} ${text}` : text;
+        });
       }
     };
 
@@ -2328,21 +2332,21 @@ const JobListing = () => {
     setIsListening(false);
     setIsSpeaking(false);
 
-    // Ban for 3 days
-    const banDuration = 3 * 24 * 60 * 60 * 1000; // 3 days in ms
-    localStorage.setItem('ai_interview_ban_until', String(Date.now() + banDuration));
+    // Ban for 3 days (Disabled for testing)
+    // const banDuration = 3 * 24 * 60 * 60 * 1000; // 3 days in ms
+    // localStorage.setItem('ai_interview_ban_until', String(Date.now() + banDuration));
 
     // Close modals
     setShowAiScreeningModal(false);
     setShowTabWarningOverlay(false);
     setPendingApplication(null);
 
-    // Show ban error modal
+    // Show ban error modal (updated message to show ban is disabled)
     setErrorModal({
       show: true,
       message: language === 'vi'
-        ? 'Bạn đã bị huỷ phỏng vấn và khoá tính năng 3 ngày do chuyển tab/thoát màn hình lần thứ 2!'
-        : 'Your interview has been cancelled and you are banned for 3 days due to tab switching!'
+        ? 'Bạn đã bị huỷ phỏng vấn do chuyển tab/thoát màn hình lần thứ 2! (Tính năng khóa 3 ngày đã được tắt để dễ test)'
+        : 'Your interview has been cancelled due to tab switching! (3-day ban disabled for testing)'
     });
   };
 
@@ -2614,6 +2618,23 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     }
   };
 
+  const getLatestAiQuestion = () => {
+    if (!interviewMessages || interviewMessages.length === 0) return '';
+    for (let i = interviewMessages.length - 1; i >= 0; i--) {
+      if (!interviewMessages[i].isMe) {
+        return interviewMessages[i].text;
+      }
+    }
+    return '';
+  };
+
+  const handleReplayAiQuestion = () => {
+    const questionText = getLatestAiQuestion();
+    if (questionText) {
+      speakVietnamese(questionText);
+    }
+  };
+
   const handleSendInterviewAnswer = async (textOverride = '') => {
     const text = (typeof textOverride === 'string' && textOverride.trim()) 
       ? textOverride.trim() 
@@ -2623,6 +2644,12 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     if (isListening) {
       stopListening();
     }
+
+    // Stop any ongoing AI speaking
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
 
     setInterviewInputText('');
     setInterviewSending(true);
@@ -3474,7 +3501,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
       // Check if AI screening is enabled!
       if (jobData?.isAiScreeningEnabled) {
-        // Check if banned
+        // Check if banned (Disabled for testing)
+        /*
         const banUntil = localStorage.getItem('ai_interview_ban_until');
         if (banUntil && Date.now() < Number(banUntil)) {
           const banDate = new Date(Number(banUntil)).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
@@ -3487,6 +3515,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           });
           return;
         }
+        */
 
         // Defer application submission
         setPendingApplication({
@@ -5084,6 +5113,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     {aiScreeningResult.toLowerCase() !== 'fail' && (
                       <button 
                         onClick={() => {
+                          // Check if banned (Disabled for testing)
+                          /*
                           const banUntil = localStorage.getItem('ai_interview_ban_until');
                           if (banUntil && Date.now() < Number(banUntil)) {
                             const banDate = new Date(Number(banUntil)).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
@@ -5095,6 +5126,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                             });
                             return;
                           }
+                          */
                           setRulesAccepted(false); // Reset checkbox when opening rules
                           setShowAiRulesModal(true);
                         }}
@@ -5194,18 +5226,129 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                   </VoiceInterviewArea>
 
                   {!interviewFinished ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: '8px' }}>
-                      <VoiceMicMainButton
-                        type="button"
-                        onClick={toggleListening}
-                        $isListening={isListening}
-                        disabled={interviewSending || isSpeaking}
-                        title={isListening 
-                          ? (language === 'vi' ? 'Đang thu âm - Bấm để dừng' : 'Recording - Click to stop') 
-                          : (language === 'vi' ? 'Bấm để nói câu trả lời' : 'Press to speak your answer')}
-                      >
-                        {isListening ? <MicOff size={28} /> : <Mic size={28} />}
-                      </VoiceMicMainButton>
+                    <div style={{ padding: '0 24px', marginBottom: '20px' }}>
+                      {/* Transcribed text preview */}
+                      <div style={{
+                        background: '#f8fafc',
+                        border: '1.5px dashed #cbd5e1',
+                        borderRadius: '16px',
+                        padding: '16px',
+                        textAlign: 'left',
+                        minHeight: '80px',
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        transition: 'all 0.2s',
+                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            {language === 'vi' ? 'Câu trả lời ghi nhận' : 'Captured Answer'}
+                          </span>
+                          {interviewInputText && (
+                            <button
+                              type="button"
+                              onClick={() => setInterviewInputText('')}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                transition: 'all 0.15s'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            >
+                              {language === 'vi' ? 'Xóa nói lại' : 'Clear'}
+                            </button>
+                          )}
+                        </div>
+                        <p style={{
+                          margin: 0,
+                          fontSize: '14.5px',
+                          color: interviewInputText ? '#1e293b' : '#94a3b8',
+                          lineHeight: '1.6',
+                          fontStyle: interviewInputText ? 'normal' : 'italic'
+                        }}>
+                          {interviewInputText || (language === 'vi' ? 'Bật micro và bắt đầu phát biểu để ghi nhận câu trả lời...' : 'Turn on the mic and speak to record your answer...')}
+                        </p>
+                      </div>
+
+                      {/* Controls Row */}
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', marginTop: '16px' }}>
+                        {/* Replay Button */}
+                        <button
+                          type="button"
+                          onClick={handleReplayAiQuestion}
+                          disabled={interviewSending}
+                          style={{
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '50%',
+                            background: '#f8fafc',
+                            border: '1.5px solid #e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#6d28d9',
+                            cursor: interviewSending ? 'not-allowed' : 'pointer',
+                            opacity: interviewSending ? 0.5 : 1,
+                            transition: 'all 0.2s',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+                          }}
+                          onMouseEnter={e => { if (!interviewSending) { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.borderColor = '#c4b5fd'; } }}
+                          onMouseLeave={e => { if (!interviewSending) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+                          title={language === 'vi' ? 'Nghe lại câu hỏi của AI' : 'Replay AI question'}
+                        >
+                          <Volume2 size={24} />
+                        </button>
+
+                        {/* Mic Button */}
+                        <VoiceMicMainButton
+                          type="button"
+                          onClick={toggleListening}
+                          $isListening={isListening}
+                          disabled={interviewSending || isSpeaking}
+                          title={isListening 
+                            ? (language === 'vi' ? 'Đang thu âm - Bấm để dừng' : 'Recording - Click to stop') 
+                            : (language === 'vi' ? 'Bấm để nói câu trả lời' : 'Press to speak your answer')}
+                        >
+                          {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+                        </VoiceMicMainButton>
+
+                        {/* Submit Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleSendInterviewAnswer()}
+                          disabled={!interviewInputText.trim() || interviewSending}
+                          style={{
+                            height: '56px',
+                            padding: '0 24px',
+                            borderRadius: '28px',
+                            background: interviewInputText.trim() && !interviewSending
+                              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                              : '#cbd5e1',
+                            color: 'white',
+                            border: 'none',
+                            fontWeight: '700',
+                            fontSize: '14.5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: (interviewInputText.trim() && !interviewSending) ? 'pointer' : 'not-allowed',
+                            boxShadow: (interviewInputText.trim() && !interviewSending) ? '0 4px 12px rgba(16, 185, 129, 0.25)' : 'none',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={e => { if (interviewInputText.trim() && !interviewSending) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.35)'; } }}
+                          onMouseLeave={e => { if (interviewInputText.trim() && !interviewSending) { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)'; } }}
+                        >
+                          {language === 'vi' ? 'Gửi & Tiếp tục' : 'Submit & Next'}
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     interviewReport && (
@@ -5382,7 +5525,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               <span style={{ color: '#ef4444' }}>⚠️</span>
               <div>
                 <strong>{language === 'vi' ? 'Cấm chuyển Tab (Tab Switching)' : 'Tab Switch Restriction'}:</strong>{' '}
-                {language === 'vi' ? 'Chuyển tab hoặc rời khỏi trang lần 1 sẽ bị cảnh cáo. Chuyển tab lần 2 sẽ ngưng phỏng vấn ngay lập tức và khóa tài khoản phỏng vấn AI trong 3 ngày.' : 'Switching tabs or minimizing the browser once will trigger a warning. The 2nd time will cancel the interview immediately and ban you for 3 days.'}
+                {language === 'vi' ? 'Chuyển tab hoặc rời khỏi trang lần 1 sẽ bị cảnh cáo. Chuyển tab lần 2 sẽ ngưng phỏng vấn ngay lập tức (đã bỏ tính năng khóa 3 ngày để dễ test).' : 'Switching tabs or minimizing the browser once will trigger a warning. The 2nd time will cancel the interview immediately (3-day ban disabled for testing).'}
               </div>
             </div>
             <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>

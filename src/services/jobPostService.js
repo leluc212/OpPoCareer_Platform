@@ -34,23 +34,19 @@ const getAuthToken = async () => {
     const session = await fetchAuthSession();
     
     if (!session || !session.tokens) {
-      console.warn('⚠️ No session or tokens available');
       return null;
     }
     
     const idToken = session.tokens.idToken;
     if (!idToken) {
-      console.warn('⚠️ No ID token in session');
       return null;
     }
     
     let tokenString = typeof idToken === 'string' ? idToken : idToken.toString();
     tokenString = tokenString.trim().replace(/[\r\n\t]/g, '');
     
-    console.log('✅ Auth token obtained from Cognito');
     return tokenString;
   } catch (error) {
-    console.error('❌ Error getting auth token from Cognito:', error);
     return null;
   }
 };
@@ -61,8 +57,7 @@ const getAuthToken = async () => {
  */
 class JobPostService {
   constructor() {
-    console.log('🚀🚀🚀 JobPostService initialized - VERSION 2.0');
-    console.log('🔗 API URL:', API_BASE_URL);
+    // JobPostService ready
   }
 
   /**
@@ -72,9 +67,6 @@ class JobPostService {
     try {
       const token = await getAuthToken();
       
-      console.log('🔑 Token check:', token ? 'Token exists' : 'No token');
-      
-      // Don't require token for public GET requests to avoid CORS preflight issues
       const headers = {
         'Content-Type': 'application/json',
         ...options.headers
@@ -85,15 +77,8 @@ class JobPostService {
       if (token && !isPublicGet) {
         const cleanToken = token.trim().replace(/[\r\n\t]/g, '');
         headers['Authorization'] = `Bearer ${cleanToken}`;
-        console.log('🔑 Authorization header added');
-      } else if (token && isPublicGet) {
-        console.log('ℹ️ Public GET request - skipping Authorization header to avoid CORS issues');
-      } else {
-        console.log('⚠️ No authorization header - proceeding without auth');
       }
 
-      console.log(`📤 Making ${options.method || 'GET'} request to ${API_BASE_URL}${endpoint}`);
-      
       const requestOptions = {
         ...options,
         headers,
@@ -102,28 +87,18 @@ class JobPostService {
 
       const response = await fetch(`${API_BASE_URL}${endpoint}`, requestOptions);
 
-      console.log(`📥 Response status: ${response.status}`);
-
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({ message: 'Request failed' }));
-        if (response.status !== 404) {
-          console.error(`❌ API Error ${response.status}:`, errorBody);
-        }
         throw new Error(errorBody.message || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('✅ API request successful:', data);
       return data;
     } catch (error) {
-      if (!error.message.includes('not found') && !error.message.includes('404')) {
-        console.error('❌ Request error:', error);
-      }
       if (error.message.includes('Failed to fetch') || 
           error.message.includes('CORS') ||
           error.message.includes('NetworkError') ||
           error.name === 'TypeError') {
-        console.error('❌ API request failed - network/CORS issue:', error);
         throw new Error('Cannot connect to API.');
       }
       throw error;
@@ -134,13 +109,8 @@ class JobPostService {
    * Create new job post
    */
   async createJobPost(jobData) {
-    console.log('🚀🚀🚀 createJobPost CALLED - VERSION 2.0');
-    console.log('📦 Job data received:', jobData);
-    
     try {
       const session = await fetchAuthSession();
-      
-      console.log('📝 Session check:', session ? 'Session exists' : 'No session');
       
       let userId = 'anonymous';
       let employerEmail = 'anonymous@example.com';
@@ -149,9 +119,6 @@ class JobPostService {
         const idTokenPayload = session.tokens.idToken?.payload;
         userId = idTokenPayload?.sub || 'anonymous';
         employerEmail = idTokenPayload?.email || 'anonymous@example.com';
-        console.log('✅ User authenticated:', userId);
-      } else {
-        console.warn('⚠️ No authentication session - using anonymous');
       }
 
       // Generate unique job ID
@@ -185,7 +152,6 @@ class JobPostService {
       };
 
       console.log('📝 Creating job post with ID:', jobId);
-      console.log('📤 Payload:', payload);
 
       const result = await this.makeRequest('/jobs', {
         method: 'POST',
@@ -193,14 +159,12 @@ class JobPostService {
       });
       
       if (result.success && result.data) {
-        console.log('✅ Job post created in DynamoDB:', result.data);
         return result.data;
       }
 
       throw new Error('Failed to create job post');
     } catch (error) {
       console.error('❌ Error creating job post:', error);
-      console.error('❌ Error details:', error.message);
       throw error;
     }
   }
@@ -215,15 +179,12 @@ class JobPostService {
         updatedAt: new Date().toISOString()
       };
 
-      console.log('📝 Updating job post:', jobId, payload);
-
       const result = await this.makeRequest(`/jobs/${jobId}`, {
         method: 'PUT',
         body: JSON.stringify(payload)
       });
       
       if (result.success && result.data) {
-        console.log('✅ Job post updated in DynamoDB:', result.data);
         return result.data;
       }
 
@@ -238,7 +199,6 @@ class JobPostService {
    * Get all job posts for current employer
    */
   async getMyJobPosts() {
-    console.log('🚀 getMyJobPosts() called');
     try {
       const session = await fetchAuthSession();
       
@@ -247,36 +207,20 @@ class JobPostService {
       if (session && session.tokens) {
         const idTokenPayload = session.tokens.idToken?.payload;
         userId = idTokenPayload?.sub;
-        console.log('✅ User authenticated, userId:', userId);
-      } else {
-        console.log('⚠️ No session or tokens found');
       }
       
       if (!userId) {
-        console.warn('⚠️ No authentication - getting all active jobs instead');
-        // If no auth, get all active jobs
         return this.getAllActiveJobs();
       }
 
-      console.log('🔍 Getting job posts for employer:', userId);
-      console.log('📡 Calling API: /jobs/employer/' + userId);
-
       const result = await this.makeRequest(`/jobs/employer/${userId}`);
       
-      console.log('📥 API Response:', result);
-      
       if (result.success && result.data) {
-        console.log('✅ Job posts loaded from DynamoDB:', result.data.length, 'jobs');
-        console.log('📦 Jobs data:', result.data);
         return result.data;
       }
 
-      console.warn('⚠️ No data in response, returning empty array');
       return [];
     } catch (error) {
-      console.error('❌ Error fetching job posts:', error);
-      console.error('❌ Error details:', error.message, error.stack);
-      // Return empty array instead of fallback
       return [];
     }
   }
@@ -286,21 +230,16 @@ class JobPostService {
    */
   async getJobPost(jobId) {
     try {
-      console.log('🔍 Getting job post:', jobId);
-
       const result = await this.makeRequest(`/jobs/${jobId}`);
       
       if (result.success && result.data) {
-        console.log('✅ Job post loaded from DynamoDB');
         return result.data;
       }
 
       return null;
     } catch (error) {
-      if (!error.message.includes('not found') && !error.message.includes('404')) {
-        console.error('❌ Error fetching job post:', error);
-      }
-      throw error;
+      // Silently return null for not-found or errored jobs
+      return null;
     }
   }
 
@@ -309,14 +248,11 @@ class JobPostService {
    */
   async deleteJobPost(jobId) {
     try {
-      console.log('🗑️ Deleting job post:', jobId);
-
       const result = await this.makeRequest(`/jobs/${jobId}`, {
         method: 'DELETE'
       });
       
       if (result.success) {
-        console.log('✅ Job post deleted from DynamoDB');
         return true;
       }
 
@@ -343,14 +279,8 @@ class JobPostService {
         method: 'POST'
       });
       
-      if (result.success) {
-        console.log('✅ View count incremented');
-        return true;
-      }
-
-      return false;
+      return result.success || false;
     } catch (error) {
-      console.error('❌ Error incrementing views:', error);
       return false;
     }
   }
@@ -359,26 +289,15 @@ class JobPostService {
    * Get all active job posts (for candidates)
    */
   async getAllActiveJobs() {
-    console.log('🚀 getAllActiveJobs() called');
     try {
-      console.log('🔍 Getting all active job posts');
-      console.log('📡 Calling API: /jobs/active');
-
       const result = await this.makeRequest('/jobs/active');
       
-      console.log('📥 API Response:', result);
-      
       if (result.success && result.data) {
-        console.log('✅ Active jobs loaded from DynamoDB:', result.data.length, 'jobs');
-        console.log('📦 Jobs data:', result.data);
         return result.data;
       }
 
-      console.warn('⚠️ No data in response, returning empty array');
       return [];
     } catch (error) {
-      console.error('❌ Error fetching active jobs:', error);
-      console.error('❌ Error details:', error.message, error.stack);
       throw error;
     }
   }
@@ -387,25 +306,20 @@ class JobPostService {
    * Get all job posts (admin view)
    */
    async getAllJobPosts() {
-     console.log('🚀 getAllJobPosts() called');
      try {
-       // Thử /jobs trước
        let result;
        try {
          result = await this.makeRequest('/jobs');
        } catch (e) {
-         console.warn('⚠️ Request to /jobs failed, trying fallback /jobs/');
          result = await this.makeRequest('/jobs/');
        }
 
        if (result && result.success && result.data) {
-         console.log('✅ All job posts loaded from DynamoDB:', result.data.length, 'jobs');
          return result.data;
        }
 
        return [];
      } catch (error) {
-       console.error('❌ Error fetching all job posts:', error);
        return this.getAllActiveJobs();
      }
   }

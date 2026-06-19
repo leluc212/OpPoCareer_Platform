@@ -312,12 +312,9 @@ const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone }) => {
   useEffect(() => {
     if (!userId || !cfg) return;
 
-    // Xem thông tin đã đủ chưa (chỉ cần Tên và Số Điện Thoại)
     const nameStr = profileName || '';
     const phoneStr = profilePhone || '';
     const hasEnoughInfo = nameStr.trim().length > 0 && phoneStr.trim().length > 0;
-
-    console.log('[ProfileSetupPrompt] Check:', { userId, role, nameStr, phoneStr, hasEnoughInfo });
 
     // Nếu ĐÃ đủ thông tin => không bao giờ hiện modal nữa
     if (hasEnoughInfo) {
@@ -330,10 +327,7 @@ const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone }) => {
     const key = `profilePrompted_${role}_${userId}`;
     const alreadySkippedThisSession = sessionStorage.getItem(key);
 
-    console.log('[ProfileSetupPrompt] skipped this session?', alreadySkippedThisSession);
-
     if (!alreadySkippedThisSession) {
-      // Hiện modal lên liền sau khi web vùa render xong giao diện
       const t = setTimeout(() => setShow(true), 200);
       return () => clearTimeout(t);
     }

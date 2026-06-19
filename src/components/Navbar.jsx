@@ -1022,7 +1022,7 @@ const Navbar = ({ showSearch = true }) => {
           const profile = await candidateProfileService.getOrCreateProfile(user);
           setCandidateProfile(profile);
         } catch (error) {
-          console.error('Error fetching candidate profile:', error);
+          // Candidate profile fetch failed silently
         }
       }
     };
@@ -1038,7 +1038,7 @@ const Navbar = ({ showSearch = true }) => {
           const profile = await employerProfileService.getMyProfile();
           setEmployerProfile(profile);
         } catch (error) {
-          console.error('Error fetching employer profile:', error);
+          // Employer profile fetch failed silently
         }
       }
     };
@@ -1091,7 +1091,6 @@ const Navbar = ({ showSearch = true }) => {
 
         const { default: applicationService } = await import('../services/applicationService');
         const apps = await applicationService.getMyCandidateApplications();
-        console.log('📥 [Navbar Chat] Raw applications:', apps);
         // Filter applications where status is 'accepted' or 'completed_pending_candidate' (exclude 'completed')
         const validChats = (apps || []).filter(app => app.status === 'accepted' || app.status === 'completed_pending_candidate');
 
@@ -1163,7 +1162,7 @@ const Navbar = ({ showSearch = true }) => {
                 jobTitle: jobTitle
               };
             } catch (err) {
-              console.error(`Error resolving job details for chat:`, err);
+              // Job details resolution failed for chat - continue with fallback
             }
 
             // Fallback for catch block
@@ -1220,7 +1219,7 @@ const Navbar = ({ showSearch = true }) => {
         });
         setUnreadChatCount(unreadTotal);
       } catch (error) {
-        console.error('Error loading candidate chats:', error);
+        // Candidate chats loading failed silently
       }
     };
 
@@ -1298,11 +1297,10 @@ const Navbar = ({ showSearch = true }) => {
           });
         }
         
-        console.log(`[Navbar] Employer unread chats: ${unreadTotal}, Total active chats: ${allChats.length}`);
         setUnreadChatCount(unreadTotal);
         setEmployerChats(allChats);
       } catch (error) {
-        console.error('Error loading employer chats for navbar:', error);
+        // Silently handle chat loading errors
       }
     };
 

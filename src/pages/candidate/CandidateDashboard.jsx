@@ -1411,7 +1411,7 @@ const CandidateDashboard = () => {
             });
           }
         } catch (aiErr) {
-          console.error('Error fetching AI job recommendations:', aiErr);
+          // AI recommendations unavailable - continue without them
         }
       }
 
@@ -1426,7 +1426,6 @@ const CandidateDashboard = () => {
       // Fetch missing jobs individually to ensure "real data" even for inactive jobs
       let additionalJobs = [];
       if (missingJobIds.length > 0) {
-        console.log('🔍 Fetching missing jobs for applications:', missingJobIds);
         const jobResults = await Promise.all(missingJobIds.map(async (id) => {
           try {
             // Try standard job service first, then quick job service

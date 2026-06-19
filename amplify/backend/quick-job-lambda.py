@@ -24,7 +24,6 @@ def get_cors_headers():
         'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
         'Access-Control-Max-Age': '3600',
-        'Access-Control-Allow-Credentials': 'true',
         'Content-Type': 'application/json'
     }
 
@@ -142,6 +141,10 @@ def lambda_handler(event, context):
                 except ValueError:
                     pass
             return increment_views(job_id, headers)
+        
+        # 5b. POST /quick-jobs/batch (Lấy nhiều jobs cùng lúc - giảm N+1 requests)
+        elif http_method == 'POST' and normalized_path == '/quick-jobs/batch':
+            return get_batch_quick_jobs(body, headers)
         
         # 6. BULK CLEANUP (BY SPECIFIC IDs) - Ưu tiên trên các route idJob
         elif http_method == 'POST' and normalized_path == '/quick-jobs/cleanup-bulk':
@@ -691,3 +694,68 @@ def increment_views(job_id, headers):
         }
     except Exception as e:
         return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'success': False})}
+
+
+def get_batch_quick_jobs(body_str, headers):
+    """Get multiple quick jobs by IDs in a single request (avoids N+1 problem)"""
+    try:
+        body = json.loads(body_str) if isinstance(body_str, str) else body_str
+        job_ids = body.get('jobIds', [])
+        
+        if not job_ids:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'success': False, 'message': 'Missing jobIds array'})
+            }
+        
+        # Limit to 25 items per batch (DynamoDB BatchGetItem limit is 100 keys)
+        job_ids = job_ids[:25]
+        
+        # Use BatchGetItem for efficiency
+        dynamodb_client = boto3.client('dynamodb')
+        
+        # Build keys for BatchGetItem
+        keys = [{'jobID': {'S': jid}} for jid in job_ids]
+        
+        response = dynamodb_client.batch_get_item(
+            RequestItems={
+                table_name: {
+                    'Keys': keys
+                }
+            }
+        )
+        
+        # Convert DynamoDB format to normal dict
+        from boto3.dynamodb.types import TypeDeserializer
+        deserializer = TypeDeserializer()
+        
+        raw_items = response.get('Responses', {}).get(table_name, [])
+        items = []
+        for raw_item in raw_items:
+            item = {k: deserializer.deserialize(v) for k, v in raw_item.items()}
+            # Skip deleted jobs
+            if item.get('status') != 'deleted':
+                items.append(item)
+        
+        print(f"✅ Batch fetched {len(items)} quick jobs out of {len(job_ids)} requested")
+        
+        return {
+            'statusCode': 200,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'data': items
+            }, default=decimal_default)
+        }
+    
+    except Exception as e:
+        print(f"Error in batch get quick jobs: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'success': False,
+                'message': f'Error fetching batch quick jobs: {str(e)}'
+            })
+        }

@@ -35,28 +35,23 @@ const getAuthInfo = async () => {
     const session = await fetchAuthSession();
     
     if (!session || !session.tokens) {
-      console.warn('⚠️ No session or tokens available');
       return { token: null, userId: null, email: null };
     }
     
     const idToken = session.tokens.idToken;
     if (!idToken) {
-      console.warn('⚠️ No ID token in session');
       return { token: null, userId: null, email: null };
     }
     
     let tokenString = typeof idToken === 'string' ? idToken : idToken.toString();
     tokenString = tokenString.trim().replace(/[\r\n\t]/g, '');
     
-    // Extract user info from token payload
     const payload = idToken.payload || {};
     const userId = payload.sub || null;
     const email = payload.email || null;
     
-    console.log('✅ Auth info obtained from Cognito');
     return { token: tokenString, userId, email };
   } catch (error) {
-    console.error('❌ Error getting auth info from Cognito:', error);
     return { token: null, userId: null, email: null };
   }
 };
@@ -66,39 +61,27 @@ const getAuthInfo = async () => {
  */
 const getCompanyInfo = async () => {
   try {
-    // Try to get from Cognito token first
     const session = await fetchAuthSession();
     if (session && session.tokens && session.tokens.idToken) {
       const payload = session.tokens.idToken.payload || {};
       const companyName = payload['custom:companyName'] || payload.companyName;
       if (companyName) {
-        console.log('✅ Company name from Cognito:', companyName);
         return { companyName };
       }
     }
     
-    // Try to fetch from employer profile API
     try {
       const profile = await employerProfileService.getMyProfile();
       if (profile && (profile.companyName || profile.businessName)) {
-        const companyName = profile.companyName || profile.businessName;
-        console.log('✅ Company name from API:', companyName);
-        return { companyName };
+        return { companyName: profile.companyName || profile.businessName };
       }
     } catch (apiError) {
-      console.warn('⚠️ Could not fetch from employer profile API:', apiError);
+      // Could not fetch from employer profile API
     }
     
-    // Fallback
-    console.warn('⚠️ No company name found, using default');
-    return {
-      companyName: 'Unknown Company'
-    };
+    return { companyName: 'Unknown Company' };
   } catch (error) {
-    console.error('❌ Error getting company info:', error);
-    return {
-      companyName: 'Unknown Company'
-    };
+    return { companyName: 'Unknown Company' };
   }
 };
 
@@ -108,8 +91,7 @@ const getCompanyInfo = async () => {
  */
 class QuickJobService {
   constructor() {
-    console.log('🚀 QuickJobService initialized');
-    console.log('🔗 API URL:', API_BASE_URL);
+    // QuickJobService ready
   }
 
   async makeRequest(endpoint, options = {}) {
@@ -126,39 +108,22 @@ class QuickJobService {
       
       if (token && !isPublicGet) {
         headers['Authorization'] = `Bearer ${token}`;
-        console.log('🔑 Authorization header added');
-      } else if (token && isPublicGet) {
-        console.log('ℹ️ Public GET request - skipping Authorization header to avoid CORS issues');
       }
-      // No need for "No token" warning if it's public
 
-      console.log(`📤 QuickJobService: Requesting ${options.method || 'GET'} ${fullUrl}`);
-      
       const response = await fetch(fullUrl, {
         ...options,
         headers,
         mode: 'cors'
       });
 
-      if (response.status !== 404) {
-        console.log(`📥 QuickJobService: Response status: ${response.status} from ${fullUrl}`);
-      }
-
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({ message: 'Request failed' }));
-        if (response.status !== 404) {
-          console.error(`❌ QuickJobService API Error ${response.status}:`, errorBody);
-        }
         throw new Error(errorBody.message || `HTTP ${response.status} from ${fullUrl}`);
       }
 
       const data = await response.json();
-      console.log('✅ QuickJobService API request successful');
       return data;
     } catch (error) {
-      if (!error.message.includes('not found') && !error.message.includes('404')) {
-        console.error(`❌ QuickJobService Request error for ${fullUrl}:`, error);
-      }
       if (error.message.includes('Failed to fetch') || 
           error.message.includes('CORS') ||
           error.message.includes('NetworkError') ||
@@ -173,21 +138,15 @@ class QuickJobService {
    * Create new quick job post
    */
   async createQuickJob(jobData) {
-    console.log('🚀 createQuickJob CALLED');
-    console.log('📦 Job data received:', jobData);
-    
     try {
       const { userId, email } = await getAuthInfo();
       
-      // Use companyName from jobData if provided, otherwise get from profile
       let companyName = jobData.companyName;
       if (!companyName) {
         const companyInfo = await getCompanyInfo();
         companyName = companyInfo.companyName;
       }
-      console.log('🏢 Company name:', companyName);
       
-      // Generate unique job ID
       const jobId = generateQuickJobId();
       
       const payload = {
@@ -197,14 +156,14 @@ class QuickJobService {
         companyName: companyName,
         title: jobData.title,
         location: jobData.location,
-        latitude: jobData.latitude ? Math.round(jobData.latitude * 1000000) / 1000000 : null, // Round to 6 decimal places
-        longitude: jobData.longitude ? Math.round(jobData.longitude * 1000000) / 1000000 : null, // Round to 6 decimal places
+        latitude: jobData.latitude ? Math.round(jobData.latitude * 1000000) / 1000000 : null,
+        longitude: jobData.longitude ? Math.round(jobData.longitude * 1000000) / 1000000 : null,
         jobType: jobData.jobType || 'part-time',
-        hourlyRate: Math.round(jobData.hourlyRate || 0), // Convert to integer
+        hourlyRate: Math.round(jobData.hourlyRate || 0),
         startTime: jobData.startTime,
         endTime: jobData.endTime,
-        totalHours: Math.round((jobData.totalHours || 0) * 10) / 10, // Round to 1 decimal place
-        totalSalary: Math.round(jobData.totalSalary || 0), // Convert to integer
+        totalHours: Math.round((jobData.totalHours || 0) * 10) / 10,
+        totalSalary: Math.round(jobData.totalSalary || 0),
         description: jobData.description || '',
         requirements: jobData.requirements || '',
         status: jobData.status || 'pending',
@@ -216,16 +175,12 @@ class QuickJobService {
         updatedAt: new Date().toISOString()
       };
 
-      console.log('📝 Creating quick job with ID:', jobId);
-      console.log('📤 Payload:', payload);
-
       const result = await this.makeRequest('/quick-jobs', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
       
       if (result.success && result.data) {
-        console.log('✅ Quick job created in DynamoDB:', result.data);
         return result.data;
       }
 
@@ -246,15 +201,12 @@ class QuickJobService {
         updatedAt: new Date().toISOString()
       };
 
-      console.log('📝 Updating quick job:', jobId, payload);
-
       const result = await this.makeRequest(`/quick-jobs/${jobId}`, {
         method: 'PUT',
         body: JSON.stringify(payload)
       });
       
       if (result.success && result.data) {
-        console.log('✅ Quick job updated in DynamoDB');
         return result.data;
       }
 
@@ -269,27 +221,21 @@ class QuickJobService {
    * Get all quick jobs for current employer
    */
   async getMyQuickJobs() {
-    console.log('🚀 getMyQuickJobs() called');
     try {
       const { userId } = await getAuthInfo();
       
       if (!userId) {
-        console.warn('⚠️ No authentication - returning empty array');
         return [];
       }
-
-      console.log('🔍 Getting quick jobs for employer:', userId);
 
       const result = await this.makeRequest(`/quick-jobs/employer/${userId}`);
       
       if (result.success && result.data) {
-        console.log('✅ Quick jobs loaded from DynamoDB:', result.data.length, 'jobs');
         return result.data;
       }
 
       return [];
     } catch (error) {
-      console.error('❌ Error fetching quick jobs:', error);
       return [];
     }
   }
@@ -299,20 +245,15 @@ class QuickJobService {
    */
   async getQuickJob(jobId) {
     try {
-      console.log('🔍 Getting quick job:', jobId);
-
       const result = await this.makeRequest(`/quick-jobs/${jobId}`);
       
       if (result.success && result.data) {
-        console.log('✅ Quick job loaded from DynamoDB');
         return result.data;
       }
 
       return null;
     } catch (error) {
-      if (!error.message.includes('not found') && !error.message.includes('404')) {
-        console.error('❌ Error fetching quick job:', error);
-      }
+      // Silently return null for not-found or unavailable jobs
       return null;
     }
   }
@@ -322,14 +263,11 @@ class QuickJobService {
    */
   async deleteQuickJob(jobId) {
     try {
-      console.log('🗑️ Deleting quick job:', jobId);
-
       const result = await this.makeRequest(`/quick-jobs/${jobId}`, {
         method: 'DELETE'
       });
       
       if (result.success) {
-        console.log('✅ Quick job deleted from DynamoDB');
         return true;
       }
 
@@ -356,14 +294,8 @@ class QuickJobService {
         method: 'POST'
       });
       
-      if (result.success) {
-        console.log('✅ View count incremented');
-        return true;
-      }
-
-      return false;
+      return result.success || false;
     } catch (error) {
-      console.error('❌ Error incrementing views:', error);
       return false;
     }
   }
@@ -372,19 +304,15 @@ class QuickJobService {
    * Get all active quick jobs (for candidates)
    */
   async getAllActiveQuickJobs() {
-    console.log('🚀 getAllActiveQuickJobs() called');
     try {
-      // Use /quick-jobs/active which is supported by Lambda
       const result = await this.makeRequest('/quick-jobs/active');
       
       if (result.success && result.data) {
-        console.log('✅ Active quick jobs loaded from DynamoDB:', result.data.length, 'jobs');
         return result.data;
       }
 
       return [];
     } catch (error) {
-      console.error('❌ Error fetching active quick jobs:', error);
       return [];
     }
   }
@@ -393,20 +321,15 @@ class QuickJobService {
    * Get all quick job posts (admin view)
    */
   async getAllQuickJobs() {
-    console.log('🚀 getAllQuickJobs() called');
     try {
-      // Use the base /quick-jobs endpoint which we just enabled in Lambda
       const result = await this.makeRequest('/quick-jobs');
 
       if (result.success && result.data) {
-        console.log('✅ All quick jobs loaded from DynamoDB:', result.data.length, 'jobs');
         return result.data;
       }
 
       return [];
         } catch (error) {
-      console.error('❌ Error fetching all quick jobs from /quick-jobs:', error);
-      // Fallback to active jobs if base endpoint fails
       return this.getAllActiveQuickJobs();
         }
   }

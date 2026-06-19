@@ -2896,38 +2896,35 @@ const HRManagement = () => {
     if (app.candidateId) {
       setIsFetchingProfile(true);
       try {
-        console.log('🔍 Fetching full profile and applications for candidate:', app.candidateId);
-        const [prof, candidateApps, standardJobs, quickJobs, approvedExperiences] = await Promise.all([
+        const [prof, candidateApps, approvedExperiences] = await Promise.all([
           candidateProfileService.getProfile(app.candidateId),
           applicationService.getCandidateApplications(app.candidateId).catch(() => []),
-          jobPostService.getAllActiveJobs().catch(() => []),
-          quickJobService.getAllActiveQuickJobs().catch(() => []),
           experienceService.getCandidateApprovedExperiences(app.candidateId).catch(() => [])
         ]);
 
-        const allJobs = [...standardJobs, ...quickJobs];
-
-        // Resolve missing jobs (e.g. inactive or archived)
-        const missingJobIds = [...new Set(candidateApps.map(a => a.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
-        let additionalJobs = [];
-        if (missingJobIds.length > 0) {
-          console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
-          const jobResults = await Promise.all(missingJobIds.map(async (id) => {
-            try {
-              if (id.startsWith('QJOB-')) {
-                return await quickJobService.getQuickJob(id).catch(() => null);
+        // Only fetch job details for completed applications (work history)
+        const completedApps = candidateApps.filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate');
+        const neededJobIds = [...new Set(completedApps.map(a => a.jobId).filter(Boolean))];
+        
+        let finalAllJobs = [];
+        if (neededJobIds.length > 0) {
+          // Batch requests (max 3 concurrent) to avoid Lambda throttling
+          for (let i = 0; i < neededJobIds.length; i += 3) {
+            const batch = neededJobIds.slice(i, i + 3);
+            const batchResults = await Promise.all(batch.map(async (id) => {
+              try {
+                if (/^\d+$/.test(id)) return null;
+                if (id.startsWith('QJOB-')) {
+                  return await quickJobService.getQuickJob(id).catch(() => null);
+                }
+                return await jobPostService.getJobPost(id).catch(() => null);
+              } catch (e) {
+                return null;
               }
-              if (/^\d+$/.test(id)) return null;
-              const standard = await jobPostService.getJobPost(id).catch(() => null);
-              if (standard) return standard;
-              return await quickJobService.getQuickJob(id).catch(() => null);
-            } catch (e) {
-              return null;
-            }
-          }));
-          additionalJobs = jobResults.filter(Boolean);
+            }));
+            finalAllJobs.push(...batchResults.filter(Boolean));
+          }
         }
-        const finalAllJobs = [...allJobs, ...additionalJobs];
 
         // Detailed work history (completed applications)
         const workHistory = candidateApps
@@ -2977,34 +2974,39 @@ const HRManagement = () => {
             : (app.experience || '');
 
         if (prof) {
-          console.log('✅ Full profile loaded:', prof);
           // Merge profile info into selectedCandidate
-          setSelectedCandidate(prev => ({
-            ...prev,
-            ...prof,
-            // Keep app-specific fields
-            candidate: prof.fullName || prev.candidate,
-            phone: prof.phone || prev.phone,
-            location: prof.location || prev.location,
-            education: prof.education || prev.education,
-            experience: experienceSummary,
-            skills: prof.skills || prev.skills,
-            bio: prof.bio || prev.bio,
-            profileImage: prof.profileImage || prev.profileImage,
-            cvUrl: prev.cvUrl || prof.cvUrl,
-            cvFileName: prev.cvFileName || prof.cvFileName,
-            workHistory,
-            reviews
-          }));
+          setSelectedCandidate(prevState => {
+            if (!prevState) return prevState;
+            return {
+              ...prevState,
+              ...prof,
+              // Keep app-specific fields
+              candidate: prof.fullName || prevState.candidate,
+              phone: prof.phone || prevState.phone,
+              location: prof.location || prevState.location,
+              education: prof.education || prevState.education,
+              experience: experienceSummary,
+              skills: prof.skills || prevState.skills,
+              bio: prof.bio || prevState.bio,
+              profileImage: prof.profileImage || prevState.profileImage,
+              cvUrl: prevState.cvUrl || prof.cvUrl,
+              cvFileName: prevState.cvFileName || prof.cvFileName,
+              workHistory,
+              reviews
+            };
+          });
         } else {
-          setSelectedCandidate(prev => ({
-            ...prev,
-            workHistory,
-            reviews
-          }));
+          setSelectedCandidate(prevState => {
+            if (!prevState) return prevState;
+            return {
+              ...prevState,
+              workHistory,
+              reviews
+            };
+          });
         }
       } catch (error) {
-        console.error('❌ Error fetching candidate profile:', error);
+        // Profile fetch failed silently - basic info already shown
       } finally {
         setIsFetchingProfile(false);
       }

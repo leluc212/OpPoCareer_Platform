@@ -1108,36 +1108,32 @@ const CandidateProfile = () => {
     try {
       const apps = await applicationService.getMyCandidateApplications();
       
-      // Resolve job details (Standard + Quick)
-      const [standardJobs, quickJobs] = await Promise.all([
-        jobPostService.getAllActiveJobs().catch(() => []),
-        quickJobService.getAllActiveQuickJobs().catch(() => [])
-      ]);
-      const allJobs = [...standardJobs, ...quickJobs];
+      // Only fetch job details for relevant applications (completed/rated)
+      const relevantApps = apps.filter(app => 
+        app.status === 'completed' || app.status === 'completed_pending_candidate' || 
+        (app.employerRating && typeof app.employerRating.overall === 'number')
+      );
+      const neededJobIds = [...new Set(relevantApps.map(app => app.jobId).filter(Boolean))];
       
-      // Resolve missing jobs (e.g. inactive or archived)
-      const missingJobIds = [...new Set(apps.map(app => app.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
-      let additionalJobs = [];
-      if (missingJobIds.length > 0) {
-        console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
-        const jobResults = await Promise.all(missingJobIds.map(async (id) => {
-          try {
-            // Quick job IDs bắt đầu bằng QJOB- → không fetch từ standard endpoint
-            if (id.startsWith('QJOB-')) {
-              return await quickJobService.getQuickJob(id).catch(() => null);
+      let finalAllJobs = [];
+      if (neededJobIds.length > 0) {
+        // Batch requests (max 3 concurrent) to avoid Lambda throttling
+        for (let i = 0; i < neededJobIds.length; i += 3) {
+          const batch = neededJobIds.slice(i, i + 3);
+          const batchResults = await Promise.all(batch.map(async (id) => {
+            try {
+              if (/^\d+$/.test(id)) return null;
+              if (id.startsWith('QJOB-')) {
+                return await quickJobService.getQuickJob(id).catch(() => null);
+              }
+              return await jobPostService.getJobPost(id).catch(() => null);
+            } catch (e) {
+              return null;
             }
-            // Bỏ qua numeric test IDs không có format hợp lệ
-            if (/^\d+$/.test(id)) return null;
-            const standard = await jobPostService.getJobPost(id).catch(() => null);
-            if (standard) return standard;
-            return await quickJobService.getQuickJob(id).catch(() => null);
-          } catch (e) {
-            return null;
-          }
-        }));
-        additionalJobs = jobResults.filter(Boolean);
+          }));
+          finalAllJobs.push(...batchResults.filter(Boolean));
+        }
       }
-      const finalAllJobs = [...allJobs, ...additionalJobs];
 
       // Process apps to find those with employerRating
       const ratedApps = apps.filter(app => app.employerRating && typeof app.employerRating.overall === 'number');
@@ -1170,7 +1166,7 @@ const CandidateProfile = () => {
 
       setWorkHistory(completedApps);
     } catch (err) {
-      console.error('Error loading work history and ratings:', err);
+      // Work history loading failed silently
     }
   };
 

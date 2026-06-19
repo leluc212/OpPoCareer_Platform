@@ -535,38 +535,35 @@ const EmployerDashboard = () => {
     if (app.candidateId) {
       setPreviewLoading(true);
       try {
-        console.log('🔍 Fetching full profile and applications for candidate:', app.candidateId);
-        const [profile, candidateApps, standardJobs, quickJobs, approvedExperiences] = await Promise.all([
+        const [profile, candidateApps, approvedExperiences] = await Promise.all([
           candidateProfileService.getProfile(app.candidateId),
           applicationService.getCandidateApplications(app.candidateId).catch(() => []),
-          jobPostService.getAllActiveJobs().catch(() => []),
-          quickJobService.getAllActiveQuickJobs().catch(() => []),
           experienceService.getCandidateApprovedExperiences(app.candidateId).catch(() => [])
         ]);
         
-        const allJobs = [...standardJobs, ...quickJobs];
+        // Only fetch job details for completed applications (work history)
+        const completedApps = candidateApps.filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate');
+        const neededJobIds = [...new Set(completedApps.map(a => a.jobId).filter(Boolean))];
         
-        // Resolve missing jobs (e.g. inactive or archived)
-        const missingJobIds = [...new Set(candidateApps.map(a => a.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
-        let additionalJobs = [];
-        if (missingJobIds.length > 0) {
-          console.log('🔍 Fetching missing jobs for profile work history:', missingJobIds);
-          const jobResults = await Promise.all(missingJobIds.map(async (id) => {
-            try {
-              if (id.startsWith('QJOB-')) {
-                return await quickJobService.getQuickJob(id).catch(() => null);
+        let finalAllJobs = [];
+        if (neededJobIds.length > 0) {
+          // Batch requests (max 3 concurrent) to avoid Lambda throttling
+          for (let i = 0; i < neededJobIds.length; i += 3) {
+            const batch = neededJobIds.slice(i, i + 3);
+            const batchResults = await Promise.all(batch.map(async (id) => {
+              try {
+                if (/^\d+$/.test(id)) return null;
+                if (id.startsWith('QJOB-')) {
+                  return await quickJobService.getQuickJob(id).catch(() => null);
+                }
+                return await jobPostService.getJobPost(id).catch(() => null);
+              } catch (e) {
+                return null;
               }
-              if (/^\d+$/.test(id)) return null;
-              const standard = await jobPostService.getJobPost(id).catch(() => null);
-              if (standard) return standard;
-              return await quickJobService.getQuickJob(id).catch(() => null);
-            } catch (e) {
-              return null;
-            }
-          }));
-          additionalJobs = jobResults.filter(Boolean);
+            }));
+            finalAllJobs.push(...batchResults.filter(Boolean));
+          }
         }
-        const finalAllJobs = [...allJobs, ...additionalJobs];
 
         // Detailed work history (completed applications)
         const workHistory = candidateApps
@@ -613,36 +610,42 @@ const EmployerDashboard = () => {
                   return `${role}${company}${period}`;
                 })
                 .join('; ')
-            : prev.experience;
+            : (basic.experience || '');
 
         if (profile) {
-          setPreviewCandidate(prev => ({
-            ...prev,
-            ...profile,
-            candidate: profile.fullName || prev.candidate,
-            candidateEmail: profile.email || prev.candidateEmail,
-            phone: profile.phone || prev.phone,
-            location: profile.location || prev.location,
-            education: profile.education || prev.education,
-            experience: experienceSummary,
-            skills: profile.skills || prev.skills,
-            bio: profile.bio || prev.bio,
-            // Ưu tiên cvUrl từ application (đã được refresh) thay vì profile (có thể hết hạn)
-            cvUrl: prev.cvUrl || profile.cvUrl,
-            cvFileName: prev.cvFileName || profile.cvFileName,
-            profileImage: profile.profileImage || prev.profileImage,
-            workHistory,
-            reviews
-          }));
+          setPreviewCandidate(prevState => {
+            if (!prevState) return prevState;
+            return {
+              ...prevState,
+              ...profile,
+              candidate: profile.fullName || prevState.candidate,
+              candidateEmail: profile.email || prevState.candidateEmail,
+              phone: profile.phone || prevState.phone,
+              location: profile.location || prevState.location,
+              education: profile.education || prevState.education,
+              experience: experienceSummary,
+              skills: profile.skills || prevState.skills,
+              bio: profile.bio || prevState.bio,
+              // Ưu tiên cvUrl từ application (đã được refresh) thay vì profile (có thể hết hạn)
+              cvUrl: prevState.cvUrl || profile.cvUrl,
+              cvFileName: prevState.cvFileName || profile.cvFileName,
+              profileImage: profile.profileImage || prevState.profileImage,
+              workHistory,
+              reviews
+            };
+          });
         } else {
-          setPreviewCandidate(prev => ({
-            ...prev,
-            workHistory,
-            reviews
-          }));
+          setPreviewCandidate(prevState => {
+            if (!prevState) return prevState;
+            return {
+              ...prevState,
+              workHistory,
+              reviews
+            };
+          });
         }
       } catch (err) {
-        console.error('Error fetching candidate profile:', err);
+        // Profile fetch failed silently - basic info already shown
       } finally {
         setPreviewLoading(false);
       }

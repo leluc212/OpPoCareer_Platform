@@ -2844,13 +2844,6 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       const transformedQuickJobs = jobs
         .filter(job => job && (job.jobID || job.idJob) && job.title)
         .filter(job => job.status !== 'deleted') // Filter out deleted jobs
-        .filter(job => {
-          // Hide quick jobs whose workDate has already passed
-          if (!job.workDate) return true; // No work date set → always show
-          const workDay = new Date(job.workDate);
-          workDay.setHours(0, 0, 0, 0);
-          return workDay > todayOnly; // Hide on and after the work date
-        })
         .map(job => {
           try {
             const jobId = job.jobID || job.idJob;

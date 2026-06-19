@@ -157,22 +157,43 @@ def vnpt_upload(b64_data, bearer, tid, tkey):
 def vnpt_ocr(b64_front, bearer, tid, tkey):
     """
     OCR CCCD mặt trước.
-    Body: img_front (base64 thuần), client_session, type=1 (CCCD)
+    Flow: upload ảnh → lấy hash → gọi OCR với hash.
+    Nếu upload fail thì fallback gửi base64 trực tiếp.
     """
-    payload = {
-        'img_front':        b64_front,
-        'client_session':   CLIENT_SESSION,
-        'type':             1,
-        'validate_postcode': False,
-        'token':            '',   # VNPT yêu cầu field này (có thể để rỗng)
-    }
+    # Thử upload ảnh lấy hash trước (recommended by VNPT)
+    front_hash = None
+    try:
+        front_hash = vnpt_upload(b64_front, bearer, tid, tkey)
+        print(f'OCR: uploaded front, hash={front_hash}')
+    except Exception as e:
+        print(f'OCR: upload failed ({e}), fallback to base64')
+
+    if front_hash:
+        payload = {
+            'img_front':         front_hash,
+            'client_session':    CLIENT_SESSION,
+            'type':              1,
+            'validate_postcode': False,
+        }
+    else:
+        payload = {
+            'img_front':         b64_front,
+            'client_session':    CLIENT_SESSION,
+            'type':              1,
+            'validate_postcode': False,
+        }
+
     r = req_lib.post(VNPT_OCR_FRONT_URL,
                      headers=vnpt_headers(bearer, tid, tkey),
                      json=payload, timeout=30)
-    print(f'OCR: status={r.status_code} body={r.text[:300]}')
+    print(f'OCR: status={r.status_code} body={r.text[:500]}')
     if r.status_code >= 400:
         raise urllib.error.HTTPError(VNPT_OCR_FRONT_URL, r.status_code, r.text[:300], {}, None)
-    return r.json()
+    try:
+        return r.json()
+    except Exception as e:
+        print(f'OCR: response not JSON: {r.text[:300]}')
+        raise ValueError(f'VNPT OCR trả response không hợp lệ: {r.text[:200]}')
 
 def check_rate_limit(user_id):
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
@@ -194,9 +215,13 @@ def check_rate_limit(user_id):
 
 def handle_ocr(event, user_id):
     try:
-        body = json.loads(event.get('body') or '{}')
-    except Exception:
-        return resp(400, {'success': False, 'errorMsg': 'Invalid JSON'})
+        raw_body = event.get('body') or '{}'
+        if event.get('isBase64Encoded'):
+            raw_body = base64.b64decode(raw_body).decode('utf-8')
+        body = json.loads(raw_body)
+    except Exception as e:
+        print(f'Body parse error: {e}, body preview: {str(event.get("body",""))[:100]}')
+        return resp(400, {'success': False, 'errorMsg': f'Invalid JSON: {str(e)}'})
 
     front = strip_prefix(body.get('imageFront', ''))
     if not front:
@@ -206,14 +231,24 @@ def handle_ocr(event, user_id):
         creds          = load_creds()
         bearer, tid, tkey = get_auth(creds)
 
-        # Gọi OCR trực tiếp với base64 — không cần upload trước
+        # Gọi OCR — upload hash rồi OCR
         ocr = vnpt_ocr(front, bearer, tid, tkey)
 
-        err_code = ocr.get('errorCode') or (0 if ocr.get('message') == 'IDG-00000000' else -1)
-        if err_code != 0 and ocr.get('message') != 'IDG-00000000':
+        # VNPT success codes: errorCode=0 hoặc message='IDG-00000000'
+        err_code = ocr.get('errorCode')
+        msg      = ocr.get('message') or ocr.get('errorMessage') or ''
+        
+        # Normalize: IDG-00000000 = success
+        if msg == 'IDG-00000000':
+            err_code = 0
+        elif err_code is None:
+            err_code = -1
+
+        if err_code != 0:
+            print(f'VNPT OCR error: code={err_code} msg={msg}')
             return resp(422, {'success': False,
                               'errorCode': err_code,
-                              'errorMsg': ocr.get('message') or ocr.get('errorMessage') or 'OCR thất bại'})
+                              'errorMsg': msg or 'OCR thất bại'})
 
         ocr_obj = ocr.get('object') or {}
 
@@ -263,9 +298,13 @@ def handle_verify_face(event, user_id):
                           'errorMsg': f'Vượt quá {MAX_DAILY_ATTEMPTS} lần/ngày. Thử lại ngày mai.'})
 
     try:
-        body = json.loads(event.get('body') or '{}')
-    except Exception:
-        return resp(400, {'success': False, 'errorMsg': 'Invalid JSON'})
+        raw_body = event.get('body') or '{}'
+        if event.get('isBase64Encoded'):
+            raw_body = base64.b64decode(raw_body).decode('utf-8')
+        body = json.loads(raw_body)
+    except Exception as e:
+        print(f'Body parse error: {e}')
+        return resp(400, {'success': False, 'errorMsg': f'Invalid JSON: {str(e)}'})
 
     face     = strip_prefix(body.get('faceImage', ''))
     id_front = strip_prefix(body.get('idFrontImage', '')) if body.get('idFrontImage') else None

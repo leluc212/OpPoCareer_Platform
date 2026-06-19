@@ -1155,7 +1155,7 @@ const PostQuickJob = () => {
         requirements: formData.requirements || '',
         contactPhone: formData.contactPhone || '',
         companyName: companyName,  // Add company name here
-        status: 'pending',  // Created by employer -> require admin approval
+        status: 'active',  // Quick jobs go live immediately (employer already approved for quick jobs)
         workDate: formData.workDate || '' // Store work date in workDate attribute
       };
 
@@ -1381,6 +1381,18 @@ const PostQuickJob = () => {
           </InfoBox>
 
           <form onSubmit={handleSubmit}>
+            <FormGroup>
+              <Label required>{t.jobTitle}</Label>
+              <Input
+                name="title"
+                type="text"
+                value={formData.title}
+                onChange={handleChange}
+                placeholder={t.jobTitlePlaceholder}
+                required
+              />
+            </FormGroup>
+
             <FormRow $columns="1fr 1fr">
               <FormGroup>
                 <Label required>{t.location}</Label>

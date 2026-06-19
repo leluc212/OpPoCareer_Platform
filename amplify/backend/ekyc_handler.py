@@ -206,14 +206,22 @@ def get_auth(creds):
 
 
 def vnpt_headers(bearer, tid, tkey):
-    """Headers chuẩn theo VNPT docs."""
-    return {
+    """Headers chuẩn theo VNPT docs.
+    Nếu bearer rỗng/invalid → dùng Token-id + Token-key (RSA public key flow).
+    """
+    hdrs = {
         'Content-Type':  'application/json',
-        'Authorization': f'Bearer {bearer}',
         'Token-id':      tid,
         'Token-key':     tkey,
         'mac-address':   MAC_ADDRESS,
     }
+    if bearer:
+        hdrs['Authorization'] = f'Bearer {bearer}'
+    else:
+        # RSA key flow: dùng Basic auth với token_id:token_key
+        cred_b64 = base64.b64encode(f'{tid}:{tkey}'.encode()).decode()
+        hdrs['Authorization'] = f'Basic {cred_b64}'
+    return hdrs
 
 def vnpt_upload(b64_data, bearer, tid, tkey):
     """Upload ảnh lên VNPT file-service (multipart/form-data), trả về (hash, token)."""
@@ -252,11 +260,15 @@ def vnpt_upload(b64_data, bearer, tid, tkey):
     files  = {'file': (filename, img_bytes, content_type)}
     data   = {'title': 'ekyc', 'description': 'ekyc'}
     hdrs   = {
-        'Authorization': f'Bearer {bearer}',
         'Token-id':      tid,
         'Token-key':     tkey,
         'mac-address':   MAC_ADDRESS,
     }
+    if bearer:
+        hdrs['Authorization'] = f'Bearer {bearer}'
+    else:
+        cred_b64 = base64.b64encode(f'{tid}:{tkey}'.encode()).decode()
+        hdrs['Authorization'] = f'Basic {cred_b64}'
     r = req_lib.post(VNPT_UPLOAD_URL, headers=hdrs, files=files, data=data, timeout=20)
     print(f'Upload: status={r.status_code} FULL_BODY={r.text[:500]}')
     if r.status_code >= 400:
@@ -374,10 +386,13 @@ def handle_ocr(event, user_id):
     """
     print(f'handle_ocr start, user_id={user_id}')
     try:
-        body = json.loads(event.get('body') or '{}')
+        raw_body = event.get('body') or '{}'
+        if event.get('isBase64Encoded'):
+            raw_body = base64.b64decode(raw_body).decode('utf-8')
+        body = json.loads(raw_body)
     except Exception as e:
-        print(f'JSON parse error: {e}')
-        return resp(400, {'success': False, 'errorMsg': 'Invalid JSON'})
+        print(f'JSON parse error: {e}, body_preview={str(event.get("body",""))[:80]}')
+        return resp(400, {'success': False, 'errorMsg': f'Invalid JSON: {e}'})
 
     front = strip_prefix(body.get('imageFront', ''))
     print(f'imageFront present={bool(front)}, length={len(front) if front else 0}')
@@ -476,7 +491,10 @@ def handle_verify_face(event, user_id):
                           'errorMsg': f'Vượt quá {MAX_DAILY_ATTEMPTS} lần/ngày. Thử lại ngày mai.'})
 
     try:
-        body = json.loads(event.get('body') or '{}')
+        raw_body = event.get('body') or '{}'
+        if event.get('isBase64Encoded'):
+            raw_body = base64.b64decode(raw_body).decode('utf-8')
+        body = json.loads(raw_body)
     except Exception:
         return resp(400, {'success': False, 'errorMsg': 'Invalid JSON'})
 

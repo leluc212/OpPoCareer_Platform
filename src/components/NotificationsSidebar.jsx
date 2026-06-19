@@ -269,9 +269,14 @@ const NotificationsSidebar = () => {
         await loadNotifications();
       }
       
-      // Navigate to action URL
+      // Navigate to action URL, normalizing bare /candidate/jobs to include tab param
       if (notification.actionUrl) {
-        navigate(notification.actionUrl);
+        let url = notification.actionUrl;
+        if (url === '/candidate/jobs') {
+          const isQuickJobRelated = ['success', 'CV_ACCEPTED', 'quick_job_activation_approved'].includes(notification.type);
+          url = isQuickJobRelated ? '/candidate/jobs?tab=shift' : '/candidate/jobs?tab=standard';
+        }
+        navigate(url);
       }
     } catch (error) {
       console.error('Error handling notification click:', error);

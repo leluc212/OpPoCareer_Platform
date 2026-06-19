@@ -800,7 +800,21 @@ const EmployerNotifications = () => {
   // Navigate to the correct page from inside the modal
   const handleGoToApplications = (notification) => {
     setSelectedNotification(null);
-    if (notification.type === 'application') {
+    if (notification.actionUrl) {
+      // Use actionUrl stored in the notification as the source of truth
+      if (notification.type === 'application') {
+        navigate(notification.actionUrl, {
+          state: {
+            fromNotifications: true,
+            jobId: notification?.data?.jobId || notification?.data?.idJob || null,
+            staffTab: notification.isQuickJob ? 'pending_confirm' : undefined
+          }
+        });
+      } else {
+        navigate(notification.actionUrl);
+      }
+    } else if (notification.type === 'application') {
+      // Fallback for old notifications without actionUrl
       const targetPath = notification.isQuickJob ? '/employer/quick-jobs' : '/employer/standard-jobs';
       navigate(targetPath, {
         state: {
@@ -1099,7 +1113,7 @@ const EmployerNotifications = () => {
               >
                 {language === 'vi' ? 'Đóng' : 'Close'}
               </ModalBtn>
-              {selectedNotification.type === 'application' && (
+              {selectedNotification.actionUrl && (
                 <ModalBtn
                   $primary
                   whileHover={{ scale: 1.03 }}
@@ -1107,9 +1121,7 @@ const EmployerNotifications = () => {
                   onClick={() => handleGoToApplications(selectedNotification)}
                 >
                   <Eye />
-                  {language === 'vi'
-                    ? (selectedNotification.isQuickJob ? 'Xem hồ sơ tuyển gấp' : 'Xem hồ sơ tiêu chuẩn')
-                    : (selectedNotification.isQuickJob ? 'View Quick Job Applications' : 'View Standard Applications')}
+                  {selectedNotification.actionText || (language === 'vi' ? 'Xem chi tiết' : 'View details')}
                 </ModalBtn>
               )}
             </ModalFooter>

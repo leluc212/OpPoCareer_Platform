@@ -1901,17 +1901,21 @@ const Navbar = ({ showSearch = true }) => {
                           $unread={isRealNotification ? !notification.read : notification.unread}
                           onClick={async () => {
                             if (isRealNotification) {
+                              // Mark this single notification as read
                               try {
                                 await markAsRead(notification.notificationId);
                                 setRealNotifications(prev => prev.map(n =>
                                   n.notificationId === notification.notificationId ? { ...n, read: true } : n
                                 ));
-                                if (notification.actionUrl) {
-                                  navigate(notification.actionUrl);
-                                }
                               } catch (error) {
                                 console.error('Error marking notification as read:', error);
                               }
+                              setShowNotifications(false);
+                              // Always navigate to the notifications page
+                              if (user?.role === 'candidate') navigate('/candidate/notifications');
+                              else if (user?.role === 'employer') navigate('/employer/notifications');
+                              else if (user?.role === 'admin') navigate('/admin/notifications');
+                              return;
                             }
                             handleNotificationItemClick();
                           }}

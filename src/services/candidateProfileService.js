@@ -602,6 +602,102 @@ class CandidateProfileService {
       throw error;
     }
   }
+
+  // ─── Account Deletion Request APIs ───────────────────────────────────────
+
+  /**
+   * Candidate submits an account deletion request
+   * Sets deletionRequest field in DynamoDB profile
+   */
+  async requestAccountDeletion() {
+    try {
+      const session = await fetchAuthSession();
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) throw new Error('User not authenticated');
+
+      const result = await this.makeRequest(`/profile/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          deletionRequest: {
+            status: 'pending',
+            requestedAt: new Date().toISOString()
+          }
+        })
+      });
+      return result;
+    } catch (error) {
+      console.error('Error submitting account deletion request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin: get all candidates with pending deletion requests
+   */
+  async getPendingDeletionRequests() {
+    try {
+      const candidates = await this.getAllCandidates();
+      return (candidates || []).filter(c => {
+        const dr = c.deletionRequest;
+        return dr && dr.status === 'pending';
+      }).map(c => ({
+        id: c.userId || c.id,
+        name: c.fullName || (c.email ? c.email.split('@')[0] : 'Unknown'),
+        email: c.email || '',
+        phone: c.phone || c.phoneNumber || '',
+        avatar: c.avatar || c.profileImage || null,
+        requestedAt: c.deletionRequest?.requestedAt || '',
+        deletionRequest: c.deletionRequest
+      }));
+    } catch (error) {
+      console.error('Error fetching deletion requests:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Admin: approve a deletion request — soft-delete the profile
+   */
+  async approveDeletionRequest(candidateId) {
+    try {
+      const result = await this.makeRequest(`/profile/${candidateId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          deletionRequest: {
+            status: 'approved',
+            approvedAt: new Date().toISOString()
+          },
+          isDeleted: true,
+          deletedAt: new Date().toISOString()
+        })
+      });
+      return result;
+    } catch (error) {
+      console.error('Error approving deletion request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Admin: reject a deletion request
+   */
+  async rejectDeletionRequest(candidateId) {
+    try {
+      const result = await this.makeRequest(`/profile/${candidateId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          deletionRequest: {
+            status: 'rejected',
+            rejectedAt: new Date().toISOString()
+          }
+        })
+      });
+      return result;
+    } catch (error) {
+      console.error('Error rejecting deletion request:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

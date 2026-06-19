@@ -469,100 +469,160 @@ const ApplyModalWrap = styled.div`
 `;
 
 const AiScreeningModalHeader = styled.div`
-  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%);
-  padding: 24px;
+  background: linear-gradient(145deg, #3b0764 0%, #5b21b6 45%, #7c3aed 100%);
+  padding: 28px 24px 32px;
   color: white;
-  border-radius: 16px 16px 0 0;
+  border-radius: 24px 24px 0 0;
   position: relative;
   overflow: hidden;
   text-align: center;
 
-  .sparkles-container {
-    width: 48px;
-    height: 48px;
-    background: rgba(255, 255, 255, 0.15);
+  /* Decorative blobs */
+  &::before {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.07);
     border-radius: 50%;
+    pointer-events: none;
+  }
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -20px;
+    left: -20px;
+    width: 90px;
+    height: 90px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .sparkles-container {
+    width: 56px;
+    height: 56px;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 12px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    color: #e9d5ff;
+    margin: 0 auto 14px;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    color: #f5d0fe;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 1;
   }
 
   h2 {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 800;
-    margin: 0 0 4px 0;
+    margin: 0 0 6px 0;
     color: white;
+    letter-spacing: -0.3px;
+    position: relative;
+    z-index: 1;
   }
 
   p {
     font-size: 13px;
-    color: #f3e8ff;
+    color: rgba(243, 232, 255, 0.85);
     margin: 0;
     font-weight: 500;
+    position: relative;
+    z-index: 1;
   }
 `;
 
 const AiScreeningContent = styled.div`
-  padding: 24px;
+  padding: 28px 24px;
   text-align: center;
-  max-height: 500px;
+  max-height: 520px;
   overflow-y: auto;
   font-family: inherit;
+  background: #f8f7ff;
+
+  /* Custom scrollbar */
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #ddd6fe;
+    border-radius: 99px;
+  }
 `;
 
 const ScoreCircleWrap = styled.div`
   position: relative;
-  width: 140px;
-  height: 140px;
-  margin: 20px auto;
+  width: 150px;
+  height: 150px;
+  margin: 4px auto 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  filter: drop-shadow(0 4px 16px ${props => props.$color}33);
 
   .score-label {
     text-align: center;
     h4 {
-      font-size: 36px;
-      font-weight: 800;
+      font-size: 40px;
+      font-weight: 900;
       margin: 0;
       color: ${props => props.$color};
+      line-height: 1;
+      letter-spacing: -1px;
     }
     span {
       font-size: 11px;
       color: #94a3b8;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
   }
 `;
 
 const ResultBadge = styled.div`
-  display: inline-block;
-  padding: 8px 16px;
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 18px;
+  border-radius: 99px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
   background: ${props => props.$bgColor};
   color: ${props => props.$color};
-  border: 1.5px solid ${props => props.$color};
-  margin-bottom: 24px;
+  border: 1.5px solid ${props => props.$color}55;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px ${props => props.$color}22;
 `;
 
 const DetailCard = styled.div`
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
+  background: white;
+  border: 1.5px solid #ede9fe;
+  border-left: 4px solid ${props => props.$iconColor || '#7c3aed'};
+  border-radius: 14px;
+  padding: 16px 18px;
   text-align: left;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(109, 40, 217, 0.06);
+  transition: box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 16px rgba(109, 40, 217, 0.1);
+  }
 
   h4 {
-    font-size: 14.5px;
+    font-size: 14px;
     font-weight: 700;
     color: #1e293b;
     margin: 0 0 10px 0;
@@ -572,22 +632,27 @@ const DetailCard = styled.div`
     
     svg {
       color: ${props => props.$iconColor || '#7c3aed'};
+      flex-shrink: 0;
     }
   }
 
   p {
     font-size: 13.5px;
-    color: #475569;
-    line-height: 1.6;
+    color: #4b5563;
+    line-height: 1.7;
     margin: 0;
   }
 
   ul {
     margin: 0;
-    padding-left: 20px;
+    padding-left: 18px;
     font-size: 13.5px;
-    color: #475569;
-    line-height: 1.6;
+    color: #4b5563;
+    line-height: 1.8;
+
+    li {
+      margin-bottom: 2px;
+    }
   }
 `;
 
@@ -2698,9 +2763,20 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       console.log('✅ Loaded DynamoDB jobs:', jobs);
 
       // Transform DynamoDB jobs to match JOBS_DATA format
+      // Today's date (calendar date only, no time component)
+      const todayOnly = new Date();
+      todayOnly.setHours(0, 0, 0, 0);
+
       const transformedJobs = jobs
         .filter(job => job && job.idJob && job.title && job.salary) // Filter out invalid jobs and jobs without salary
         .filter(job => job.status !== 'deleted') // Filter out deleted jobs
+        .filter(job => {
+          // Hide jobs whose workDays (application deadline) has already passed
+          if (!job.workDays) return true; // No deadline set → always show
+          const deadline = new Date(job.workDays);
+          deadline.setHours(0, 0, 0, 0);
+          return deadline > todayOnly; // Hide on and after the work date
+        })
         .map(job => {
           try {
             // Use coordinates from job if available, otherwise use default HCM location
@@ -2762,9 +2838,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       console.log('✅ Loaded quick jobs:', jobs);
 
       // Transform quick jobs to match JOBS_DATA format
+      const todayOnly = new Date();
+      todayOnly.setHours(0, 0, 0, 0);
+
       const transformedQuickJobs = jobs
         .filter(job => job && (job.jobID || job.idJob) && job.title)
         .filter(job => job.status !== 'deleted') // Filter out deleted jobs
+        .filter(job => {
+          // Hide quick jobs whose workDate has already passed
+          if (!job.workDate) return true; // No work date set → always show
+          const workDay = new Date(job.workDate);
+          workDay.setHours(0, 0, 0, 0);
+          return workDay > todayOnly; // Hide on and after the work date
+        })
         .map(job => {
           try {
             const jobId = job.jobID || job.idJob;
@@ -2975,7 +3061,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       searchParams.set('tab', 'standard');
       navigate({ search: searchParams.toString() }, { replace: true });
     }
-  }, [location.search, jobCategory, showSavedJobsOnly, navigate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   // Load saved jobs from candidate profile instead of localStorage
   useEffect(() => {
@@ -4843,9 +4930,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             }
           }
         }}
-        title=""
+        noPadding={true}
       >
-        <ApplyModalWrap onClick={e => e.stopPropagation()} style={{ padding: 0, overflow: 'hidden', maxWidth: '600px', width: '100%' }}>
+        <div onClick={e => e.stopPropagation()} style={{ overflow: 'hidden', borderRadius: '24px' }}>
           <AiScreeningModalHeader>
             <div className="sparkles-container">
               <Sparkles size={24} />
@@ -4863,12 +4950,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           <AiScreeningContent>
             {aiScreeningStep === 'screening' ? (
               aiScreeningLoading ? (
-                <div style={{ padding: '40px 0' }}>
-                  <div className="apply-emoji" style={{ fontSize: '48px', animation: 'spin 2s linear infinite' }}>⏳</div>
-                  <h3 style={{ fontSize: '18px', fontWeight: '700', marginTop: '16px', color: '#1e293b' }}>
+                <div style={{ padding: '48px 20px' }}>
+                  <div style={{ 
+                    width: '64px', height: '64px', margin: '0 auto 20px',
+                    background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)',
+                    borderRadius: '18px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '32px', animation: 'spin 2s linear infinite',
+                    boxShadow: '0 4px 16px rgba(109, 40, 217, 0.2)'
+                  }}>⏳</div>
+                  <h3 style={{ fontSize: '18px', fontWeight: '700', marginTop: '0', color: '#1e293b' }}>
                     {language === 'vi' ? 'AI đang đối chiếu hồ sơ...' : 'AI is screening your profile...'}
                   </h3>
-                  <p style={{ fontSize: '14px', color: '#64748b', marginTop: '8px' }}>
+                  <p style={{ fontSize: '13.5px', color: '#64748b', marginTop: '8px', lineHeight: '1.6' }}>
                     {language === 'vi' 
                       ? `Đang phân tích CV "${aiScreeningCvName}" dựa trên JD tuyển dụng`
                       : `Analyzing CV "${aiScreeningCvName}" against the job requirements`}
@@ -4903,30 +4997,31 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 <div>
                   <ScoreCircleWrap $color={resultColor}>
                     <svg
-                      height={140}
-                      width={140}
+                      height={150}
+                      width={150}
                       style={{ transform: 'rotate(-90deg)', position: 'absolute' }}
                     >
                       <circle
-                        stroke="#e2e8f0"
+                        stroke="#ede9fe"
                         fill="transparent"
-                        strokeWidth={10}
-                        r={50}
-                        cx={70}
-                        cy={70}
+                        strokeWidth={11}
+                        r={55}
+                        cx={75}
+                        cy={75}
                       />
                       <circle
                         stroke={resultColor}
                         fill="transparent"
-                        strokeWidth={10}
-                        strokeDasharray={(50 * 2 * Math.PI) + ' ' + (50 * 2 * Math.PI)}
+                        strokeWidth={11}
+                        strokeLinecap="round"
+                        strokeDasharray={(55 * 2 * Math.PI) + ' ' + (55 * 2 * Math.PI)}
                         style={{
-                          strokeDashoffset: (50 * 2 * Math.PI) - (aiScreeningScore / 100) * (50 * 2 * Math.PI),
-                          transition: 'stroke-dashoffset 1s ease-in-out'
+                          strokeDashoffset: (55 * 2 * Math.PI) - (aiScreeningScore / 100) * (55 * 2 * Math.PI),
+                          transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)'
                         }}
-                        r={50}
-                        cx={70}
-                        cy={70}
+                        r={55}
+                        cx={75}
+                        cy={75}
                       />
                     </svg>
                     <div className="score-label">
@@ -4962,7 +5057,14 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     </DetailCard>
                   )}
 
-                  <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
+                  <div style={{ 
+                    marginTop: '20px',
+                    padding: '16px 0 4px',
+                    borderTop: '1.5px solid #ede9fe',
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'center'
+                  }}>
                     <button 
                       onClick={() => {
                         setShowAiScreeningModal(false);
@@ -4970,14 +5072,18 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       }}
                       style={{
                         flex: 1,
-                        padding: '14px 20px',
-                        background: '#f1f5f9',
-                        color: '#475569',
-                        border: 'none',
+                        padding: '13px 16px',
+                        background: 'white',
+                        color: '#64748b',
+                        border: '1.5px solid #e2e8f0',
                         borderRadius: '12px',
                         fontWeight: '600',
-                        cursor: 'pointer'
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
                       }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f8f7ff'; e.currentTarget.style.borderColor = '#c4b5fd'; e.currentTarget.style.color = '#5b21b6'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b'; }}
                     >
                       {language === 'vi' ? 'Đóng và Quay lại' : 'Close and Back'}
                     </button>
@@ -5000,16 +5106,21 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                           setShowAiRulesModal(true);
                         }}
                         style={{
-                          flex: 1.5,
-                          padding: '14px 20px',
-                          background: 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)',
+                          flex: 1.7,
+                          padding: '13px 20px',
+                          background: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '12px',
                           fontWeight: '700',
+                          fontSize: '14px',
                           cursor: 'pointer',
-                          boxShadow: '0 4px 14px rgba(124, 58, 237, 0.3)'
+                          boxShadow: '0 4px 16px rgba(109, 40, 217, 0.35)',
+                          transition: 'all 0.15s',
+                          letterSpacing: '0.1px',
                         }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(109,40,217,0.45)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(109,40,217,0.35)'; }}
                       >
                         {language === 'vi' ? 'Bắt đầu Vòng 2: Phỏng vấn AI' : 'Start Round 2: AI Interview'}
                       </button>
@@ -5234,7 +5345,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               )
             )}
           </AiScreeningContent>
-        </ApplyModalWrap>
+        </div>
       </Modal>
 
       {/* AI Rules Modal */}

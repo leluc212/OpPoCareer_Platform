@@ -271,9 +271,9 @@ export const createCandidateCvAcceptedNotification = async (payload) => {
     },
     icon: 'check-circle',
     color: '#10b981',
-    actionUrl: '',
-    actionText: 'Xem chi tiết',
-    actionTextEn: 'View details'
+    actionUrl: '/candidate/jobs?tab=shift',
+    actionText: 'Xem việc làm tuyển gấp',
+    actionTextEn: 'View shift jobs'
   };
 
   return await saveNotification(notification);
@@ -320,9 +320,9 @@ export const createCandidateCvRejectedNotification = async (payload) => {
     },
     icon: 'alert-circle',
     color: '#ef4444',
-    actionUrl: '',
-    actionText: 'Xem chi tiết',
-    actionTextEn: 'View details'
+    actionUrl: '/candidate/jobs?tab=shift',
+    actionText: 'Xem việc làm khác',
+    actionTextEn: 'Browse other jobs'
   };
 
   return await saveNotification(notification);
@@ -365,7 +365,7 @@ export const createChatMessageNotification = async (payload) => {
     },
     icon: 'message-square',
     color: '#3b82f6',
-    actionUrl: recipientRole === 'employer' ? '/employer/quick-jobs' : '/candidate/jobs',
+    actionUrl: recipientRole === 'employer' ? '/employer/quick-jobs' : '/candidate/jobs?tab=shift',
     actionText: 'Xem tin nhắn',
     actionTextEn: 'View message'
   };
@@ -645,8 +645,8 @@ export const createCandidateQuickJobVerifNotification = async (candidateId, cand
     messageEn = `Congratulations ${safeName}! Your profile has been approved by Admin. You can now start receiving Quick Job offers.`;
     icon = 'check-circle';
     color = '#10b981';
-    actionUrl = '/candidate/jobs';
-    actionText = 'Xem việc làm';
+    actionUrl = '/candidate/jobs?tab=shift';
+    actionText = 'Xem việc làm tuyển gấp';
     actionTextEn = 'View jobs';
   } else if (isDeactivated) {
     type = 'system';

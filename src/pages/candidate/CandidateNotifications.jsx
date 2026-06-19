@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import RelativeTime from '../../components/RelativeTime';
 import { useLanguage } from '../../context/LanguageContext';
@@ -445,6 +446,7 @@ const ActivityItem = styled.div`
 function CandidateNotifications() {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
 
   const getIconForType = (type) => {
@@ -589,6 +591,20 @@ function CandidateNotifications() {
     await markAsRead(id);
   };
 
+  const handleNotificationClick = async (notif) => {
+    await handleMarkAsRead(notif.id);
+    if (notif.actionUrl) {
+      let url = notif.actionUrl;
+      // Normalize bare /candidate/jobs → add ?tab param based on notification type
+      // so the URL doesn't visibly jump after landing on the page.
+      if (url === '/candidate/jobs') {
+        const isQuickJobRelated = ['success', 'CV_ACCEPTED', 'quick_job_activation_approved'].includes(notif.type);
+        url = isQuickJobRelated ? '/candidate/jobs?tab=shift' : '/candidate/jobs?tab=standard';
+      }
+      navigate(url);
+    }
+  };
+
   const filteredNotifications = filter === 'all'
     ? notifications
     : filter === 'unread'
@@ -660,7 +676,7 @@ function CandidateNotifications() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.1 + index * 0.05 }}
-                onClick={() => handleMarkAsRead(notif.id)}
+                onClick={() => handleNotificationClick(notif)}
                 whileHover={{ scale: 1.01 }}
               >
                 <NotificationIcon $color={notif.color}>

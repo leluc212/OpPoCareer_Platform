@@ -7,7 +7,6 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
 import candidateProfileService from '../../services/candidateProfileService';
-import { deleteUser, signOut } from 'aws-amplify/auth';
 import { 
   Trash2, 
   ArrowLeft, 
@@ -307,32 +306,13 @@ function DeleteAccount() {
     try {
       setIsDeleting(true);
       
-      // 1. Clear DynamoDB profile record (soft delete)
-      await candidateProfileService.deleteProfile();
+      // Submit deletion request — admin will review and approve
+      await candidateProfileService.requestAccountDeletion();
       
-      // 2. Delete Cognito User account
-      try {
-        await deleteUser();
-        console.log('✅ Auth user deleted from Cognito');
-      } catch (authErr) {
-        console.error('⚠️ Cognito delete error (might be social user):', authErr);
-        // If deleteUser fails (common with social identities if not configured), 
-        // we at least ensure they are logged out.
-        await signOut();
-      }
-
       setIsSuccess(true);
-      
-      // Clear local auth
-      logout();
-
-      // Show final success before redirect
-      setTimeout(() => {
-        navigate('/');
-      }, 3000);
 
     } catch (error) {
-      console.error('❌ Account deletion error:', error);
+      console.error('❌ Account deletion request error:', error);
       toast.error(vi ? 'Có lỗi xảy ra: ' + (error.message || 'Thử lại sau') : 'Error occurred: ' + (error.message || 'Try again later'));
       setIsDeleting(false);
     }
@@ -363,10 +343,10 @@ function DeleteAccount() {
                 >
                   <CheckCircle2 size={72} color="#059669" />
                 </motion.div>
-                <h2>{vi ? 'Tài khoản đã bị xóa' : 'Account Deleted'}</h2>
-                <p>{vi ? 'Cảm ơn bạn đã đồng hành cùng Ốp Pờ. Chúc bạn thành công!' : 'Thanks for using Ốp Pờ. Wishing you the best!'}</p>
+                <h2>{vi ? 'Yêu cầu đã được gửi' : 'Request Submitted'}</h2>
+                <p>{vi ? 'Yêu cầu xóa tài khoản của bạn đang chờ admin xét duyệt. Chúng tôi sẽ thông báo khi có kết quả.' : 'Your account deletion request is pending admin review. We will notify you when there is a decision.'}</p>
                 <p style={{ fontSize: '13px', color: '#9CA3AF', marginTop: '24px' }}>
-                  {vi ? 'Tự động chuyển hướng trong giây lát...' : 'Redirecting you in a moment...'}
+                  {vi ? 'Bạn có thể tiếp tục sử dụng tài khoản trong thời gian chờ.' : 'You can continue using your account while waiting.'}
                 </p>
               </SuccessOverlay>
             )}

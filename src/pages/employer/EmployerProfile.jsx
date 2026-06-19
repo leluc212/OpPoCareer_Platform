@@ -765,6 +765,7 @@ const EmployerProfile = () => {
   const [companyLogo, setCompanyLogo] = useState('');
   const [companyVideo, setCompanyVideo] = useState('');
   const [companyImages, setCompanyImages] = useState([]);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isLockedFields, setIsLockedFields] = useState({
     taxCode: false,
@@ -1896,7 +1897,12 @@ const EmployerProfile = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginBottom: '12px' }}>
                       {companyImages.map(img => (
                         <div key={img.id} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #E8EFFF', aspectRatio: '4/3' }}>
-                          <img src={img.data} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          <img
+                            src={img.data}
+                            alt={img.name}
+                            onClick={() => setLightboxImage(img.data)}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }}
+                          />
                           {isEditing && (
                             <button
                               type="button"
@@ -2086,6 +2092,47 @@ const EmployerProfile = () => {
         )}
       </ProfileContainer>
       <GlobalSpinStyle />
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            zIndex: 10000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', cursor: 'zoom-out'
+          }}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.15)', border: 'none',
+              borderRadius: '50%', width: '40px', height: '40px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'white'
+            }}
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="full"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              borderRadius: '8px',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+              cursor: 'default',
+              imageRendering: 'auto',
+            }}
+          />
+        </div>
+      )}
     </DashboardLayout>
   );
 };

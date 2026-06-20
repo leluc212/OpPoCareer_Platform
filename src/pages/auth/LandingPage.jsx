@@ -3652,8 +3652,8 @@ const LandingPage = ({ children }) => {
               </FeaturesSectionTitle>
               <FeaturesSectionSub $isDark={isDarkMode}>
                 {language === 'vi'
-                  ? 'OpPo cung cấp đầy đủ công cụ hiện đại giúp ứng viên và nhà tuyển dụng kết nối nhanh chóng, hiệu quả.'
-                  : 'OpPo provides all the modern tools to help candidates and employers connect quickly and effectively.'}
+                  ? 'Ốp Pờ cung cấp đầy đủ công cụ hiện đại giúp ứng viên và nhà tuyển dụng kết nối nhanh chóng, hiệu quả.'
+                  : 'Ốp Pờ provides all the modern tools to help candidates and employers connect quickly and effectively.'}
               </FeaturesSectionSub>
               <FeaturesGrid>
                 {[
@@ -4267,7 +4267,7 @@ const LandingPage = ({ children }) => {
                   <p>{language === 'vi' ? 'Hotline hệ thống:' : 'System Hotline:'} <strong>0379 784 509</strong></p>
                   <p>{language === 'vi' ? 'Hỗ trợ khách hàng:' : 'Customer Support:'} <strong>0563 518 922</strong></p>
                   <p>Email: oppohiringplatform@gmail.com</p>
-                  <p>TikTok: <strong>OpPo</strong></p>
+                  <p>TikTok: <strong><a href="https://www.tiktok.com/@oppo.career?is_from_webapp=1&sender_device=pc" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>tiktok.com/@oppo.career</a></strong></p>
                   <p>Fanpage: <strong><a href="https://facebook.com/oppo.nentangtuyendung/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>facebook.com/oppo.nentangtuyendung/</a></strong></p>
                 </div>
 

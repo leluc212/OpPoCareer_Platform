@@ -1310,33 +1310,23 @@ const CandidateProfile = () => {
   const calculateProfileCompletion = () => {
     let completion = 0;
     
-    // Basic info (40% total - 8% each)
-    if (formData.fullName && formData.fullName.trim()) completion += 8;
-    if (formData.email && formData.email.trim()) completion += 8;
-    if (formData.phone && formData.phone.trim()) completion += 8;
-    if (formData.cccd && formData.cccd.trim()) completion += 8;
-    if (formData.dateOfBirth && formData.dateOfBirth.trim()) completion += 8;
+    // Basic info (35% total - 7% each)
+    if (formData.fullName && formData.fullName.trim()) completion += 7;
+    if (formData.email && formData.email.trim()) completion += 7;
+    if (formData.phone && formData.phone.trim()) completion += 7;
+    if (formData.cccd && formData.cccd.trim()) completion += 7;
+    if (formData.dateOfBirth && formData.dateOfBirth.trim()) completion += 7;
     
-    // Professional info (24% total - 8% each)
-    if (formData.location && formData.location.trim()) completion += 8;
-    if (formData.title && formData.title.trim()) completion += 8;
-    if (formData.bio && formData.bio.trim()) completion += 8;
+    // Professional info (21% total - 7% each)
+    if (formData.location && formData.location.trim()) completion += 7;
+    if (formData.title && formData.title.trim()) completion += 7;
+    if (formData.bio && formData.bio.trim()) completion += 7;
     
-    // Profile image (10%)
-    if (profileImage) completion += 10;
+    // Profile image (14%)
+    if (profileImage) completion += 14;
     
-    // Social links (6% total - at least 1 link)
-    const hasSocialLinks = formData.socialLinks?.facebook?.trim() || 
-                          formData.socialLinks?.instagram?.trim() || 
-                          formData.socialLinks?.zalo?.trim() || 
-                          formData.socialLinks?.website?.trim();
-    if (hasSocialLinks) completion += 6;
-    
-    // Skills (10% - at least 3 skills)
-    if (skills && skills.length >= 3) completion += 10;
-    
-    // eKYC verification (10%)
-    if (kycCompleted) completion += 10;
+    // eKYC verification (30%)
+    if (kycCompleted) completion += 30;
     
     return Math.min(completion, 100); // Cap at 100%
   };
@@ -2047,11 +2037,20 @@ const CandidateProfile = () => {
                       </div>
                       <div className="value">
                         {formData.dateOfBirth 
-                          ? new Date(formData.dateOfBirth).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })
+                          ? (() => {
+                              const d = formData.dateOfBirth;
+                              // Nếu đã là dd/mm/yyyy thì hiển thị trực tiếp
+                              if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) return d;
+                              // Nếu là yyyy-mm-dd thì convert sang dd/mm/yyyy
+                              if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
+                                const [y, m, day] = d.split('-');
+                                return `${day}/${m}/${y}`;
+                              }
+                              // Fallback: thử parse bình thường
+                              const parsed = new Date(d);
+                              if (isNaN(parsed.getTime())) return d;
+                              return parsed.toLocaleDateString('vi-VN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                            })()
                           : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')
                         }
                       </div>

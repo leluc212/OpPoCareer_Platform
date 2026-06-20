@@ -353,7 +353,7 @@ const Sidebar = ({ role, onHoverChange }) => {
     isNavigatingRef.current = false;
   }, [location.pathname]);
   
-  const handleNavClick = (link, e) => {
+  const handleNavClick = async (link, e) => {
     if (link.to === '#') {
       e?.preventDefault();
       return;
@@ -361,8 +361,8 @@ const Sidebar = ({ role, onHoverChange }) => {
     
     if (link.isLogout) {
       e?.preventDefault();
-      logout();
-      navigate('/');
+      await logout();
+      navigate('/', { replace: true });
       return;
     }
     

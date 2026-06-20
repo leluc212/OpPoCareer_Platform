@@ -116,6 +116,28 @@ def submit_application(event, candidate_id, candidate_email, create_response):
         if not job_id or not cv_url:
             return create_response(400, {'error': 'Missing required fields: jobId, cvUrl'})
         
+        # ─── eKYC Verification Gate ───────────────────────────────────────────
+        try:
+            candidate_table = dynamodb.Table('CandidateProfiles')
+            profile_response = candidate_table.get_item(Key={'userId': candidate_id})
+            profile = profile_response.get('Item', {})
+            kyc_completed = profile.get('kycCompleted', False)
+            kyc_status = profile.get('kycStatus', '')
+            is_verified = kyc_completed == True or kyc_status == 'VERIFIED'
+            if not is_verified:
+                return create_response(403, {
+                    'error': 'Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển.',
+                    'code': 'EKYC_REQUIRED'
+                })
+        except Exception as kyc_err:
+            print(f"⚠️ Error checking eKYC status: {kyc_err}")
+            # If cannot verify KYC status, block the application for safety
+            return create_response(403, {
+                'error': 'Không thể xác minh trạng thái eKYC. Vui lòng thử lại.',
+                'code': 'EKYC_CHECK_FAILED'
+            })
+        # ──────────────────────────────────────────────────────────────────────
+        
         # ANTI-SPAM: Check if user already applied to this job
         try:
             existing_response = applications_table.query(

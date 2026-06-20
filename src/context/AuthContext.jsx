@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
+import { getCurrentUser, fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 
 const AuthContext = createContext();
@@ -27,12 +27,17 @@ export const AuthProvider = ({ children }) => {
     window.dispatchEvent(new CustomEvent('userLoggedIn', { detail: userData }));
   };
 
-  const logout = () => {
+  const logout = async () => {
     console.log('🚪 Logout called');
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('user');
     sessionStorage.clear(); // Clear session khi đăng xuất
+    try {
+      await signOut();
+    } catch (e) {
+      console.log('SignOut error (ignored):', e);
+    }
   };
 
   const updateUser = (userData) => {

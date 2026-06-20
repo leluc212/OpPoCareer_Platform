@@ -20,6 +20,11 @@ import quickJobService from '../../services/quickJobService';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { s3Images } from '../../utils/s3Images';
 import { getActiveBanners } from '../../services/bannerService';
+import { getAuthHeaders } from '../../services/authHeaders';
+
+const CV_AI_API_BASE_URL =
+  (import.meta.env.VITE_CV_AI_API_URL || '/api-cv-ai').replace(/\/$/, '');
+
 
 // Animations
 const fadeIn = `
@@ -2498,9 +2503,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được giao."}
 `;
 
-      const response = await fetch("http://localhost:8000/api/v1/cv/screen", {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${CV_AI_API_BASE_URL}/api/v1/cv/screen`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           job_description: jdText,
           cv_text: cvText,
@@ -2572,9 +2578,10 @@ Mô tả công việc: ${job.description}
 Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 `;
 
-      const response = await fetch("http://localhost:8000/api/v1/interview/start", {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${CV_AI_API_BASE_URL}/api/v1/interview/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           job_title: job.title,
           job_description: jdText,
@@ -2727,9 +2734,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         return;
       }
 
-      const response = await fetch("http://localhost:8000/api/v1/interview/respond", {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${CV_AI_API_BASE_URL}/api/v1/interview/respond`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           session_id: interviewSessionId,
           answer: text
@@ -2871,6 +2879,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       const transformedQuickJobs = jobs
         .filter(job => job && (job.jobID || job.idJob) && job.title)
         .filter(job => job.status !== 'deleted') // Filter out deleted jobs
+        .filter(job => {
+          // Hide quick jobs whose workDate has already passed
+          if (!job.workDate) return true; // No work date set → always show
+          const workDay = new Date(job.workDate);
+          workDay.setHours(0, 0, 0, 0);
+          return workDay > todayOnly; // Hide on and after the work date
+        })
         .map(job => {
           try {
             const jobId = job.jobID || job.idJob;
@@ -5270,27 +5285,6 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                           <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                             {language === 'vi' ? 'Câu trả lời ghi nhận' : 'Captured Answer'}
                           </span>
-                          {interviewInputText && (
-                            <button
-                              type="button"
-                              onClick={() => setInterviewInputText('')}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#ef4444',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                transition: 'all 0.15s'
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                            >
-                              {language === 'vi' ? 'Xóa nói lại' : 'Clear'}
-                            </button>
-                          )}
                         </div>
                         <p style={{
                           margin: 0,

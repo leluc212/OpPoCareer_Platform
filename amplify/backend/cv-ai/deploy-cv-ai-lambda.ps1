@@ -17,7 +17,7 @@ $ZipFile = Join-Path $ScriptDir "cv-ai-handler.zip"
 $HandlerFile = Join-Path $ScriptDir "handler.py"
 
 Write-Host "Packaging CV AI Lambda..."
-Compress-Archive -LiteralPath $HandlerFile -DestinationPath $ZipFile -Force
+Compress-Archive -Path "$ScriptDir\handler.py", "$ScriptDir\fnb_interview_dataset.py" -DestinationPath $ZipFile -Force
 
 $ExistingFunction = aws lambda list-functions `
     --region $Region `
@@ -175,6 +175,12 @@ Ensure-Route "POST /job/suggest-jd" $true
 Ensure-Route "OPTIONS /job/suggest-jd" $false
 Ensure-Route "POST /candidate/recommend-jobs" $true
 Ensure-Route "OPTIONS /candidate/recommend-jobs" $false
+Ensure-Route "POST /api/v1/cv/screen" $true
+Ensure-Route "OPTIONS /api/v1/cv/screen" $false
+Ensure-Route "POST /api/v1/interview/start" $true
+Ensure-Route "OPTIONS /api/v1/interview/start" $false
+Ensure-Route "POST /api/v1/interview/respond" $true
+Ensure-Route "OPTIONS /api/v1/interview/respond" $false
 Ensure-Route "GET /health" $false
 
 $PreviousErrorActionPreference = $ErrorActionPreference

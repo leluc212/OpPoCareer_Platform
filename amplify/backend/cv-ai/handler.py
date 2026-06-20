@@ -5,6 +5,48 @@ import urllib.error
 import urllib.request
 import uuid
 
+# --- IMPORT DATASET MODULE ---
+try:
+    import fnb_interview_dataset as fnb_dataset
+    _FNB_DATASET_AVAILABLE = True
+except Exception as e:
+    _FNB_DATASET_AVAILABLE = False
+    print(f"Error importing fnb_interview_dataset: {e}")
+
+# --- SCHEMAS FOR AI RECRUITMENT ---
+CV_SCREENING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "integer"},
+        "result": {"type": "string"},
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "weaknesses": {"type": "array", "items": {"type": "string"}},
+        "reason": {"type": "string"}
+    },
+    "required": ["score", "result", "strengths", "weaknesses", "reason"]
+}
+
+INTERVIEW_REPORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "total_score": {"type": "integer"},
+        "past_experience_score": {"type": "integer"},
+        "situation_handling_score": {"type": "integer"},
+        "operations_score": {"type": "integer"},
+        "custom_questions_score": {"type": "integer"},
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "weaknesses": {"type": "array", "items": {"type": "string"}},
+        "recommend_to_employer": {"type": "boolean"},
+        "reason": {"type": "string"}
+    },
+    "required": [
+        "total_score", "past_experience_score", "situation_handling_score",
+        "operations_score", "custom_questions_score", "strengths", "weaknesses",
+        "recommend_to_employer", "reason"
+    ]
+}
+
+
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
@@ -983,6 +1025,587 @@ def call_gemini_recommend_jobs(candidate_profile, jobs, urlopen=None):
         raise ProviderError("AI_INVALID_RESPONSE", "The AI returned invalid JSON.", True)
 
 
+# --- DYNAMODB INTERVIEW SESSION STATE HELPERS ---
+def _decimal_to_float_int(obj):
+    from decimal import Decimal
+    if isinstance(obj, Decimal):
+        if obj % 1 == 0:
+            return int(obj)
+        else:
+            return float(obj)
+    if isinstance(obj, dict):
+        return {k: _decimal_to_float_int(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_decimal_to_float_int(x) for x in obj]
+    return obj
+
+
+def _get_candidate_profile_table():
+    import boto3
+    dynamodb = boto3.resource("dynamodb", region_name="ap-southeast-1")
+    return dynamodb.Table("CandidateProfiles")
+
+
+def get_active_session(user_id):
+    try:
+        table = _get_candidate_profile_table()
+        res = table.get_item(Key={"userId": user_id})
+        profile = res.get("Item") or {}
+        session = profile.get("activeInterviewSession")
+        if session:
+            session = _decimal_to_float_int(session)
+        return session
+    except Exception as e:
+        print(f"Error loading active session for user {user_id}: {e}")
+        return None
+
+
+def save_active_session(user_id, session):
+    try:
+        from decimal import Decimal
+        def float_to_decimal(obj):
+            if isinstance(obj, float):
+                return Decimal(str(obj))
+            if isinstance(obj, dict):
+                return {k: float_to_decimal(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [float_to_decimal(x) for x in obj]
+            return obj
+
+        session_decimal = float_to_decimal(session)
+        table = _get_candidate_profile_table()
+        table.update_item(
+            Key={"userId": user_id},
+            UpdateExpression="SET activeInterviewSession = :s",
+            ExpressionAttributeValues={":s": session_decimal}
+        )
+    except Exception as e:
+        print(f"Error saving active session for user {user_id}: {e}")
+
+
+def delete_active_session(user_id):
+    try:
+        table = _get_candidate_profile_table()
+        table.update_item(
+            Key={"userId": user_id},
+            UpdateExpression="REMOVE activeInterviewSession"
+        )
+    except Exception as e:
+        print(f"Error removing active session for user {user_id}: {e}")
+
+
+# --- AI INTERVIEWER HELPERS ---
+_REFLECTIVE_LISTENING_PREAMBLE = """[Phong cách bắt buộc cho lượt này — Lắng nghe phản chiếu]:
+1. CÔNG NHẬN/ĐỒNG CẢM: Mở đầu bằng một nhận xét ấm áp, chân thành để ghi nhận câu trả lời VỪA RỒI của ứng viên, cho thấy bạn thực sự lắng nghe.
+2. DIỄN GIẢI LẠI Ý: Tóm lược/diễn giải ngắn gọn ý chính trong câu trả lời gần nhất của ứng viên bằng lời của bạn, để xác nhận đã hiểu đúng.
+3. CHỈ ĐẶT MỘT CÂU HỎI: Sau đó mới chuyển sang phần hỏi bên dưới và chỉ đặt ĐÚNG MỘT (01) câu hỏi đào sâu trong lượt này (tuyệt đối không hỏi nhiều câu cùng lúc)."""
+
+
+def _get_turn_instruction(current_idx: int, turns: list[str]) -> str:
+    try:
+        if current_idx >= len(turns):
+            return ""
+        question = turns[current_idx]
+        preamble = _REFLECTIVE_LISTENING_PREAMBLE
+        if question.startswith("Custom Question: "):
+            q_text = question.replace("Custom Question: ", "")
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi bắt buộc cho lượt này]:
+ĐÂY LÀ YÊU CẦU BẮT BUỘC: Câu hỏi đào sâu của bạn ở bước (3) phải chính là câu hỏi sau đây từ Nhà tuyển dụng: "{q_text}". Hãy dẫn dắt thật tự nhiên và lịch sự.
+Lưu ý: Không được tự tiện thay đổi hoặc bỏ qua câu hỏi này.
+"""
+        elif question == "Technical Question based on CV/JD":
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+Ở bước (3), dựa vào CV của ứng viên và bản mô tả công việc (JD), hãy đặt MỘT câu hỏi phỏng vấn kỹ thuật hoặc tình huống chuyên môn thực tế và sâu sắc để thử thách năng lực của ứng viên.
+"""
+        elif question == "Salary and Work Expectations":
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+Ở bước (3), hãy đặt MỘT câu hỏi về mức lương mong muốn cùng kỳ vọng đối với môi trường làm việc mới và thời gian có thể bắt đầu nhận việc (gộp thành một câu hỏi tự nhiên, không tách thành nhiều câu rời rạc).
+"""
+        elif question == "Candidate Questions & Wrap up":
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+ĐÂY LÀ LƯỢT HỎI CUỐI CÙNG của buổi phỏng vấn. Sau khi công nhận và diễn giải lại câu trả lời gần nhất của ứng viên, hãy cảm ơn ứng viên vì sự tham gia của họ, rồi lịch sự đặt MỘT câu hỏi xem họ có câu hỏi nào dành cho công ty chúng ta hoặc có chia sẻ gì thêm không.
+"""
+        else:
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+Ở bước (3), hãy đặt MỘT câu hỏi đào sâu tiếp theo liên quan đến chủ đề: "{question}".
+"""
+    except Exception as e:
+        print(f"Error building turn instruction: {e}")
+        return ""
+
+
+def _detect_conversational_request(answer: str) -> str | None:
+    if not answer:
+        return None
+    ans_lower = answer.lower().strip()
+    
+    repeat_keywords = [
+        "nói lại", "nhắc lại", "lặp lại", "hỏi lại", "chưa nghe", "chưa rõ", "nghe chưa",
+        "nói lại đi", "hỏi lại đi", "nhắc lại đi", "lặp lại đi", "chưa nghe rõ",
+        "nói lại câu hỏi", "hỏi lại câu hỏi", "nhắc lại câu hỏi", "lặp lại câu hỏi",
+        "repeat", "say again", "pardon"
+    ]
+    if any(kw in ans_lower for kw in repeat_keywords) or (len(ans_lower) < 15 and "nghe" in ans_lower and "chưa" in ans_lower):
+        return "repeat"
+        
+    clarify_keywords = [
+        "giải thích", "làm rõ", "chưa hiểu", "không hiểu", "chưa rõ ý", "nghĩa là gì",
+        "giải nghĩa", "giải thích thêm", "giải thích rõ", "chưa nắm được", "không rõ ý",
+        "clarify", "explain", "what do you mean"
+    ]
+    if any(kw in ans_lower for kw in clarify_keywords):
+        return "clarify"
+        
+    skip_keywords = [
+        "bỏ qua", "hỏi câu khác", "đổi câu hỏi", "câu khác đi", "qua câu", "next câu",
+        "skip", "next question"
+    ]
+    if any(kw in ans_lower for kw in skip_keywords):
+        return "skip"
+        
+    return None
+
+
+# --- GEMINI REST API DEPLOYED METHODS ---
+def _cv_screening_system_prompt():
+    return """
+Bạn là một AI chuyên viên tuyển dụng cao cấp.
+
+CHÚ Ý QUAN TRỌNG VỀ PHÂN LOẠI VÀ THẨM ĐỊNH TÀI LIỆU (BẮT BUỘC KIỂM TRA ĐẦU TIÊN):
+Tài liệu của ứng viên gửi lên bắt buộc phải là một bản CV (Resume / Hồ sơ ứng tuyển) hợp lệ của một cá nhân cụ thể.
+Một bản CV/Resume hợp lệ BẮT BUỘC phải thỏa mãn đồng thời các điều kiện sau:
+1. Có thông tin định danh cá nhân tối thiểu (ví dụ: Họ tên và một trong các thông tin liên hệ như Email, Số điện thoại, Địa chỉ, Link LinkedIn/GitHub).
+2. Có cấu trúc thể hiện quá trình làm việc, học tập hoặc bộ kỹ năng của một cá nhân (bao gồm các phần như Kinh nghiệm làm việc, Học vấn, Kỹ năng, Mục tiêu nghề nghiệp, Dự án cá nhân).
+
+Các tài liệu sau đây được coi là KHÔNG HỢP LỆ (KHÔNG PHẢI CV):
+- Đề bài tập, bài giải lab, slide bài giảng, giáo trình, bài báo cáo học thuật.
+- Hướng dẫn kỹ thuật, tài liệu cấu hình (config), mã nguồn (source code), log file, thông báo lỗi.
+- Hóa đơn, chứng từ, tài liệu sản phẩm, bài viết tin tức, tiểu thuyết, truyện, hoặc văn bản ngẫu nhiên.
+- Bản mô tả công việc (JD) của chính công ty hoặc tài liệu không chứa thông tin của một người xin việc cụ thể.
+
+NẾU TÀI LIỆU KHÔNG PHẢI LÀ CV/RESUME HỢP LỆ, BẠN BẮT BUỘC PHẢI TRẢ VỀ:
+{
+  "score": 0,
+  "result": "fail",
+  "strengths": [],
+  "weaknesses": ["Tài liệu tải lên không phải là một CV/Resume hợp lệ (phát hiện tài liệu kỹ thuật, bài lab, bài tập, slide hoặc văn bản không liên quan)."],
+  "reason": "Tài liệu được tải lên không chứa thông tin về CV/Hồ sơ ứng viên hợp lệ để đánh giá tuyển dụng."
+}
+TUYỆT ĐỐI không được đánh giá các từ khóa kỹ thuật hay kỹ năng trong các văn bản không phải CV này để chấm điểm hoặc cho kết quả "pass". An toàn và chính xác trong việc phân loại tài liệu là ưu tiên số một.
+
+Nếu tài liệu đúng là một bản CV/Resume hợp lệ, hãy tiến hành đánh giá CV đó so với bản mô tả công việc (JD) bên dưới theo các tiêu chí:
+1. Kỹ năng bắt buộc (Must-have skills)
+2. Kinh nghiệm làm việc liên quan
+3. Dự án thực tế đã thực hiện
+4. Học vấn và chứng chỉ chuyên ngành
+5. Mức độ phù hợp tổng thể
+
+Return a JSON object matching the requested schema.
+""".strip()
+
+
+def _download_and_extract_cv(cv_url):
+    """
+    Downloads cv_url and attempts to parse it.
+    Returns a dict with either:
+      - {"type": "pdf", "bytes": pdf_bytes}
+      - {"type": "text", "text": docx_text}
+      - None (if download/parse fails or format is unsupported)
+    """
+    if not cv_url or not (cv_url.startswith("http://") or cv_url.startswith("https://")):
+        return None
+    try:
+        import urllib.request
+        import zipfile
+        import xml.etree.ElementTree as ET
+        import io
+        
+        req = urllib.request.Request(cv_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as conn:
+            content_bytes = conn.read()
+            
+        if not content_bytes:
+            return None
+            
+        url_lower = cv_url.lower()
+        if content_bytes.startswith(b"%PDF") or ".pdf" in url_lower:
+            return {"type": "pdf", "bytes": content_bytes}
+            
+        if content_bytes.startswith(b"PK\x03\x04") or ".docx" in url_lower:
+            try:
+                with zipfile.ZipFile(io.BytesIO(content_bytes)) as z:
+                    xml_content = z.read("word/document.xml")
+                root = ET.fromstring(xml_content)
+                texts = []
+                for elem in root.iter():
+                    if elem.tag.endswith("}t") or elem.tag.endswith("t"):
+                        if elem.text:
+                            texts.append(elem.text)
+                docx_text = " ".join(texts)
+                return {"type": "text", "text": docx_text}
+            except Exception as e:
+                print(f"Error extracting DOCX text: {e}")
+                return None
+        return None
+    except Exception as e:
+        print(f"Error downloading or parsing CV file from {cv_url}: {e}")
+        return None
+
+
+def _gemini_cv_screen_payload(job_description, cv_text, extracted_file=None):
+    if extracted_file and extracted_file["type"] == "pdf":
+        import base64
+        pdf_base64 = base64.b64encode(extracted_file["bytes"]).decode("utf-8")
+        contents = [{
+            "role": "user",
+            "parts": [
+                {
+                    "inlineData": {
+                        "mimeType": "application/pdf",
+                        "data": pdf_base64
+                    }
+                },
+                {
+                    "text": f"Yêu cầu công việc (JD):\n{job_description}\n\nNội dung tài liệu của ứng viên nằm trong file PDF đính kèm ở trên. Hãy kiểm tra xem đây có phải là CV/Resume hợp lệ không, và nếu có thì đánh giá so với JD."
+                }
+            ],
+        }]
+    else:
+        text_to_eval = cv_text
+        if extracted_file and extracted_file["type"] == "text":
+            text_to_eval = extracted_file["text"]
+            
+        contents = [{
+            "role": "user",
+            "parts": [{
+                "text": f"Yêu cầu công việc (JD):\n{job_description}\n\nNội dung tài liệu của ứng viên:\n{text_to_eval}"
+            }],
+        }]
+
+    return {
+        "systemInstruction": {
+            "parts": [{"text": _cv_screening_system_prompt()}]
+        },
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 2000,
+            "responseMimeType": "application/json",
+            "responseSchema": CV_SCREENING_SCHEMA,
+        },
+    }
+
+
+def call_gemini_cv_screen(job_description, cv_text, cv_url=None):
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    
+    extracted_file = _download_and_extract_cv(cv_url) if cv_url else None
+    payload = _gemini_cv_screen_payload(job_description, cv_text, extracted_file)
+    
+    request = urllib.request.Request(
+        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        provider_response = json.loads(response.read().decode("utf-8"))
+    return json.loads(_extract_gemini_text(provider_response))
+
+
+def _get_interview_system_instruction(job_title: str, job_description: str, cv_text: str, custom_questions: list) -> str:
+    custom_questions_str = "\n".join([f"- {q}" for q in custom_questions]) if custom_questions else "Không có câu hỏi riêng."
+    base_instruction = f"""
+Bạn là một AI Interviewer chuyên nghiệp, lịch thiệp và dày dạn kinh nghiệm quản lý trong ngành F&B (Nhà hàng - Cà phê - Khách sạn). Bạn đang phỏng vấn ứng viên cho vị trí: {job_title}.
+
+Thông tin công việc (JD):
+{job_description}
+
+Thông tin CV của ứng viên:
+{cv_text}
+
+Câu hỏi riêng bắt buộc từ Nhà tuyển dụng (Employer):
+{custom_questions_str}
+
+Nội dung và Mục tiêu Phỏng vấn:
+1. **Tìm hiểu Kinh nghiệm đã làm:** Hỏi ứng viên về kinh nghiệm thực tế tại các vị trí F&B trước đây, vai trò và môi trường làm việc cũ.
+2. **Xử lý Tình huống Thực tế:** Đặt câu hỏi tình huống thực tiễn ngành F&B (ví dụ: khách chê món ăn/đồ uống có vấn đề, đông khách giờ cao điểm và thiếu người, xung đột với đồng nghiệp trong ca).
+3. **Đặt Câu hỏi từ Employer:** Phải đưa các câu hỏi riêng của Employer vào đúng lượt đi.
+
+Quy tắc giao tiếp (BẮT BUỘC):
+1. Nói tiếng Việt tự nhiên, ấm áp, lịch sự, đóng vai trò như một quản lý/chủ quán thực thụ đang trò chuyện trực tiếp.
+2. Bạn phải lắng nghe và đọc kỹ câu trả lời của ứng viên ở mỗi lượt. Luôn nhận xét ngắn gọn, tự nhiên (thể hiện sự khích lệ hoặc công nhận câu trả lời cũ) trước khi đặt câu hỏi mới.
+3. CHỈ ĐẶT 1 CÂU HỎI duy nhất ở mỗi lượt. Tuyệt đối không hỏi dồn dập nhiều câu cùng một lúc.
+4. Ở mỗi lượt hội thoại, hệ thống sẽ gửi câu trả lời kèm theo "[Chỉ đạo dành riêng cho lượt này của Người phỏng vấn]". Bạn phải tuân thủ nghiêm ngặt chỉ đạo đó để đặt câu hỏi tương ứng (ví dụ: chào hỏi ở lượt đầu, hỏi câu hỏi chuyên môn/tình huống ở lượt kế tiếp, hỏi câu hỏi riêng từ Employer, hoặc cảm ơn kết thúc).
+5. TƯƠNG TÁC CÓ CẢM XÚC & ĐỒNG CẢM SÂU SẮC: Thể hiện sự đồng cảm ấm áp khi ứng viên chia sẻ về những vất vả của ca làm F&B và tán thưởng chân thành đối với những thành tích tốt của họ.
+6. THỰC HIỆN YÊU CẦU ĐƠN GIẢN: Nếu ứng viên có yêu cầu đơn giản như nhờ nói lại câu hỏi, giải thích thêm hay đổi câu hỏi, hãy thực hiện ngay lập tức một cách thân thiện.
+7. PHÁT HIỆN ỨNG VIÊN DÙNG AI: Nếu nghi ngờ ứng viên dùng AI (ChatGPT/Gemini) để trả lời phỏng vấn (cấu trúc gạch đầu dòng tự động, dài dòng, sáo rỗng), hãy hỏi thêm câu hỏi phụ đào sâu rất cụ thể về trải nghiệm thực tế để kiểm chứng.
+8. XỬ LÝ NGÔN TỪ KHÔNG CHUẨN MỰC: Nếu ứng viên dùng từ ngữ thô tục, vô lễ hoặc hành vi phi đạo đức, hãy giữ sự bình tĩnh, lịch sự của người phỏng vấn và hướng câu chuyện quay lại chủ đề chính.
+"""
+    if not _FNB_DATASET_AVAILABLE:
+        return base_instruction
+    try:
+        role = fnb_dataset.get_role_for_title(job_title)
+        dataset_block = fnb_dataset.build_dataset_prompt_block(role)
+        if dataset_block:
+            return f"{base_instruction}\n{dataset_block}"
+        return base_instruction
+    except Exception as e:
+        print(f"Error enriching system instruction with dataset: {e}")
+        return base_instruction
+
+
+def call_gemini_interview_start(job_title, job_description, cv_text, custom_questions):
+    system_instruction = _get_interview_system_instruction(
+        job_title, job_description, cv_text, custom_questions
+    )
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    
+    prompt = f"""
+[Ứng viên bắt đầu vào phòng phỏng vấn]
+"Xin chào, tôi đã sẵn sàng. Hãy bắt đầu buổi phỏng vấn."
+
+[Chỉ đạo dành riêng cho lượt này]:
+Hãy gửi lời chào mừng ứng viên thân thiện, nêu rõ vị trí ứng tuyển "{job_title}", và yêu cầu ứng viên giới thiệu ngắn gọn bản thân cùng kinh nghiệm nổi bật nhất của họ.
+"""
+    
+    payload = {
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        },
+        "contents": [{
+            "role": "user",
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1000,
+        }
+    }
+    
+    request = urllib.request.Request(
+        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        provider_response = json.loads(response.read().decode("utf-8"))
+    
+    return _extract_gemini_text(provider_response)
+
+
+def call_gemini_interview_respond(system_instruction, messages, steered_prompt):
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    
+    contents = []
+    for msg in messages:
+        contents.append({
+            "role": msg["role"],
+            "parts": [{"text": msg["parts"][0]["text"]}]
+        })
+    
+    contents.append({
+        "role": "user",
+        "parts": [{"text": steered_prompt}]
+    })
+    
+    payload = {
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        },
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1000,
+        }
+    }
+    
+    request = urllib.request.Request(
+        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        provider_response = json.loads(response.read().decode("utf-8"))
+    
+    return _extract_gemini_text(provider_response)
+
+
+def call_gemini_interview_report(job_title, job_description, cv_text, conversation_text, rubric_block):
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    
+    prompt = f"""
+Bạn là một AI Interviewer chuyên nghiệp kiêm chuyên gia đánh giá tuyển dụng ngành F&B (Nhà hàng, Quán ăn, Cửa hàng Cafe).
+Dưới đây là lịch sử buổi phỏng vấn trực tiếp giữa bạn và ứng viên cho vị trí {job_title}.
+
+Thông tin công việc (JD):
+{job_description}
+
+CV của ứng viên:
+{cv_text}
+
+Lịch sử phỏng vấn chi tiết:
+{conversation_text}
+
+Nhiệm vụ của bạn:
+Hãy đánh giá kết quả phỏng vấn một cách khách quan, nghiêm túc và chính xác theo các tiêu chí và khung điểm quy định dưới đây.
+
+HƯỚNG DẪN CHẤM ĐIỂM CHI TIẾT (0-100 điểm cho mỗi phần):
+1. **past_experience_score (Điểm đánh giá về kinh nghiệm làm việc ngành F&B):** Đánh giá dựa trên việc ứng viên đã từng làm các công việc F&B tương tự trong quá khứ hay chưa, có hiểu tính chất công việc không.
+2. **situation_handling_score (Điểm giải quyết và xử lý tình huống thực tế):** Đánh giá cách ứng viên ứng biến, xử lý các tình huống giả định hoặc sự cố (ví dụ: phục vụ chậm, khách phàn nàn, áp lực giờ cao điểm).
+3. **operations_score (Điểm quy trình vận hành và tác phong làm việc):** Đánh giá tính kỷ luật, giờ giấc ca kíp, quy tắc vệ sinh an toàn thực phẩm, thái độ dịch vụ.
+4. **custom_questions_score (Điểm trả lời các câu hỏi riêng từ Employer):** Đánh giá mức độ trả lời chính xác, đầy đủ các câu hỏi bắt buộc do Nhà tuyển dụng đề ra. (Nếu Employer không có câu hỏi riêng, cho điểm mặc định bằng điểm trung bình cộng của các phần khác).
+5. **total_score (Tổng điểm trung bình):** Tổng điểm trung bình phản ánh chính xác năng lực tổng thể của ứng viên.
+
+LƯU Ý QUAN TRỌNG VỀ ĐÁNH GIÁ ĐIỂM SỐ (BẮT BUỘC TUÂN THỦ):
+- Điểm số phỏng vấn phải phản ánh chính xác chất lượng câu trả lời của ứng viên. Không được cho điểm cao mang tính động viên hoặc mặc định.
+- **Khung điểm DƯỚI 40 (Chống chỉ định/Không đạt):** 
+  Nếu ứng viên có thái độ thiếu nghiêm túc, cợt nhả, trả lời cộc lốc hoặc vô nghĩa (ví dụ: trả lời 'Không', 'Không biết', '...', hoặc câu trả lời chỉ có vài từ thiếu hợp tác), hoặc hoàn toàn không trả lời được các câu hỏi cơ bản và câu hỏi riêng của Nhà tuyển dụng. Hoặc nếu ứng viên sử dụng ngôn từ không chuẩn mực/thô tục/vô lễ, hay chia sẻ hành vi vi phạm đạo đức nghề nghiệp nghiêm trọng (như ăn cắp, lừa dối, phá hoại).
+- **Khung điểm từ 40 đến 69 (Trung bình / Cần cân nhắc thêm):**
+  Ứng viên trả lời nghiêm túc, có cố gắng trả lời đầy đủ nhưng câu trả lời còn ngắn gọn, thiếu chiều sâu thực tế, hoặc còn lúng túng trước câu hỏi tình huống hoặc câu hỏi riêng của Nhà tuyển dụng. Hoặc nếu phát hiện ứng viên có hành vi sử dụng AI/chatbot khác để trả lời câu hỏi (cần hạ điểm toàn bộ xuống dưới 50).
+- **Khung điểm từ 70 đến 100 (Đạt yêu cầu / Khuyên dùng):**
+  Ứng viên có thái độ chuyên nghiệp, trả lời đầy đủ, chi tiết, thể hiện rõ năng lực chuyên môn, kinh nghiệm thực tế phù hợp với JD và trả lời thuyết phục các câu hỏi riêng bắt buộc từ Nhà tuyển dụng. Tuyệt đối không có dấu hiệu sử dụng AI hoặc vi phạm đạo đức/tác phong.
+
+Nhiệm vụ đánh giá chi tiết:
+1. Phân tích thái độ, tính chuyên nghiệp, sự hợp tác của ứng viên.
+2. Đánh giá kinh nghiệm, xử lý tình huống và vận hành F&B dựa trên câu hỏi chuyên môn/CV.
+3. Kiểm tra xem ứng viên có trả lời và đáp ứng tốt các câu hỏi riêng bắt buộc từ Nhà tuyển dụng không.
+4. PHÁT HIỆN NGÔN TỪ KHÔNG CHUẨN MỰC & VI PHẠM ĐẠO ĐỨC: Kiểm tra kỹ xem ứng viên có sử dụng từ ngữ thô tục, vô lễ hoặc kể các hành vi vi phạm đạo đức nghề nghiệp F&B (ăn cắp tiền, phá hoại, lừa dối, gây hại cho khách/đồng nghiệp). Nếu có, bắt buộc chấm toàn bộ các điểm số thành phần và tổng kết (`total_score`) xuống DƯỚI 40 điểm (từ 0 đến 35 điểm), đặt `recommend_to_employer` là False, ghi rõ hành vi vi phạm đạo đức này trong `weaknesses` và giải thích lý do cụ thể trong `reason`.
+5. PHÁT HIỆN SỬ DỤNG AI ĐỂ TRẢ LỜI: Kiểm tra xem ứng viên có dấu hiệu sao chép câu trả lời từ AI/chatbot khác hay không (dấu hiệu: câu trả lời cực kỳ dài, cấu trúc gạch đầu dòng hoàn hảo, dùng từ ngữ chatbot học thuật, thiếu chi tiết cá nhân thực tế). Nếu phát hiện hoặc nghi ngờ mạnh mẽ hành vi này, bắt buộc hạ toàn bộ các điểm số xuống DƯỚI 50 điểm (từ 0 đến 45 điểm), đặt `recommend_to_employer` là False, ghi rõ nghi vấn sử dụng AI trong `weaknesses` và giải thích lý do cụ thể trong `reason`.
+6. Cho điểm tổng kết (`total_score`) từ 0-100. Đề xuất `recommend_to_employer` là True nếu điểm từ 70 trở lên và không vi phạm quy tắc đạo đức hay dùng AI, ngược lại False.
+7. Tổng hợp các điểm mạnh, điểm yếu lớn và nêu lý do chi tiết giải thích cho điểm số đó.
+{rubric_block}
+Hãy trả về kết quả chính xác theo định dạng JSON với cấu trúc quy định trong schema.
+"""
+
+    payload = {
+        "contents": [{
+            "role": "user",
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 2000,
+            "responseMimeType": "application/json",
+            "responseSchema": INTERVIEW_REPORT_SCHEMA,
+        }
+    }
+    
+    request = urllib.request.Request(
+        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        provider_response = json.loads(response.read().decode("utf-8"))
+    
+    return json.loads(_extract_gemini_text(provider_response))
+
+
+def _generate_interview_report_lambda(session):
+    try:
+        messages = session["messages"]
+        last_answer = session["answers"][-1] if session["answers"] else ""
+        
+        conversation_text = ""
+        for idx, msg in enumerate(messages):
+            role_label = "Interviewer (AI)" if msg["role"] == "model" else "Candidate"
+            parts_text = msg["parts"][0]["text"] if isinstance(msg["parts"][0], dict) else msg["parts"][0]
+            conversation_text += f"{role_label}: {parts_text}\n"
+        
+        if last_answer and not conversation_text.endswith(f"Candidate: {last_answer}\n"):
+            conversation_text += f"Candidate: {last_answer}\n"
+        
+        rubric_block = ""
+        if _FNB_DATASET_AVAILABLE and hasattr(fnb_dataset, "SCORING_RUBRIC"):
+            rubric_block = (
+                "\n\nRUBRIC CHẤM ĐIỂM CHUẨN HÓA (tham chiếu bắt buộc, "
+                "bổ sung cho hướng dẫn chấm điểm chi tiết ở trên):\n"
+                f"{fnb_dataset.SCORING_RUBRIC}\n"
+            )
+            
+        try:
+            return call_gemini_interview_report(
+                session["job_title"], session["job_description"], session["cv_text"], conversation_text, rubric_block
+            )
+        except Exception as e:
+            print(f"Error calling interview report Gemini API: {e}")
+            return {
+                "total_score": 60,
+                "past_experience_score": 60,
+                "situation_handling_score": 60,
+                "operations_score": 60,
+                "custom_questions_score": 60,
+                "strengths": ["Ứng viên đã hoàn thành buổi phỏng vấn"],
+                "weaknesses": [
+                    "Lỗi chấm điểm của AI: hệ thống không thể phân tích (parse) "
+                    "kết quả JSON chấm điểm do mô hình trả về, nên điểm số tạm "
+                    "thời mang tính trung lập và cần đánh giá lại thủ công."
+                ],
+                "recommend_to_employer": False,
+                "reason": f"Buổi phỏng vấn đã hoàn tất nhưng hệ thống gặp lỗi khi chấm điểm JSON từ AI: {str(e)}."
+            }
+    except Exception as e:
+        print(f"Error generating interview report lambda: {e}")
+        return {
+            "total_score": 60,
+            "past_experience_score": 60,
+            "situation_handling_score": 60,
+            "operations_score": 60,
+            "custom_questions_score": 60,
+            "strengths": ["Nộp bài đầy đủ"],
+            "weaknesses": ["Lỗi hệ thống trong quá trình chấm điểm AI"],
+            "recommend_to_employer": True,
+            "reason": f"Đã hoàn thành phỏng vấn nhưng gặp lỗi hệ thống: {str(e)}."
+        }
+
+
 def lambda_handler(event, context):
     request_id = getattr(context, "aws_request_id", None) or str(uuid.uuid4())
     method, path = _method_and_path(event)
@@ -991,7 +1614,11 @@ def lambda_handler(event, context):
         return _response(event, 200, {"ok": True})
     if method == "GET" and path == "/health":
         return _response(event, 200, {"status": "ok", "provider": "gemini"})
-    if method != "POST" or path not in {"/cv/analyze", "/cv/generate", "/cv/recommend-candidates", "/job/suggest-jd", "/candidate/recommend-jobs"}:
+    if method != "POST" or path not in {
+        "/cv/analyze", "/cv/generate", "/cv/recommend-candidates", 
+        "/job/suggest-jd", "/candidate/recommend-jobs",
+        "/api/v1/cv/screen", "/api/v1/interview/start", "/api/v1/interview/respond"
+    }:
         return _response(event, 404, {
             "error": {"code": "NOT_FOUND", "message": "Route not found."},
             "request_id": request_id,
@@ -1162,7 +1789,7 @@ def lambda_handler(event, context):
                 "processing_ms": result["metadata"]["processing_ms"],
             }))
             return _response(event, 200, result)
-        else:
+        elif path == "/cv/generate":
             validated = validate_generate_payload(_parse_body(event))
             started = time.monotonic()
             api_key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -1215,6 +1842,162 @@ def lambda_handler(event, context):
                 "processing_ms": processing_ms,
             }))
             return _response(event, 200, ai_result)
+
+        elif path == "/api/v1/cv/screen":
+            body = _parse_body(event)
+            job_description = body.get("job_description", "")
+            cv_text = body.get("cv_text", "")
+            cv_url = body.get("cv_url", "")
+            ai_result = call_gemini_cv_screen(job_description, cv_text, cv_url)
+            return _response(event, 200, ai_result)
+
+        elif path == "/api/v1/interview/start":
+            body = _parse_body(event)
+            job_title = body.get("job_title", "")
+            job_description = body.get("job_description", "")
+            cv_text = body.get("cv_text", "")
+            custom_questions = body.get("custom_questions", [])
+            
+            user_id = claims.get("sub")
+            if not user_id:
+                raise RequestError(401, "UNAUTHORIZED", "User not logged in.")
+            
+            session_id = f"sess_{uuid.uuid4().hex[:16]}"
+            first_question = call_gemini_interview_start(
+                job_title, job_description, cv_text, custom_questions
+            )
+            
+            turns = ["Greeting and Self-Introduction", "Technical Question based on CV/JD"]
+            if custom_questions:
+                for q in custom_questions:
+                    turns.append(f"Custom Question: {q}")
+            else:
+                turns.append("Salary and Work Expectations")
+            turns.append("Candidate Questions & Wrap up")
+            
+            session = {
+                "session_id": session_id,
+                "job_title": job_title,
+                "job_description": job_description,
+                "cv_text": cv_text,
+                "custom_questions": custom_questions,
+                "current_question_index": 1,
+                "max_questions": len(turns),
+                "messages": [
+                    {"role": "model", "parts": [{"text": first_question}]}
+                ],
+                "turns": turns,
+                "answers": []
+            }
+            
+            save_active_session(user_id, session)
+            return _response(event, 200, {
+                "session_id": session_id,
+                "question": first_question
+            })
+
+        elif path == "/api/v1/interview/respond":
+            body = _parse_body(event)
+            session_id = body.get("session_id")
+            answer = body.get("answer", "")
+            
+            user_id = claims.get("sub")
+            if not user_id:
+                raise RequestError(401, "UNAUTHORIZED", "User not logged in.")
+            
+            session = get_active_session(user_id)
+            if not session or session.get("session_id") != session_id:
+                return _response(event, 200, {
+                    "question": "Không tìm thấy phiên phỏng vấn. Vui lòng bắt đầu lại.",
+                    "finished": True,
+                    "report": None
+                })
+            
+            session["answers"].append(answer)
+            current_idx = session["current_question_index"]
+            max_questions = session["max_questions"]
+            turns = session.get("turns", [])
+            
+            if current_idx >= max_questions:
+                req_type = _detect_conversational_request(answer)
+                if req_type in ["repeat", "clarify"] and current_idx > 0:
+                    pass
+                else:
+                    report = _generate_interview_report_lambda(session)
+                    delete_active_session(user_id)
+                    return _response(event, 200, {
+                        "question": None,
+                        "finished": True,
+                        "report": report
+                    })
+            
+            req_type = _detect_conversational_request(answer)
+            is_repeat_or_clarify = False
+            steered_prompt = ""
+            
+            if req_type in ["repeat", "clarify"] and current_idx > 0:
+                is_repeat_or_clarify = True
+                prev_turn = turns[current_idx - 1]
+                if req_type == "repeat":
+                    steered_prompt = f"""
+[Ứng viên yêu cầu]: "{answer}"
+[YÊU CẦU BẮT BUỘC]: Ứng viên yêu cầu lặp lại câu hỏi vừa rồi. 
+Bạn hãy bày tỏ sự lịch sự, vui vẻ (ví dụ: "Dạ vâng...", "Tất nhiên rồi bạn...") và lặp lại câu hỏi của lượt trước liên quan đến chủ đề: "{prev_turn}". 
+TUYỆT ĐỐI KHÔNG chuyển sang câu hỏi tiếp theo và không hỏi chủ đề mới.
+"""
+                else:
+                    steered_prompt = f"""
+[Ứng viên yêu cầu]: "{answer}"
+[YÊU CẦU BẮT BUỘC]: Ứng viên yêu cầu giải thích hoặc làm rõ câu hỏi vừa rồi. 
+Bạn hãy bày tỏ sự sẵn lòng giúp đỡ và giải thích, làm rõ hoặc diễn đạt lại câu hỏi liên quan đến chủ đề: "{prev_turn}" bằng ngôn từ đơn giản, dễ hiểu hơn. 
+TUYỆT ĐỐI KHÔNG chuyển sang câu hỏi tiếp theo và không hỏi chủ đề mới.
+"""
+            elif req_type == "skip":
+                current_idx = session["current_question_index"]
+                if current_idx < max_questions:
+                    next_turn_instruction = _get_turn_instruction(current_idx, turns)
+                    steered_prompt = f"""
+[Ứng viên yêu cầu]: "{answer}"
+[YÊU CẦU BẮT BUỘC]: Ứng viên yêu cầu bỏ qua câu hỏi vừa rồi. Bạn hãy lịch sự đồng ý (ví dụ: "Được chứ, mình qua câu hỏi tiếp theo nhé...") và chuyển ngay sang câu hỏi mới dưới đây:
+{next_turn_instruction}
+"""
+                else:
+                    report = _generate_interview_report_lambda(session)
+                    delete_active_session(user_id)
+                    return _response(event, 200, {
+                        "question": None,
+                        "finished": True,
+                        "report": report
+                    })
+            
+            if not steered_prompt:
+                turn_instruction = _get_turn_instruction(current_idx, turns)
+                steered_prompt = f"""
+[Ứng viên trả lời]:
+"{answer}"
+
+{turn_instruction}
+"""
+            
+            system_instruction = _get_interview_system_instruction(
+                session["job_title"], session["job_description"], session["cv_text"], session["custom_questions"]
+            )
+            next_question = call_gemini_interview_respond(
+                system_instruction, session["messages"], steered_prompt
+            )
+            
+            session["messages"].append({"role": "user", "parts": [{"text": answer}]})
+            session["messages"].append({"role": "model", "parts": [{"text": next_question}]})
+            
+            if not is_repeat_or_clarify:
+                session["current_question_index"] += 1
+            
+            save_active_session(user_id, session)
+            return _response(event, 200, {
+                "question": next_question,
+                "finished": False,
+                "report": None
+            })
     except RequestError as error:
         return _response(event, error.status_code, {
             "error": {"code": error.code, "message": error.message},

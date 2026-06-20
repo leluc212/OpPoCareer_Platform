@@ -181,6 +181,8 @@ Ensure-Route "POST /api/v1/interview/start" $true
 Ensure-Route "OPTIONS /api/v1/interview/start" $false
 Ensure-Route "POST /api/v1/interview/respond" $true
 Ensure-Route "OPTIONS /api/v1/interview/respond" $false
+Ensure-Route "POST /api/v1/interview/upload-audio" $true
+Ensure-Route "OPTIONS /api/v1/interview/upload-audio" $false
 Ensure-Route "GET /health" $false
 
 $PreviousErrorActionPreference = $ErrorActionPreference

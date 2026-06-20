@@ -237,6 +237,58 @@ export const createEmployerApplicationNotification = async (payload) => {
 };
 
 /**
+ * Create notification when candidate completes AI Interview (Round 2)
+ * @param {object} payload - { employerId, candidateId, candidateName, jobTitle, companyName, jobId }
+ */
+export const createEmployerAiInterviewCompletedNotification = async (payload) => {
+  const {
+    employerId,
+    candidateId,
+    candidateName,
+    jobTitle,
+    companyName,
+    jobId
+  } = payload;
+
+  if (!employerId) {
+    const error = new Error('❌ CRITICAL: employerId is required but was not provided!');
+    console.error(error);
+    throw error;
+  }
+
+  const safeCandidateName = candidateName || 'Ứng viên';
+  const safeJobTitle = jobTitle || 'vị trí mới';
+  const safeCompanyName = companyName || 'công ty của bạn';
+
+  const notification = {
+    type: 'ai_interview_complete',
+    title: 'Kết quả phỏng vấn AI hoàn thành',
+    titleEn: 'AI Interview Completed',
+    message: `Ứng viên ${safeCandidateName} đã hoàn thành buổi phỏng vấn AI cho vị trí ${safeJobTitle}.`,
+    messageEn: `Candidate ${safeCandidateName} has completed the AI interview for ${safeJobTitle}.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: candidateId || 'candidate',
+    senderName: safeCandidateName,
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      candidateId: candidateId || null,
+      candidateName: safeCandidateName,
+      isQuickJob: false
+    },
+    icon: 'volume-2',
+    color: '#8b5cf6',
+    actionUrl: '/employer/standard-jobs',
+    actionText: 'Xem kết quả',
+    actionTextEn: 'View Results'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
  * Create notification when employer accepts candidate CV (quick job)
  * @param {object} payload - Candidate notification data
  */
@@ -328,6 +380,104 @@ export const createCandidateCvRejectedNotification = async (payload) => {
     color: '#ef4444',
     actionUrl: '/candidate/jobs?tab=shift',
     actionText: 'Xem việc làm khác',
+    actionTextEn: 'Browse other jobs'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when employer approves candidate CV for a standard job (directing to AI interview within 2 days)
+ * @param {object} payload - Candidate notification data
+ */
+export const createCandidateCvApprovedNotification = async (payload) => {
+  const {
+    candidateId,
+    jobTitle,
+    companyName,
+    jobId,
+    employerId
+  } = payload;
+
+  if (!candidateId) {
+    const error = new Error('❌ CRITICAL: candidateId is required but was not provided!');
+    console.error(error);
+    throw error;
+  }
+
+  const safeJobTitle = jobTitle || 'công việc tiêu chuẩn';
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'success',
+    title: 'CV của bạn đã được duyệt vòng 1',
+    titleEn: 'Your CV has been approved (Round 1)',
+    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã được duyệt. Trong vòng 2 ngày bạn phải vào hệ thống để phỏng vấn với AI.`,
+    messageEn: `Your CV for the position ${safeJobTitle} at ${safeCompanyName} has been approved. You must enter the platform to interview with AI within 2 days.`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: employerId || 'employer',
+    senderName: safeCompanyName,
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      employerId: employerId || null,
+      isQuickJob: false
+    },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '/candidate/dashboard',
+    actionText: 'Phỏng vấn với AI ngay',
+    actionTextEn: 'Start AI Interview'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when employer rejects candidate CV for a standard job
+ * @param {object} payload - Candidate notification data
+ */
+export const createCandidateCvRejectedStandardNotification = async (payload) => {
+  const {
+    candidateId,
+    jobTitle,
+    companyName,
+    jobId,
+    employerId
+  } = payload;
+
+  if (!candidateId) {
+    const error = new Error('❌ CRITICAL: candidateId is required but was not provided!');
+    console.error(error);
+    throw error;
+  }
+
+  const safeJobTitle = jobTitle || 'công việc tiêu chuẩn';
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'system',
+    title: 'Hồ sơ tuyển dụng của bạn không được duyệt',
+    titleEn: 'Your CV was not accepted',
+    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} chưa được chấp nhận. Bạn có thể cập nhật hồ sơ và tiếp tục ứng tuyển các công việc phù hợp khác.`,
+    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} was not accepted. You can update your profile and apply for other suitable jobs.`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: employerId || 'employer',
+    senderName: safeCompanyName,
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      employerId: employerId || null,
+      isQuickJob: false
+    },
+    icon: 'x-circle',
+    color: '#ef4444',
+    actionUrl: '/candidate/jobs',
+    actionText: 'Tìm việc làm khác',
     actionTextEn: 'Browse other jobs'
   };
 
@@ -1222,6 +1372,7 @@ export default {
   createWithdrawalApprovedNotification,
   createWithdrawalRejectedNotification,
   createEmployerApplicationNotification,
+  createEmployerAiInterviewCompletedNotification,
   createCandidateCvAcceptedNotification,
   createCandidateCvRejectedNotification,
   createJobApprovedNotification,

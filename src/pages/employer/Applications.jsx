@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import StatusBadge from '../../components/StatusBadge';
 import TableFilter from '../../components/TableFilter';
 import Modal from '../../components/Modal';
-import { Eye, CheckCircle, Star, Mail, Phone, MapPin, Calendar, Award, Briefcase, FileText, Clock, Users, Newspaper, Edit, Trash2, TrendingUp, Plus, X, XCircle, Wallet, Banknote, AlertCircle, Save, Download, MessageSquare, Search, Sparkles, ShieldCheck } from 'lucide-react';
+import { Eye, CheckCircle, Star, Mail, Phone, MapPin, Calendar, Award, Briefcase, FileText, Clock, Users, Newspaper, Edit, Trash2, TrendingUp, Plus, X, XCircle, Wallet, Banknote, AlertCircle, Save, Download, MessageSquare, Search, Sparkles, ShieldCheck, Play, Pause, Volume2 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { initializeMultipleSampleCVs } from '../../utils/sampleCVGenerator';
@@ -1429,6 +1429,152 @@ const FeedbackSection = styled.div`
   border-radius: 14px;
 `;
 
+const TabContainer = styled.div`
+  display: flex;
+  border-bottom: 2px solid ${props => props.theme.colors.border};
+  margin-bottom: 20px;
+  gap: 24px;
+`;
+
+const TabButton = styled.button`
+  padding: 12px 4px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: ${props => props.$active ? '#1e40af' : '#64748b'};
+  border: none;
+  background: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+  outline: none;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #1e40af;
+    border-radius: 100px;
+    opacity: ${props => props.$active ? 1 : 0};
+    transition: all 0.2s;
+  }
+  
+  &:hover {
+    color: #1e40af;
+  }
+`;
+
+const AudioPlayerContainer = styled.div`
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+  border: 1.5px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const AudioControlsRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+`;
+
+const PlayButton = styled.button`
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+  transition: all 0.2s;
+  outline: none;
+  flex-shrink: 0;
+  
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+  
+  &:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 18px rgba(30, 64, 175, 0.4);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
+const RangeInput = styled.input`
+  flex: 1;
+  height: 6px;
+  border-radius: 100px;
+  background: #E2E8F0;
+  outline: none;
+  cursor: pointer;
+  accent-color: #1e40af;
+  -webkit-appearance: none;
+  
+  &::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 100px;
+  }
+  
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #1e40af;
+    margin-top: -4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.1s;
+  }
+  
+  &:hover::-webkit-slider-thumb {
+    transform: scale(1.2);
+  }
+`;
+
+const TimeDisplay = styled.div`
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  min-width: 80px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+`;
+
+const StatusBanner = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14.5px;
+  margin-top: 24px;
+  
+  background: ${props => props.$status === 'approved' ? '#D1FAE5' : '#FEE2E2'};
+  color: ${props => props.$status === 'approved' ? '#065F46' : '#991B1B'};
+  border: 1.5px solid ${props => props.$status === 'approved' ? '#34D399' : '#F87171'};
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+`;
+
 const FeedbackHeader = styled.div`
   display: flex;
   align-items: center;
@@ -1593,9 +1739,98 @@ const StarRating = ({ rating }) => (
   </StarRow>
 );
 
+// Interview Audio Player Component
+const InterviewAudioPlayer = ({ audioUrl }) => {
+  const audioRef = React.useRef(null);
+  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [currentTime, setCurrentTime] = React.useState(0);
+  const [duration, setDuration] = React.useState(0);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(err => console.log('Audio playback error:', err));
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return;
+    setCurrentTime(audioRef.current.currentTime);
+  };
+
+  const handleLoadedMetadata = () => {
+    if (!audioRef.current) return;
+    setDuration(audioRef.current.duration || 0);
+  };
+
+  const handleSeek = (e) => {
+    if (!audioRef.current) return;
+    const time = parseFloat(e.target.value);
+    audioRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const formatTime = (time) => {
+    if (isNaN(time) || time === Infinity) return '0:00';
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  return (
+    <AudioPlayerContainer>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Volume2 size={16} color="#1e40af" />
+          <span>Ghi âm cuộc phỏng vấn giữa ứng viên & AI</span>
+        </div>
+        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+          Nghe lại toàn bộ câu hỏi của AI và câu trả lời của ứng viên
+        </div>
+      </div>
+      
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={() => setIsPlaying(false)}
+        preload="metadata"
+      />
+      
+      <AudioControlsRow>
+        <PlayButton type="button" onClick={togglePlay} title={isPlaying ? "Tạm dừng" : "Phát"}>
+          {isPlaying ? <Pause fill="white" size={18} /> : <Play fill="white" size={18} style={{ marginLeft: '2px' }} />}
+        </PlayButton>
+        
+        <RangeInput
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={handleSeek}
+        />
+        
+        <TimeDisplay>
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </TimeDisplay>
+      </AudioControlsRow>
+    </AudioPlayerContainer>
+  );
+};
+
 // Profile Detail Modal Component
-const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
+const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onApprove, onReject, initialTab = 'profile' }) => {
   const { language } = useLanguage();
+  const [activeTab, setActiveTab] = React.useState(initialTab); // 'profile' | 'interview'
+  const [feedback, setFeedback] = React.useState('');
+
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, candidate?.id]);
 
   const initials = candidate.candidate
     .split(' ')
@@ -1607,6 +1842,9 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
   const avgRating = candidate.reviews && candidate.reviews.length > 0
     ? (candidate.reviews.reduce((s, r) => s + r.rating, 0) / candidate.reviews.length)
     : null;
+
+  // Use a default sample interview audio if candidate doesn't have one
+  const audioUrl = candidate.aiInterviewAudio || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
 
   return (
     <>
@@ -1655,218 +1893,367 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
             </div>
           ) : (
             <>
-              {/* Contact Info */}
-              <ProfileSection>
-                <h3><FileText /> {language === 'vi' ? 'Thông tin liên hệ' : 'Contact'}</h3>
-                <InfoGrid>
-                  <InfoCard>
-                    <InfoIconBox><Mail /></InfoIconBox>
-                    <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Email' : 'Email'}</div>
-                      <div className="value">{candidate.candidateEmail || candidate.email}</div>
-                    </InfoItem>
-                  </InfoCard>
-                  <InfoCard>
-                    <InfoIconBox><Phone /></InfoIconBox>
-                    <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
-                      <div className="value">{candidate.phone && candidate.phone !== '-' ? candidate.phone : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
-                    </InfoItem>
-                  </InfoCard>
-                  <InfoCard>
-                    <InfoIconBox><MapPin /></InfoIconBox>
-                    <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</div>
-                      <div className="value">{candidate.location && candidate.location !== '-' ? candidate.location : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
-                    </InfoItem>
-                  </InfoCard>
-                  <InfoCard>
-                    <InfoIconBox><Calendar /></InfoIconBox>
-                    <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Thời gian ứng tuyển' : 'Applied'}</div>
-                      <div className="value">{candidate.applied}</div>
-                    </InfoItem>
-                  </InfoCard>
-                </InfoGrid>
-              </ProfileSection>
+              {/* Tab navigation */}
+              <TabContainer>
+                <TabButton
+                  $active={activeTab === 'profile'}
+                  onClick={() => setActiveTab('profile')}
+                >
+                  {language === 'vi' ? 'Hồ sơ ứng viên' : 'Candidate Profile'}
+                </TabButton>
+                <TabButton
+                  $active={activeTab === 'interview'}
+                  onClick={() => setActiveTab('interview')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Sparkles size={15} color={activeTab === 'interview' ? '#1e40af' : '#64748b'} />
+                  {language === 'vi' ? 'Phỏng vấn & Đánh giá AI' : 'Interview & AI Evaluation'}
+                </TabButton>
+              </TabContainer>
 
-              {/* AI Screening & Interview Evaluation */}
-              {(candidate.aiScreeningScore !== undefined || candidate.aiScreeningResult) && (
-                <ProfileSection style={{ background: '#F5F3FF', border: '1.5px solid #DDD6FE', borderRadius: '16px', padding: '20px', marginTop: '16px' }}>
-                  <h3 style={{ color: '#4C1D95', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #DDD6FE', paddingBottom: '10px', margin: '0 0 16px 0' }}>
-                    <Sparkles color="#8b5cf6" size={18} />
-                    <span>{language === 'vi' ? 'Đánh giá & Chọn lọc bằng AI' : 'AI Screening & Interview Evaluation'}</span>
-                  </h3>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-                    {/* Round 1: CV Screening */}
-                    <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
-                        <FileText size={14} />
-                        {language === 'vi' ? 'Vòng 1: Chọn lọc CV' : 'Round 1: CV Screening'}
-                      </h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '28px', fontWeight: '800', color: candidate.aiScreeningScore >= 60 ? '#059669' : '#DC2626' }}>
-                          {candidate.aiScreeningScore || '---'}
-                          <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>
-                        </div>
-                        <span style={{
-                          padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                          background: candidate.aiScreeningResult === 'pass' ? '#D1FAE5' : candidate.aiScreeningResult === 'review' ? '#FEF3C7' : '#FEE2E2',
-                          color: candidate.aiScreeningResult === 'pass' ? '#065F46' : candidate.aiScreeningResult === 'review' ? '#92400E' : '#991B1B',
-                          border: `1.5px solid ${candidate.aiScreeningResult === 'pass' ? '#34D399' : candidate.aiScreeningResult === 'review' ? '#FBBF24' : '#F87171'}`
-                        }}>
-                          {candidate.aiScreeningResult === 'pass' ? (language === 'vi' ? 'ĐẠT' : 'PASS') : candidate.aiScreeningResult === 'review' ? (language === 'vi' ? 'XEM XÉT' : 'REVIEW') : (language === 'vi' ? 'LOẠI' : 'FAIL')}
-                        </span>
-                      </div>
-                    </div>
+              {activeTab === 'profile' && (
+                <>
+                  {/* Contact Info */}
+                  <ProfileSection>
+                    <h3><FileText /> {language === 'vi' ? 'Thông tin liên hệ' : 'Contact'}</h3>
+                    <InfoGrid>
+                      <InfoCard>
+                        <InfoIconBox><Mail /></InfoIconBox>
+                        <InfoItem>
+                          <div className="label">{language === 'vi' ? 'Email' : 'Email'}</div>
+                          <div className="value">{candidate.candidateEmail || candidate.email}</div>
+                        </InfoItem>
+                      </InfoCard>
+                      <InfoCard>
+                        <InfoIconBox><Phone /></InfoIconBox>
+                        <InfoItem>
+                          <div className="label">{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
+                          <div className="value">{candidate.phone && candidate.phone !== '-' ? candidate.phone : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                        </InfoItem>
+                      </InfoCard>
+                      <InfoCard>
+                        <InfoIconBox><MapPin /></InfoIconBox>
+                        <InfoItem>
+                          <div className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</div>
+                          <div className="value">{candidate.location && candidate.location !== '-' ? candidate.location : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                        </InfoItem>
+                      </InfoCard>
+                      <InfoCard>
+                        <InfoIconBox><Calendar /></InfoIconBox>
+                        <InfoItem>
+                          <div className="label">{language === 'vi' ? 'Thời gian ứng tuyển' : 'Applied'}</div>
+                          <div className="value">{candidate.applied}</div>
+                        </InfoItem>
+                      </InfoCard>
+                    </InfoGrid>
+                  </ProfileSection>
 
-                    {/* Round 2: AI Interviewer */}
-                    <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
-                        <MessageSquare size={14} />
-                        {language === 'vi' ? 'Vòng 2: Phỏng vấn AI' : 'Round 2: AI Interview'}
-                      </h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '28px', fontWeight: '800', color: (candidate.aiInterviewScore && candidate.aiInterviewScore >= 60) ? '#059669' : '#DC2626' }}>
-                          {candidate.aiInterviewScore || '---'}
-                          {candidate.aiInterviewScore && <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>}
-                        </div>
-                        {candidate.aiInterviewScore && (
-                          <span style={{
-                            padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                            background: candidate.aiInterviewScore >= 60 ? '#D1FAE5' : '#FEE2E2',
-                            color: candidate.aiInterviewScore >= 60 ? '#065F46' : '#991B1B',
-                            border: `1.5px solid ${candidate.aiInterviewScore >= 60 ? '#34D399' : '#F87171'}`
-                          }}>
-                            {candidate.aiInterviewScore >= 60 ? (language === 'vi' ? 'KHUYÊN DÙNG' : 'RECOMMEND') : (language === 'vi' ? 'CÂN NHẮC' : 'HOLD')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  {/* CV Document view/download */}
+                  <ProfileSection>
+                    <h3><FileText /> {language === 'vi' ? 'Hồ sơ CV' : 'CV Document'}</h3>
+                    {candidate.cvUrl ? (
+                      <CVCard>
+                        <CVIconBox>
+                          <FileText />
+                        </CVIconBox>
+                        <CVInfo>
+                          <div className="cv-name">{candidate.cvFileName || (language === 'vi' ? 'Tài liệu CV' : 'CV Document')}</div>
+                          <div className="cv-meta">PDF • {language === 'vi' ? 'Tải trực tiếp từ hệ thống' : 'Direct download'}</div>
+                        </CVInfo>
+                        <CVDownloadButton
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => window.open(candidate.cvUrl, '_blank')}
+                        >
+                          <Download /> {language === 'vi' ? 'Tải CV' : 'Download'}
+                        </CVDownloadButton>
+                      </CVCard>
+                    ) : (
+                      <EmptyCV>
+                        <div className="icon">📄</div>
+                        <p>{language === 'vi' ? 'Ứng viên chưa tải lên CV dạng tệp.' : 'No CV file uploaded by candidate.'}</p>
+                      </EmptyCV>
+                    )}
+                  </ProfileSection>
 
-                  {/* AI Reason & Analysis */}
-                  {candidate.aiScreeningReason && (
-                    <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '12px' }}>
-                      <div style={{ fontWeight: '700', fontSize: '13.5px', color: '#475569', marginBottom: '6px' }}>
-                        {language === 'vi' ? 'Nhận xét tổng quan của AI:' : 'AI Overall Summary:'}
-                      </div>
-                      <p style={{ fontSize: '13px', color: '#1E293B', margin: 0, lineHeight: '1.6' }}>{candidate.aiScreeningReason}</p>
-                    </div>
+                  {/* Education & Experience */}
+                  <ProfileSection>
+                    <h3><Award /> {language === 'vi' ? 'Học vấn & Kinh nghiệm' : 'Education & Experience'}</h3>
+                    <InfoGrid>
+                      <InfoCard>
+                        <InfoIconBox><Award /></InfoIconBox>
+                        <InfoItem>
+                          <div className="label">{language === 'vi' ? 'Trình độ học vấn' : 'Education'}</div>
+                          <div className="value">{candidate.education && candidate.education !== '-' ? candidate.education : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                        </InfoItem>
+                      </InfoCard>
+                      <InfoCard>
+                        <InfoIconBox><Briefcase /></InfoIconBox>
+                        <InfoItem>
+                          <div className="label">{language === 'vi' ? 'Kinh nghiệm' : 'Experience'}</div>
+                          <div className="value">{candidate.experience && candidate.experience !== '-' ? candidate.experience : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                        </InfoItem>
+                      </InfoCard>
+                    </InfoGrid>
+                  </ProfileSection>
+
+                  {/* Skills */}
+                  {(candidate.skills && candidate.skills.length > 0) && (
+                    <ProfileSection>
+                      <h3><Star /> {language === 'vi' ? 'Kỹ năng' : 'Skills'}</h3>
+                      <SkillsWrap>
+                        {candidate.skills.map((skill, index) => (
+                          <SkillTag key={index}>{skill}</SkillTag>
+                        ))}
+                      </SkillsWrap>
+                    </ProfileSection>
                   )}
 
-                  {/* AI Report detail (strengths & weaknesses) */}
-                  {candidate.aiInterviewReport && (
-                    <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontWeight: '700', fontSize: '13.5px', color: '#475569', marginBottom: '10px' }}>
-                        {language === 'vi' ? 'Báo cáo chi tiết phỏng vấn:' : 'Interview Evaluation Detail:'}
-                      </div>
-                      {candidate.aiInterviewReport.strengths && candidate.aiInterviewReport.strengths.length > 0 && (
-                        <div style={{ marginBottom: '12px' }}>
-                          <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#059669', display: 'block', marginBottom: '4px' }}>✓ {language === 'vi' ? 'Điểm mạnh:' : 'Strengths:'}</span>
-                          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                            {candidate.aiInterviewReport.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                          </ul>
-                        </div>
-                      )}
-                      {candidate.aiInterviewReport.weaknesses && candidate.aiInterviewReport.weaknesses.length > 0 && (
-                        <div>
-                          <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#D97706', display: 'block', marginBottom: '4px' }}>⚠ {language === 'vi' ? 'Điểm cần cải thiện:' : 'Weaknesses / Areas of Improvement:'}</span>
-                          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
-                            {candidate.aiInterviewReport.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
+                  {/* Bio */}
+                  {(candidate.bio && candidate.bio !== '-') && (
+                    <ProfileSection>
+                      <h3><FileText /> {language === 'vi' ? 'Giới thiệu bản thân' : 'About'}</h3>
+                      <BioText>{candidate.bio}</BioText>
+                    </ProfileSection>
                   )}
-                </ProfileSection>
+
+                  {/* Lịch sử việc làm */}
+                  <ProfileSection>
+                    <h3><Briefcase /> {language === 'vi' ? 'Lịch sử việc làm' : 'Employment History'}</h3>
+                    {candidate.workHistory && candidate.workHistory.length > 0 ? (
+                      <WorkHistoryList>
+                        {candidate.workHistory.map((item, idx) => (
+                          <WorkHistoryCard key={item.id || idx}>
+                            <WorkHistoryHeader>
+                              <WorkHistoryInfo>
+                                <div className="job-title">{item.jobTitle}</div>
+                                <div className="company-date">
+                                  <span>{item.companyName}</span>
+                                  <span>•</span>
+                                  <span>
+                                    {new Date(item.completedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric'
+                                    })}
+                                  </span>
+                                </div>
+                              </WorkHistoryInfo>
+                            </WorkHistoryHeader>
+                            {item.employerRating && (
+                              <div style={{ marginTop: '10px' }}>
+                                <StarRating rating={item.employerRating.overall} />
+                                {item.employerRating.comment && (
+                                  <p style={{ fontSize: '13px', fontStyle: 'italic', margin: '6px 0 0 0', color: '#475569' }}>
+                                    "{item.employerRating.comment}"
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </WorkHistoryCard>
+                        ))}
+                      </WorkHistoryList>
+                    ) : (
+                      <EmptyWorkHistory>
+                        <div className="icon">💼</div>
+                        <p>{language === 'vi' ? 'Chưa có lịch sử làm việc nào.' : 'No work history available.'}</p>
+                      </EmptyWorkHistory>
+                    )}
+                  </ProfileSection>
+                </>
               )}
 
-              {/* Education & Experience */}
-              <ProfileSection>
-                <h3><Award /> {language === 'vi' ? 'Học vấn & Kinh nghiệm' : 'Education & Experience'}</h3>
-                <InfoGrid>
-                  <InfoCard>
-                    <InfoIconBox><Award /></InfoIconBox>
-                    <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Trình độ học vấn' : 'Education'}</div>
-                      <div className="value">{candidate.education && candidate.education !== '-' ? candidate.education : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
-                    </InfoItem>
-                  </InfoCard>
-                  <InfoCard>
-                    <InfoIconBox><Briefcase /></InfoIconBox>
-                    <InfoItem>
-                      <div className="label">{language === 'vi' ? 'Kinh nghiệm' : 'Experience'}</div>
-                      <div className="value">{candidate.experience && candidate.experience !== '-' ? candidate.experience : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
-                    </InfoItem>
-                  </InfoCard>
-                </InfoGrid>
-              </ProfileSection>
-
-              {/* Skills */}
-              {(candidate.skills && candidate.skills.length > 0) && (
-                <ProfileSection>
-                  <h3><Star /> {language === 'vi' ? 'Kỹ năng' : 'Skills'}</h3>
-                  <SkillsWrap>
-                    {candidate.skills.map((skill, index) => (
-                      <SkillTag key={index}>{skill}</SkillTag>
-                    ))}
-                  </SkillsWrap>
-                </ProfileSection>
-              )}
-
-              {/* Bio */}
-              {(candidate.bio && candidate.bio !== '-') && (
-                <ProfileSection>
-                  <h3><FileText /> {language === 'vi' ? 'Giới thiệu bản thân' : 'About'}</h3>
-                  <BioText>{candidate.bio}</BioText>
-                </ProfileSection>
-              )}
-
-              {/* Lịch sử việc làm */}
-              <ProfileSection>
-                <h3><Briefcase /> {language === 'vi' ? 'Lịch sử việc làm' : 'Employment History'}</h3>
-                {candidate.workHistory && candidate.workHistory.length > 0 ? (
-                  <WorkHistoryList>
-                    {candidate.workHistory.map((item, idx) => (
-                      <WorkHistoryCard key={item.id || idx}>
-                        <WorkHistoryHeader>
-                          <WorkHistoryInfo>
-                            <div className="job-title">{item.jobTitle}</div>
-                            <div className="company-date">
-                              <span>{item.companyName}</span>
-                              <span>•</span>
-                              <span>
-                                {new Date(item.completedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric'
-                                })}
-                              </span>
+              {activeTab === 'interview' && (
+                <>
+                  {/* AI Screening & Interview Evaluation */}
+                  {(candidate.aiScreeningScore !== undefined || candidate.aiScreeningResult) ? (
+                    <ProfileSection style={{ background: '#F5F3FF', border: '1.5px solid #DDD6FE', borderRadius: '16px', padding: '20px', margin: '0' }}>
+                      <h3 style={{ color: '#4C1D95', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #DDD6FE', paddingBottom: '10px', margin: '0 0 16px 0' }}>
+                        <Sparkles color="#8b5cf6" size={18} />
+                        <span>{language === 'vi' ? 'Đánh giá & Chọn lọc bằng AI' : 'AI Screening & Interview Evaluation'}</span>
+                      </h3>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                        {/* Round 1: CV Screening */}
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
+                          <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
+                            <FileText size={14} />
+                            {language === 'vi' ? 'Vòng 1: Chọn lọc CV' : 'Round 1: CV Screening'}
+                          </h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ fontSize: '28px', fontWeight: '800', color: candidate.aiScreeningScore >= 60 ? '#059669' : '#DC2626' }}>
+                              {candidate.aiScreeningScore || '---'}
+                              <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>
                             </div>
-                          </WorkHistoryInfo>
-                        </WorkHistoryHeader>
-                        {item.employerRating && (
-                          <div style={{ marginTop: '10px' }}>
-                            <StarRating rating={item.employerRating.overall} />
-                            {item.employerRating.comment && (
-                              <p style={{ fontSize: '13px', fontStyle: 'italic', margin: '6px 0 0 0', color: '#475569' }}>
-                                "{item.employerRating.comment}"
-                              </p>
+                            <span style={{
+                              padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
+                              background: candidate.aiScreeningResult === 'pass' ? '#D1FAE5' : candidate.aiScreeningResult === 'review' ? '#FEF3C7' : '#FEE2E2',
+                              color: candidate.aiScreeningResult === 'pass' ? '#065F46' : candidate.aiScreeningResult === 'review' ? '#92400E' : '#991B1B',
+                              border: `1.5px solid ${candidate.aiScreeningResult === 'pass' ? '#34D399' : candidate.aiScreeningResult === 'review' ? '#FBBF24' : '#F87171'}`
+                            }}>
+                              {candidate.aiScreeningResult === 'pass' ? (language === 'vi' ? 'ĐẠT' : 'PASS') : candidate.aiScreeningResult === 'review' ? (language === 'vi' ? 'XEM XÉT' : 'REVIEW') : (language === 'vi' ? 'LOẠI' : 'FAIL')}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Round 2: AI Interviewer */}
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
+                          <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
+                            <MessageSquare size={14} />
+                            {language === 'vi' ? 'Vòng 2: Phỏng vấn AI' : 'Round 2: AI Interview'}
+                          </h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ fontSize: '28px', fontWeight: '800', color: (candidate.aiInterviewScore && candidate.aiInterviewScore >= 60) ? '#059669' : '#DC2626' }}>
+                              {candidate.aiInterviewScore || '---'}
+                              {candidate.aiInterviewScore && <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>}
+                            </div>
+                            {candidate.aiInterviewScore && (
+                              <span style={{
+                                padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
+                                background: candidate.aiInterviewScore >= 60 ? '#D1FAE5' : '#FEE2E2',
+                                color: candidate.aiInterviewScore >= 60 ? '#065F46' : '#991B1B',
+                                border: `1.5px solid ${candidate.aiInterviewScore >= 60 ? '#34D399' : '#F87171'}`
+                              }}>
+                                {candidate.aiInterviewScore >= 60 ? (language === 'vi' ? 'KHUYÊN DÙNG' : 'RECOMMEND') : (language === 'vi' ? 'CÂN NHẮC' : 'HOLD')}
+                              </span>
                             )}
                           </div>
-                        )}
-                      </WorkHistoryCard>
-                    ))}
-                  </WorkHistoryList>
-                ) : (
-                  <EmptyWorkHistory>
-                    <div className="icon">💼</div>
-                    <p>{language === 'vi' ? 'Chưa có lịch sử làm việc nào.' : 'No work history available.'}</p>
-                  </EmptyWorkHistory>
-                )}
-              </ProfileSection>
+                        </div>
+                      </div>
+
+                      {/* AI Reason & Analysis */}
+                      {candidate.aiScreeningReason && (
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '12px' }}>
+                          <div style={{ fontWeight: '700', fontSize: '13.5px', color: '#475569', marginBottom: '6px' }}>
+                            {language === 'vi' ? 'Nhận xét tổng quan của AI:' : 'AI Overall Summary:'}
+                          </div>
+                          <p style={{ fontSize: '13px', color: '#1E293B', margin: 0, lineHeight: '1.6' }}>{candidate.aiScreeningReason}</p>
+                        </div>
+                      )}
+
+                      {/* CV Screening Report detail (strengths & weaknesses) */}
+                      {((candidate.aiScreeningStrengths && candidate.aiScreeningStrengths.length > 0) || 
+                        (candidate.aiScreeningWeaknesses && candidate.aiScreeningWeaknesses.length > 0)) && (
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '12px' }}>
+                          <div style={{ fontWeight: '700', fontSize: '13.5px', color: '#475569', marginBottom: '10px' }}>
+                            {language === 'vi' ? 'Báo cáo chi tiết duyệt CV:' : 'CV Screening Evaluation Detail:'}
+                          </div>
+                          {candidate.aiScreeningStrengths && candidate.aiScreeningStrengths.length > 0 && (
+                            <div style={{ marginBottom: '12px' }}>
+                              <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#059669', display: 'block', marginBottom: '4px' }}>✓ {language === 'vi' ? 'Điểm phù hợp:' : 'Matching Highlights:'}</span>
+                              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                {candidate.aiScreeningStrengths.map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {candidate.aiScreeningWeaknesses && candidate.aiScreeningWeaknesses.length > 0 && (
+                            <div>
+                              <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#D97706', display: 'block', marginBottom: '4px' }}>⚠ {language === 'vi' ? 'Điểm chưa phù hợp:' : 'Gaps / Areas of Mismatch:'}</span>
+                              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                {candidate.aiScreeningWeaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* AI Report detail (strengths & weaknesses) */}
+                      {candidate.aiInterviewReport && (
+                        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '12px' }}>
+                          <div style={{ fontWeight: '700', fontSize: '13.5px', color: '#475569', marginBottom: '10px' }}>
+                            {language === 'vi' ? 'Báo cáo chi tiết phỏng vấn:' : 'Interview Evaluation Detail:'}
+                          </div>
+                          {candidate.aiInterviewReport.strengths && candidate.aiInterviewReport.strengths.length > 0 && (
+                            <div style={{ marginBottom: '12px' }}>
+                              <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#059669', display: 'block', marginBottom: '4px' }}>✓ {language === 'vi' ? 'Điểm mạnh:' : 'Strengths:'}</span>
+                              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                {candidate.aiInterviewReport.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {candidate.aiInterviewReport.weaknesses && candidate.aiInterviewReport.weaknesses.length > 0 && (
+                            <div>
+                              <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#D97706', display: 'block', marginBottom: '4px' }}>⚠ {language === 'vi' ? 'Điểm cần cải thiện:' : 'Weaknesses / Areas of Improvement:'}</span>
+                              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+                                {candidate.aiInterviewReport.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Audio Interview Recording */}
+                      <InterviewAudioPlayer audioUrl={audioUrl} />
+                    </ProfileSection>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '40px', background: '#F8FAFC', border: '1.5px dashed #CBD5E1', borderRadius: '16px', color: '#64748b' }}>
+                      <div style={{ fontSize: '32px', marginBottom: '10px' }}>🤖</div>
+                      <p style={{ fontSize: '13.5px', fontWeight: '600' }}>
+                        {language === 'vi' ? 'Ứng viên này chưa thực hiện phỏng vấn với AI.' : 'This candidate has not interviewed with AI yet.'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Feedback and Recruitment Decision Section */}
+                  {candidate.status === 'approved' || candidate.status === 'rejected' ? (
+                    <StatusBanner $status={candidate.status}>
+                      {candidate.status === 'approved' ? (
+                        <>
+                          <CheckCircle />
+                          <span>
+                            {language === 'vi' ? 'Hồ sơ này đã được bạn phê duyệt.' : 'This application has been approved by you.'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle />
+                          <span>
+                            {language === 'vi' ? 'Hồ sơ này đã bị bạn từ chối.' : 'This application has been rejected by you.'}
+                          </span>
+                        </>
+                      )}
+                    </StatusBanner>
+                  ) : (
+                    <FeedbackSection>
+                      <FeedbackHeader>
+                        <MessageSquare />
+                        <span>{language === 'vi' ? 'Phản hồi tuyển dụng' : 'Recruitment Feedback'}</span>
+                      </FeedbackHeader>
+                      <FeedbackTextarea
+                        placeholder={language === 'vi' 
+                          ? 'Nhập lý do duyệt, từ chối hoặc nhận xét thêm về hồ sơ ứng viên...' 
+                          : 'Enter reason for approval, rejection or additional comments...'}
+                        value={feedback}
+                        onChange={(e) => setFeedback(e.target.value)}
+                      />
+                      <FeedbackActions>
+                        <FeedbackButton
+                          $variant="approve"
+                          onClick={() => {
+                            onApprove(candidate.id);
+                          }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <CheckCircle />
+                          {language === 'vi' ? 'Duyệt hồ sơ (Đạt)' : 'Approve Application'}
+                        </FeedbackButton>
+                        <FeedbackButton
+                          $variant="reject"
+                          onClick={() => {
+                            onReject(candidate.id);
+                          }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <XCircle />
+                          {language === 'vi' ? 'Từ chối hồ sơ' : 'Reject Application'}
+                        </FeedbackButton>
+                      </FeedbackActions>
+                    </FeedbackSection>
+                  )}
+                </>
+              )}
             </>
           )}
         </ProfileInner>
@@ -1886,6 +2273,60 @@ export {
   CVCard, CVIconBox, CVInfo, CVDownloadButton, EmptyCV,
   WorkHistoryList, WorkHistoryCard, WorkHistoryHeader, WorkHistoryInfo, EmptyWorkHistory
 };
+
+const AIScoresCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 280px;
+  min-width: 0;
+  
+  @media (max-width: 1024px) {
+    display: none;
+  }
+`;
+
+const AIScoreBadge = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  background: ${props => props.$variant === 'interview' ? '#F5F3FF' : '#EFF6FF'};
+  color: ${props => props.$variant === 'interview' ? '#6B21A8' : '#1e40af'};
+  border: 1.5px solid ${props => props.$variant === 'interview' ? '#DDD6FE' : '#BFDBFE'};
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+
+  &:hover {
+    background: ${props => props.$variant === 'interview' ? '#EDE9FE' : '#DBEAFE'};
+    border-color: ${props => props.$variant === 'interview' ? '#C084FC' : '#93C5FD'};
+    transform: translateY(-2px);
+    box-shadow: ${props => props.$variant === 'interview' 
+      ? '0 6px 16px rgba(139, 92, 246, 0.15)' 
+      : '0 6px 16px rgba(37, 99, 235, 0.15)'};
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+  
+  svg {
+    width: 15px;
+    height: 15px;
+    color: ${props => props.$variant === 'interview' ? '#8b5cf6' : '#2563eb'};
+    transition: transform 0.25s ease;
+  }
+
+  &:hover svg {
+    transform: scale(1.15) rotate(5deg);
+  }
+`;
 
 // Application Card Component
 const ApplicationRow = React.memo(({
@@ -1931,7 +2372,100 @@ const ApplicationRow = React.memo(({
 
       <MetaChip><Clock />{app.applied}</MetaChip>
 
+      {/* AI Scores Summary Column */}
+      <AIScoresCol>
+        <AIScoreBadge
+          $variant="cv"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewProfile(app, 'interview');
+          }}
+        >
+          <Sparkles />
+          <span>
+            {language === 'vi' ? 'Lọc CV bằng AI' : 'AI CV Screening'}
+            {app.aiScreeningScore !== undefined && app.aiScreeningScore !== null ? `: ${app.aiScreeningScore}/100` : ': --/100'}
+          </span>
+        </AIScoreBadge>
+
+        <AIScoreBadge
+          $variant="interview"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewProfile(app, 'interview');
+          }}
+        >
+          <Volume2 />
+          <span>
+            {language === 'vi' ? 'Phỏng vấn với AI' : 'AI Interview'}
+            {app.aiInterviewScore !== undefined && app.aiInterviewScore !== null ? `: ${app.aiInterviewScore}/100` : ': --/100'}
+          </span>
+        </AIScoreBadge>
+      </AIScoresCol>
+
       <ActionsCol>
+        {/* Status badges or Action buttons */}
+        {app.status === 'approved' && (
+          <span style={{
+            color: '#059669',
+            background: '#D1FAE5',
+            border: '1px solid #34D399',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: '700',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}>
+            <CheckCircle size={14} />
+            {language === 'vi' ? 'Đã duyệt' : 'Approved'}
+          </span>
+        )}
+        {app.status === 'rejected' && (
+          <span style={{
+            color: '#DC2626',
+            background: '#FEE2E2',
+            border: '1px solid #F87171',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: '700',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}>
+            <XCircle size={14} />
+            {language === 'vi' ? 'Đã từ chối' : 'Rejected'}
+          </span>
+        )}
+        {app.status === 'pending' && (
+          <>
+            <ActionButton
+              $variant="success"
+              onClick={(e) => {
+                e.stopPropagation();
+                onApprove(app.id);
+              }}
+              title={language === 'vi' ? 'Duyệt hồ sơ' : 'Approve Application'}
+            >
+              <CheckCircle />
+              {language === 'vi' ? 'Duyệt' : 'Approve'}
+            </ActionButton>
+            <ActionButton
+              $variant="danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                onReject(app.id);
+              }}
+              title={language === 'vi' ? 'Từ chối hồ sơ' : 'Reject Application'}
+            >
+              <XCircle />
+              {language === 'vi' ? 'Từ chối' : 'Reject'}
+            </ActionButton>
+          </>
+        )}
+        
         <ActionButton onClick={() => onViewProfile(app)}>
           <Eye />{language === 'vi' ? 'Xem hồ sơ' : 'View'}
         </ActionButton>
@@ -2227,6 +2761,7 @@ const Applications = () => {
   const [timeFilter, setTimeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [initialModalTab, setInitialModalTab] = useState('profile');
   const [applications, setApplications] = useState([]);
   const [realApplications, setRealApplications] = useState([]); // Real applications from DynamoDB
   const [isLoadingApplications, setIsLoadingApplications] = useState(false);
@@ -2500,6 +3035,20 @@ const Applications = () => {
                 : isReview 
                   ? 'Ứng viên có tiềm năng tốt về mặt tư duy logic nhưng kinh nghiệm thực tế chưa nhiều, cần đào tạo và theo sát trong thời gian đầu.'
                   : 'Hồ sơ ứng viên không đạt các yêu cầu cơ bản về mặt kỹ thuật bắt buộc và kinh nghiệm làm việc liên quan được nêu trong JD.'),
+              aiScreeningStrengths: app.aiScreeningStrengths || (app.aiScreeningScore !== undefined ? [] : (isPass ? [
+                'Kỹ năng kỹ thuật vững vàng với ngôn ngữ lập trình chính.',
+                'Kinh nghiệm thực tiễn phong phú qua các dự án thực tế.',
+                'CV trình bày mạch lạc, logic và khoa học.'
+              ] : isReview ? [
+                'Có nhiệt huyết học hỏi và nền tảng lập trình tốt.',
+                'Có dự án cá nhân thể hiện sự chủ động.'
+              ] : [])),
+              aiScreeningWeaknesses: app.aiScreeningWeaknesses || (app.aiScreeningScore !== undefined ? [] : (isPass ? [
+                'Chưa có nhiều kinh nghiệm ở các hệ thống chịu tải lớn (Scale).'
+              ] : isReview ? [
+                'Thời gian làm việc ở các công ty trước tương đối ngắn.',
+                'Thiếu chứng chỉ ngoại ngữ liên quan.'
+              ] : [])),
               aiInterviewScore: app.aiInterviewScore !== undefined ? app.aiInterviewScore : (isPass ? 85 : isReview ? 68 : null),
               aiInterviewReport: app.aiInterviewReport || (isPass ? {
                 strengths: [
@@ -2520,7 +3069,9 @@ const Applications = () => {
                   'Kinh nghiệm thực tiễn tương đối mỏng.',
                   'Trả lời phỏng vấn còn thiếu tự tin ở một số câu hỏi tình huống.'
                 ]
-              } : null)
+              } : null),
+              aiInterviewAudio: app.aiInterviewAudio || '',
+              aiInterviewAudioKey: app.aiInterviewAudioKey || ''
             };
           });
 
@@ -2710,19 +3261,78 @@ const Applications = () => {
     ));
   }, []);
 
-  const handleApproveApplication = useCallback((id) => {
-    setRealApplications(prev => prev.map(app =>
-      app.id === id ? { ...app, status: 'approved' } : app
-    ));
-  }, []);
+  const handleApproveApplication = useCallback(async (id) => {
+    try {
+      await applicationService.updateApplicationStatus(id, 'approved');
+      setRealApplications(prev => prev.map(app =>
+        app.id === id ? { ...app, status: 'approved' } : app
+      ));
+      setSelectedCandidate(prev => prev && prev.id === id ? { ...prev, status: 'approved' } : prev);
+      setSuccessMessage(language === 'vi' ? 'Đã duyệt hồ sơ thành công!' : 'Application approved successfully!');
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
 
-  const handleRejectApplication = useCallback((id) => {
-    setRealApplications(prev => prev.map(app =>
-      app.id === id ? { ...app, status: 'rejected' } : app
-    ));
-  }, []);
+      // Send standard job CV approval notification to Candidate
+      const app = realApplications.find(a => a.id === id);
+      if (app) {
+        try {
+          const { createCandidateCvApprovedNotification } = await import('../../services/notificationService');
+          await createCandidateCvApprovedNotification({
+            candidateId: app.candidateId,
+            jobTitle: app.job,
+            companyName: app.companyName || 'Nhà tuyển dụng',
+            jobId: app.jobId,
+            employerId: user?.userId
+          });
+        } catch (notifErr) {
+          console.error('Error sending approval notification:', notifErr);
+        }
+      }
+    } catch (error) {
+      console.error('Error approving application:', error);
+      setSuccessMessage(language === 'vi' ? 'Lỗi khi duyệt hồ sơ!' : 'Error approving application!');
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
+    }
+  }, [language, realApplications, user]);
 
-  const handleViewProfile = useCallback(async (app) => {
+  const handleRejectApplication = useCallback(async (id) => {
+    try {
+      await applicationService.updateApplicationStatus(id, 'rejected');
+      setRealApplications(prev => prev.map(app =>
+        app.id === id ? { ...app, status: 'rejected' } : app
+      ));
+      setSelectedCandidate(prev => prev && prev.id === id ? { ...prev, status: 'rejected' } : prev);
+      setSuccessMessage(language === 'vi' ? 'Đã từ chối hồ sơ thành công!' : 'Application rejected successfully!');
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
+
+      // Send standard job CV rejection notification to Candidate
+      const app = realApplications.find(a => a.id === id);
+      if (app) {
+        try {
+          const { createCandidateCvRejectedStandardNotification } = await import('../../services/notificationService');
+          await createCandidateCvRejectedStandardNotification({
+            candidateId: app.candidateId,
+            jobTitle: app.job,
+            companyName: app.companyName || 'Nhà tuyển dụng',
+            jobId: app.jobId,
+            employerId: user?.userId
+          });
+        } catch (notifErr) {
+          console.error('Error sending rejection notification:', notifErr);
+        }
+      }
+    } catch (error) {
+      console.error('Error rejecting application:', error);
+      setSuccessMessage(language === 'vi' ? 'Lỗi khi từ chối hồ sơ!' : 'Error rejecting application!');
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
+    }
+  }, [language, realApplications, user]);
+
+  const handleViewProfile = useCallback(async (app, tab = 'profile') => {
+    setInitialModalTab(tab);
     // Set basic info from application immediately
     setSelectedCandidate(app);
 
@@ -3817,6 +4427,9 @@ const Applications = () => {
             candidate={selectedCandidate}
             onClose={handleCloseProfile}
             isLoading={isFetchingProfile}
+            onApprove={handleApproveApplication}
+            onReject={handleRejectApplication}
+            initialTab={initialModalTab}
           />
         </Modal>
       )}

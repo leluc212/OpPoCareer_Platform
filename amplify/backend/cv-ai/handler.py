@@ -1617,7 +1617,8 @@ def lambda_handler(event, context):
     if method != "POST" or path not in {
         "/cv/analyze", "/cv/generate", "/cv/recommend-candidates", 
         "/job/suggest-jd", "/candidate/recommend-jobs",
-        "/api/v1/cv/screen", "/api/v1/interview/start", "/api/v1/interview/respond"
+        "/api/v1/cv/screen", "/api/v1/interview/start", "/api/v1/interview/respond",
+        "/api/v1/interview/upload-audio"
     }:
         return _response(event, 404, {
             "error": {"code": "NOT_FOUND", "message": "Route not found."},
@@ -1998,6 +1999,66 @@ TUYỆT ĐỐI KHÔNG chuyển sang câu hỏi tiếp theo và không hỏi ch�
                 "finished": False,
                 "report": None
             })
+        elif path == "/api/v1/interview/upload-audio":
+            import base64
+            from datetime import datetime
+            body = _parse_body(event)
+            session_id = body.get("session_id")
+            audio_data = body.get("audio_data")
+            
+            user_id = claims.get("sub")
+            if not user_id:
+                raise RequestError(401, "UNAUTHORIZED", "User not logged in.")
+            
+            if not session_id or not audio_data:
+                raise RequestError(400, "MISSING_FIELDS", "Missing session_id or audio_data.")
+            
+            try:
+                if "," in audio_data:
+                    audio_data = audio_data.split(",")[1]
+                file_bytes = base64.b64decode(audio_data)
+            except Exception as decode_err:
+                raise RequestError(400, "INVALID_BASE64", f"Failed to decode audio base64: {str(decode_err)}")
+            
+            import boto3
+            s3_client = boto3.client("s3", region_name="ap-southeast-1")
+            
+            timestamp = int(time.time())
+            s3_key = f"interviews/{user_id}/{session_id}_{timestamp}.webm"
+            bucket_name = "opporeview-cv-storage"
+            
+            try:
+                s3_client.put_object(
+                    Bucket=bucket_name,
+                    Key=s3_key,
+                    Body=file_bytes,
+                    ContentType="audio/webm",
+                    ContentDisposition='inline; filename="interview_audio.webm"',
+                    Metadata={
+                        "userId": user_id,
+                        "sessionId": session_id,
+                        "uploadDate": datetime.utcnow().isoformat() + "Z"
+                    }
+                )
+                
+                presigned_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': bucket_name,
+                        'Key': s3_key,
+                        'ResponseContentDisposition': 'inline; filename="interview_audio.webm"'
+                    },
+                    ExpiresIn=43200
+                )
+                
+                return _response(event, 200, {
+                    "s3_key": s3_key,
+                    "url": presigned_url,
+                    "message": "Audio uploaded successfully."
+                })
+            except Exception as s3_err:
+                print(f"Error uploading audio to S3: {str(s3_err)}")
+                raise RequestError(500, "S3_UPLOAD_FAILED", f"S3 upload failed: {str(s3_err)}")
     except RequestError as error:
         return _response(event, error.status_code, {
             "error": {"code": error.code, "message": error.message},

@@ -416,6 +416,29 @@ class HandlerTests(unittest.TestCase):
         self.assertFalse(body["finished"])
         mock_save.assert_called_once()
 
+    @patch("boto3.client")
+    def test_interview_upload_audio_endpoint(self, mock_boto_client):
+        mock_s3 = mock_boto_client.return_value
+        mock_s3.generate_presigned_url.return_value = "https://example.com/audio.webm?presigned"
+
+        import base64
+        dummy_audio_b64 = base64.b64encode(b"dummy webm audio data").decode("utf-8")
+
+        response = handler.lambda_handler(
+            event(path="/api/v1/interview/upload-audio", method="POST", body={
+                "session_id": "sess_123",
+                "audio_data": dummy_audio_b64,
+                "file_name": "test.webm"
+            }),
+            None
+        )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["message"], "Audio uploaded successfully.")
+        self.assertEqual(body["url"], "https://example.com/audio.webm?presigned")
+        self.assertIn("s3_key", body)
+        self.assertTrue(body["s3_key"].startswith("interviews/candidate-123/sess_123_"))
+
 
 if __name__ == "__main__":
     unittest.main()

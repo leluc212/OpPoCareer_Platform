@@ -227,8 +227,12 @@ def submit_application(event, candidate_id, candidate_email, create_response):
             'aiScreeningScore',
             'aiScreeningResult',
             'aiScreeningReason',
+            'aiScreeningStrengths',
+            'aiScreeningWeaknesses',
             'aiInterviewScore',
-            'aiInterviewReport'
+            'aiInterviewReport',
+            'aiInterviewAudio',
+            'aiInterviewAudioKey'
         ]
         for field in ai_fields:
             if field in body:
@@ -310,40 +314,52 @@ def extract_s3_key_from_url(cv_url):
 
 
 def refresh_cv_urls(applications):
-    """Refresh presigned CV URLs in a list of applications.
+    """Refresh presigned CV URLs and AI Interview Audio URLs in a list of applications.
     
-    Uses cvS3Key if available (most reliable), otherwise parses cvUrl to extract the key.
-    This ensures URLs are always fresh regardless of when the application was submitted.
+    Uses cvS3Key and aiInterviewAudioKey if available.
     """
     for app in applications:
         try:
-            # Prefer explicit S3 key saved at submission time
+            # 1. Refresh CV URL
             s3_key = app.get('cvS3Key')
-
-            # Fall back to parsing the existing URL
             if not s3_key:
                 cv_url = app.get('cvUrl', '')
                 if cv_url and 'amazonaws.com' in cv_url:
                     s3_key = extract_s3_key_from_url(cv_url)
 
-            if not s3_key:
-                print(f"⚠️ No S3 key found for application {app.get('applicationId')} — skipping URL refresh")
-                continue
-
-            # Generate a fresh presigned URL (valid for 12 hours — safe with STS session tokens)
-            new_url = s3_client.generate_presigned_url(
-                'get_object',
-                Params={
-                    'Bucket': BUCKET_NAME,
-                    'Key': s3_key,
-                    'ResponseContentDisposition': f'inline; filename="{app.get("cvFilename", "CV.pdf")}"'
-                },
-                ExpiresIn=43200  # 12 hours — stays within STS session limit
-            )
-            app['cvUrl'] = new_url
-            print(f"✅ Refreshed CV URL for application {app.get('applicationId')}, key={s3_key}")
+            if s3_key:
+                new_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': BUCKET_NAME,
+                        'Key': s3_key,
+                        'ResponseContentDisposition': f'inline; filename="{app.get("cvFilename", "CV.pdf")}"'
+                    },
+                    ExpiresIn=43200
+                )
+                app['cvUrl'] = new_url
+                print(f"✅ Refreshed CV URL for application {app.get('applicationId')}, key={s3_key}")
         except Exception as e:
             print(f"⚠️ Warning: Could not refresh CV URL for application {app.get('applicationId')}: {str(e)}")
+
+        try:
+            # 2. Refresh AI Interview Audio URL
+            audio_key = app.get('aiInterviewAudioKey')
+            if audio_key:
+                new_audio_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': BUCKET_NAME,
+                        'Key': audio_key,
+                        'ResponseContentDisposition': 'inline; filename="interview_audio.webm"'
+                    },
+                    ExpiresIn=43200
+                )
+                app['aiInterviewAudio'] = new_audio_url
+                print(f"✅ Refreshed AI Interview Audio URL for application {app.get('applicationId')}, key={audio_key}")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not refresh AI Interview Audio URL for application {app.get('applicationId')}: {str(e)}")
+            
     return applications
 
 
@@ -419,7 +435,16 @@ def update_application_status(event, application_id, user_id, create_response):
             'candidateConfirmed',
             'candidateConfirmedAt',
             'chatMessages',
-            'acceptedAt'
+            'acceptedAt',
+            'aiScreeningScore',
+            'aiScreeningResult',
+            'aiScreeningReason',
+            'aiScreeningStrengths',
+            'aiScreeningWeaknesses',
+            'aiInterviewScore',
+            'aiInterviewReport',
+            'aiInterviewAudio',
+            'aiInterviewAudioKey'
         ]
 
         for field in optional_fields:
@@ -486,15 +511,21 @@ def update_application_status(event, application_id, user_id, create_response):
             ExpressionAttributeValues=expr_attr_values
         )
 
-        # Chat updates preserve the current status. Only a real status transition
-        # should send an application-result email.
         try:
-            if status_changed and new_status in ['accepted', 'rejected']:
+            if status_changed and new_status in ['accepted', 'approved', 'rejected']:
                 # Get the full updated application item
                 app_item = applications_table.get_item(Key={'applicationId': application_id}).get('Item', {})
                 if app_item:
                     from email_service import send_application_result_email
                     send_application_result_email(app_item, new_status)
+            
+            # Trigger employer email if candidate completes AI interview (Round 2)
+            is_interview_completed = (not status_changed) and ('aiInterviewScore' in body) and (previous_status == 'approved')
+            if is_interview_completed:
+                app_item = applications_table.get_item(Key={'applicationId': application_id}).get('Item', {})
+                if app_item:
+                    from email_service import send_employer_interview_completed_email
+                    send_employer_interview_completed_email(app_item)
         except Exception as email_err:
             print(f"Error sending application status result email: {str(email_err)}")
 

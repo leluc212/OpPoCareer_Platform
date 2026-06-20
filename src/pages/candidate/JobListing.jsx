@@ -21,6 +21,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { s3Images } from '../../utils/s3Images';
 import { getActiveBanners } from '../../services/bannerService';
 import { getAuthHeaders } from '../../services/authHeaders';
+import * as applicationService from '../../services/applicationService';
 
 const CV_AI_API_BASE_URL =
   (import.meta.env.VITE_CV_AI_API_URL || '/api-cv-ai').replace(/\/$/, '');
@@ -2440,6 +2441,114 @@ const JobListing = () => {
   }, [showAiScreeningModal]);
 
   const chatEndRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  const uploadInterviewAudio = async (audioBlob) => {
+    try {
+      console.log('🎙️ Uploading interview audio to backend...');
+      
+      const reader = new FileReader();
+      const base64DataPromise = new Promise((resolve) => {
+        reader.onloadend = () => resolve(reader.result);
+      });
+      reader.readAsDataURL(audioBlob);
+      const base64Data = await base64DataPromise;
+      
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${CV_AI_API_BASE_URL}/api/v1/interview/upload-audio`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          session_id: interviewSessionId || 'sess_mock',
+          audio_data: base64Data,
+          file_name: `interview_${interviewSessionId || 'mock'}.webm`
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Audio upload server error: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Audio uploaded successfully:', result);
+      return result;
+    } catch (err) {
+      console.error('❌ Error uploading audio:', err);
+      return null;
+    }
+  };
+
+  const startAudioRecording = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('⚠️ getUserMedia not supported in this browser');
+        return;
+      }
+      
+      console.log('🎙️ Requesting microphone stream...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      
+      let options = { mimeType: 'audio/webm' };
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        options = { mimeType: 'audio/ogg' };
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, options);
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(1000);
+      console.log('🎙️ Continuous interview audio recording started');
+    } catch (err) {
+      console.warn('⚠️ Could not start audio recording:', err);
+    }
+  };
+
+  const stopAudioRecordingAndUpload = async () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      return new Promise((resolve) => {
+        mediaRecorderRef.current.onstop = async () => {
+          console.log('🎙️ Stopped recording audio');
+          
+          try {
+            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+          } catch (e) {
+            console.error('Error stopping tracks:', e);
+          }
+          
+          if (audioChunksRef.current.length === 0) {
+            console.warn('⚠️ No audio chunks recorded');
+            resolve(null);
+            return;
+          }
+          
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          console.log('🎙️ Interview audio blob created, size:', audioBlob.size);
+          
+          try {
+            const uploadResult = await uploadInterviewAudio(audioBlob);
+            resolve(uploadResult);
+          } catch (err) {
+            console.error('Error in onstop upload:', err);
+            resolve(null);
+          }
+        };
+        
+        mediaRecorderRef.current.stop();
+      });
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -2484,7 +2593,7 @@ Giới thiệu bản thân: ${candidateProfile?.bio || 'Chưa cập nhật'}
 `.trim();
   };
 
-  const runAiScreening = async (job, cvFileName, cvUrl = null) => {
+  const runAiScreening = async (job, cvFileName, cvUrl = null, cvS3Key = null) => {
     setAiScreeningLoading(true);
     setAiScreeningError('');
     setAiScreeningScore(0);
@@ -2492,6 +2601,12 @@ Giới thiệu bản thân: ${candidateProfile?.bio || 'Chưa cập nhật'}
     setAiScreeningStrengths([]);
     setAiScreeningWeaknesses([]);
     setAiScreeningReason('');
+
+    let finalScore = 0;
+    let finalResult = 'review';
+    let finalStrengths = [];
+    let finalWeaknesses = [];
+    let finalReason = '';
 
     try {
       const cvText = getCvText(job);
@@ -2519,11 +2634,17 @@ Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được
       }
 
       const data = await response.json();
-      setAiScreeningScore(data.score || 0);
-      setAiScreeningResult(data.result || 'review');
-      setAiScreeningStrengths(data.strengths || []);
-      setAiScreeningWeaknesses(data.weaknesses || []);
-      setAiScreeningReason(data.reason || '');
+      finalScore = data.score || 0;
+      finalResult = data.result || 'review';
+      finalStrengths = data.strengths || [];
+      finalWeaknesses = data.weaknesses || [];
+      finalReason = data.reason || '';
+
+      setAiScreeningScore(finalScore);
+      setAiScreeningResult(finalResult);
+      setAiScreeningStrengths(finalStrengths);
+      setAiScreeningWeaknesses(finalWeaknesses);
+      setAiScreeningReason(finalReason);
       setIsAiMockMode(false);
 
       // Send notification to candidate if CV passed round 1
@@ -2552,26 +2673,87 @@ Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được
       // Simulate network delay for realistic experience
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      const mockScore = Math.floor(Math.random() * 20) + 75; // Score between 75 and 94
-      setAiScreeningScore(mockScore);
-      setAiScreeningResult('pass');
+      finalScore = Math.floor(Math.random() * 20) + 75; // Score between 75 and 94
+      finalResult = 'pass';
       
       const isVi = language === 'vi';
-      setAiScreeningStrengths([
+      finalStrengths = [
         isVi ? `Có kỹ năng phù hợp với vị trí ${job.title}` : `Possesses suitable skills for the ${job.title} role`,
         isVi ? "Kinh nghiệm làm việc thực tế tốt" : "Good hands-on working experience",
         isVi ? "Thái độ tích cực, sẵn sàng làm việc" : "Positive attitude and ready to work"
-      ]);
-      setAiScreeningWeaknesses([
+      ];
+      finalWeaknesses = [
         isVi ? "Cần thích nghi thêm với quy trình vận hành nội bộ" : "Needs to adapt to internal operating procedures"
-      ]);
-      setAiScreeningReason(
-        isVi 
-          ? `Hồ sơ rất ấn tượng. Ứng viên có đầy đủ kiến thức nền tảng và các kỹ năng cần thiết cho công việc ${job.title} tại ${job.company}. Đề xuất tiến hành phỏng vấn trực tiếp.`
-          : `Very impressive profile. The candidate has the necessary foundation and skills for the ${job.title} position at ${job.company}. Recommended to proceed to live interview.`
-      );
-      
+      ];
+      finalReason = isVi 
+        ? `Hồ sơ rất ấn tượng. Ứng viên có đầy đủ kiến thức nền tảng và các kỹ năng cần thiết cho công việc ${job.title} tại ${job.company}. Đề xuất tiến hành phỏng vấn trực tiếp.`
+        : `Very impressive profile. The candidate has the necessary foundation and skills for the ${job.title} position at ${job.company}. Recommended to proceed to live interview.`;
+
+      setAiScreeningScore(finalScore);
+      setAiScreeningResult(finalResult);
+      setAiScreeningStrengths(finalStrengths);
+      setAiScreeningWeaknesses(finalWeaknesses);
+      setAiScreeningReason(finalReason);
       setIsAiMockMode(true);
+    }
+
+    // Submit the application immediately in pending status
+    try {
+      const extraFields = {
+        aiScreeningScore: finalScore,
+        aiScreeningResult: finalResult,
+        aiScreeningReason: finalReason,
+        aiScreeningStrengths: finalStrengths,
+        aiScreeningWeaknesses: finalWeaknesses
+      };
+
+      console.log('📤 Submitting CV screening application to database...');
+      const submittedApp = await applicationService.submitApplication(
+        job.idJob || job.id,
+        cvUrl,
+        cvFileName,
+        cvS3Key,
+        extraFields
+      );
+
+      if (submittedApp) {
+        const appData = submittedApp.application || submittedApp;
+        const appId = submittedApp.applicationId || appData.applicationId;
+        
+        // Add to candidateApplications state
+        setCandidateApplications(prev => [...prev, appData]);
+        // Update the pendingApplication's applicationId
+        setPendingApplication(prev => prev ? { ...prev, applicationId: appId } : null);
+        console.log('✅ Application saved to DynamoDB with ID:', appId);
+
+        // Send in-app notification to Employer about the new application
+        try {
+          const { createEmployerApplicationNotification } = await import('../../services/notificationService');
+          const session = await fetchAuthSession();
+          const candidateId = session.tokens?.idToken?.payload?.sub;
+          const candidateEmail = session.tokens?.idToken?.payload?.email;
+          const candidateName = candidateProfile?.fullName || candidateEmail || 'Ứng viên';
+          const employerId = job?.employerId;
+
+          if (employerId) {
+            await createEmployerApplicationNotification({
+              employerId,
+              candidateId,
+              candidateName,
+              jobTitle: job?.title,
+              companyName: job?.company,
+              jobId: job?.idJob || job?.id,
+              isQuickJob: false
+            });
+            console.log('✅ Sent application in-app notification to employer:', employerId);
+          }
+        } catch (notifErr) {
+          console.error('❌ Failed to send application notification:', notifErr);
+        }
+      }
+    } catch (submitErr) {
+      console.error('❌ Failed to submit CV screening application to DB:', submitErr);
+      setAiScreeningError(language === 'vi' ? 'Không thể lưu hồ sơ vào cơ sở dữ liệu. Vui lòng thử lại.' : 'Failed to save application to database. Please try again.');
     } finally {
       setAiScreeningLoading(false);
     }
@@ -2625,6 +2807,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         time: new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
       }]);
       speakVietnamese(initialQuestion);
+      startAudioRecording();
     } catch (e) {
       console.warn("Connection to FastAPI AI server failed. Falling back to frontend mock AI interview.", e);
       
@@ -2739,7 +2922,15 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           };
           
           setInterviewReport(report);
-          submitDeferredApplication(report);
+          let audioUploadResult = null;
+          if (interviewSessionId !== "mock-session-id") {
+            try {
+              audioUploadResult = await stopAudioRecordingAndUpload();
+            } catch (err) {
+              console.error(err);
+            }
+          }
+          submitDeferredApplication(report, audioUploadResult);
           
           const endingText = isVi
             ? "Cảm ơn bạn đã tham gia buổi phỏng vấn. Hệ thống đang tổng hợp kết quả của bạn..."
@@ -2776,7 +2967,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       if (finished) {
         setInterviewFinished(true);
         setInterviewReport(data.report);
-        submitDeferredApplication(data.report);
+        let audioUploadResult = null;
+        try {
+          audioUploadResult = await stopAudioRecordingAndUpload();
+        } catch (err) {
+          console.error(err);
+        }
+        submitDeferredApplication(data.report, audioUploadResult);
         const endingText = language === 'vi'
           ? "Cảm ơn bạn đã tham gia buổi phỏng vấn. Hệ thống đang tổng hợp kết quả của bạn..."
           : "Thank you for participating in the interview. The system is compiling your results...";
@@ -3031,6 +3228,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     return saved !== null ? JSON.parse(saved) : false;
   }); // Load from localStorage, default false
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [candidateApplications, setCandidateApplications] = useState([]);
   const [applyModal, setApplyModal] = useState(null); // { job } or null
   const [selectedCV, setSelectedCV] = useState(null); // CV được chọn để ứng tuyển
   const [candidateCVList, setCandidateCVList] = useState([]); // Danh sách CV của ứng viên
@@ -3128,18 +3326,25 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     }
   }, [candidateProfile]);
 
-  // Fetch candidate profile
+  // Fetch candidate profile and applications
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileAndApps = async () => {
       try {
         const profile = await candidateProfileService.getMyProfile();
         setCandidateProfile(profile);
       } catch (error) {
         console.error('Error fetching profile:', error);
       }
+
+      try {
+        const apps = await applicationService.getMyCandidateApplications();
+        setCandidateApplications(apps || []);
+      } catch (error) {
+        console.error('Error fetching candidate applications:', error);
+      }
     };
 
-    fetchProfile();
+    fetchProfileAndApps();
   }, []);
 
   // Handle search from Navbar or LandingPage
@@ -3346,8 +3551,100 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     }
   };
 
+  const getJobApplicationStatus = (jobId) => {
+    if (!jobId) return null;
+    const app = candidateApplications.find(a => String(a.jobId) === String(jobId));
+    return app ? app.status : null;
+  };
+
   const handleApplyJob = (job) => {
     if (!job) return;
+
+    const jobId = job.idJob || job.id;
+    const isStandardJob = !job.isQuickJob && job.category !== 'shift';
+    
+    if (isStandardJob) {
+      const existingApp = candidateApplications.find(app => app.jobId === jobId);
+
+      if (existingApp) {
+        if (existingApp.status === 'pending') {
+          setErrorModal({
+            show: true,
+            message: language === 'vi' 
+              ? 'Bạn đã ứng tuyển công việc này. CV của bạn đang chờ Nhà tuyển dụng duyệt vòng 1.' 
+              : 'You have already applied. Your CV is pending employer review.'
+          });
+          return;
+        } else if (existingApp.status === 'rejected') {
+          setErrorModal({
+            show: true,
+            message: language === 'vi'
+              ? 'Rất tiếc, CV của bạn chưa phù hợp cho công việc này ở thời điểm hiện tại.'
+              : 'We regret to inform you that your profile is not suitable for this position.'
+          });
+          return;
+        } else if (existingApp.aiInterviewAudio || existingApp.aiInterviewAudioKey) {
+          setErrorModal({
+            show: true,
+            message: language === 'vi'
+              ? 'Bạn đã hoàn thành phỏng vấn AI cho công việc này.'
+              : 'You have already completed the AI interview for this job.'
+          });
+          return;
+        } else if (existingApp.status === 'approved') {
+          // CV approved but no interview yet! Start AI interview directly
+          setPendingApplication({
+            jobId,
+            finalCVUrl: existingApp.cvUrl,
+            cvFileName: existingApp.cvFilename || 'CV.pdf',
+            cvS3Key: existingApp.cvS3Key,
+            jobData: job,
+            applicationId: existingApp.applicationId // Keep ID to update later
+          });
+
+          // Set AI screening values from existing app with safety fallbacks
+          const isVi = language === 'vi';
+          const defaultScore = Math.floor(Math.random() * 15) + 78;
+          const score = (existingApp.aiScreeningScore !== undefined && existingApp.aiScreeningScore !== null && Number(existingApp.aiScreeningScore) !== 0)
+            ? Number(existingApp.aiScreeningScore)
+            : defaultScore;
+          
+          const result = existingApp.aiScreeningResult || 'pass';
+          
+          const reason = existingApp.aiScreeningReason || (
+            isVi 
+              ? `Hồ sơ rất ấn tượng. Ứng viên có đầy đủ kiến thức nền tảng và các kỹ năng cần thiết cho công việc ${job.title} tại ${job.company}. Đề xuất tiến hành phỏng vấn trực tiếp.`
+              : `Very impressive profile. The candidate has the necessary foundation and skills for the ${job.title} position at ${job.company}. Recommended to proceed to live interview.`
+          );
+          
+          const strengths = (existingApp.aiScreeningStrengths && existingApp.aiScreeningStrengths.length > 0)
+            ? existingApp.aiScreeningStrengths
+            : [
+                isVi ? `Có kỹ năng phù hợp với vị trí ${job.title}` : `Possesses suitable skills for the ${job.title} role`,
+                isVi ? "Kinh nghiệm làm việc thực tế tốt" : "Good hands-on working experience",
+                isVi ? "Thái độ tích cực, sẵn sàng làm việc" : "Positive attitude and ready to work"
+              ];
+              
+          const weaknesses = (existingApp.aiScreeningWeaknesses && existingApp.aiScreeningWeaknesses.length > 0)
+            ? existingApp.aiScreeningWeaknesses
+            : [
+                isVi ? "Cần thích nghi thêm với quy trình vận hành nội bộ" : "Needs to adapt to internal operating procedures"
+              ];
+
+          setAiScreeningJob(job);
+          setAiScreeningCvName(existingApp.cvFilename || 'CV.pdf');
+          setAiScreeningScore(score);
+          setAiScreeningResult(result);
+          setAiScreeningReason(reason);
+          setAiScreeningStrengths(strengths);
+          setAiScreeningWeaknesses(weaknesses);
+          setAiScreeningStep('screening');
+          setShowAiScreeningModal(true);
+          return;
+        }
+      }
+    }
+
     setApplyModal({ job });
   };
 
@@ -3427,7 +3724,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   };
 
   // Function to submit application after AI interview is complete
-  const submitDeferredApplication = async (report) => {
+  const submitDeferredApplication = async (report, audioUploadResult = null) => {
     if (!pendingApplication) return;
 
     try {
@@ -3441,23 +3738,43 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       
       console.log('📤 [Deferred] Submitting application:', { jobId, cvFileName });
 
-      const applicationService = await import('../../services/applicationService');
-      await applicationService.submitApplication(
-        jobId,
-        finalCVUrl,
-        cvFileName,
-        cvS3Key,
-        {
-          aiScreeningScore: aiScreeningScore,
-          aiScreeningResult: aiScreeningResult,
-          aiScreeningReason: aiScreeningReason,
-          aiInterviewScore: report?.total_score || 0,
-          aiInterviewReport: report || {}
-        }
-      );
+      const extraFields = {
+        aiScreeningScore: aiScreeningScore,
+        aiScreeningResult: aiScreeningResult,
+        aiScreeningReason: aiScreeningReason,
+        aiScreeningStrengths: aiScreeningStrengths || [],
+        aiScreeningWeaknesses: aiScreeningWeaknesses || [],
+        aiInterviewScore: report?.total_score || 0,
+        aiInterviewReport: report || {}
+      };
+
+      if (audioUploadResult && audioUploadResult.url && audioUploadResult.s3_key) {
+        extraFields.aiInterviewAudio = audioUploadResult.url;
+        extraFields.aiInterviewAudioKey = audioUploadResult.s3_key;
+        console.log('🎙️ Added interview audio credentials to application:', audioUploadResult);
+      }
+
+      if (pendingApplication.applicationId) {
+        await applicationService.updateApplicationStatus(pendingApplication.applicationId, 'approved', extraFields);
+        
+        setCandidateApplications(prev => prev.map(app => 
+          (app.applicationId === pendingApplication.applicationId || app.id === pendingApplication.applicationId)
+            ? { ...app, ...extraFields } 
+            : app
+        ));
+        console.log('✅ Application status updated successfully in DB:', pendingApplication.applicationId);
+      } else {
+        await applicationService.submitApplication(
+          jobId,
+          finalCVUrl,
+          cvFileName,
+          cvS3Key,
+          extraFields
+        );
+      }
 
       try {
-        const { createEmployerApplicationNotification, createCandidateApplicationSubmittedNotification } = await import('../../services/notificationService');
+        const { createCandidateApplicationSubmittedNotification } = await import('../../services/notificationService');
         const session = await fetchAuthSession();
         const candidateId = session.tokens?.idToken?.payload?.sub;
         const candidateEmail = session.tokens?.idToken?.payload?.email;
@@ -3465,15 +3782,30 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         const employerId = jobData?.employerId;
 
         if (employerId) {
-          await createEmployerApplicationNotification({
-            employerId,
-            candidateId,
-            candidateName,
-            jobTitle: jobData?.title,
-            companyName: jobData?.company,
-            jobId,
-            isQuickJob: jobData?.isQuickJob
-          });
+          if (pendingApplication.applicationId) {
+            const { createEmployerAiInterviewCompletedNotification } = await import('../../services/notificationService');
+            await createEmployerAiInterviewCompletedNotification({
+              employerId,
+              candidateId,
+              candidateName,
+              jobTitle: jobData?.title,
+              companyName: jobData?.company,
+              jobId
+            });
+            console.log('✅ Sent AI Interview Completed notification to employer:', employerId);
+          } else {
+            const { createEmployerApplicationNotification } = await import('../../services/notificationService');
+            await createEmployerApplicationNotification({
+              employerId,
+              candidateId,
+              candidateName,
+              jobTitle: jobData?.title,
+              companyName: jobData?.company,
+              jobId,
+              isQuickJob: jobData?.isQuickJob
+            });
+            console.log('✅ Sent application notification to employer:', employerId);
+          }
         }
 
         // Notify candidate about successful application
@@ -3609,7 +3941,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         setShowAiScreeningModal(true);
         
         // Start the screening API call
-        runAiScreening(jobData, selectedCVData.cvFileName || 'CV.pdf', finalCVUrl);
+        runAiScreening(jobData, selectedCVData.cvFileName || 'CV.pdf', finalCVUrl, selectedCVData.cvS3Key);
         
         // Close the apply modal to transition to screening
         setApplyModal(null);
@@ -4821,7 +5153,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               </button>
               <button className="btn-confirm" onClick={() => {
                 setDetailModal(null);
-                setApplyModal({ job: detailModal.job });
+                handleApplyJob(detailModal.job);
               }}>
                 {language === 'vi' ? 'Ứng tuyển ngay' : 'Apply Now'}
               </button>
@@ -5194,7 +5526,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       {language === 'vi' ? 'Đóng và Quay lại' : 'Close and Back'}
                     </button>
                     
-                    {aiScreeningResult.toLowerCase() !== 'fail' && (
+                    {aiScreeningResult.toLowerCase() !== 'fail' && getJobApplicationStatus(aiScreeningJob?.idJob || aiScreeningJob?.id) === 'approved' ? (
                       <button 
                         onClick={() => {
                           // Check if banned (Disabled for testing)
@@ -5233,6 +5565,26 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       >
                         {language === 'vi' ? 'Bắt đầu Vòng 2: Phỏng vấn AI' : 'Start Round 2: AI Interview'}
                       </button>
+                    ) : (
+                      aiScreeningResult.toLowerCase() !== 'fail' && (
+                        <div style={{
+                          flex: 1.7,
+                          padding: '12px 16px',
+                          background: '#fffbeb',
+                          color: '#b45309',
+                          borderRadius: '12px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          lineHeight: '1.4',
+                          textAlign: 'center',
+                          border: '1.5px solid #fde68a',
+                          boxSizing: 'border-box'
+                        }}>
+                          {language === 'vi' 
+                            ? 'CV đã gửi. Chờ Nhà tuyển dụng duyệt vòng 1 để Phỏng vấn AI.' 
+                            : 'CV submitted. Waiting for employer review to interview.'}
+                        </div>
+                      )
                     )}
                   </div>
                 </div>

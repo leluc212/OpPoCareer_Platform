@@ -236,10 +236,12 @@ def create_job_post(event, user_id, headers):
             'workDays': body['workDays'],
             'workHours': body['workHours'],
             'salary': body.get('salary'),
+            'salaryUnit': body.get('salaryUnit', 'hour'),
             'tags': body.get('tags', ''),
             'description': body['description'],
             'requirements': body.get('requirements', ''),
             'benefits': body.get('benefits', ''),
+            'customFields': body.get('customFields', []),
             # Default to 'pending' so Admin must manually approve standard jobs
             'status': body.get('status', 'pending'),
             'category': 'standard',  # Always set to 'standard' for PostStandardJob
@@ -455,7 +457,7 @@ def update_job_post(event, job_id, user_id, headers):
         # Add fields to update
         updatable_fields = ['title', 'location', 'jobType', 'workDays', 'workHours', 
                            'salary', 'tags', 'description', 
-                           'requirements', 'benefits', 'status']
+                           'requirements', 'benefits', 'customFields', 'salaryUnit', 'status']
         
         # Reserved keywords that need ExpressionAttributeNames
         reserved_keywords = ['location', 'status']

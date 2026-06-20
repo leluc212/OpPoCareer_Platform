@@ -4,12 +4,24 @@ import styled, { keyframes } from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
 import { Button, Input, TextArea, Select, FormGroup, Label } from '../../components/FormElements';
-import { Save, ArrowLeft, AlertCircle, Briefcase, Clock, FileText, CheckSquare, ClipboardList, Gift, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { Save, ArrowLeft, AlertCircle, Briefcase, Clock, ClipboardList, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import jobPostService from '../../services/jobPostService';
 import employerProfileService from '../../services/employerProfileService';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import cvAiService from '../../services/cvAiService';
+
+// Days of week options for work-hour slots. `key` is the stable token persisted
+// into the workHours string; vi/en are the display labels.
+const WORK_DAY_OPTIONS = [
+  { key: 'T2', vi: 'T2', en: 'Mon' },
+  { key: 'T3', vi: 'T3', en: 'Tue' },
+  { key: 'T4', vi: 'T4', en: 'Wed' },
+  { key: 'T5', vi: 'T5', en: 'Thu' },
+  { key: 'T6', vi: 'T6', en: 'Fri' },
+  { key: 'T7', vi: 'T7', en: 'Sat' },
+  { key: 'CN', vi: 'CN', en: 'Sun' },
+];
 
 // Keyframe animations
 const fadeIn = keyframes`
@@ -271,30 +283,6 @@ const FormActions = styled.div`
   border-top: 2px solid ${props => props.theme.colors.border};
 `;
 
-const SalaryInputWrapper = styled.div`
-  position: relative;
-  flex: 1;
-  
-  input {
-    padding-right: 70px;
-  }
-  
-  &::after {
-    content: 'VNĐ/h';
-    position: absolute;
-    right: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #1e40af;
-    font-weight: 700;
-    font-size: 13px;
-    pointer-events: none;
-    background: #EFF6FF;
-    padding: 4px 10px;
-    border-radius: 6px;
-  }
-`;
-
 const spin = keyframes`
   from {
     transform: rotate(0deg);
@@ -464,15 +452,22 @@ const PostJob = () => {
   const editingJob = location.state?.job; // Get job data if editing
   const isEditing = !!editingJob;
 
-  const createWorkHourSlot = (isNew = true) => ({ startTime: '', endTime: '', isNew });
+  const createWorkHourSlot = (isNew = true) => ({ startTime: '', endTime: '', days: [], isNew });
   const parseWorkHours = (workHours) => {
     const normalized = String(workHours || '')
-      .split(/\s*(?:\||,|\n)\s*/)
+      .split(/\s*(?:\||\n)\s*/)
       .map(part => part.trim())
       .filter(Boolean)
       .map(part => {
-        const [startTime = '', endTime = ''] = part.split('-').map(t => t.trim());
-        return startTime && endTime ? { startTime, endTime, isNew: false } : null;
+        let days = [];
+        let timeStr = part;
+        const atIdx = part.indexOf('@');
+        if (atIdx !== -1) {
+          days = part.slice(0, atIdx).split(',').map(d => d.trim()).filter(Boolean);
+          timeStr = part.slice(atIdx + 1).trim();
+        }
+        const [startTime = '', endTime = ''] = timeStr.split('-').map(t => t.trim());
+        return startTime && endTime ? { startTime, endTime, days, isNew: false } : null;
       })
       .filter(Boolean)
       .slice(0, 5);
@@ -481,7 +476,10 @@ const PostJob = () => {
   };
   const serializeWorkHours = (slots) => slots
     .filter(slot => slot.startTime && slot.endTime)
-    .map(slot => `${slot.startTime} - ${slot.endTime}`)
+    .map(slot => {
+      const time = `${slot.startTime} - ${slot.endTime}`;
+      return slot.days && slot.days.length > 0 ? `${slot.days.join(',')} @ ${time}` : time;
+    })
     .join(' | ');
 
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -492,16 +490,18 @@ const PostJob = () => {
   const [formData, setFormData] = useState({
     title: '',
     location: '',
-    jobType: '',
+    jobType: 'full-time',
     workDays: '',
     workHours: '',
     salary: '',
+    salaryUnit: 'hour',
     tags: '',
     description: '',
     requirements: '',
     benefits: '',
     isAiScreeningEnabled: false,
-    customQuestions: ''
+    customQuestions: '',
+    customFields: []
   });
 
   // Check verification status on mount — fetch real isVerified from API
@@ -541,16 +541,18 @@ const PostJob = () => {
       setFormData({
         title: editingJob.title || '',
         location: editingJob.location || '',
-        jobType: editingJob.jobType || '',
+        jobType: editingJob.jobType || 'full-time',
         workDays: editingJob.workDays || '',
         workHours: editingJob.workHours || serializeWorkHours(parsedWorkHours),
         salary: editingJob.salary || '',
+        salaryUnit: editingJob.salaryUnit || 'hour',
         tags: editingJob.tags || '',
         description: editingJob.description || '',
         requirements: editingJob.requirements || '',
         benefits: editingJob.benefits || '',
         isAiScreeningEnabled: editingJob.isAiScreeningEnabled || false,
-        customQuestions: editingJob.customQuestions ? editingJob.customQuestions.join('\n') : ''
+        customQuestions: editingJob.customQuestions ? editingJob.customQuestions.join('\n') : '',
+        customFields: Array.isArray(editingJob.customFields) ? editingJob.customFields : []
       });
     }
   }, [editingJob]);
@@ -573,10 +575,47 @@ const PostJob = () => {
     });
   };
 
+  // Custom fields (employer-defined extra JD sections)
+  const handleAddCustomField = () => {
+    setFormData(prev => ({
+      ...prev,
+      customFields: [...(prev.customFields || []), { label: '', value: '' }]
+    }));
+  };
+
+  const handleRemoveCustomField = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      customFields: (prev.customFields || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleCustomFieldChange = (index, key, value) => {
+    setFormData(prev => ({
+      ...prev,
+      customFields: (prev.customFields || []).map((field, i) => (
+        i === index ? { ...field, [key]: value } : field
+      ))
+    }));
+  };
+
   const handleWorkHourChange = (index, field, value) => {
     setWorkHoursList(prev => prev.map((slot, slotIndex) => (
       slotIndex === index ? { ...slot, [field]: value } : slot
     )));
+  };
+
+  const toggleWorkHourDay = (index, dayKey) => {
+    setWorkHoursList(prev => prev.map((slot, slotIndex) => {
+      if (slotIndex !== index) return slot;
+      const days = slot.days || [];
+      const nextDays = days.includes(dayKey)
+        ? days.filter(d => d !== dayKey)
+        : [...days, dayKey];
+      // Keep canonical week order (T2 -> CN)
+      const ordered = WORK_DAY_OPTIONS.map(o => o.key).filter(k => nextDays.includes(k));
+      return { ...slot, days: ordered };
+    }));
   };
 
   const addWorkHour = () => {
@@ -632,6 +671,14 @@ const PostJob = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Require salary
+    if (!String(formData.salary).trim()) {
+      alert(language === 'vi'
+        ? 'Vui lòng nhập mức lương.'
+        : 'Please enter the salary.');
+      return;
+    }
+
     // Validate work date is not in the past
     if (formData.workDays) {
       const today = new Date().toISOString().split('T')[0];
@@ -660,9 +707,14 @@ const PostJob = () => {
         : [];
 
       // Tạo payload sạch để loại bỏ customQuestions kiểu string cũ
+      const sanitizedCustomFields = (formData.customFields || [])
+        .map(f => ({ label: (f.label || '').trim(), value: (f.value || '').trim() }))
+        .filter(f => f.label.length > 0 || f.value.length > 0);
+
       const cleanFormData = {
         ...formData,
-        customQuestions: customQuestionsArray
+        customQuestions: customQuestionsArray,
+        customFields: sanitizedCustomFields
       };
 
       if (isEditing) {
@@ -831,8 +883,8 @@ const PostJob = () => {
               <div className="info-title">{language === 'vi' ? 'Lưu ý về bài đăng' : 'Posting Guidelines'}</div>
               <div className="info-text">
                 {language === 'vi'
-                  ? 'Bài đăng sẽ được ưu tiên hiển thị và có thời hạn tuyển dụng linh hoạt. Phù hợp cho các vị trí cần tuyển dụng lâu dài.'
-                  : 'Posts will be prioritized and have flexible recruitment deadlines. Suitable for long-term recruitment positions.'}
+                  ? 'Bài đăng sẽ được hiển thị đến hết thời hạn nộp hồ sơ. Phù hợp cho các vị trí cần tuyển dụng lâu dài.'
+                  : 'Posts will be prioritized ultil end of application deadline. Suitable for long-term recruitment positions.'}
               </div>
             </div>
           </InfoBox>
@@ -856,15 +908,6 @@ const PostJob = () => {
               </FormGroup>
 
               <FormGroup>
-                <Label>{language === 'vi' ? 'Loại hình công việc *' : 'Job Type *'}</Label>
-                <Select name="jobType" value={formData.jobType} onChange={handleChange} required>
-                  <option value="">{language === 'vi' ? 'Chọn loại hình' : 'Select type'}</option>
-                  <option value="part-time">{language === 'vi' ? 'Bán thời gian' : 'Part-time'}</option>
-                  <option value="full-time">{language === 'vi' ? 'Toàn thời gian' : 'Full-time'}</option>
-                </Select>
-              </FormGroup>
-
-              <FormGroup>
                 <Label>{language === 'vi' ? 'Thời hạn nộp hồ sơ *' : 'Application Deadline *'}</Label>
                 <Input
                   name="workDays"
@@ -881,65 +924,108 @@ const PostJob = () => {
                 <Label>{language === 'vi' ? 'Khung giờ làm việc *' : 'Working Hours *'}</Label>
                 <div style={{ marginTop: '4px' }}>
                   {workHoursList.map((slot, index) => (
-                    <WorkHoursRow key={index}>
-                      <div>
-                        <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Từ' : 'From'}</Label>
-                        <Input
-                          type="time"
-                          value={slot.startTime}
-                          onChange={(e) => handleWorkHourChange(index, 'startTime', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Đến' : 'To'}</Label>
-                        <Input
-                          type="time"
-                          value={slot.endTime}
-                          onChange={(e) => handleWorkHourChange(index, 'endTime', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <WorkHoursActionButton
-                          type="button"
-                          onClick={addWorkHour}
-                          disabled={workHoursList.length >= 5}
-                          title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
-                        >
-                          <Plus />
-                        </WorkHoursActionButton>
-                        {slot.isNew && (
+                    <div key={index} style={{ marginBottom: '16px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
+                      <WorkHoursRow style={{ marginBottom: 0 }}>
+                        <div>
+                          <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Từ' : 'From'}</Label>
+                          <Input
+                            type="time"
+                            value={slot.startTime}
+                            onChange={(e) => handleWorkHourChange(index, 'startTime', e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Đến' : 'To'}</Label>
+                          <Input
+                            type="time"
+                            value={slot.endTime}
+                            onChange={(e) => handleWorkHourChange(index, 'endTime', e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
                           <WorkHoursActionButton
                             type="button"
-                            $danger
-                            onClick={() => removeWorkHour(index)}
-                            title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
+                            onClick={addWorkHour}
+                            disabled={workHoursList.length >= 5}
+                            title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
                           >
-                            <Trash2 />
+                            <Plus />
                           </WorkHoursActionButton>
-                        )}
+                          {slot.isNew && (
+                            <WorkHoursActionButton
+                              type="button"
+                              $danger
+                              onClick={() => removeWorkHour(index)}
+                              title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
+                            >
+                              <Trash2 />
+                            </WorkHoursActionButton>
+                          )}
+                        </div>
+                      </WorkHoursRow>
+                      <div style={{ marginTop: '12px' }}>
+                        <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Thứ' : 'Days'}</Label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {WORK_DAY_OPTIONS.map(opt => {
+                            const active = (slot.days || []).includes(opt.key);
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => toggleWorkHourDay(index, opt.key)}
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  border: `1px solid ${active ? '#1e40af' : '#cbd5e1'}`,
+                                  background: active ? '#1e40af' : '#ffffff',
+                                  color: active ? '#ffffff' : '#475569',
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                {language === 'vi' ? opt.vi : opt.en}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </WorkHoursRow>
+                    </div>
                   ))}
                 </div>
               </FormGroup>
 
               <FormGroup>
-                <Label>{language === 'vi' ? 'Mức lương' : 'Salary'}</Label>
-                <SalaryInputWrapper>
-                  <Input
-                    name="salary"
-                    type="number"
-                    placeholder={language === 'vi' ? 'Ví dụ: 25000' : 'e.g., 25000'}
-                    value={formData.salary}
+                <Label>{language === 'vi' ? 'Mức lương *' : 'Salary *'}</Label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+                  <div style={{ flex: 1 }}>
+                    <Input
+                      name="salary"
+                      type="number"
+                      min="0"
+                      placeholder={language === 'vi' ? 'Ví dụ: 25000' : 'e.g., 25000'}
+                      value={formData.salary}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+                  <Select
+                    name="salaryUnit"
+                    value={formData.salaryUnit}
                     onChange={handleChange}
-                  />
-                </SalaryInputWrapper>
+                    style={{ maxWidth: '160px' }}
+                  >
+                    <option value="hour">{language === 'vi' ? 'VNĐ/giờ' : 'VND/hour'}</option>
+                    <option value="month">{language === 'vi' ? 'VNĐ/tháng' : 'VND/month'}</option>
+                  </Select>
+                </div>
               </FormGroup>
 
               <FormGroup>
-                <Label>{language === 'vi' ? 'Đặc điểm (Không bắt buộc)' : 'Tags (Optional)'}</Label>
+                <Label>{language === 'vi' ? 'Đặc điểm' : 'Tags'}</Label>
                 <Input
                   name="tags"
                   placeholder={language === 'vi' ? 'Pha chế, F&B, Coffee (phân cách bằng dấu phẩy)' : 'Barista, F&B, Coffee (comma separated)'}
@@ -1008,7 +1094,6 @@ const PostJob = () => {
             <FormGroup style={{ marginTop: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <SectionLabel style={{ marginBottom: 0 }}>
-                  <FileText />
                   <span>{language === 'vi' ? 'Mô tả công việc *' : 'Job Description *'}</span>
                 </SectionLabel>
                 {formData.title && (
@@ -1039,7 +1124,6 @@ const PostJob = () => {
 
             <FormGroup>
               <SectionLabel>
-                <ClipboardList />
                 <span>{language === 'vi' ? 'Yêu cầu' : 'Requirements'}</span>
               </SectionLabel>
               <TextArea name="requirements" placeholder={language === 'vi' ? 'Liệt kê yêu cầu và trình độ...' : 'List requirements and qualifications...'} value={formData.requirements} onChange={handleChange} />
@@ -1047,10 +1131,83 @@ const PostJob = () => {
 
             <FormGroup>
               <SectionLabel>
-                <Gift />
                 <span>{language === 'vi' ? 'Quyền lợi' : 'Benefits'}</span>
               </SectionLabel>
               <TextArea name="benefits" placeholder={language === 'vi' ? 'Liệt kê quyền lợi và phúc lợi...' : 'List benefits and perks...'} value={formData.benefits} onChange={handleChange} />
+            </FormGroup>
+
+            {/* Custom fields - employer-defined extra JD sections */}
+            {(formData.customFields || []).map((field, index) => (
+              <FormGroup key={index}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    value={field.label}
+                    onChange={(e) => handleCustomFieldChange(index, 'label', e.target.value)}
+                    placeholder={language === 'vi' ? 'Tên mục (vd: Địa điểm làm việc)...' : 'Field title (e.g. Work location)...'}
+                    style={{
+                      flex: 1,
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: '#1E293B',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      padding: '10px 12px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCustomField(index)}
+                    title={language === 'vi' ? 'Xóa mục này' : 'Remove this field'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '38px',
+                      height: '38px',
+                      flexShrink: 0,
+                      background: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1px solid #FECACA',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                <TextArea
+                  value={field.value}
+                  onChange={(e) => handleCustomFieldChange(index, 'value', e.target.value)}
+                  placeholder={language === 'vi' ? 'Nội dung mục này...' : 'Content for this field...'}
+                />
+              </FormGroup>
+            ))}
+
+            <FormGroup>
+              <button
+                type="button"
+                onClick={handleAddCustomField}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  background: '#EFF6FF',
+                  color: '#1e40af',
+                  border: '1px dashed #93C5FD',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={18} />
+                {language === 'vi' ? 'Thêm mục tùy chỉnh' : 'Add custom field'}
+              </button>
             </FormGroup>
 
             <FormActions>

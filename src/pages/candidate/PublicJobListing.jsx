@@ -1067,6 +1067,14 @@ const PublicJobListing = () => {
                     <div>{selectedJob.benefits}</div>
                   </Section>
                 )}
+                {Array.isArray(selectedJob.customFields) && selectedJob.customFields
+                  .filter(f => f && (f.label || f.value))
+                  .map((field, idx) => (
+                    <Section key={idx} $isDark={isDarkMode}>
+                      <h3><FileText size={15} />{field.label}</h3>
+                      <div>{field.value}</div>
+                    </Section>
+                  ))}
               </ModalBody>
 
               {selectedJob.isAiScreeningEnabled && (

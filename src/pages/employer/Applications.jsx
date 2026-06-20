@@ -25,13 +25,14 @@ import employerProfileService from '../../services/employerProfileService';
  * - Already has currency unit (VNĐ / VND / đ) → return as-is
  * - Raw number / numeric string → format as "X.XXX VNĐ/giờ"
  */
-const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận') => {
+const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận', unit = 'hour') => {
   if (!raw && raw !== 0) return fallback;
   const str = String(raw).trim();
   if (str.includes('VNĐ') || str.includes('VND') || str.includes('đ')) return str;
   const num = parseInt(str.replace(/\D/g, ''), 10);
   if (isNaN(num) || num === 0) return fallback;
-  return `${num.toLocaleString('vi-VN')} VNĐ/giờ`;
+  const suffix = unit === 'month' ? 'VNĐ/tháng' : 'VNĐ/giờ';
+  return `${num.toLocaleString('vi-VN')} ${suffix}`;
 };
 
 // Mock job posts data
@@ -2830,7 +2831,7 @@ const Applications = () => {
           idJob: job.idJob,
           title: job.title,
           location: job.location,
-          salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable'),
+          salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable', job.salaryUnit),
           type: job.jobType === 'part-time' ? (language === 'vi' ? 'Bán thời gian' : 'Part-time') : (language === 'vi' ? 'Toàn thời gian' : 'Full-time'),
           shift: job.workHours,
           workDays: job.workDays,
@@ -2844,6 +2845,8 @@ const Applications = () => {
           responsibilities: job.responsibilities,
           requirements: job.requirements,
           benefits: job.benefits,
+          customFields: Array.isArray(job.customFields) ? job.customFields : [],
+          salaryUnit: job.salaryUnit || 'hour',
           tags: job.tags
         }));
 
@@ -4134,6 +4137,20 @@ const Applications = () => {
                 </div>
               </div>
             )}
+
+            {Array.isArray(selectedJobView.customFields) && selectedJobView.customFields
+              .filter(f => f && (f.label || f.value))
+              .map((field, idx) => (
+                <div key={idx} style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                  <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '12px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={18} />
+                    {field.label}
+                  </h4>
+                  <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', whiteSpace: 'pre-line', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    {field.value}
+                  </div>
+                </div>
+              ))}
 
             <div style={{ fontSize: '13px', color: '#94a3b8', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
               {language === 'vi' ? 'Đăng ' : 'Posted '}{selectedJobView.postedDate}

@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
 import AddressInput from '../../components/AddressInput';
 import { Button, Input, TextArea, Select, FormGroup, Label } from '../../components/FormElements';
-import { Save, ArrowLeft, AlertCircle, CheckCircle, Clock, Zap, Globe, X, Banknote, Copy, Check, RefreshCw } from 'lucide-react';
+import { Save, ArrowLeft, AlertCircle, CheckCircle, Clock, Zap, Globe, X, Banknote, Copy, Check, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import quickJobService from '../../services/quickJobService';
 import employerProfileService from '../../services/employerProfileService';
@@ -901,7 +901,8 @@ const PostQuickJob = () => {
       workDate: '', // Ngày làm việc
       description: '',
       requirements: '', // Yêu cầu
-      contactPhone: ''
+      contactPhone: '',
+      customFields: []
     };
   });
 
@@ -923,6 +924,30 @@ const PostQuickJob = () => {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  // Custom fields (employer-defined extra JD sections)
+  const handleAddCustomField = () => {
+    setFormData(prev => ({
+      ...prev,
+      customFields: [...(prev.customFields || []), { label: '', value: '' }]
+    }));
+  };
+
+  const handleRemoveCustomField = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      customFields: (prev.customFields || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleCustomFieldChange = (index, key, value) => {
+    setFormData(prev => ({
+      ...prev,
+      customFields: (prev.customFields || []).map((field, i) => (
+        i === index ? { ...field, [key]: value } : field
+      ))
     }));
   };
 
@@ -1154,6 +1179,9 @@ const PostQuickJob = () => {
         description: formData.description || '',
         requirements: formData.requirements || '',
         contactPhone: formData.contactPhone || '',
+        customFields: (formData.customFields || [])
+          .map(f => ({ label: (f.label || '').trim(), value: (f.value || '').trim() }))
+          .filter(f => f.label.length > 0 || f.value.length > 0),
         companyName: companyName,  // Add company name here
         status: 'active',  // Quick jobs go live immediately (employer already approved for quick jobs)
         workDate: formData.workDate || '' // Store work date in workDate attribute
@@ -1239,7 +1267,7 @@ const PostQuickJob = () => {
       jobTypePartTime: 'Bán thời gian',
       jobTypeFullTime: 'Toàn thời gian',
       jobTypePlaceholder: 'Chọn loại hình',
-      hourlyRate: 'Lương/h',
+      hourlyRate: 'Lương',
       hourlyRatePlaceholder: '',
       hourlyRateMin: 'Phải lớn hơn hoặc bằng 29.500 VNĐ',
       workDate: 'Ngày làm',
@@ -1428,7 +1456,7 @@ const PostQuickJob = () => {
                     }}
                   />
                   <span className="salary-unit">
-                    {language === 'vi' ? 'Lương/h' : 'Lương/h'}
+                    {language === 'vi' ? 'VNĐ/h' : 'VNĐ/h'}
                   </span>
                 </SalaryInputWrap>
                 {salaryError ? (
@@ -1538,6 +1566,70 @@ const PostQuickJob = () => {
               />
             </FormGroup>
 
+            {/* Custom fields - employer-defined extra JD sections */}
+            {(formData.customFields || []).map((field, index) => (
+              <FormGroup key={index}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <Input
+                    type="text"
+                    value={field.label}
+                    onChange={(e) => handleCustomFieldChange(index, 'label', e.target.value)}
+                    placeholder={language === 'vi' ? 'Tên mục (vd: Địa điểm làm việc)...' : 'Field title (e.g. Work location)...'}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCustomField(index)}
+                    title={language === 'vi' ? 'Xóa mục này' : 'Remove this field'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '40px',
+                      height: '40px',
+                      flexShrink: 0,
+                      background: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1px solid #FECACA',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                <TextArea
+                  value={field.value}
+                  onChange={(e) => handleCustomFieldChange(index, 'value', e.target.value)}
+                  placeholder={language === 'vi' ? 'Nội dung mục này...' : 'Content for this field...'}
+                  rows={3}
+                />
+              </FormGroup>
+            ))}
+
+            <FormGroup>
+              <button
+                type="button"
+                onClick={handleAddCustomField}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  background: '#EFF6FF',
+                  color: '#1e40af',
+                  border: '1px dashed #93C5FD',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={18} />
+                {language === 'vi' ? 'Thêm mục tùy chỉnh' : 'Add custom field'}
+              </button>
+            </FormGroup>
+
             <FormActions>
               <Button
                 type="button"
@@ -1603,7 +1695,7 @@ const PostQuickJob = () => {
                   fontSize: '12px',
                   color: '#1e40af'
                 }}>
-                  <span>{language === 'vi' ? 'Lương/h:' : 'Hourly rate:'}</span>
+                  <span>{language === 'vi' ? 'VNĐ/h:' : 'Hourly rate:'}</span>
                   <span style={{ fontWeight: '600' }}>{paymentInfo.hourlyRate.toLocaleString('vi-VN')} VNĐ</span>
                 </div>
               </div>

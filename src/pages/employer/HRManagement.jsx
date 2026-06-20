@@ -3271,6 +3271,7 @@ const HRManagement = () => {
         })(),
         description: job.description,
         requirements: job.requirements,
+        customFields: Array.isArray(job.customFields) ? job.customFields : [],
         contactPhone: job.contactPhone,
         companyName: job.companyName,
         status: job.status,
@@ -6570,6 +6571,41 @@ const HRManagement = () => {
                   </p>
                 </div>
               )}
+
+              {/* Custom fields - employer-defined extra JD sections */}
+              {Array.isArray(selectedJobView.customFields) && selectedJobView.customFields
+                .filter(f => f && (f.label || f.value))
+                .map((field, idx) => (
+                  <div key={idx} style={{
+                    padding: '20px',
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '12px',
+                      paddingBottom: '12px',
+                      borderBottom: '2px solid #E2E8F0'
+                    }}>
+                      <FileText size={18} style={{ color: '#1e40af' }} />
+                      <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                        {field.label}
+                      </h4>
+                    </div>
+                    <p style={{
+                      fontSize: '14px',
+                      lineHeight: '1.8',
+                      color: '#475569',
+                      whiteSpace: 'pre-wrap',
+                      margin: 0
+                    }}>
+                      {field.value}
+                    </p>
+                  </div>
+                ))}
 
               {/* Stats Section */}
               <div style={{

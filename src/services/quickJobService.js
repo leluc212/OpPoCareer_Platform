@@ -166,6 +166,7 @@ class QuickJobService {
         totalSalary: Math.round(jobData.totalSalary || 0),
         description: jobData.description || '',
         requirements: jobData.requirements || '',
+        customFields: jobData.customFields || [],
         status: jobData.status || 'pending',
         category: 'quick-jobs',
         applicants: 0,

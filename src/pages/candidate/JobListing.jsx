@@ -1796,7 +1796,7 @@ const translateSalary = (salaryStr, language) => {
  * @param {string} fallback - fallback text if falsy
  * @returns {string}
  */
-const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận') => {
+const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận', unit = 'hour') => {
   if (!raw && raw !== 0) return fallback;
   const str = String(raw).trim();
   if (str.includes('VNĐ') || str.includes('VND') || str.includes('đ')) return str;
@@ -1804,6 +1804,9 @@ const formatSalaryFromDB = (raw, fallback = 'Thỏa thuận') => {
   if (isNaN(num) || num === 0) return fallback;
   // fallback already has language context from caller
   const isEn = fallback === 'Negotiable';
+  if (unit === 'month') {
+    return isEn ? `${num.toLocaleString('vi-VN')} VNĐ/month` : `${num.toLocaleString('vi-VN')} VNĐ/tháng`;
+  }
   return isEn ? `${num.toLocaleString('vi-VN')} VNĐ/hr` : `${num.toLocaleString('vi-VN')} VNĐ/giờ`;
 };
 
@@ -3026,7 +3029,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               location: String(job.location || ''),
               lat: lat, // Add coordinates for location-based filtering
               lng: lng,
-              salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable'),
+              salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable', job.salaryUnit),
               type: job.jobType === 'part-time' ? (language === 'vi' ? 'Bán thời gian' : 'Part-time') : (language === 'vi' ? 'Toàn thời gian' : 'Full-time'),
               category: String(job.category || 'standard'), // Use category from DynamoDB
               tags: job.tags ? String(job.tags).split(',').map(t => String(t).trim()).filter(t => t) : [],
@@ -3038,6 +3041,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               responsibilities: String(job.responsibilities || ''),
               requirements: String(job.requirements || ''),
               benefits: String(job.benefits || ''),
+              customFields: Array.isArray(job.customFields) ? job.customFields : [],
               workHours: String(job.workHours || ''),
               workDays: String(job.workDays || ''),
               status: String(job.status || 'active'),
@@ -3127,6 +3131,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               views: parseInt(job.views) || 0,
               description: String(job.description || ''),
               requirements: String(job.requirements || ''),
+              customFields: Array.isArray(job.customFields) ? job.customFields : [],
               startTime: String(job.startTime || ''),
               endTime: String(job.endTime || ''),
               hourlyRate: Math.round(hourlyRate * 0.85),
@@ -5163,6 +5168,18 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     <DynamicTranslate text={jobDescriptionModal.job.requirements} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
                   </div>
                 )}
+
+                {/* Custom fields - employer-defined extra JD sections */}
+                {Array.isArray(jobDescriptionModal.job.customFields) && jobDescriptionModal.job.customFields
+                  .filter(f => f && (f.label || f.value))
+                  .map((field, idx) => (
+                    <div key={idx} style={{ marginBottom: '20px' }}>
+                      <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '10px', color: '#1e40af', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                        <DynamicTranslate text={field.label || ''} as="span" />
+                      </div>
+                      <DynamicTranslate text={field.value || ''} as="div" style={{ color: '#4b5563', lineHeight: '1.8' }} />
+                    </div>
+                  ))}
 
 
                 {/* Fallback to generated description if no data */}

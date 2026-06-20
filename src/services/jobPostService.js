@@ -136,10 +136,12 @@ class JobPostService {
         workDays: jobData.workDays,
         workHours: jobData.workHours,
         salary: jobData.salary || null,
+        salaryUnit: jobData.salaryUnit || 'hour',
         tags: jobData.tags || '',
         description: jobData.description,
         requirements: jobData.requirements || '',
         benefits: jobData.benefits || '',
+        customFields: jobData.customFields || [],
         isAiScreeningEnabled: jobData.isAiScreeningEnabled || false,
         customQuestions: jobData.customQuestions || [],
         // New posts should require admin moderation; set to 'pending' by default

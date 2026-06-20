@@ -1356,8 +1356,18 @@ const CandidateDashboard = () => {
         quickJobService.getAllActiveQuickJobs().catch(() => [])
       ]);
 
-      // Merge and transform for recommendations
-      const allJobs = [...standardJobs, ...quickJobs];
+      // Merge and filter out expired jobs
+      const todayOnly = new Date();
+      todayOnly.setHours(0, 0, 0, 0);
+
+      const allJobs = [...standardJobs, ...quickJobs].filter(job => {
+        // Standard jobs: workDays is the application deadline
+        const deadline = job.workDays || job.workDate;
+        if (!deadline) return true; // No deadline set → always show
+        const deadlineDate = new Date(deadline);
+        deadlineDate.setHours(0, 0, 0, 0);
+        return deadlineDate > todayOnly; // Hide if deadline has passed
+      });
       setAllActiveJobs(allJobs);
 
       // Fetch profile if not loaded to check KYC status
@@ -1844,22 +1854,16 @@ const CandidateDashboard = () => {
   const profileCompletion = (() => {
     if (!candidateProfile) return 0;
     let completion = 0;
-    if (candidateProfile.fullName?.trim()) completion += 8;
-    if (candidateProfile.email?.trim()) completion += 8;
-    if (candidateProfile.phone?.trim()) completion += 8;
-    if (candidateProfile.cccd?.trim()) completion += 8;
-    if (candidateProfile.dateOfBirth?.trim()) completion += 8;
-    if (candidateProfile.location?.trim()) completion += 8;
-    if (candidateProfile.title?.trim()) completion += 8;
-    if (candidateProfile.bio?.trim()) completion += 8;
-    if (candidateProfile.profileImage) completion += 10;
-    const hasSocialLinks = candidateProfile.socialLinks?.facebook?.trim() ||
-      candidateProfile.socialLinks?.instagram?.trim() ||
-      candidateProfile.socialLinks?.zalo?.trim() ||
-      candidateProfile.socialLinks?.website?.trim();
-    if (hasSocialLinks) completion += 6;
-    if (candidateProfile.skills && candidateProfile.skills.length >= 3) completion += 10;
-    if (candidateProfile.kycCompleted) completion += 10;
+    if (candidateProfile.fullName?.trim()) completion += 7;
+    if (candidateProfile.email?.trim()) completion += 7;
+    if (candidateProfile.phone?.trim()) completion += 7;
+    if (candidateProfile.cccd?.trim()) completion += 7;
+    if (candidateProfile.dateOfBirth?.trim()) completion += 7;
+    if (candidateProfile.location?.trim()) completion += 7;
+    if (candidateProfile.title?.trim()) completion += 7;
+    if (candidateProfile.bio?.trim()) completion += 7;
+    if (candidateProfile.profileImage) completion += 14;
+    if (candidateProfile.kycCompleted) completion += 30;
     return Math.min(completion, 100);
   })();
 

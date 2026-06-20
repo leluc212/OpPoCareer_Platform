@@ -3650,6 +3650,32 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         return;
       }
 
+      // ─── eKYC Verification Gate ─────────────────────────────────────────
+      try {
+        const { getKycStatus } = await import('../../services/ekycService');
+        const kycRes = await getKycStatus(userId);
+        const isVerified = kycRes?.kycCompleted || kycRes?.kycStatus === 'VERIFIED';
+        if (!isVerified) {
+          setApplyModal(null);
+          setErrorModal({
+            show: true,
+            message: 'Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển. Vui lòng vào phần Xác minh danh tính để thực hiện.',
+            action: () => navigate('/candidate/ekyc')
+          });
+          return;
+        }
+      } catch (ekycErr) {
+        console.error('❌ Error checking eKYC status:', ekycErr);
+        setApplyModal(null);
+        setErrorModal({
+          show: true,
+          message: 'Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển. Vui lòng vào phần Xác minh danh tính để thực hiện.',
+          action: () => navigate('/candidate/ekyc')
+        });
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       // Get CV list
       const { getCVInfo } = await import('../../services/cvUploadService');
       const cvData = await getCVInfo(userId);
@@ -6065,8 +6091,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               </h3>
               <button
                 onClick={() => {
+                  const action = errorModal.action;
                   setErrorModal({ show: false, message: '' });
-                  setApplyModal(null); // Close apply modal when clicking button
+                  setApplyModal(null);
+                  if (action) action();
                 }}
                 style={{
                   marginTop: '24px',
@@ -6090,7 +6118,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                   e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                 }}
               >
-                {language === 'vi' ? 'Đã hiểu' : 'Got It'}
+                {errorModal.action
+                  ? (language === 'vi' ? 'Xác minh ngay' : 'Verify Now')
+                  : (language === 'vi' ? 'Đã hiểu' : 'Got It')
+                }
               </button>
             </div>
           </div>

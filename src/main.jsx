@@ -1,3 +1,5 @@
+// Must be first import to suppress all console output before other modules initialize
+import './silenceConsole';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

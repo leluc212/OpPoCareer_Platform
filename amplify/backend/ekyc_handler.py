@@ -501,6 +501,7 @@ def handle_verify_face(event, user_id):
     face        = strip_prefix(body.get('faceImage', ''))
     front_hash  = body.get('front_hash') or body.get('idFrontHash')   # hash từ bước OCR
     front_token = body.get('front_token') or body.get('idFrontToken') or ''
+    ocr_data    = body.get('ocrData') or {}  # Thông tin OCR từ frontend (name, dob, id...)
 
     if not face:
         return resp(400, {'success': False, 'errorMsg': 'faceImage là bắt buộc'})
@@ -564,10 +565,29 @@ def handle_verify_face(event, user_id):
         if kyc_status == 'VERIFIED':
             try:
                 now_iso = datetime.now(timezone.utc).isoformat()
+                # Lưu trạng thái KYC + thông tin cá nhân từ OCR vào profile
+                update_expr = 'SET kycStatus=:s, kycCompleted=:d, kycVerifiedAt=:t, updatedAt=:t'
+                expr_values = {':s': 'VERIFIED', ':d': True, ':t': now_iso}
+
+                # Thêm thông tin CCCD từ OCR nếu có
+                ocr_cccd = (ocr_data.get('id') or '').strip()
+                ocr_name = (ocr_data.get('name') or '').strip()
+                ocr_dob  = (ocr_data.get('dob') or '').strip()
+
+                if ocr_cccd:
+                    update_expr += ', cccd=:cccd'
+                    expr_values[':cccd'] = ocr_cccd
+                if ocr_name:
+                    update_expr += ', fullName=:fn'
+                    expr_values[':fn'] = ocr_name
+                if ocr_dob:
+                    update_expr += ', dateOfBirth=:dob'
+                    expr_values[':dob'] = ocr_dob
+
                 table.update_item(Key={'userId': user_id},
-                    UpdateExpression='SET kycStatus=:s, kycCompleted=:d, kycVerifiedAt=:t, updatedAt=:t',
-                    ExpressionAttributeValues={':s': 'VERIFIED', ':d': True, ':t': now_iso})
-                print(f'DynamoDB updated: {user_id} -> VERIFIED')
+                    UpdateExpression=update_expr,
+                    ExpressionAttributeValues=expr_values)
+                print(f'DynamoDB updated: {user_id} -> VERIFIED, cccd={ocr_cccd}, name={ocr_name}, dob={ocr_dob}')
             except Exception as e:
                 print(f'DynamoDB error: {e}')
 

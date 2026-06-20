@@ -204,7 +204,7 @@ export const ocrCCCD = async (imageFront, imageBack = null) => {
  * @param {string} front_hash   hash ảnh CCCD lấy từ response ocrCCCD()
  * @param {string} front_token  token giao dịch lấy từ response ocrCCCD()
  */
-export const verifyFace = async (faceImage, front_hash = null, front_token = null) => {
+export const verifyFace = async (faceImage, front_hash = null, front_token = null, ocrData = null) => {
   const headers = await getAuthHeaders();
 
   const [face] = await Promise.all([
@@ -218,6 +218,7 @@ export const verifyFace = async (faceImage, front_hash = null, front_token = nul
       faceImage:   face,
       ...(front_hash  && { front_hash }),
       ...(front_token && { front_token }),
+      ...(ocrData     && { ocrData }),
     }),
   });
 

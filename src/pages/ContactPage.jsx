@@ -514,7 +514,9 @@ const ContactPage = () => {
           </ContactCard>
 
           <ContactCard
-            as="div"
+            href="https://www.tiktok.com/@oppo.career?is_from_webapp=1&sender_device=pc"
+            target="_blank"
+            rel="noopener noreferrer"
             $isDark={isDarkMode}
           >
             <IconBox $bg="linear-gradient(135deg,#fdf4ff,#ede9fe)" $color="#7c3aed">
@@ -522,7 +524,7 @@ const ContactPage = () => {
             </IconBox>
             <div>
               <ContactLabel $isDark={isDarkMode}>TikTok</ContactLabel>
-              <ContactValue $isDark={isDarkMode}>OpPo</ContactValue>
+              <ContactValue $isDark={isDarkMode}>@oppo.career</ContactValue>
               <ContactNote $isDark={isDarkMode}>{vi ? 'Theo dõi chúng tôi trên TikTok' : 'Follow us on TikTok'}</ContactNote>
             </div>
           </ContactCard>

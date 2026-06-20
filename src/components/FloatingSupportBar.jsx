@@ -1193,8 +1193,8 @@ export default function FloatingSupportBar() {
                         <Clock />
                         <span>
                           {language === 'vi'
-                            ? 'Giờ làm việc: 8:00 - 18:00 (T2 - T7)'
-                            : 'Working Hours: 8:00 AM - 6:00 PM (Mon - Sat)'}
+                            ? 'Giờ làm việc: 8:00 - 19:30 (T2 - T7)'
+                            : 'Working Hours: 8:00 AM - 6:30 PM (Mon - Sat)'}
                         </span>
                       </div>
                     </ContactItem>

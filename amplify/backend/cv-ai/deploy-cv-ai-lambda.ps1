@@ -7,7 +7,7 @@ param(
     [string]$JwtAuthorizerId,
     [string]$StageName = "prod",
     [string]$GeminiSecretName = "opporeview/gemini",
-    [string]$AllowedOrigins = "http://localhost:3000"
+    [string]$AllowedOrigins = "http://localhost:3000,https://oppocareer.com,https://www.oppocareer.com"
 )
 
 $ErrorActionPreference = "Stop"

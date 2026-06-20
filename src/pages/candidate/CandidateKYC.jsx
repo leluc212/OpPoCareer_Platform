@@ -18,7 +18,6 @@ import {
 import { useLanguage } from '../../context/LanguageContext';
 import { ocrCCCD, verifyFace, getKycStatus } from '../../services/ekycService';
 import { useAuth } from '../../context/AuthContext';
-import candidateProfileService from '../../services/candidateProfileService';
 
 // ─── Animations ───────────────────────────────────────────────────────────────
 const spin = keyframes`from { transform: rotate(0deg); } to { transform: rotate(360deg); }`;
@@ -412,18 +411,9 @@ const CandidateKYC = () => {
     setLoading(true);
     setLoadingMsg(t('Đang xác minh khuôn mặt…', 'Verifying face…'));
     try {
-      const faceRes = await verifyFace(selfieImg, frontHash, frontToken);
+      const faceRes = await verifyFace(selfieImg, frontHash, frontToken, ocrResult);
       setFaceResult(faceRes);
       if (faceRes?.kycStatus === 'VERIFIED') {
-        try {
-          await candidateProfileService.updateProfile({
-            cccd: ocrResult?.id || '',
-            fullName: ocrResult?.name || '',
-            dateOfBirth: ocrResult?.dob || ''
-          });
-        } catch (dbErr) {
-          console.error('Failed to update profile fields:', dbErr);
-        }
         markComplete(1);
         setTimeout(() => { markComplete(0); setCurrentStep(2); }, 2000);
       } else {
@@ -527,11 +517,37 @@ const CandidateKYC = () => {
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
               style={{
                 background: '#fee2e2', border: '2px solid #ef444450', borderRadius: 12,
-                padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center',
+                padding: '12px 18px', marginBottom: 20, display: 'flex', flexDirection: 'column',
                 gap: 10, color: '#b91c1c', fontSize: 14, fontWeight: 600
               }}>
-              <XCircle size={18} style={{ flexShrink: 0 }} />
-              {error}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <XCircle size={18} style={{ flexShrink: 0 }} />
+                {error}
+              </div>
+              {currentStep === 0 && !ocrResult && (
+                <button
+                  onClick={() => {
+                    setError('');
+                    setFrontImage(null);
+                    setBackImage(null);
+                    setOcrResult(null);
+                    setFrontHash(null);
+                    setFrontToken(null);
+                    setOcrConfirmed(false);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 8,
+                    padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    alignSelf: 'flex-start', transition: 'opacity .2s',
+                  }}
+                  onMouseOver={e => e.currentTarget.style.opacity = '0.85'}
+                  onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                >
+                  <RotateCcw size={14} />
+                  {t('Tải lại ảnh CCCD', 'Re-upload ID Card')}
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

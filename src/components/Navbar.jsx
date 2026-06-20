@@ -1485,9 +1485,9 @@ const Navbar = ({ showSearch = true }) => {
     return role;
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
   };
 
   const toggleNotifications = (e) => {

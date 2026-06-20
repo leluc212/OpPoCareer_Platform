@@ -19,10 +19,10 @@ cognitoUserPoolsTokenProvider.setKeyValueStorage(window.localStorage);
 
 // Redirect URI must exactly match what's registered in Cognito Hosted UI.
 // Local dev: http://localhost:3000/  (vite base = '/', port 3000)
-// Production: https://leluc212.github.io/OpPoReview/
+// Production: https://oppocareer.com/
 const redirectUri = window.location.hostname === 'localhost'
   ? 'http://localhost:3000/'
-  : 'https://leluc212.github.io/OpPoReview/';
+  : 'https://oppocareer.com/';
 
 // Configure Amplify v6 with proper storage and OAuth settings
 Amplify.configure({

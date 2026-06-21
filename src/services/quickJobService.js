@@ -162,6 +162,7 @@ class QuickJobService {
         hourlyRate: Math.round(jobData.hourlyRate || 0),
         startTime: jobData.startTime,
         endTime: jobData.endTime,
+        workHours: jobData.workHours || '',
         totalHours: Math.round((jobData.totalHours || 0) * 10) / 10,
         totalSalary: Math.round(jobData.totalSalary || 0),
         description: jobData.description || '',

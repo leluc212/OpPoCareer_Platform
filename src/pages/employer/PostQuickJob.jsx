@@ -880,30 +880,38 @@ const PostQuickJob = () => {
   };
 
   const [formData, setFormData] = useState(() => {
-    // Load draft from localStorage on mount
-    const savedDraft = localStorage.getItem('quickJobDraft');
-    if (savedDraft) {
-      try {
-        return JSON.parse(savedDraft);
-      } catch (e) {
-        console.error('Error loading draft:', e);
-      }
-    }
-    return {
+    const defaults = {
       title: '',
       location: '',
       latitude: '', // GPS latitude
       longitude: '', // GPS longitude
       jobType: '', // Loại hình công việc
       hourlyRate: '', // Lương theo giờ
-      startTime: '', // Thời gian bắt đầu ca
-      endTime: '', // Thời gian kết thúc ca
+      startTime: '', // Thời gian bắt đầu ca (slot đầu tiên — giữ để tương thích)
+      endTime: '', // Thời gian kết thúc ca (slot đầu tiên — giữ để tương thích)
       workDate: '', // Ngày làm việc
       description: '',
       requirements: '', // Yêu cầu
       contactPhone: '',
-      customFields: []
+      customFields: [],
+      workHoursList: [{ startTime: '', endTime: '' }] // Nhiều khung giờ làm việc
     };
+    // Load draft from localStorage on mount
+    const savedDraft = localStorage.getItem('quickJobDraft');
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        const merged = { ...defaults, ...parsed };
+        // Migrate older drafts that only stored a single startTime/endTime
+        if (!Array.isArray(merged.workHoursList) || merged.workHoursList.length === 0) {
+          merged.workHoursList = [{ startTime: parsed.startTime || '', endTime: parsed.endTime || '' }];
+        }
+        return merged;
+      } catch (e) {
+        console.error('Error loading draft:', e);
+      }
+    }
+    return defaults;
   });
 
   const handleChange = (e) => {
@@ -972,43 +980,62 @@ const PostQuickJob = () => {
   };
 
   // Calculate total salary based on hourly rate and working hours
+  // Work-hour slots management (multiple "Khung giờ làm việc")
+  const addWorkHourSlot = () => {
+    setFormData(prev => ({
+      ...prev,
+      workHoursList: [...(prev.workHoursList || []), { startTime: '', endTime: '' }]
+    }));
+  };
+
+  const removeWorkHourSlot = (index) => {
+    setFormData(prev => {
+      const list = (prev.workHoursList || []).filter((_, i) => i !== index);
+      return { ...prev, workHoursList: list.length > 0 ? list : [{ startTime: '', endTime: '' }] };
+    });
+  };
+
+  const updateWorkHourSlot = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      workHoursList: (prev.workHoursList || []).map((slot, i) => (
+        i === index ? { ...slot, [field]: value } : slot
+      ))
+    }));
+  };
+
   const calculateTotalSalary = () => {
-    const { hourlyRate, startTime, endTime } = formData;
-    
-    if (!hourlyRate || !startTime || !endTime) {
-      return null;
-    }
+    const { hourlyRate, workHoursList } = formData;
 
     const rate = parseHourlyRateInput(hourlyRate);
-    if (isNaN(rate) || rate < 29500) {
+    if (!hourlyRate || isNaN(rate) || rate < 29500) {
       return null;
     }
 
-    // Parse time strings (HH:MM)
-    const [startHour, startMin] = startTime.split(':').map(Number);
-    const [endHour, endMin] = endTime.split(':').map(Number);
+    const slots = Array.isArray(workHoursList) ? workHoursList : [];
+    let totalHours = 0;
 
-    if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) {
+    for (const slot of slots) {
+      if (!slot || !slot.startTime || !slot.endTime) continue;
+
+      const [startHour, startMin] = slot.startTime.split(':').map(Number);
+      const [endHour, endMin] = slot.endTime.split(':').map(Number);
+      if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) continue;
+
+      let hoursWorked = (endHour + endMin / 60) - (startHour + startMin / 60);
+      // Handle negative (next day scenario)
+      if (hoursWorked < 0) hoursWorked += 24;
+
+      totalHours += hoursWorked;
+    }
+
+    if (totalHours <= 0) {
       return null;
     }
 
-    // Calculate hours worked
-    let hoursWorked = (endHour + endMin / 60) - (startHour + startMin / 60);
-    
-    // Handle negative (next day scenario)
-    if (hoursWorked < 0) {
-      hoursWorked += 24;
-    }
-
-    if (hoursWorked === 0) {
-      return null;
-    }
-
-    const totalSalary = rate * hoursWorked;
-    
     return {
-      hours: hoursWorked,
-      total: totalSalary
+      hours: totalHours,
+      total: rate * totalHours
     };
   };
 
@@ -1032,7 +1059,7 @@ const PostQuickJob = () => {
     e.preventDefault();
     
     // Validation
-    if (!formData.title || !formData.location || !formData.hourlyRate || !formData.workDate) {
+    if (!formData.title || !formData.location || !formData.hourlyRate || !formData.workDate || !formData.description || !formData.requirements) {
       setModalType('error');
       setShowModal(true);
       return;
@@ -1061,8 +1088,9 @@ const PostQuickJob = () => {
       return;
     }
 
-    // Check if time range is provided
-    if (!formData.startTime || !formData.endTime) {
+    // Check that at least one complete work-hour slot is provided
+    const validSlots = (formData.workHoursList || []).filter(s => s.startTime && s.endTime);
+    if (validSlots.length === 0) {
       setModalType('error');
       setPaymentInfo({
         error: true,
@@ -1172,8 +1200,9 @@ const PostQuickJob = () => {
         longitude: formData.longitude ? Math.round(parseFloat(formData.longitude) * 1000000) / 1000000 : null,
         jobType: formData.jobType || 'part-time',
         hourlyRate: Math.round(rate), // Ensure integer
-        startTime: formData.startTime,
-        endTime: formData.endTime,
+        startTime: validSlots[0].startTime,
+        endTime: validSlots[0].endTime,
+        workHours: validSlots.map(s => `${s.startTime} - ${s.endTime}`).join(' | '),
         totalHours: Math.round(calculation.hours * 10) / 10, // Round to 1 decimal place
         totalSalary: Math.round(totalFee), // Ensure integer
         description: formData.description || '',
@@ -1486,29 +1515,51 @@ const PostQuickJob = () => {
 
             <FormRow $columns="1fr 1fr">
               <FormGroup>
-                <Label>{t.workingHours}</Label>
-                <FormRow $columns="1fr 1fr">
-                  <div>
-                    <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.startTime}</Label>
-                    <Input
-                      name="startTime"
-                      type="time"
-                      value={formData.startTime}
-                      onChange={handleChange}
-                      placeholder={t.startTimePlaceholder}
-                    />
-                  </div>
-                  <div>
-                    <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
-                    <Input
-                      name="endTime"
-                      type="time"
-                      value={formData.endTime}
-                      onChange={handleChange}
-                      placeholder={t.endTimePlaceholder}
-                    />
-                  </div>
-                </FormRow>
+                <Label required>{t.workingHours}</Label>
+                {(formData.workHoursList || []).map((slot, index) => (
+                  <FormRow key={index} $columns="1fr 1fr auto" style={{ marginBottom: '10px', alignItems: 'end' }}>
+                    <div>
+                      <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.startTime}</Label>
+                      <Input
+                        type="time"
+                        value={slot.startTime}
+                        onChange={(e) => updateWorkHourSlot(index, 'startTime', e.target.value)}
+                        placeholder={t.startTimePlaceholder}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
+                      <Input
+                        type="time"
+                        value={slot.endTime}
+                        onChange={(e) => updateWorkHourSlot(index, 'endTime', e.target.value)}
+                        placeholder={t.endTimePlaceholder}
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', paddingBottom: '2px' }}>
+                      <button
+                        type="button"
+                        onClick={addWorkHourSlot}
+                        title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#EFF6FF', color: '#1e40af', border: '1px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer' }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                      {(formData.workHoursList || []).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeWorkHourSlot(index)}
+                          title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
+                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: '8px', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </FormRow>
+                ))}
               </FormGroup>
               
               {/* Total Salary Display */}
@@ -1545,24 +1596,26 @@ const PostQuickJob = () => {
             </FormRow>
 
             <FormGroup>
-              <Label>{t.description}</Label>
+              <Label required>{t.description}</Label>
               <TextArea
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
                 placeholder={t.descriptionPlaceholder}
                 rows={4}
+                required
               />
             </FormGroup>
 
             <FormGroup>
-              <Label>{t.requirements}</Label>
+              <Label required>{t.requirements}</Label>
               <TextArea
                 name="requirements"
                 value={formData.requirements}
                 onChange={handleChange}
                 placeholder={t.requirementsPlaceholder}
                 rows={3}
+                required
               />
             </FormGroup>
 

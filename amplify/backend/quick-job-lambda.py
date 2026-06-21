@@ -325,6 +325,7 @@ def create_quick_job(body_str, user_id, headers):
             'hourlyRate': to_decimal(body.get('hourlyRate')),
             'startTime': body['startTime'],
             'endTime': body['endTime'],
+            'workHours': body.get('workHours', ''),
             'totalHours': to_decimal(body.get('totalHours')),
             'totalSalary': to_decimal(body.get('totalSalary')),
             'description': body['description'],
@@ -623,7 +624,7 @@ def update_quick_job(body_str, job_id, user_id, claims, headers):
         expr_names = {}
         
         updatable_fields = ['title', 'location', 'latitude', 'longitude', 'jobType', 'hourlyRate', 'startTime', 'endTime',
-                           'totalHours', 'totalSalary', 'description', 'requirements', 'customFields', 'status', 'workDate']
+                           'totalHours', 'totalSalary', 'description', 'requirements', 'customFields', 'workHours', 'status', 'workDate']
         
         reserved_keywords = ['location', 'status']
         

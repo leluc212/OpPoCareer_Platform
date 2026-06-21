@@ -3254,7 +3254,7 @@ const HRManagement = () => {
           }
           return language === 'vi' ? 'Thỏa thuận' : 'Negotiable';
         })(),
-        shift: job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : '',
+        shift: job.workHours || (job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : ''),
         deadline: (() => {
           // Use workDate from database instead of calculating from createdAt
           if (job.workDate) {

@@ -3226,7 +3226,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               endTime: String(job.endTime || ''),
               hourlyRate: Math.round(hourlyRate * 0.85),
               totalHours: totalHours,
-              workHours: job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : '',
+              workHours: job.workHours || (job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : ''),
               workDate: job.workDate || '',
               status: String(job.status || 'active'),
               isQuickJob: true, // Flag to identify quick jobs

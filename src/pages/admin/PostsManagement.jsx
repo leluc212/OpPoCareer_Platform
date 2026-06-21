@@ -617,7 +617,7 @@ const PostsManagement = () => {
     const cvSent = Number.isFinite(Number(job.cvSent)) ? Number(job.cvSent) : Math.floor(applications * 0.7);
     const reach = Number(job.views ?? job.reach ?? 0);
     const employerName = job.companyName || job.employerName || job.company || job.employerEmail || job.employerId || 'N/A';
-    const workTime = job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : job.workTime || '';
+    const workTime = job.workHours || (job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : job.workTime || '');
     const salaryValue = job.totalSalary ?? job.hourlyRate ?? job.salary;
 
     return {

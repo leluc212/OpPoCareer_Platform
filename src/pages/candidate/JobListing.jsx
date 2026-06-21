@@ -2217,6 +2217,8 @@ const JobListing = () => {
   const [isAiMockMode, setIsAiMockMode] = useState(false);
   const [showAiRulesModal, setShowAiRulesModal] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(false);
+  const [micPermissionGranted, setMicPermissionGranted] = useState(false);
+  const [micPermissionError, setMicPermissionError] = useState('');
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarningOverlay, setShowTabWarningOverlay] = useState(false);
 
@@ -2234,6 +2236,7 @@ const JobListing = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const recognitionRef = useRef(null);
   const autoSendTimerRef = useRef(null);
+  const isExitingFullscreenRef = useRef(false);
 
   const speakVietnamese = useCallback((text) => {
     if (!window.speechSynthesis) return;
@@ -2331,6 +2334,25 @@ const JobListing = () => {
     }
   };
 
+  // Exit fullscreen helper
+  const exitFullscreenMode = () => {
+    try {
+      isExitingFullscreenRef.current = true;
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (document.webkitFullscreenElement) {
+        document.webkitExitFullscreen();
+      } else if (document.msFullscreenElement) {
+        document.msExitFullscreen();
+      }
+      // Reset flag after a short delay to allow event to fire
+      setTimeout(() => { isExitingFullscreenRef.current = false; }, 500);
+    } catch (e) {
+      isExitingFullscreenRef.current = false;
+      console.warn('Exit fullscreen error:', e);
+    }
+  };
+
   const handleDisqualifyCandidate = () => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -2344,6 +2366,9 @@ const JobListing = () => {
     // Ban for 3 days (Disabled for testing)
     // const banDuration = 3 * 24 * 60 * 60 * 1000; // 3 days in ms
     // localStorage.setItem('ai_interview_ban_until', String(Date.now() + banDuration));
+
+    // Exit fullscreen
+    exitFullscreenMode();
 
     // Close modals
     setShowAiScreeningModal(false);
@@ -2411,12 +2436,32 @@ const JobListing = () => {
       e.returnValue = ''; // Standard confirmation popup
     };
 
+    // Block browser back button during interview
+    window.history.pushState(null, '', window.location.href);
+    const handlePopState = () => {
+      // Push state again to prevent navigation
+      window.history.pushState(null, '', window.location.href);
+      handleViolation();
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('copy', handlePreventCopyPaste);
     document.addEventListener('paste', handlePreventCopyPaste);
     document.addEventListener('contextmenu', handlePreventRightClick);
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    // Detect fullscreen exit (Escape key) as violation
+    const handleFullscreenChange = () => {
+      // Skip if we're programmatically exiting fullscreen (e.g., interview ended)
+      if (isExitingFullscreenRef.current) return;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+        handleViolation();
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -2425,6 +2470,9 @@ const JobListing = () => {
       document.removeEventListener('paste', handlePreventCopyPaste);
       document.removeEventListener('contextmenu', handlePreventRightClick);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, [showAiScreeningModal, aiScreeningStep, interviewFinished, language, showTabWarningOverlay]);
 
@@ -2904,6 +2952,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           speakVietnamese(nextQuestion);
         } else {
           setInterviewFinished(true);
+          exitFullscreenMode();
           const score = Math.floor(Math.random() * 15) + 75; // Score 75-89
           const report = {
             total_score: score,
@@ -2969,6 +3018,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
       if (finished) {
         setInterviewFinished(true);
+        exitFullscreenMode();
         setInterviewReport(data.report);
         let audioUploadResult = null;
         try {
@@ -5379,6 +5429,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             return;
           }
           if (!aiScreeningLoading && (!interviewSending || interviewFinished)) {
+            exitFullscreenMode();
             setShowAiScreeningModal(false);
             if (!interviewFinished) {
               setPendingApplication(null);
@@ -5561,6 +5612,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                           }
                           */
                           setRulesAccepted(false); // Reset checkbox when opening rules
+                          setMicPermissionGranted(false); // Reset mic permission
+                          setMicPermissionError(''); // Reset mic error
                           setShowAiRulesModal(true);
                         }}
                         style={{
@@ -5882,6 +5935,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
                         <button 
                           onClick={() => {
+                            exitFullscreenMode();
                             setShowAiScreeningModal(false);
                             const isPassed = interviewReport?.recommend_to_employer || (interviewReport?.total_score >= 60);
                             if (isPassed) {
@@ -5981,6 +6035,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 {language === 'vi' ? 'Tính năng sao chép và dán bị vô hiệu hóa hoàn toàn trong suốt buổi phỏng vấn.' : 'Copying and pasting is completely disabled during the interview.'}
               </div>
             </div>
+            <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+              <span style={{ color: '#2563eb' }}>🎤</span>
+              <div>
+                <strong>{language === 'vi' ? 'Yêu cầu cấp quyền Micro' : 'Microphone Permission Required'}:</strong>{' '}
+                {language === 'vi' ? 'Bạn cần cấp quyền sử dụng micro trước khi phỏng vấn. Phỏng vấn sẽ chạy toàn màn hình (fullscreen) để đảm bảo tính công bằng.' : 'You must grant microphone permission before starting. The interview will run in fullscreen mode to ensure fairness.'}
+              </div>
+            </div>
           </div>
 
           <label style={{
@@ -5996,7 +6057,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             fontSize: '13.5px',
             fontWeight: '600',
             color: '#1e40af',
-            marginBottom: '20px'
+            marginBottom: '12px'
           }}>
             <input
               type="checkbox"
@@ -6011,6 +6072,74 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             </span>
           </label>
 
+          {/* Mic Permission Request Section */}
+          <div style={{
+            padding: '12px 16px',
+            background: micPermissionGranted ? '#f0fdf4' : '#fefce8',
+            border: `1.5px solid ${micPermissionGranted ? '#86efac' : '#fde047'}`,
+            borderRadius: '10px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '13.5px', fontWeight: '700', color: micPermissionGranted ? '#166534' : '#92400e', marginBottom: '2px' }}>
+                {micPermissionGranted
+                  ? (language === 'vi' ? 'Đã cấp quyền Micro thành công!' : 'Microphone permission granted!')
+                  : (language === 'vi' ? 'Cần cấp quyền Micro để bắt đầu' : 'Microphone permission required')}
+              </div>
+              {!micPermissionGranted && (
+                <div style={{ fontSize: '12px', color: '#78716c' }}>
+                  {language === 'vi' ? 'Nhấn nút bên phải để cấp quyền' : 'Click button to grant permission'}
+                </div>
+              )}
+              {micPermissionError && (
+                <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '4px' }}>
+                  {micPermissionError}
+                </div>
+              )}
+            </div>
+            {!micPermissionGranted && (
+              <button
+                onClick={async () => {
+                  setMicPermissionError('');
+                  try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    // Stop tracks immediately - just testing permission
+                    stream.getTracks().forEach(track => track.stop());
+                    setMicPermissionGranted(true);
+                  } catch (err) {
+                    console.error('Mic permission error:', err);
+                    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                      setMicPermissionError(language === 'vi'
+                        ? 'Bạn đã từ chối quyền micro. Vui lòng vào Cài đặt trình duyệt để bật lại.'
+                        : 'You denied microphone access. Please enable it in browser settings.');
+                    } else {
+                      setMicPermissionError(language === 'vi'
+                        ? 'Không tìm thấy micro. Vui lòng kiểm tra thiết bị.'
+                        : 'No microphone found. Please check your device.');
+                    }
+                  }
+                }}
+                style={{
+                  padding: '8px 16px',
+                  background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '700',
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)'
+                }}
+              >
+                {language === 'vi' ? 'Cấp quyền' : 'Grant'}
+              </button>
+            )}
+          </div>
+
           <div className="apply-buttons">
             <button
               className="btn-cancel"
@@ -6020,23 +6149,38 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               {language === 'vi' ? 'Hủy' : 'Cancel'}
             </button>
             <button
-              onClick={() => {
-                if (!rulesAccepted) return;
+              onClick={async () => {
+                if (!rulesAccepted || !micPermissionGranted) return;
                 setShowAiRulesModal(false);
+                
+                // Request fullscreen mode
+                try {
+                  const elem = document.documentElement;
+                  if (elem.requestFullscreen) {
+                    await elem.requestFullscreen();
+                  } else if (elem.webkitRequestFullscreen) {
+                    await elem.webkitRequestFullscreen();
+                  } else if (elem.msRequestFullscreen) {
+                    await elem.msRequestFullscreen();
+                  }
+                } catch (fsErr) {
+                  console.warn('Fullscreen request failed:', fsErr);
+                }
+                
                 setAiScreeningStep('interview');
                 startInterviewSession(aiScreeningJob, pendingApplication?.finalCVUrl);
               }}
-              disabled={!rulesAccepted}
+              disabled={!rulesAccepted || !micPermissionGranted}
               style={{
                 flex: 1.5,
                 padding: '14px 20px',
-                background: rulesAccepted ? 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)' : '#cbd5e1',
+                background: (rulesAccepted && micPermissionGranted) ? 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)' : '#cbd5e1',
                 color: 'white',
                 border: 'none',
                 borderRadius: '12px',
                 fontWeight: '700',
-                cursor: rulesAccepted ? 'pointer' : 'not-allowed',
-                boxShadow: rulesAccepted ? '0 4px 14px rgba(124, 58, 237, 0.3)' : 'none'
+                cursor: (rulesAccepted && micPermissionGranted) ? 'pointer' : 'not-allowed',
+                boxShadow: (rulesAccepted && micPermissionGranted) ? '0 4px 14px rgba(124, 58, 237, 0.3)' : 'none'
               }}
             >
               {language === 'vi' ? 'Bắt đầu ngay' : 'Start Now'}

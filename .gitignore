@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Data dumps / debug exports that may contain presigned URLs (AWS temp keys) and PII
+cand_profile.json
+candidate-profiles-data.json
+public/candidate-profiles-data.json
+*profiles-data.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

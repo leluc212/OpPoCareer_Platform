@@ -160,6 +160,43 @@ SUGGEST_JD_SCHEMA = {
     "required": ["description", "responsibilities", "requirements", "benefits"],
 }
 
+PARSE_JD_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "location": {"type": "string"},
+        "description": {"type": "string"},
+        "requirements": {"type": "string"},
+        "benefits": {"type": "string"},
+        "salary": {"type": "string"},
+        "salaryUnit": {"type": "string"},
+        "hourlyRate": {"type": "string"},
+        "workDays": {"type": "string"},
+        "workDate": {"type": "string"},
+        "workHoursList": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "startTime": {"type": "string"},
+                    "endTime": {"type": "string"},
+                    "days": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["startTime", "endTime"]
+            }
+        },
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "contactPhone": {"type": "string"},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+    },
+    "required": [
+        "title", "location", "description", "requirements", "benefits",
+        "salary", "salaryUnit", "hourlyRate", "workDays", "workDate",
+        "workHoursList", "tags", "contactPhone", "warnings"
+    ]
+}
+
+
 
 RECOMMEND_JOBS_SCHEMA = {
     "type": "object",
@@ -195,6 +232,66 @@ class ProviderError(Exception):
         self.code = code
         self.message = message
         self.retryable = retryable
+
+
+def _call_gemini_with_fallback(payload, urlopen=None):
+    if urlopen is None:
+        urlopen = urllib.request.urlopen
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
+    
+    primary_model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL).strip()
+    fallback_model = "gemini-2.5-flash"
+    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
+
+    def _attempt_call(model):
+        request = urllib.request.Request(
+            f"{GEMINI_API_BASE_URL}/{model}:generateContent",
+            data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
+            headers={
+                "x-goog-api-key": api_key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            status = error.code
+            provider_message = ""
+            try:
+                error_body = json.loads(error.read().decode("utf-8"))
+                provider_message = str((error_body.get("error") or {}).get("message") or "")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+            print(f"DEBUG_GEMINI_ERROR - status: {status}, message: {provider_message}")
+            if status in {400, 401, 403} and "api key" in provider_message.lower():
+                raise ProviderError(
+                    "AI_CREDENTIAL_INVALID",
+                    "The Gemini API key is invalid.",
+                )
+            retryable = status == 429 or status >= 500
+            code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
+            raise ProviderError(code, f"The AI provider returned status {status}: {provider_message}", retryable)
+        except (urllib.error.URLError, TimeoutError):
+            raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
+        except json.JSONDecodeError:
+            raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
+
+    try:
+        return _attempt_call(primary_model)
+    except ProviderError as e:
+        is_temporary = e.code in {"AI_RATE_LIMITED", "AI_PROVIDER_ERROR"} and getattr(e, "retryable", False)
+        if is_temporary and primary_model != fallback_model:
+            print(f"DEBUG_GEMINI_FALLBACK - Temporary error on primary model {primary_model}. Trying fallback model {fallback_model}...")
+            try:
+                return _attempt_call(fallback_model)
+            except Exception as fallback_err:
+                print(f"DEBUG_GEMINI_FALLBACK_FAILED - Fallback model call failed: {fallback_err}")
+                raise e
+        raise e
 
 
 def _allowed_origin(event):
@@ -437,6 +534,38 @@ def _validate_suggest_jd_payload(body):
     }
 
 
+def _validate_parse_jd_payload(body):
+    if not isinstance(body, dict):
+        raise RequestError(400, "INVALID_PAYLOAD", "Payload must be a JSON object.")
+    
+    text = body.get("text")
+    if text is not None and not isinstance(text, str):
+        raise RequestError(400, "INVALID_PAYLOAD", "text must be a string.")
+        
+    file_content = body.get("file_content")
+    if file_content is not None and not isinstance(file_content, str):
+        raise RequestError(400, "INVALID_PAYLOAD", "file_content must be a base64 encoded string.")
+        
+    file_type = body.get("file_type")
+    if file_type is not None and not isinstance(file_type, str):
+        raise RequestError(400, "INVALID_PAYLOAD", "file_type must be a string.")
+
+    if not text and not file_content:
+        raise RequestError(400, "MISSING_FIELDS", "Either text or file_content is required.")
+
+    language = body.get("language", "vi")
+    if language not in {"vi", "en"}:
+        language = "vi"
+
+    return {
+        "text": text,
+        "file_content": file_content,
+        "file_type": file_type,
+        "language": language
+    }
+
+
+
 def _generation_system_prompt(language):
     output_language = "Vietnamese" if language == "vi" else "English"
     return f"""
@@ -553,48 +682,9 @@ def _extract_gemini_text(response):
     raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", retryable=True)
 
 
-def call_gemini(validated, urlopen=urllib.request.urlopen):
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(_gemini_payload(validated), ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            provider_response = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        status = error.code
-        provider_message = ""
-        try:
-            error_body = json.loads(error.read().decode("utf-8"))
-            provider_message = str((error_body.get("error") or {}).get("message") or "")
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-        print(f"DEBUG_GEMINI_ERROR - status: {status}, message: {provider_message}")
-        if status in {400, 401, 403} and "api key" in provider_message.lower():
-            raise ProviderError(
-                "AI_CREDENTIAL_INVALID",
-                "The Gemini API key is invalid.",
-            )
-        retryable = status == 429 or status >= 500
-        code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
-        raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
-    except (urllib.error.URLError, TimeoutError):
-        raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
-    except json.JSONDecodeError:
-        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
-
+def call_gemini(validated, urlopen=None):
+    payload = _gemini_payload(validated)
+    provider_response = _call_gemini_with_fallback(payload, urlopen=urlopen)
     try:
         return json.loads(_extract_gemini_text(provider_response))
     except json.JSONDecodeError:
@@ -801,45 +891,9 @@ def _gemini_recommend_payload(validated, candidates):
     }
 
 
-def call_gemini_recommend(validated, candidates, urlopen=urllib.request.urlopen):
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(_gemini_recommend_payload(validated, candidates), ensure_ascii=False, default=str).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            provider_response = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        status = error.code
-        provider_message = ""
-        try:
-            error_body = json.loads(error.read().decode("utf-8"))
-            provider_message = str((error_body.get("error") or {}).get("message") or "")
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-        print(f"DEBUG_GEMINI_ERROR - status: {status}, message: {provider_message}")
-        if status in {400, 401, 403} and "api key" in provider_message.lower():
-            raise ProviderError(
-                "AI_CREDENTIAL_INVALID",
-                "The Gemini API key is invalid.",
-            )
-        retryable = status == 429 or status >= 500
-        code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
-        raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
-    except (urllib.error.URLError, TimeoutError):
-        raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
-    except json.JSONDecodeError:
-        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
+def call_gemini_recommend(validated, candidates, urlopen=None):
+    payload = _gemini_recommend_payload(validated, candidates)
+    provider_response = _call_gemini_with_fallback(payload, urlopen=urlopen)
     try:
         return json.loads(_extract_gemini_text(provider_response))
     except json.JSONDecodeError:
@@ -892,50 +946,91 @@ def _gemini_suggest_jd_payload(validated):
 
 
 def call_gemini_suggest_jd(validated, urlopen=None):
-    if urlopen is None:
-        urlopen = urllib.request.urlopen
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(_gemini_suggest_jd_payload(validated), ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            provider_response = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        status = error.code
-        provider_message = ""
-        try:
-            error_body = json.loads(error.read().decode("utf-8"))
-            provider_message = str((error_body.get("error") or {}).get("message") or "")
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-        print(f"DEBUG_GEMINI_ERROR - status: {status}, message: {provider_message}")
-        if status in {400, 401, 403} and "api key" in provider_message.lower():
-            raise ProviderError(
-                "AI_CREDENTIAL_INVALID",
-                "The Gemini API key is invalid.",
-            )
-        retryable = status == 429 or status >= 500
-        code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
-        raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
-    except (urllib.error.URLError, TimeoutError):
-        raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
-    except json.JSONDecodeError:
-        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
+    payload = _gemini_suggest_jd_payload(validated)
+    provider_response = _call_gemini_with_fallback(payload, urlopen=urlopen)
     try:
         return json.loads(_extract_gemini_text(provider_response))
     except json.JSONDecodeError:
         raise ProviderError("AI_INVALID_RESPONSE", "The AI returned invalid JSON.", True)
+
+
+def _parse_jd_system_prompt(language):
+    output_language = "Vietnamese" if language == "vi" else "English"
+    return f"""
+You are an expert HR recruitment parser and writer. Return all prose in {output_language}.
+Your job is to read and analyze the provided job description (JD) and populate all structured fields in the schema.
+The fields to extract are:
+- title: Job title.
+- location: Working location.
+- description: General job description.
+- requirements: Job requirements.
+- benefits: Job benefits and perks.
+- salary: Numerical salary value (e.g. "30000" or "10000000") or a range. If not found, leave as empty string.
+- salaryUnit: Either "hour" or "month" (default to "hour" if unclear).
+- hourlyRate: A numerical salary value per hour (e.g. "30000") if salary is hourly or if it is a quick job. If not found, leave as empty string.
+- workDays: Application deadline date in format YYYY-MM-DD. If not found, leave as empty string.
+- workDate: Specific date of work in format YYYY-MM-DD. If not found, leave as empty string.
+- workHoursList: Array of time slots, each slot has "startTime" (HH:MM) and "endTime" (HH:MM), and optionally "days" (array of weekday keys like "T2", "T3", "T4", "T5", "T6", "T7", "CN").
+- tags: Array of tags (e.g. ["Pha chế", "F&B", "Coffee"]).
+- contactPhone: Contact phone number if specified in the JD.
+
+CRITICAL RULES:
+1. AUTOFILLED MISSING CONTENT:
+   - If the JD is missing 'description', 'requirements', or 'benefits', or if they are extremely short (less than 15 words), you MUST automatically generate a professional, appropriate content block for that missing section in {output_language} based on the job title.
+   - For example, if it's for a "Barista/Pha chế" and the requirements section is empty, generate typical barista requirements (e.g., pha chế thành thạo, làm việc nhóm, giao tiếp tốt).
+2. WARNING FOR UNPARSABLE FIELDS:
+   - If any of the following fields are missing, empty, or cannot be determined from the JD: 'location', 'salary' (or 'hourlyRate'), 'workDays' (or 'workDate'), 'contactPhone', you MUST leave them as empty string or null, AND you MUST add the field name (e.g., "location", "salary", "workDays", "workHoursList", "contactPhone") to the 'warnings' array.
+   - The 'warnings' array must contain the list of fields that the employer needs to fill manually.
+3. Use newline character '\\n' between items in description, requirements, benefits, but do not use markdown list symbols like '*' or '-' in the bullet text itself.
+4. Ensure the output strictly conforms to the requested JSON schema.
+""".strip()
+
+
+def _gemini_parse_jd_payload(validated):
+    parts = []
+    
+    # If file content is provided, pass it as inlineData
+    if validated.get("file_content") and validated.get("file_type") == "application/pdf":
+        parts.append({
+            "inlineData": {
+                "mimeType": "application/pdf",
+                "data": validated["file_content"]
+            }
+        })
+        
+    prompt_text = "Please analyze this Job Description (JD) and extract the required fields. Conform to the response schema."
+    if validated.get("text"):
+        prompt_text += f"\n\nJD Plain Text:\n{validated['text']}"
+    else:
+        prompt_text += "\n\nThe JD content is provided in the PDF file attached above."
+        
+    parts.append({"text": prompt_text})
+    
+    return {
+        "systemInstruction": {
+            "parts": [{"text": _parse_jd_system_prompt(validated["language"])}]
+        },
+        "contents": [{
+            "role": "user",
+            "parts": parts,
+        }],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 2000,
+            "responseMimeType": "application/json",
+            "responseSchema": PARSE_JD_SCHEMA,
+        },
+    }
+
+
+def call_gemini_parse_jd(validated, urlopen=None):
+    payload = _gemini_parse_jd_payload(validated)
+    provider_response = _call_gemini_with_fallback(payload, urlopen=urlopen)
+    try:
+        return json.loads(_extract_gemini_text(provider_response))
+    except json.JSONDecodeError:
+        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned invalid JSON.", True)
+
 
 
 def _recommend_jobs_system_prompt(language):
@@ -985,46 +1080,8 @@ def _gemini_recommend_jobs_payload(candidate_profile, jobs):
 
 
 def call_gemini_recommend_jobs(candidate_profile, jobs, urlopen=None):
-    if urlopen is None:
-        urlopen = urllib.request.urlopen
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(_gemini_recommend_jobs_payload(candidate_profile, jobs), ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            provider_response = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        status = error.code
-        provider_message = ""
-        try:
-            error_body = json.loads(error.read().decode("utf-8"))
-            provider_message = str((error_body.get("error") or {}).get("message") or "")
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
-        print(f"DEBUG_GEMINI_ERROR - status: {status}, message: {provider_message}")
-        if status in {400, 401, 403} and "api key" in provider_message.lower():
-            raise ProviderError(
-                "AI_CREDENTIAL_INVALID",
-                "The Gemini API key is invalid.",
-            )
-        retryable = status == 429 or status >= 500
-        code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
-        raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
-    except (urllib.error.URLError, TimeoutError):
-        raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
-    except json.JSONDecodeError:
-        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
+    payload = _gemini_recommend_jobs_payload(candidate_profile, jobs)
+    provider_response = _call_gemini_with_fallback(payload, urlopen=urlopen)
     try:
         return json.loads(_extract_gemini_text(provider_response))
     except json.JSONDecodeError:
@@ -1318,27 +1375,13 @@ def _gemini_cv_screen_payload(job_description, cv_text, extracted_file=None):
 
 
 def call_gemini_cv_screen(job_description, cv_text, cv_url=None):
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    
     extracted_file = _download_and_extract_cv(cv_url) if cv_url else None
     payload = _gemini_cv_screen_payload(job_description, cv_text, extracted_file)
-    
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        provider_response = json.loads(response.read().decode("utf-8"))
-    return json.loads(_extract_gemini_text(provider_response))
+    provider_response = _call_gemini_with_fallback(payload)
+    try:
+        return json.loads(_extract_gemini_text(provider_response))
+    except json.JSONDecodeError:
+        raise ProviderError("AI_INVALID_RESPONSE", "The AI returned invalid JSON.", True)
 
 
 def _get_interview_system_instruction(job_title: str, job_description: str, cv_text: str, custom_questions: list) -> str:
@@ -1387,11 +1430,6 @@ def call_gemini_interview_start(job_title, job_description, cv_text, custom_ques
     system_instruction = _get_interview_system_instruction(
         job_title, job_description, cv_text, custom_questions
     )
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    
     prompt = f"""
 [Ứng viên bắt đầu vào phòng phỏng vấn]
 "Xin chào, tôi đã sẵn sàng. Hãy bắt đầu buổi phỏng vấn."
@@ -1399,7 +1437,6 @@ def call_gemini_interview_start(job_title, job_description, cv_text, custom_ques
 [Chỉ đạo dành riêng cho lượt này]:
 Hãy gửi lời chào mừng ứng viên thân thiện, nêu rõ vị trí ứng tuyển "{job_title}", và yêu cầu ứng viên giới thiệu ngắn gọn bản thân cùng kinh nghiệm nổi bật nhất của họ.
 """
-    
     payload = {
         "systemInstruction": {
             "parts": [{"text": system_instruction}]
@@ -1413,29 +1450,11 @@ Hãy gửi lời chào mừng ứng viên thân thiện, nêu rõ vị trí ứn
             "maxOutputTokens": 1000,
         }
     }
-    
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        provider_response = json.loads(response.read().decode("utf-8"))
-    
+    provider_response = _call_gemini_with_fallback(payload)
     return _extract_gemini_text(provider_response)
 
 
 def call_gemini_interview_respond(system_instruction, messages, steered_prompt):
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    
     contents = []
     for msg in messages:
         contents.append({
@@ -1458,29 +1477,11 @@ def call_gemini_interview_respond(system_instruction, messages, steered_prompt):
             "maxOutputTokens": 1000,
         }
     }
-    
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        provider_response = json.loads(response.read().decode("utf-8"))
-    
+    provider_response = _call_gemini_with_fallback(payload)
     return _extract_gemini_text(provider_response)
 
 
 def call_gemini_interview_report(job_title, job_description, cv_text, conversation_text, rubric_block):
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-    model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    
     prompt = f"""
 Bạn là một AI Interviewer chuyên nghiệp kiêm chuyên gia đánh giá tuyển dụng ngành F&B (Nhà hàng, Quán ăn, Cửa hàng Cafe).
 Dưới đây là lịch sử buổi phỏng vấn trực tiếp giữa bạn và ứng viên cho vị trí {job_title}.
@@ -1538,19 +1539,7 @@ Hãy trả về kết quả chính xác theo định dạng JSON với cấu tr�
         }
     }
     
-    request = urllib.request.Request(
-        f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        provider_response = json.loads(response.read().decode("utf-8"))
-    
+    provider_response = _call_gemini_with_fallback(payload)
     return json.loads(_extract_gemini_text(provider_response))
 
 
@@ -1622,7 +1611,7 @@ def lambda_handler(event, context):
         return _response(event, 200, {"status": "ok", "provider": "gemini"})
     if method != "POST" or path not in {
         "/cv/analyze", "/cv/generate", "/cv/recommend-candidates", 
-        "/job/suggest-jd", "/candidate/recommend-jobs",
+        "/job/suggest-jd", "/job/parse-jd", "/candidate/recommend-jobs",
         "/api/v1/cv/screen", "/api/v1/interview/start", "/api/v1/interview/respond",
         "/api/v1/interview/upload-audio", "/api/v1/interview/audio-upload-url"
     }:
@@ -1764,6 +1753,21 @@ def lambda_handler(event, context):
             }))
             return _response(event, 200, ai_result)
 
+        if path == "/job/parse-jd":
+            claims = _employer_claims(event)
+            body_data = _parse_body(event)
+            validated = _validate_parse_jd_payload(body_data)
+            started = time.monotonic()
+            ai_result = call_gemini_parse_jd(validated)
+            processing_ms = round((time.monotonic() - started) * 1_000)
+            print(json.dumps({
+                "event": "parse_jd_completed",
+                "request_id": request_id,
+                "user_id": claims.get("sub"),
+                "processing_ms": processing_ms,
+            }))
+            return _response(event, 200, ai_result)
+
         if path == "/cv/recommend-candidates":
             claims = _employer_claims(event)
             body_data = _parse_body(event)
@@ -1799,43 +1803,8 @@ def lambda_handler(event, context):
         elif path == "/cv/generate":
             validated = validate_generate_payload(_parse_body(event))
             started = time.monotonic()
-            api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-            if not api_key:
-                raise ProviderError("AI_NOT_CONFIGURED", "GEMINI_API_KEY is not configured.")
-
-            model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-            request = urllib.request.Request(
-                f"{GEMINI_API_BASE_URL}/{model}:generateContent",
-                data=json.dumps(_gemini_generate_payload(validated), ensure_ascii=False).encode("utf-8"),
-                headers={
-                    "x-goog-api-key": api_key,
-                    "Content-Type": "application/json",
-                },
-                method="POST",
-            )
-            timeout = min(max(int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "24")), 5), 28)
-
-            try:
-                with urllib.request.urlopen(request, timeout=timeout) as response:
-                    provider_response = json.loads(response.read().decode("utf-8"))
-            except urllib.error.HTTPError as error:
-                status = error.code
-                provider_message = ""
-                try:
-                    error_body = json.loads(error.read().decode("utf-8"))
-                    provider_message = str((error_body.get("error") or {}).get("message") or "")
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    pass
-                if status in {400, 401, 403} and "api key" in provider_message.lower():
-                    raise ProviderError("AI_CREDENTIAL_INVALID", "The Gemini API key is invalid.")
-                retryable = status == 429 or status >= 500
-                code = "AI_RATE_LIMITED" if status == 429 else "AI_PROVIDER_ERROR"
-                raise ProviderError(code, "The AI provider is temporarily unavailable.", retryable)
-            except (urllib.error.URLError, TimeoutError):
-                raise ProviderError("AI_TIMEOUT", "The AI provider did not respond in time.", True)
-            except json.JSONDecodeError:
-                raise ProviderError("AI_INVALID_RESPONSE", "The AI returned an invalid response.", True)
-
+            payload = _gemini_generate_payload(validated)
+            provider_response = _call_gemini_with_fallback(payload)
             try:
                 ai_result = json.loads(_extract_gemini_text(provider_response))
             except json.JSONDecodeError:

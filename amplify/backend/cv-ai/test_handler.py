@@ -259,6 +259,60 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(body["description"], "Pha chế các loại đồ uống.")
         self.assertEqual(body["responsibilities"], "Chuẩn bị nguyên liệu.\nPha chế nước uống.")
 
+    def test_parse_jd_rejects_candidate(self):
+        response = handler.lambda_handler(
+            event(path="/job/parse-jd", method="POST", groups=["Candidate"], body={"text": "Cashier JD"}),
+            None
+        )
+        self.assertEqual(response["statusCode"], 403)
+
+    def test_parse_jd_rejects_missing_inputs(self):
+        response = handler.lambda_handler(
+            event(path="/job/parse-jd", method="POST", groups=["Employer"], body={}),
+            None
+        )
+        self.assertEqual(response["statusCode"], 400)
+
+    @patch("urllib.request.urlopen")
+    def test_returns_parsed_jd(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = json.dumps({
+            "candidates": [{
+                "content": {
+                    "parts": [{"text": json.dumps({
+                        "title": "Nhân viên Pha Chế",
+                        "location": "Quận 1",
+                        "description": "Pha chế các loại đồ uống.",
+                        "requirements": "Chăm chỉ, trung thực.\nCó kinh nghiệm pha chế.",
+                        "benefits": "Lương thưởng hấp dẫn.\nMôi trường năng động.",
+                        "salary": "30000",
+                        "salaryUnit": "hour",
+                        "hourlyRate": "30000",
+                        "workDays": "2026-07-01",
+                        "workDate": "",
+                        "workHoursList": [
+                            {"startTime": "08:00", "endTime": "17:00", "days": ["T2", "T3"]}
+                        ],
+                        "tags": ["F&B", "Cafe"],
+                        "contactPhone": "0987654321",
+                        "warnings": []
+                    })}]
+                }
+            }]
+        }).encode("utf-8")
+        
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_key"}, clear=False):
+            response = handler.lambda_handler(
+                event(path="/job/parse-jd", method="POST", groups=["Employer"], body={"text": "Cashier JD info"}),
+                None
+            )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["title"], "Nhân viên Pha Chế")
+        self.assertEqual(body["salary"], "30000")
+        self.assertEqual(body["contactPhone"], "0987654321")
+
+
     def test_recommend_jobs_rejects_employer(self):
         response = handler.lambda_handler(
             event(path="/candidate/recommend-jobs", method="POST", groups=["Employer"], body={}),

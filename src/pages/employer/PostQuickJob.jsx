@@ -6,12 +6,13 @@ import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
 import AddressInput from '../../components/AddressInput';
 import { Button, Input, TextArea, Select, FormGroup, Label } from '../../components/FormElements';
-import { Save, ArrowLeft, AlertCircle, CheckCircle, Clock, Zap, Globe, X, Banknote, Copy, Check, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { Save, ArrowLeft, AlertCircle, CheckCircle, Clock, Zap, Globe, X, Banknote, Copy, Check, RefreshCw, Plus, Trash2, Sparkles, Loader2, UploadCloud, CheckCircle2, AlertTriangle, FileText, ClipboardList } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import quickJobService from '../../services/quickJobService';
 import employerProfileService from '../../services/employerProfileService';
 import { useAuth } from '../../context/AuthContext';
 import { getWallet, createWalletTransaction } from '../../services/packageCatalogService';
+import cvAiService from '../../services/cvAiService';
 
 
 // Keyframe animations
@@ -58,7 +59,7 @@ const countUp = keyframes`
 `;
 
 const PostJobContainer = styled.div`
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px;
   animation: ${fadeIn} 0.4s ease-out;
@@ -331,6 +332,149 @@ const TotalSalaryBox = styled.div`
   
   &.active {
     animation: ${pulseGlow} 1.5s ease-in-out;
+  }
+`;
+
+const PageLayout = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 28px;
+  align-items: start;
+  
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const JdUploadCard = styled.div`
+  background: linear-gradient(135deg, #ffffff 0%, #f0f4ff 100%);
+  border: 2px dashed #bfdbfe;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.08);
+  transition: all 0.3s ease;
+  position: relative;
+  
+  &:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 12px 30px -5px rgba(59, 130, 246, 0.15);
+  }
+
+  .close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: #f1f5f9;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+  }
+`;
+
+const TabButton = styled.button`
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1.5px solid ${props => props.$active ? '#3b82f6' : '#e2e8f0'};
+  background: ${props => props.$active ? '#3b82f6' : '#ffffff'};
+  color: ${props => props.$active ? '#ffffff' : '#475569'};
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${props => props.$active ? '#2563eb' : '#f8fafc'};
+  }
+`;
+
+const FileUploadArea = styled.div`
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    border-color: #3b82f6;
+    background: #f8fafc;
+  }
+  
+  input {
+    display: none;
+  }
+
+  svg {
+    width: 40px;
+    height: 40px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+`;
+
+const SidebarCard = styled.div`
+  background: ${props => props.theme.colors.bgLight};
+  border-radius: ${props => props.theme.borderRadius.lg};
+  padding: 24px;
+  border: 1px solid ${props => props.theme.colors.border};
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  
+  @media (max-width: 1024px) {
+    position: static;
+  }
+`;
+
+const SidebarTitle = styled.h3`
+  font-size: 15px;
+  font-weight: 750;
+  color: ${props => props.theme.colors.text};
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const ChecklistItem = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid ${props => props.theme.colors.border}22;
+  font-size: 13.5px;
+  color: ${props => props.$warning ? '#dc2626' : props.$filled ? '#059669' : '#64748b'};
+  font-weight: ${props => (props.$warning || props.$filled) ? '600' : '500'};
+  
+  .label-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 `;
 
@@ -757,7 +901,13 @@ const PostQuickJob = () => {
   const [salaryBoxActive, setSalaryBoxActive] = useState(false);
   const [salaryError, setSalaryError] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState(null);
-  
+
+  const [showJdParser, setShowJdParser] = useState(false);
+  const [jdActiveTab, setJdActiveTab] = useState('file');
+  const [jdText, setJdText] = useState('');
+  const [parsingJd, setParsingJd] = useState(false);
+  const [fieldWarnings, setFieldWarnings] = useState([]);
+
   const { user } = useAuth();
   const employerId = user?.userId || user?.id || user?.email || 'mock_employer_id';
   const [realBalance, setRealBalance] = useState(0);
@@ -917,6 +1067,9 @@ const PostQuickJob = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
+    // Clear warning for this field if any
+    setFieldWarnings(prev => prev.filter(w => w !== name));
+
     // Parse hourly rate internally while keeping what user typed
     if (name === 'hourlyRate') {
       const numValue = parseHourlyRateInput(value);
@@ -933,6 +1086,95 @@ const PostQuickJob = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const runJdParsing = async (payload) => {
+    setParsingJd(true);
+    try {
+      const result = await cvAiService.parseJd({
+        ...payload,
+        language: language
+      });
+
+      if (result) {
+        setFormData(prev => {
+          const newFormData = { ...prev };
+          if (result.title) newFormData.title = result.title;
+          if (result.location) newFormData.location = result.location;
+          if (result.description) newFormData.description = result.description;
+          if (result.requirements) newFormData.requirements = result.requirements;
+          if (result.contactPhone) newFormData.contactPhone = result.contactPhone;
+
+          let rate = '';
+          if (result.hourlyRate) {
+            rate = result.hourlyRate;
+          } else if (result.salary && result.salaryUnit === 'hour') {
+            rate = result.salary;
+          } else if (result.salary) {
+            rate = result.salary;
+          }
+          if (rate) {
+            newFormData.hourlyRate = String(rate).replace(/\D/g, '');
+          }
+
+          if (result.workDate) {
+            newFormData.workDate = result.workDate;
+          } else if (result.workDays) {
+            newFormData.workDate = result.workDays;
+          }
+
+          if (Array.isArray(result.workHoursList) && result.workHoursList.length > 0) {
+            newFormData.workHoursList = result.workHoursList.map((slot) => ({
+              startTime: slot.startTime || '',
+              endTime: slot.endTime || ''
+            }));
+          }
+
+          return newFormData;
+        });
+
+        let warnings = result.warnings || [];
+        if (warnings.includes('salary')) {
+          warnings = [...warnings.filter(w => w !== 'salary'), 'hourlyRate'];
+        }
+        if (warnings.includes('workDays') && !warnings.includes('workDate')) {
+          warnings = [...warnings.filter(w => w !== 'workDays'), 'workDate'];
+        }
+
+        setFieldWarnings(warnings);
+
+        alert(language === 'vi'
+          ? 'AI đã tự động phân bổ và điền thông tin vào biểu mẫu thành công!'
+          : 'AI has successfully extracted and filled the form!');
+
+        setShowJdParser(false);
+      }
+    } catch (error) {
+      console.error('Error parsing JD:', error);
+      alert(error.message || (language === 'vi' ? 'Có lỗi xảy ra khi phân tích JD.' : 'Error parsing JD.'));
+    } finally {
+      setParsingJd(false);
+    }
+  };
+
+  const handlePdfFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert(language === 'vi' ? 'Vui lòng chọn file PDF!' : 'Please select a PDF file!');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert(language === 'vi' ? 'Dung lượng file không được vượt quá 2MB!' : 'File size must not exceed 2MB!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Str = reader.result.split(',')[1];
+      await runJdParsing({ fileContent: base64Str, fileType: 'application/pdf' });
+    };
+    reader.readAsDataURL(file);
   };
 
   // Custom fields (employer-defined extra JD sections)
@@ -961,6 +1203,7 @@ const PostQuickJob = () => {
 
   // Handle address change from AddressInput component
   const handleAddressChange = (address) => {
+    setFieldWarnings(prev => prev.filter(w => w !== 'location'));
     setFormData(prev => ({
       ...prev,
       location: address
@@ -982,6 +1225,7 @@ const PostQuickJob = () => {
   // Calculate total salary based on hourly rate and working hours
   // Work-hour slots management (multiple "Khung giờ làm việc")
   const addWorkHourSlot = () => {
+    setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => ({
       ...prev,
       workHoursList: [...(prev.workHoursList || []), { startTime: '', endTime: '' }]
@@ -989,6 +1233,7 @@ const PostQuickJob = () => {
   };
 
   const removeWorkHourSlot = (index) => {
+    setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => {
       const list = (prev.workHoursList || []).filter((_, i) => i !== index);
       return { ...prev, workHoursList: list.length > 0 ? list : [{ startTime: '', endTime: '' }] };
@@ -996,6 +1241,7 @@ const PostQuickJob = () => {
   };
 
   const updateWorkHourSlot = (index, field, value) => {
+    setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => ({
       ...prev,
       workHoursList: (prev.workHoursList || []).map((slot, i) => (
@@ -1057,7 +1303,7 @@ const PostQuickJob = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validation
     if (!formData.title || !formData.location || !formData.hourlyRate || !formData.workDate || !formData.description || !formData.requirements) {
       setModalType('error');
@@ -1071,7 +1317,7 @@ const PostQuickJob = () => {
       setModalType('error');
       setPaymentInfo({
         error: true,
-        message: language === 'vi' 
+        message: language === 'vi'
           ? 'Ngày làm việc không được ở trong quá khứ.'
           : 'Work date cannot be in the past.'
       });
@@ -1094,7 +1340,7 @@ const PostQuickJob = () => {
       setModalType('error');
       setPaymentInfo({
         error: true,
-        message: language === 'vi' 
+        message: language === 'vi'
           ? 'Vui lòng điền đầy đủ khung giờ làm việc.'
           : 'Please fill in the working hours.'
       });
@@ -1108,7 +1354,7 @@ const PostQuickJob = () => {
       setModalType('error');
       setPaymentInfo({
         error: true,
-        message: language === 'vi' 
+        message: language === 'vi'
           ? 'Không thể tính tổng lương. Vui lòng kiểm tra lại thông tin.'
           : 'Cannot calculate total salary. Please check your information.'
       });
@@ -1136,7 +1382,7 @@ const PostQuickJob = () => {
       setPaymentInfo({
         error: true,
         missingAmount: missingAmount,
-        message: language === 'vi' 
+        message: language === 'vi'
           ? `Số dư không đủ. Bạn cần nạp thêm ${missingAmount.toLocaleString('vi-VN')} VNĐ (Tổng chi phí: ${totalFee.toLocaleString('vi-VN')} VNĐ, Số dư hiện tại: ${currentBalance.toLocaleString('vi-VN')} VNĐ).`
           : `Insufficient balance. You need an additional ${missingAmount.toLocaleString('vi-VN')} VND (Total fee: ${totalFee.toLocaleString('vi-VN')} VND, Current balance: ${currentBalance.toLocaleString('vi-VN')} VND).`
       });
@@ -1150,7 +1396,7 @@ const PostQuickJob = () => {
     try {
       // Deduct fee from wallet (backend database)
       try {
-        const description = language === 'vi' 
+        const description = language === 'vi'
           ? `Nạp tiền - Đăng bài: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VNĐ)`
           : `Deposit - Post job: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VND)`;
 
@@ -1240,7 +1486,7 @@ const PostQuickJob = () => {
       setShowModal(true);
     } catch (error) {
       console.error('❌ Error creating quick job:', error);
-      
+
       // Rollback wallet deduction if API had deducted balance
       if (didDeductRealWallet) {
         try {
@@ -1259,11 +1505,11 @@ const PostQuickJob = () => {
           console.error('❌ Failed to refund wallet balance:', refundError);
         }
       }
-      
+
       setModalType('error');
       setPaymentInfo({
         error: true,
-        message: language === 'vi' 
+        message: language === 'vi'
           ? `Lỗi khi tạo bài đăng: ${error.message}`
           : `Error creating job post: ${error.message}`
       });
@@ -1286,7 +1532,7 @@ const PostQuickJob = () => {
       urgentBadge: 'Tuyển gấp',
       infoTitle: 'Lưu ý về tuyển gấp',
       infoText: 'Bài đăng tuyển gấp sẽ được ưu tiên hiển thị và có thời hạn ngắn (2-7 ngày). Phù hợp cho các vị trí cần tuyển ngay lập tức.',
-      
+
       // Form labels
       jobTitle: 'Tiêu đề công việc - Vị trí công việc',
       jobTitlePlaceholder: 'VD: Nhân viên Phục Vụ - Cần ngay',
@@ -1306,24 +1552,24 @@ const PostQuickJob = () => {
       endTime: 'Đến',
       startTimePlaceholder: '',
       endTimePlaceholder: '',
-      
+
       totalSalary: 'Tổng lương ước tính',
       totalSalaryEmpty: 'Nhập lương và khung giờ để xem tổng',
       hoursWorked: 'giờ làm việc',
-      
+
       description: 'Mô tả công việc',
       descriptionPlaceholder: 'Mô tả ngắn gọn về công việc cần tuyển...',
-      
+
       requirements: 'Yêu cầu',
       requirementsPlaceholder: 'Liệt kê các yêu cầu cần thiết cho ứng viên...',
-      
+
       contactPhone: 'Số điện thoại liên hệ',
       contactPhonePlaceholder: '0123 456 789',
-      
+
       // Buttons
       cancelButton: 'Hủy',
       submitButton: 'Đăng bài ngay',
-      
+
       // Modal
       successTitle: 'Đã gửi yêu cầu',
       successMessage: 'Bài đăng của bạn đã được gửi và đang chờ admin duyệt. Nó sẽ hiển thị sau khi được phê duyệt.',
@@ -1340,7 +1586,7 @@ const PostQuickJob = () => {
       urgentBadge: 'Urgent Hiring',
       infoTitle: 'About Urgent Jobs',
       infoText: 'Urgent job postings will be prioritized and have shorter duration (2-7 days). Suitable for positions that need immediate filling.',
-      
+
       // Form labels
       jobTitle: 'Job Title',
       jobTitlePlaceholder: 'e.g., Server - Immediate Need',
@@ -1359,24 +1605,24 @@ const PostQuickJob = () => {
       endTime: 'To',
       startTimePlaceholder: '',
       endTimePlaceholder: '',
-      
+
       totalSalary: 'Estimated Total Salary',
       totalSalaryEmpty: 'Enter salary and hours to see total',
       hoursWorked: 'hours worked',
-      
+
       description: 'Job Description',
       descriptionPlaceholder: 'Brief description of the job...',
-      
+
       requirements: 'Requirements',
       requirementsPlaceholder: 'List the necessary requirements for candidates...',
-      
+
       contactPhone: 'Contact Phone',
       contactPhonePlaceholder: '0123 456 789',
-      
+
       // Buttons
       cancelButton: 'Cancel',
       submitButton: 'Post Now',
-      
+
       // Modal
       successTitle: 'Submitted for Approval',
       successMessage: 'Your job posting has been submitted and is awaiting admin approval. It will be visible once approved.',
@@ -1412,292 +1658,498 @@ const PostQuickJob = () => {
           {t.backButton}
         </BackButton>
 
-        <FormCard>
-          <FormHeader>
-            <div className="icon-box">
-              <Zap />
-            </div>
-            <div className="header-text">
-              <h1>
-                {t.pageTitle}
-                <UrgentBadge>
-                  <Clock />
-                  {t.urgentBadge}
-                </UrgentBadge>
-              </h1>
-              <p>{t.pageSubtitle}</p>
-            </div>
-          </FormHeader>
+        {/* JD Auto-Fill Banner */}
+        <div style={{ marginBottom: '24px' }}>
+          {!showJdParser ? (
+            <Button
+              type="button"
+              $variant="secondary"
+              onClick={() => setShowJdParser(true)}
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                border: '1.5px solid #bfdbfe',
+                color: '#1e40af',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '16px',
+                borderRadius: '12px'
+              }}
+            >
+              <Sparkles size={18} />
+              {language === 'vi'
+                ? 'Đăng bài nhanh chóng từ JD đã có sẵn'
+                : 'Quickly post from available JD'}
+            </Button>
+          ) : (
+            <JdUploadCard>
+              <button type="button" className="close-btn" onClick={() => setShowJdParser(false)}>
+                <X size={16} />
+              </button>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e3a8a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={18} color="#2563eb" />
+                {language === 'vi'
+                  ? 'Đăng bài nhanh chóng từ JD đã có sẵn'
+                  : 'Quickly post from available JD'}
+              </h3>
 
-          <InfoBox>
-            <AlertCircle />
-            <div className="info-content">
-              <div className="info-title">{t.infoTitle}</div>
-              <div className="info-text">{t.infoText}</div>
-            </div>
-          </InfoBox>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                <TabButton
+                  type="button"
+                  $active={jdActiveTab === 'file'}
+                  onClick={() => setJdActiveTab('file')}
+                >
+                  {language === 'vi' ? 'Tải tệp PDF sẵn có' : 'Upload existing PDF'}
+                </TabButton>
+                <TabButton
+                  type="button"
+                  $active={jdActiveTab === 'text'}
+                  onClick={() => setJdActiveTab('text')}
+                >
+                  {language === 'vi' ? 'Dán văn bản JD' : 'Paste JD Text'}
+                </TabButton>
+              </div>
 
-          <form onSubmit={handleSubmit}>
-            <FormGroup>
-              <Label required>{t.jobTitle}</Label>
-              <Input
-                name="title"
-                type="text"
-                value={formData.title}
-                onChange={handleChange}
-                placeholder={t.jobTitlePlaceholder}
-                required
-              />
-            </FormGroup>
-
-            <FormRow $columns="1fr 1fr">
-              <FormGroup>
-                <Label required>{t.location}</Label>
-                <AddressInput
-                  value={formData.location}
-                  onChange={handleAddressChange}
-                  onCoordinatesChange={handleCoordinatesChange}
-                  placeholder={t.locationPlaceholder}
-                  required
-                  showCoordinates={true}
-                />
-              </FormGroup>
-
-            </FormRow>
-
-            <FormRow $columns="1fr 1fr">
-              <FormGroup>
-                <Label required>{t.hourlyRate}</Label>
-                <SalaryInputWrap>
-                  <Input
-                    name="hourlyRate"
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={formData.hourlyRate}
-                    onChange={handleChange}
-                    placeholder={t.hourlyRatePlaceholder}
-                    required
-                    style={{
-                      borderColor: salaryError ? '#EF4444' : '',
-                      background: salaryError ? '#FEE2E2' : '',
-                      paddingRight: '74px'
-                    }}
-                  />
-                  <span className="salary-unit">
-                    {language === 'vi' ? 'VNĐ/h' : 'VNĐ/h'}
+              {parsingJd ? (
+                <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                  <Loader2 size={32} className="animate-spin" style={{ color: '#2563eb', animation: 'spin 1s linear infinite' }} />
+                  <span style={{ fontWeight: '600', color: '#1e3a8a', fontSize: '14px' }}>
+                    {language === 'vi'
+                      ? 'AI đang đọc nội dung JD và tự động điền các trường biểu mẫu...'
+                      : 'AI is reading JD content and filling form fields...'}
                   </span>
-                </SalaryInputWrap>
-                {salaryError ? (
-                  <small style={{ color: '#DC2626', fontSize: '12px', marginTop: '4px', display: 'block', fontWeight: '600' }}>
-                    ⚠️ {language === 'vi' ? 'Lương phải lớn hơn hoặc bằng 29.500 VNĐ' : 'Salary must be >= 29,500 VND'}
-                  </small>
-                ) : (
-                  <small style={{ color: '#000000', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                    {t.hourlyRateMin}
-                  </small>
-                )}
-              </FormGroup>
-
-              <FormGroup>
-                <Label required>{t.workDate}</Label>
-                <Input
-                  name="workDate"
-                  type="date"
-                  value={formData.workDate}
-                  onChange={handleChange}
-                  placeholder={t.workDatePlaceholder}
-                  min={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </FormGroup>
-            </FormRow>
-
-            <FormRow $columns="1fr 1fr">
-              <FormGroup>
-                <Label required>{t.workingHours}</Label>
-                {(formData.workHoursList || []).map((slot, index) => (
-                  <FormRow key={index} $columns="1fr 1fr auto" style={{ marginBottom: '10px', alignItems: 'end' }}>
-                    <div>
-                      <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.startTime}</Label>
-                      <Input
-                        type="time"
-                        value={slot.startTime}
-                        onChange={(e) => updateWorkHourSlot(index, 'startTime', e.target.value)}
-                        placeholder={t.startTimePlaceholder}
-                        required
+                </div>
+              ) : (
+                <>
+                  {jdActiveTab === 'file' ? (
+                    <FileUploadArea onClick={() => document.getElementById('jd-pdf-upload').click()}>
+                      <UploadCloud />
+                      <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                        {language === 'vi' ? 'Kéo & thả file PDF JD vào đây hoặc Click để chọn file' : 'Drag & drop PDF JD file here or click to select'}
+                      </h4>
+                      <p style={{ fontSize: '12px', color: '#64748b' }}>
+                        {language === 'vi' ? 'Chấp nhận file .pdf có kích thước dưới 2MB' : 'Supports .pdf files under 2MB'}
+                      </p>
+                      <input
+                        id="jd-pdf-upload"
+                        type="file"
+                        accept=".pdf"
+                        onChange={handlePdfFileSelect}
+                        onClick={(e) => e.stopPropagation()}
                       />
-                    </div>
-                    <div>
-                      <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
-                      <Input
-                        type="time"
-                        value={slot.endTime}
-                        onChange={(e) => updateWorkHourSlot(index, 'endTime', e.target.value)}
-                        placeholder={t.endTimePlaceholder}
-                        required
+                    </FileUploadArea>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <TextArea
+                        value={jdText}
+                        onChange={(e) => setJdText(e.target.value)}
+                        placeholder={language === 'vi'
+                          ? 'Dán nội dung mô tả công việc (JD) của bạn vào đây...'
+                          : 'Paste your job description (JD) text here...'}
+                        rows={6}
                       />
+                      <Button
+                        type="button"
+                        $variant="primary"
+                        disabled={!jdText.trim()}
+                        onClick={() => runJdParsing({ text: jdText })}
+                      >
+                        <Sparkles size={14} />
+                        {language === 'vi' ? 'Phân tích & Tự động điền' : 'Analyze & Autofill'}
+                      </Button>
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', paddingBottom: '2px' }}>
+                  )}
+                </>
+              )}
+            </JdUploadCard>
+          )}
+        </div>
+
+        <PageLayout>
+          {/* Main Form Content */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <FormCard>
+              <FormHeader>
+                <div className="icon-box">
+                  <Zap />
+                </div>
+                <div className="header-text">
+                  <h1>
+                    {t.pageTitle}
+                    <UrgentBadge>
+                      <Clock />
+                      {t.urgentBadge}
+                    </UrgentBadge>
+                  </h1>
+                  <p>{t.pageSubtitle}</p>
+                </div>
+              </FormHeader>
+
+              <InfoBox>
+                <AlertCircle />
+                <div className="info-content">
+                  <div className="info-title">{t.infoTitle}</div>
+                  <div className="info-text">{t.infoText}</div>
+                </div>
+              </InfoBox>
+
+              <form onSubmit={handleSubmit}>
+                <FormGroup>
+                  <Label required>{t.jobTitle}</Label>
+                  <Input
+                    name="title"
+                    type="text"
+                    value={formData.title}
+                    onChange={handleChange}
+                    placeholder={t.jobTitlePlaceholder}
+                    required
+                  />
+                  {fieldWarnings.includes('title') && (
+                    <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      ⚠️ {language === 'vi' ? 'AI không tìm thấy tiêu đề phù hợp, vui lòng điền tay.' : 'AI did not find job title, please input manually.'}
+                    </small>
+                  )}
+                </FormGroup>
+
+                <FormRow $columns="1fr 1fr">
+                  <FormGroup>
+                    <Label required>{t.location}</Label>
+                    <AddressInput
+                      value={formData.location}
+                      onChange={handleAddressChange}
+                      onCoordinatesChange={handleCoordinatesChange}
+                      placeholder={t.locationPlaceholder}
+                      required
+                      showCoordinates={true}
+                    />
+                    {fieldWarnings.includes('location') && (
+                      <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                        ⚠️ {language === 'vi' ? 'AI không tìm thấy địa điểm làm việc, vui lòng điền tay.' : 'AI did not find location, please input manually.'}
+                      </small>
+                    )}
+                  </FormGroup>
+                </FormRow>
+
+                <FormRow $columns="1fr 1fr">
+                  <FormGroup>
+                    <Label required>{t.hourlyRate}</Label>
+                    <SalaryInputWrap>
+                      <Input
+                        name="hourlyRate"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={formData.hourlyRate}
+                        onChange={handleChange}
+                        placeholder={t.hourlyRatePlaceholder}
+                        required
+                        style={{
+                          borderColor: salaryError ? '#EF4444' : '',
+                          background: salaryError ? '#FEE2E2' : '',
+                          paddingRight: '74px'
+                        }}
+                      />
+                      <span className="salary-unit">
+                        {language === 'vi' ? 'VNĐ/h' : 'VNĐ/h'}
+                      </span>
+                    </SalaryInputWrap>
+                    {salaryError ? (
+                      <small style={{ color: '#DC2626', fontSize: '12px', marginTop: '4px', display: 'block', fontWeight: '600' }}>
+                        ⚠️ {language === 'vi' ? 'Lương phải lớn hơn hoặc bằng 29.500 VNĐ' : 'Salary must be >= 29,500 VND'}
+                      </small>
+                    ) : (
+                      <small style={{ color: '#000000', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        {t.hourlyRateMin}
+                      </small>
+                    )}
+                    {fieldWarnings.includes('hourlyRate') && (
+                      <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                        ⚠️ {language === 'vi' ? 'AI không tìm thấy mức lương phù hợp, vui lòng điền tay.' : 'AI did not find salary, please input manually.'}
+                      </small>
+                    )}
+                  </FormGroup>
+
+                  <FormGroup>
+                    <Label required>{t.workDate}</Label>
+                    <Input
+                      name="workDate"
+                      type="date"
+                      value={formData.workDate}
+                      onChange={handleChange}
+                      placeholder={t.workDatePlaceholder}
+                      min={new Date().toISOString().split('T')[0]}
+                      required
+                    />
+                    {fieldWarnings.includes('workDate') && (
+                      <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                        ⚠️ {language === 'vi' ? 'AI không tìm thấy ngày làm việc phù hợp, vui lòng điền tay.' : 'AI did not find work date, please input manually.'}
+                      </small>
+                    )}
+                  </FormGroup>
+                </FormRow>
+
+                <FormRow $columns="1fr 1fr">
+                  <FormGroup>
+                    <Label required>{t.workingHours}</Label>
+                    {fieldWarnings.includes('workHoursList') && (
+                      <small style={{ color: '#dc2626', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
+                        ⚠️ {language === 'vi' ? 'AI không tìm thấy khung giờ làm việc phù hợp, vui lòng điền tay.' : 'AI did not find working hours, please input manually.'}
+                      </small>
+                    )}
+                    {(formData.workHoursList || []).map((slot, index) => (
+                      <FormRow key={index} $columns="1fr 1fr auto" style={{ marginBottom: '10px', alignItems: 'end' }}>
+                        <div>
+                          <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.startTime}</Label>
+                          <Input
+                            type="time"
+                            value={slot.startTime}
+                            onChange={(e) => updateWorkHourSlot(index, 'startTime', e.target.value)}
+                            placeholder={t.startTimePlaceholder}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
+                          <Input
+                            type="time"
+                            value={slot.endTime}
+                            onChange={(e) => updateWorkHourSlot(index, 'endTime', e.target.value)}
+                            placeholder={t.endTimePlaceholder}
+                            required
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', paddingBottom: '2px' }}>
+                          <button
+                            type="button"
+                            onClick={addWorkHourSlot}
+                            title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#EFF6FF', color: '#1e40af', border: '1px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer' }}
+                          >
+                            <Plus size={16} />
+                          </button>
+                          {(formData.workHoursList || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeWorkHourSlot(index)}
+                              title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: '8px', cursor: 'pointer' }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </FormRow>
+                    ))}
+                  </FormGroup>
+
+                  {/* Total Salary Display */}
+                  <FormGroup>
+                    <Label style={{ opacity: 0, pointerEvents: 'none' }}>-</Label>
+                    <TotalSalaryBox className={`${!salaryCalculation ? 'empty' : ''} ${salaryBoxActive ? 'active' : ''}`}>
+                      <div className="salary-label">
+                        <div className="label-text">{t.totalSalary}</div>
+                        {salaryCalculation && (
+                          <div className="hours-info">
+                            {salaryCalculation.hours.toFixed(1)} {t.hoursWorked}
+                          </div>
+                        )}
+                      </div>
+                      <div className="salary-amount">
+                        {salaryCalculation ? (
+                          <>
+                            <span className="amount">
+                              {salaryCalculation.total.toLocaleString('vi-VN', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0
+                              })}
+                            </span>
+                            <span className="currency">VNĐ</span>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '14px', color: '#1e40af', opacity: 0.6 }}>
+                            {t.totalSalaryEmpty}
+                          </span>
+                        )}
+                      </div>
+                    </TotalSalaryBox>
+                  </FormGroup>
+                </FormRow>
+
+                <FormGroup>
+                  <Label required>{t.description}</Label>
+                  <TextArea
+                    name="description"
+                    value={formData.description}
+                    onChange={handleChange}
+                    placeholder={t.descriptionPlaceholder}
+                    rows={4}
+                    required
+                  />
+                  {fieldWarnings.includes('description') && (
+                    <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      ⚠️ {language === 'vi' ? 'AI không thể tạo mô tả công việc, vui lòng nhập tay.' : 'AI did not generate description, please input manually.'}
+                    </small>
+                  )}
+                </FormGroup>
+
+                <FormGroup>
+                  <Label required>{t.requirements}</Label>
+                  <TextArea
+                    name="requirements"
+                    value={formData.requirements}
+                    onChange={handleChange}
+                    placeholder={t.requirementsPlaceholder}
+                    rows={3}
+                    required
+                  />
+                  {fieldWarnings.includes('requirements') && (
+                    <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      ⚠️ {language === 'vi' ? 'AI không thể tạo yêu cầu công việc, vui lòng nhập tay.' : 'AI did not generate requirements, please input manually.'}
+                    </small>
+                  )}
+                </FormGroup>
+
+                {/* Custom fields - employer-defined extra JD sections */}
+                {(formData.customFields || []).map((field, index) => (
+                  <FormGroup key={index}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                      <Input
+                        type="text"
+                        value={field.label}
+                        onChange={(e) => handleCustomFieldChange(index, 'label', e.target.value)}
+                        placeholder={language === 'vi' ? 'Tên mục (vd: Địa điểm làm việc)...' : 'Field title (e.g. Work location)...'}
+                        style={{ flex: 1 }}
+                      />
                       <button
                         type="button"
-                        onClick={addWorkHourSlot}
-                        title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
-                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#EFF6FF', color: '#1e40af', border: '1px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer' }}
+                        onClick={() => handleRemoveCustomField(index)}
+                        title={language === 'vi' ? 'Xóa mục này' : 'Remove this field'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '40px',
+                          height: '40px',
+                          flexShrink: 0,
+                          background: '#FEF2F2',
+                          color: '#DC2626',
+                          border: '1px solid #FECACA',
+                          borderRadius: '8px',
+                          cursor: 'pointer'
+                        }}
                       >
-                        <Plus size={16} />
+                        <Trash2 size={16} />
                       </button>
-                      {(formData.workHoursList || []).length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeWorkHourSlot(index)}
-                          title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
-                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: '8px', cursor: 'pointer' }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
                     </div>
-                  </FormRow>
+                    <TextArea
+                      value={field.value}
+                      onChange={(e) => handleCustomFieldChange(index, 'value', e.target.value)}
+                      placeholder={language === 'vi' ? 'Nội dung mục này...' : 'Content for this field...'}
+                      rows={3}
+                    />
+                  </FormGroup>
                 ))}
-              </FormGroup>
-              
-              {/* Total Salary Display */}
-              <FormGroup>
-                <Label style={{ opacity: 0, pointerEvents: 'none' }}>-</Label>
-                <TotalSalaryBox className={`${!salaryCalculation ? 'empty' : ''} ${salaryBoxActive ? 'active' : ''}`}>
-                  <div className="salary-label">
-                    <div className="label-text">{t.totalSalary}</div>
-                    {salaryCalculation && (
-                      <div className="hours-info">
-                        {salaryCalculation.hours.toFixed(1)} {t.hoursWorked}
-                      </div>
-                    )}
-                  </div>
-                  <div className="salary-amount">
-                    {salaryCalculation ? (
-                      <>
-                        <span className="amount">
-                          {salaryCalculation.total.toLocaleString('vi-VN', { 
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0 
-                          })}
-                        </span>
-                        <span className="currency">VNĐ</span>
-                      </>
-                    ) : (
-                      <span style={{ fontSize: '14px', color: '#1e40af', opacity: 0.6 }}>
-                        {t.totalSalaryEmpty}
-                      </span>
-                    )}
-                  </div>
-                </TotalSalaryBox>
-              </FormGroup>
-            </FormRow>
 
-            <FormGroup>
-              <Label required>{t.description}</Label>
-              <TextArea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                placeholder={t.descriptionPlaceholder}
-                rows={4}
-                required
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <Label required>{t.requirements}</Label>
-              <TextArea
-                name="requirements"
-                value={formData.requirements}
-                onChange={handleChange}
-                placeholder={t.requirementsPlaceholder}
-                rows={3}
-                required
-              />
-            </FormGroup>
-
-            {/* Custom fields - employer-defined extra JD sections */}
-            {(formData.customFields || []).map((field, index) => (
-              <FormGroup key={index}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                  <Input
-                    type="text"
-                    value={field.label}
-                    onChange={(e) => handleCustomFieldChange(index, 'label', e.target.value)}
-                    placeholder={language === 'vi' ? 'Tên mục (vd: Địa điểm làm việc)...' : 'Field title (e.g. Work location)...'}
-                    style={{ flex: 1 }}
-                  />
+                <FormGroup>
                   <button
                     type="button"
-                    onClick={() => handleRemoveCustomField(index)}
-                    title={language === 'vi' ? 'Xóa mục này' : 'Remove this field'}
+                    onClick={handleAddCustomField}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '40px',
-                      height: '40px',
-                      flexShrink: 0,
-                      background: '#FEF2F2',
-                      color: '#DC2626',
-                      border: '1px solid #FECACA',
-                      borderRadius: '8px',
+                      gap: '8px',
+                      padding: '10px 16px',
+                      background: '#EFF6FF',
+                      color: '#1e40af',
+                      border: '1px dashed #93C5FD',
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                      fontSize: '14px',
                       cursor: 'pointer'
                     }}
                   >
-                    <Trash2 size={16} />
+                    <Plus size={18} />
+                    {language === 'vi' ? 'Thêm mục tùy chỉnh' : 'Add custom field'}
                   </button>
-                </div>
-                <TextArea
-                  value={field.value}
-                  onChange={(e) => handleCustomFieldChange(index, 'value', e.target.value)}
-                  placeholder={language === 'vi' ? 'Nội dung mục này...' : 'Content for this field...'}
-                  rows={3}
-                />
-              </FormGroup>
-            ))}
+                </FormGroup>
 
-            <FormGroup>
-              <button
-                type="button"
-                onClick={handleAddCustomField}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '10px 16px',
-                  background: '#EFF6FF',
-                  color: '#1e40af',
-                  border: '1px dashed #93C5FD',
-                  borderRadius: '10px',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  cursor: 'pointer'
-                }}
-              >
-                <Plus size={18} />
-                {language === 'vi' ? 'Thêm mục tùy chỉnh' : 'Add custom field'}
-              </button>
-            </FormGroup>
+                <FormActions>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => navigate('/employer/quick-jobs')}
+                  >
+                    {t.cancelButton}
+                  </Button>
+                  <SubmitButton type="submit">
+                    <Save />
+                    {t.submitButton}
+                  </SubmitButton>
+                </FormActions>
+              </form>
+            </FormCard>
+          </div>
 
-            <FormActions>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => navigate('/employer/quick-jobs')}
-              >
-                {t.cancelButton}
-              </Button>
-              <SubmitButton type="submit">
-                <Save />
-                {t.submitButton}
-              </SubmitButton>
-            </FormActions>
-          </form>
-        </FormCard>
+          {/* Checklist Sidebar */}
+          <SidebarCard>
+            <SidebarTitle>
+              <ClipboardList size={18} color="#1e40af" />
+              {language === 'vi' ? 'Tiến độ điền tin' : 'Filling Progress'}
+            </SidebarTitle>
+
+            <ChecklistItem $filled={!!formData.title.trim()} $warning={fieldWarnings.includes('title')}>
+              <div className="label-group">
+                {fieldWarnings.includes('title') ? <AlertTriangle color="#dc2626" /> : !!formData.title.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Thông tin cơ bản' : 'Basic info'}</span>
+              </div>
+            </ChecklistItem>
+
+            <ChecklistItem $filled={!!formData.location.trim()} $warning={fieldWarnings.includes('location')}>
+              <div className="label-group">
+                {fieldWarnings.includes('location') ? <AlertTriangle color="#dc2626" /> : !!formData.location.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Địa điểm làm việc' : 'Location'}</span>
+              </div>
+            </ChecklistItem>
+
+            <ChecklistItem $filled={!!formData.hourlyRate.trim()} $warning={fieldWarnings.includes('hourlyRate')}>
+              <div className="label-group">
+                {fieldWarnings.includes('hourlyRate') ? <AlertTriangle color="#dc2626" /> : !!formData.hourlyRate.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Mức lương theo giờ' : 'Hourly rate'}</span>
+              </div>
+            </ChecklistItem>
+
+            <ChecklistItem $filled={!!formData.workDate.trim()} $warning={fieldWarnings.includes('workDate')}>
+              <div className="label-group">
+                {fieldWarnings.includes('workDate') ? <AlertTriangle color="#dc2626" /> : !!formData.workDate.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Ngày làm việc' : 'Work date'}</span>
+              </div>
+            </ChecklistItem>
+
+            <ChecklistItem $filled={(formData.workHoursList || []).some(s => s.startTime && s.endTime)} $warning={fieldWarnings.includes('workHoursList')}>
+              <div className="label-group">
+                {fieldWarnings.includes('workHoursList') ? <AlertTriangle color="#dc2626" /> : (formData.workHoursList || []).some(s => s.startTime && s.endTime) ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Khung giờ làm việc' : 'Working hours'}</span>
+              </div>
+            </ChecklistItem>
+
+            <ChecklistItem $filled={!!formData.description.trim()} $warning={fieldWarnings.includes('description')}>
+              <div className="label-group">
+                {fieldWarnings.includes('description') ? <AlertTriangle color="#dc2626" /> : !!formData.description.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Mô tả công việc' : 'Job description'}</span>
+              </div>
+            </ChecklistItem>
+
+            <ChecklistItem $filled={!!formData.requirements.trim()} $warning={fieldWarnings.includes('requirements')}>
+              <div className="label-group">
+                {fieldWarnings.includes('requirements') ? <AlertTriangle color="#dc2626" /> : !!formData.requirements.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                <span>{language === 'vi' ? 'Yêu cầu công việc' : 'Requirements'}</span>
+              </div>
+            </ChecklistItem>
+          </SidebarCard>
+        </PageLayout>
       </PostJobContainer>
 
       <Modal
@@ -1779,14 +2231,14 @@ const PostQuickJob = () => {
                   {paymentInfo.newBalance.toLocaleString('vi-VN')} VNĐ
                 </span>
               </div>
-              
+
             </div>
           )}
           {modalType === 'error' && (paymentInfo?.message?.includes('Số dư không đủ') || paymentInfo?.message?.includes('Insufficient balance')) ? (
             <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
-              <Button 
+              <Button
                 onClick={handleModalClose}
-                style={{ 
+                style={{
                   flex: 1,
                   background: '#E5E7EB',
                   color: '#374151'
@@ -1794,14 +2246,14 @@ const PostQuickJob = () => {
               >
                 {language === 'vi' ? 'Đóng' : 'Close'}
               </Button>
-              <Button 
+              <Button
                 onClick={() => {
                   setShowModal(false);
                   setDepositRawAmount(String(paymentInfo?.missingAmount || ''));
                   setDepositStep(2); // Go directly to step 2 (show QR code for the missing amount)
                   setShowDepositModal(true);
                 }}
-                style={{ 
+                style={{
                   flex: 1,
                   background: '#3B82F6',
                   color: 'white'

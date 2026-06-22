@@ -36,18 +36,29 @@ const isAnalysisResponse = (value) => (
   && Array.isArray(value.suggested_skills)
 );
 
-const errorMessage = (status, code, language) => {
+const errorMessage = (status, code, language, context = 'cv') => {
   const vi = language === 'vi';
+  const isJd = context === 'jd';
   if (status === 401) return vi ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' : 'Your session has expired. Please sign in again.';
-  if (status === 403) return vi ? 'Tài khoản này không có quyền phân tích CV.' : 'This account cannot analyze CVs.';
-  if (status === 413) return vi ? 'Nội dung CV quá lớn để phân tích.' : 'The CV content is too large to analyze.';
+  if (status === 403) {
+    if (isJd) return vi ? 'Tài khoản này không có quyền phân tích JD.' : 'This account cannot analyze JDs.';
+    return vi ? 'Tài khoản này không có quyền phân tích CV.' : 'This account cannot analyze CVs.';
+  }
+  if (status === 413) {
+    if (isJd) return vi ? 'Nội dung JD quá lớn để phân tích.' : 'The JD content is too large to analyze.';
+    return vi ? 'Nội dung CV quá lớn để phân tích.' : 'The CV content is too large to analyze.';
+  }
   if (code === 'PROFILE_TITLE_REQUIRED') return vi ? 'Hãy bổ sung chức danh nghề nghiệp trong Hồ sơ cá nhân trước khi tạo CV bằng AI.' : 'Please add a career title to your profile before generating a CV.';
   if (status === 422 || code === 'CV_TOO_EMPTY') return vi ? 'Hãy bổ sung chức danh và nội dung CV trước khi phân tích.' : 'Add a title and more CV content before analysis.';
   if (status === 429 || code === 'AI_RATE_LIMITED') return vi ? 'Hệ thống đang xử lý nhiều yêu cầu. Vui lòng thử lại sau ít phút.' : 'The service is busy. Please try again in a few minutes.';
   if (code === 'AI_NOT_CONFIGURED') return vi ? 'Dịch vụ Gemini chưa được cấu hình API key. Vui lòng liên hệ quản trị viên.' : 'The Gemini service has not been configured with an API key.';
   if (code === 'AI_CREDENTIAL_INVALID') return vi ? 'Gemini API key không hợp lệ. Vui lòng tạo key trong Google AI Studio và cấu hình lại.' : 'The Gemini API key is invalid. Create a key in Google AI Studio and configure it again.';
   if (code === 'AI_TIMEOUT') return vi ? 'AI phản hồi quá chậm. Vui lòng thử lại.' : 'The AI response timed out. Please try again.';
-  if (status >= 500) return vi ? 'Dịch vụ phân tích CV đang tạm gián đoạn. Vui lòng thử lại.' : 'The CV analysis service is temporarily unavailable.';
+  if (status >= 500) {
+    if (isJd) return vi ? 'Dịch vụ phân tích JD đang tạm gián đoạn. Vui lòng thử lại.' : 'The JD analysis service is temporarily unavailable.';
+    return vi ? 'Dịch vụ phân tích CV đang tạm gián đoạn. Vui lòng thử lại.' : 'The CV analysis service is temporarily unavailable.';
+  }
+  if (isJd) return vi ? 'Không thể phân tích JD. Vui lòng thử lại.' : 'Unable to analyze the JD. Please try again.';
   return vi ? 'Không thể phân tích CV. Vui lòng thử lại.' : 'Unable to analyze the CV. Please try again.';
 };
 
@@ -223,7 +234,7 @@ export const suggestJd = async ({
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(errorMessage(response.status, payload?.error?.code, language));
+      throw new Error(errorMessage(response.status, payload?.error?.code, language, 'jd'));
     }
     return payload;
   } catch (error) {
@@ -236,6 +247,51 @@ export const suggestJd = async ({
       throw new Error(language === 'vi'
         ? 'Không thể kết nối tới dịch vụ đề xuất JD.'
         : 'Could not connect to the JD suggestion service.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
+export const parseJd = async ({
+  text = '',
+  fileContent = '', // base64 without prefix
+  fileType = '',    // 'application/pdf'
+  language = 'vi'
+}) => {
+  const headers = await getAuthHeaders();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 40_000);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/job/parse-jd`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        text: text || null,
+        file_content: fileContent || null,
+        file_type: fileType || null,
+        language
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(errorMessage(response.status, payload?.error?.code, language, 'jd'));
+    }
+    return payload;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(language === 'vi'
+        ? 'Yêu cầu phân tích JD đã hết thời gian chờ. Vui lòng thử lại.'
+        : 'The JD parsing request timed out. Please try again.');
+    }
+    if (error instanceof TypeError) {
+      throw new Error(language === 'vi'
+        ? 'Không thể kết nối tới dịch vụ phân tích JD.'
+        : 'Could not connect to the JD parsing service.');
     }
     throw error;
   } finally {
@@ -278,4 +334,5 @@ export const recommendJobsForCandidate = async ({ language = 'vi' } = {}) => {
   }
 };
 
-export default { analyzeCV, generateCV, recommendCandidates, suggestJd, recommendJobsForCandidate };
+export default { analyzeCV, generateCV, recommendCandidates, suggestJd, parseJd, recommendJobsForCandidate };
+

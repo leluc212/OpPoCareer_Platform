@@ -154,6 +154,7 @@ export const createBanner = async (bannerData) => {
     ...bannerData,
     bannerId: `banner_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     isActive: false,
+    targetRegions: bannerData.targetRegions || [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -259,12 +260,23 @@ export const toggleBannerActive = async (bannerId, currentBanners) => {
 
 /**
  * Get only the active banners (for use on the public website).
+ * Optionally filters by candidate location (region targeting).
+ * @param {string} [candidateLocation] - Candidate's location string (e.g. "Quận 1, TP.HCM")
  * Returns max 5 banners sorted by order/createdAt.
  */
-export const getActiveBanners = async () => {
+export const getActiveBanners = async (candidateLocation = '') => {
   const all = await getAllBanners();
   return all
     .filter(b => b.isActive)
+    .filter(b => {
+      // If no targetRegions set (empty or missing), show to everyone
+      if (!b.targetRegions || b.targetRegions.length === 0) return true;
+      // If candidate has no location, only show banners without region targeting
+      if (!candidateLocation) return false;
+      // Check if any target region matches the candidate's location string
+      const loc = candidateLocation.toLowerCase();
+      return b.targetRegions.some(region => loc.includes(region.toLowerCase()));
+    })
     .sort((a, b) => (a.order || 0) - (b.order || 0))
     .slice(0, MAX_ACTIVE_BANNERS);
 };

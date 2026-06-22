@@ -267,7 +267,7 @@ const JobInfo = styled.div`
 const JobTitle = styled.div`
   font-size: 0.97rem;
   font-weight: 700;
-  color: ${p => p.$isDark ? '#e2e8f0' : '#1e293b'};
+  color: ${p => p.$isUrgent ? (p.$isDark ? '#e2e8f0' : '#1e293b') : '#1a62ff'};
   margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -276,8 +276,8 @@ const JobTitle = styled.div`
 
 const Company = styled.div`
   font-size: 0.85rem;
-  color: #1a62ff;
-  font-weight: 600;
+  color: ${p => p.$isUrgent ? '#1a62ff' : (p.$isDark ? '#e2e8f0' : '#1e293b')};
+  font-weight: 700;
   margin-bottom: 8px;
 `;
 
@@ -288,12 +288,12 @@ const Tags = styled.div`
 `;
 
 const Tag = styled.span`
-  background: ${p => p.$isDark ? 'rgba(26,98,255,0.15)' : '#f0f4ff'};
-  color: ${p => p.$isDark ? '#93c5fd' : '#1a62ff'};
+  background: ${p => p.$isUrgent ? (p.$isDark ? 'rgba(26,98,255,0.15)' : '#f0f4ff') : 'transparent'};
+  color: ${p => p.$isUrgent ? (p.$isDark ? '#93c5fd' : '#1a62ff') : (p.$isDark ? '#e2e8f0' : '#1e293b')};
   border-radius: 6px;
   padding: 3px 8px;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 700;
 `;
 
 const UrgentTag = styled(Tag)`
@@ -951,7 +951,7 @@ const PublicJobListing = () => {
                     }
                   </LogoBox>
                   <JobInfo>
-                    <JobTitle $isDark={isDarkMode} style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                    <JobTitle $isDark={isDarkMode} $isUrgent={job._type === 'urgent'} style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
                       <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{job.title}</span>
                       {job.isAiScreeningEnabled && (
                         <span style={{
@@ -972,14 +972,14 @@ const PublicJobListing = () => {
                         </span>
                       )}
                     </JobTitle>
-                    <Company>{job.companyName || job.employerName || 'Công ty'}</Company>
+                    <Company $isDark={isDarkMode} $isUrgent={job._type === 'urgent'}>{job.companyName || job.employerName || 'Công ty'}</Company>
                     <Tags>
                       {job._type === 'urgent' && (
                         <UrgentTag><Zap size={10} style={{ display: 'inline' }} /> {language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</UrgentTag>
                       )}
-                      {job.location && <Tag $isDark={isDarkMode}><MapPin size={10} style={{ display: 'inline' }} /> {job.location}</Tag>}
-                      {job.workHours && <Tag $isDark={isDarkMode}><Clock size={10} style={{ display: 'inline' }} /> {job.workHours}</Tag>}
-                      {job.jobType && <Tag $isDark={isDarkMode}>{job.jobType}</Tag>}
+                      {job.location && <Tag $isDark={isDarkMode} $isUrgent={job._type === 'urgent'}><MapPin size={10} style={{ display: 'inline' }} /> {job.location}</Tag>}
+                      {job.workHours && <Tag $isDark={isDarkMode} $isUrgent={job._type === 'urgent'}><Clock size={10} style={{ display: 'inline' }} /> {job.workHours}</Tag>}
+                      {job.jobType && <Tag $isDark={isDarkMode} $isUrgent={job._type === 'urgent'}>{job.jobType}</Tag>}
                     </Tags>
                   </JobInfo>
                   <JobRight>

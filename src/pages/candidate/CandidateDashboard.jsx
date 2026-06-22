@@ -1313,13 +1313,15 @@ const CandidateDashboard = () => {
   ]);
 
   // Load active banners from admin (max 5)
+  // Load active banners - reload when candidate profile is available for region targeting
   useEffect(() => {
-    getActiveBanners().then(activeBanners => {
+    const location = candidateProfile?.location || '';
+    getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
         setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl })));
       }
     }).catch(() => {/* fallback to default banners */});
-  }, []);
+  }, [candidateProfile?.location]);
 
   useEffect(() => {
     const bannerInterval = setInterval(() => {

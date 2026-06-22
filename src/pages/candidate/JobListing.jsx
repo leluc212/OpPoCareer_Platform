@@ -3302,14 +3302,15 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     { src: s3Images.banner.unnamed, alt: "Banner" }
   ]);
 
-  // Load active banners from admin (max 5)
+  // Load active banners from admin (max 5) - with region targeting
   useEffect(() => {
-    getActiveBanners().then(activeBanners => {
+    const location = candidateProfile?.location || '';
+    getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
         setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl })));
       }
     }).catch(() => {/* fallback to default banners */});
-  }, []);
+  }, [candidateProfile?.location]);
 
   useEffect(() => {
     const bannerInterval = setInterval(() => {

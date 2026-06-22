@@ -84,6 +84,7 @@ def create_banner(body):
             'linkUrl':   body.get('linkUrl', ''),
             'isActive':  body.get('isActive', False),
             'order':     int(body.get('order', 0)),
+            'targetRegions': body.get('targetRegions', []),  # [] = all regions
             'createdAt': now_iso(),
             'updatedAt': now_iso(),
         }
@@ -104,6 +105,9 @@ def update_banner(banner_id, body):
             'order':     body.get('order'),
             'updatedAt': now_iso(),
         }
+        # targetRegions can be an empty list (meaning all regions), so check key existence
+        if 'targetRegions' in body:
+            updates['targetRegions'] = body['targetRegions']
         # Remove None values
         updates = {k: v for k, v in updates.items() if v is not None}
 

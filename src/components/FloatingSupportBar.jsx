@@ -1059,6 +1059,20 @@ export default function FloatingSupportBar() {
                         }
                         required
                       />
+                      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                        <span style={{ color: 'var(--text-light, #64748b)' }}>
+                          {language === 'vi' ? 'Hoặc góp ý trực tiếp qua' : 'Or contact us directly via'}
+                        </span>
+                        <a
+                          href="https://facebook.com/oppo.nentangtuyendung/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#1e40af', fontWeight: 600, textDecoration: 'none' }}
+                        >
+                          Facebook
+                        </a>
+
+                      </div>
                     </FormGroup>
                   )}
 

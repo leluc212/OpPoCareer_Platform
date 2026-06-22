@@ -3282,7 +3282,7 @@ const HRManagement = () => {
         updatedAt: job.updatedAt
       }));
 
-      // Auto-close expired quick jobs (workDate + endTime has passed)
+      // Auto-delete expired quick jobs (workDate + endTime has passed)
       const now = new Date();
       const nowDateStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format
       const nowTimeStr = now.toTimeString().slice(0, 5); // HH:MM format
@@ -3295,20 +3295,20 @@ const HRManagement = () => {
       });
 
       if (expiredJobs.length > 0) {
-        console.log(`⏰ Auto-closing ${expiredJobs.length} expired quick job(s)...`);
+        console.log(`⏰ Auto-deleting ${expiredJobs.length} expired quick job(s)...`);
         for (const job of expiredJobs) {
           try {
-            await quickJobService.updateJobStatus(job.idJob, 'closed');
-            console.log(`✅ Auto-closed expired quick job: ${job.idJob} (${job.title})`);
+            await quickJobService.deleteQuickJob(job.idJob);
+            console.log(`✅ Auto-deleted expired quick job: ${job.idJob} (${job.title})`);
           } catch (err) {
-            console.error(`❌ Failed to auto-close quick job ${job.idJob}:`, err);
+            console.error(`❌ Failed to auto-delete quick job ${job.idJob}:`, err);
           }
         }
       }
 
-      // Hide closed jobs from the post management list
+      // Hide deleted/expired jobs from the post management list
       const visibleJobs = formattedJobs.filter(job => {
-        if (job.status === 'closed') return false;
+        if (job.status === 'closed' || job.status === 'deleted') return false;
         // Also hide jobs we just detected as expired
         if (expiredJobs.some(ej => ej.idJob === job.idJob)) return false;
         return true;

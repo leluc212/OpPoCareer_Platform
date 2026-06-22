@@ -1432,8 +1432,11 @@ const CandidateDashboard = () => {
       // Fetch user's applications
       const apps = await applicationService.getMyCandidateApplications();
 
+      // Filter out applications for deleted jobs
+      const activeApps = apps.filter(app => app.status !== 'job_deleted');
+
       // Find IDs of jobs not in our active lists
-      const missingJobIds = [...new Set(apps.map(app => app.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
+      const missingJobIds = [...new Set(activeApps.map(app => app.jobId).filter(id => id && !allJobs.find(j => (j.idJob || j.id || j.jobID) === id)))];
 
       // Fetch missing jobs individually to ensure "real data" even for inactive jobs
       let additionalJobs = [];
@@ -1453,7 +1456,7 @@ const CandidateDashboard = () => {
 
       const finalAllJobs = [...allJobs, ...additionalJobs];
 
-      const mappedApps = apps
+      const mappedApps = activeApps
         .sort((a, b) => new Date(b.appliedAt || b.createdAt || 0) - new Date(a.appliedAt || a.createdAt || 0))
         .map(app => {
           const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === app.jobId);

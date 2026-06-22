@@ -199,6 +199,24 @@ def submit_application(event, candidate_id, candidate_email, create_response):
             except:
                 pass
         
+        # Block applications to deleted or expired jobs
+        if job:
+            job_status = job.get('status', '')
+            if job_status == 'deleted':
+                return create_response(410, {
+                    'error': 'Bài đăng này đã bị xóa, không thể ứng tuyển.',
+                    'code': 'JOB_DELETED'
+                })
+            # Check if job is expired (workDays before today)
+            work_days = job.get('workDays', '')
+            if work_days:
+                today_str = datetime.utcnow().strftime('%Y-%m-%d')
+                if work_days < today_str:
+                    return create_response(410, {
+                        'error': 'Bài đăng này đã hết hạn, không thể ứng tuyển.',
+                        'code': 'JOB_EXPIRED'
+                    })
+        
         if not job:
             employer_id = body.get('employerId') or 'DEMO-EMPLOYER'
             employer_email = body.get('employerEmail') or 'demo@example.com'
@@ -375,7 +393,7 @@ def refresh_cv_urls(applications):
 
 
 def get_candidate_applications(candidate_id, create_response):
-    """Get all applications for a candidate"""
+    """Get all applications for a candidate (excluding job_deleted)"""
     try:
         response = applications_table.query(
             IndexName='CandidateIndex',
@@ -384,6 +402,8 @@ def get_candidate_applications(candidate_id, create_response):
             ScanIndexForward=False
         )
         applications = response.get('Items', [])
+        # Filter out applications whose parent job was deleted
+        applications = [app for app in applications if app.get('status') != 'job_deleted']
         applications = refresh_cv_urls(applications)
         return create_response(200, {
             'applications': applications,

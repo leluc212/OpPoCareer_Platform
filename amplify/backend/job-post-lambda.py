@@ -97,18 +97,37 @@ def lambda_handler(event, context):
                     expired_ids.append(item['idJob'])
                 else:
                     active_items.append(item)
-            # Auto-close expired jobs in DB
+            # Auto-delete expired jobs and their applications
             for job_id in expired_ids:
                 try:
                     table.update_item(
                         Key={'idJob': job_id},
-                        UpdateExpression='SET #s = :s, updatedAt = :u',
+                        UpdateExpression='SET #s = :s, updatedAt = :u, deletedReason = :r',
                         ExpressionAttributeNames={'#s': 'status'},
-                        ExpressionAttributeValues={':s': 'closed', ':u': datetime.utcnow().isoformat() + 'Z'}
+                        ExpressionAttributeValues={':s': 'deleted', ':u': datetime.utcnow().isoformat() + 'Z', ':r': 'expired'}
                     )
-                    print(f"⏰ Auto-closed expired job: {job_id}")
+                    print(f"⏰ Auto-deleted expired job: {job_id}")
+                    # Mark associated applications as job_deleted
+                    try:
+                        apps_table = dynamodb.Table('StandardApplications')
+                        app_resp = apps_table.query(
+                            IndexName='JobIndex',
+                            KeyConditionExpression='jobId = :jid',
+                            ExpressionAttributeValues={':jid': job_id}
+                        )
+                        for app in app_resp.get('Items', []):
+                            if app.get('status') != 'job_deleted':
+                                apps_table.update_item(
+                                    Key={'applicationId': app['applicationId']},
+                                    UpdateExpression='SET #s = :s, updatedAt = :u',
+                                    ExpressionAttributeNames={'#s': 'status'},
+                                    ExpressionAttributeValues={':s': 'job_deleted', ':u': datetime.utcnow().isoformat() + 'Z'}
+                                )
+                        print(f"  ✅ Marked applications as job_deleted for expired job {job_id}")
+                    except Exception as app_err:
+                        print(f"  ⚠️ Error updating applications for expired job {job_id}: {str(app_err)}")
                 except Exception as e:
-                    print(f"Error auto-closing job {job_id}: {str(e)}")
+                    print(f"Error auto-deleting job {job_id}: {str(e)}")
             active_items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
             return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'data': active_items}, default=decimal_default)}
 
@@ -117,22 +136,41 @@ def lambda_handler(event, context):
             emp_id = path_parameters.get('employerId') or (path_segments[-1] if path_segments else None)
             response = table.query(IndexName='EmployerIndex', KeyConditionExpression='employerId = :e', ExpressionAttributeValues={':e': emp_id})
             items = [item for item in response.get('Items', []) if item.get('status') != 'deleted']
-            # Auto-close expired jobs that are still active
+            # Auto-delete expired jobs that are still active
             today_str = datetime.utcnow().strftime('%Y-%m-%d')
-            for item in items:
+            for item in items[:]:  # iterate over a copy since we may remove
                 work_days = item.get('workDays', '')
                 if item.get('status') == 'active' and work_days and work_days < today_str:
                     try:
                         table.update_item(
                             Key={'idJob': item['idJob']},
-                            UpdateExpression='SET #s = :s, updatedAt = :u',
+                            UpdateExpression='SET #s = :s, updatedAt = :u, deletedReason = :r',
                             ExpressionAttributeNames={'#s': 'status'},
-                            ExpressionAttributeValues={':s': 'closed', ':u': datetime.utcnow().isoformat() + 'Z'}
+                            ExpressionAttributeValues={':s': 'deleted', ':u': datetime.utcnow().isoformat() + 'Z', ':r': 'expired'}
                         )
-                        item['status'] = 'closed'
-                        print(f"⏰ Auto-closed expired job: {item['idJob']}")
+                        print(f"⏰ Auto-deleted expired job: {item['idJob']}")
+                        # Mark associated applications as job_deleted
+                        try:
+                            apps_table = dynamodb.Table('StandardApplications')
+                            app_resp = apps_table.query(
+                                IndexName='JobIndex',
+                                KeyConditionExpression='jobId = :jid',
+                                ExpressionAttributeValues={':jid': item['idJob']}
+                            )
+                            for app in app_resp.get('Items', []):
+                                if app.get('status') != 'job_deleted':
+                                    apps_table.update_item(
+                                        Key={'applicationId': app['applicationId']},
+                                        UpdateExpression='SET #s = :s, updatedAt = :u',
+                                        ExpressionAttributeNames={'#s': 'status'},
+                                        ExpressionAttributeValues={':s': 'job_deleted', ':u': datetime.utcnow().isoformat() + 'Z'}
+                                    )
+                            print(f"  ✅ Marked applications as job_deleted for expired job {item['idJob']}")
+                        except Exception as app_err:
+                            print(f"  ⚠️ Error updating applications for expired job {item['idJob']}: {str(app_err)}")
+                        items.remove(item)
                     except Exception as e:
-                        print(f"Error auto-closing job {item['idJob']}: {str(e)}")
+                        print(f"Error auto-deleting job {item['idJob']}: {str(e)}")
             return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'data': items}, default=decimal_default)}
 
         # D. POST /jobs (Create)
@@ -570,7 +608,7 @@ def update_job_post(event, job_id, user_id, headers):
         }
 
 def delete_job_post(job_id, user_id, headers):
-    """Delete job post (soft delete)"""
+    """Delete job post (soft delete) and mark associated applications as job_deleted"""
     try:
         # First, get the existing job to verify ownership
         response = table.get_item(Key={'idJob': job_id})
@@ -619,6 +657,35 @@ def delete_job_post(job_id, user_id, headers):
                 ':updatedAt': datetime.utcnow().isoformat() + 'Z'
             }
         )
+        
+        # Also mark all associated applications as 'job_deleted'
+        try:
+            applications_table = dynamodb.Table('StandardApplications')
+            app_response = applications_table.query(
+                IndexName='JobIndex',
+                KeyConditionExpression='jobId = :jid',
+                ExpressionAttributeValues={':jid': job_id}
+            )
+            
+            deleted_apps_count = 0
+            for app in app_response.get('Items', []):
+                app_id = app.get('applicationId')
+                if app_id and app.get('status') != 'job_deleted':
+                    applications_table.update_item(
+                        Key={'applicationId': app_id},
+                        UpdateExpression='SET #status = :status, updatedAt = :updatedAt',
+                        ExpressionAttributeNames={'#status': 'status'},
+                        ExpressionAttributeValues={
+                            ':status': 'job_deleted',
+                            ':updatedAt': datetime.utcnow().isoformat() + 'Z'
+                        }
+                    )
+                    deleted_apps_count += 1
+            
+            print(f"✅ Marked {deleted_apps_count} applications as job_deleted for job {job_id}")
+        except Exception as app_err:
+            # Non-fatal: job is still deleted even if application updates fail
+            print(f"⚠️ Error updating applications for deleted job {job_id}: {str(app_err)}")
         
         print(f"✅ Job post deleted: {job_id}")
         

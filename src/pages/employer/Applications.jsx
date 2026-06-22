@@ -2852,7 +2852,7 @@ const Applications = () => {
 
         console.log('📦 Transformed jobs:', transformedJobs);
 
-        // Auto-close expired jobs that are still active
+        // Auto-delete expired jobs that are still active
         const today = new Date();
         const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -2860,28 +2860,34 @@ const Applications = () => {
           if (job.status !== 'active' || !job.workDays) return false;
           const workDate = new Date(job.workDays);
           const workDateOnly = new Date(workDate.getFullYear(), workDate.getMonth(), workDate.getDate());
-          // Close jobs only when workDays is strictly before today
+          // Delete jobs only when workDays is strictly before today
           return workDateOnly < todayOnly;
         });
 
         if (expiredActiveJobs.length > 0) {
-          console.log(`⏰ Auto-closing ${expiredActiveJobs.length} expired job(s)...`);
+          console.log(`⏰ Auto-deleting ${expiredActiveJobs.length} expired job(s)...`);
+          const expiredJobIds = [];
           for (const job of expiredActiveJobs) {
             try {
-              await jobPostService.updateJobStatus(job.idJob, 'closed');
-              console.log(`✅ Auto-closed expired job: ${job.idJob} (${job.title})`);
+              await jobPostService.deleteJobPost(job.idJob);
+              expiredJobIds.push(job.idJob);
+              console.log(`✅ Auto-deleted expired job: ${job.idJob} (${job.title})`);
             } catch (err) {
-              console.error(`❌ Failed to auto-close job ${job.idJob}:`, err);
+              console.error(`❌ Failed to auto-delete job ${job.idJob}:`, err);
             }
           }
-          // Update local state to reflect closed status
-          const updatedJobs = transformedJobs.map(job => {
-            if (expiredActiveJobs.some(ej => ej.idJob === job.idJob)) {
-              return { ...job, status: 'closed' };
-            }
-            return job;
-          });
+          // Remove expired jobs from local state (they're now deleted)
+          const updatedJobs = transformedJobs.filter(job =>
+            !expiredActiveJobs.some(ej => ej.idJob === job.idJob)
+          );
           setJobPosts(updatedJobs);
+
+          // Mark associated applications as job_deleted in local state
+          if (expiredJobIds.length > 0) {
+            setRealApplications(prev => prev.map(app =>
+              expiredJobIds.includes(app.jobId) ? { ...app, status: 'job_deleted' } : app
+            ));
+          }
         } else {
           setJobPosts(transformedJobs);
         }
@@ -2998,7 +3004,10 @@ const Applications = () => {
         const transformedApplications = allApplications
           .filter(app => {
             // Filter out test records without identification (Name or Email)
-            return app.fullName?.trim() || app.candidateName?.trim() || (app.candidateEmail && app.candidateEmail !== 'Unknown');
+            if (!(app.fullName?.trim() || app.candidateName?.trim() || (app.candidateEmail && app.candidateEmail !== 'Unknown'))) return false;
+            // Filter out applications whose job was deleted
+            if (app.status === 'job_deleted') return false;
+            return true;
           })
           // Sort newest first
           .sort((a, b) => new Date(b.appliedAt || 0) - new Date(a.appliedAt || 0))
@@ -3210,6 +3219,9 @@ const Applications = () => {
     };
 
     return applicationsToFilter.filter(app => {
+      // Hide applications whose job was deleted
+      if (app.status === 'job_deleted') return false;
+
       // Search: tên ứng viên hoặc vị trí
       const matchesSearch = !searchTerm ||
         app.candidate.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -3483,11 +3495,16 @@ const Applications = () => {
 
       console.log('🗑️ Deleting job:', jobId);
 
-      // Delete from DynamoDB
+      // Delete from DynamoDB (backend also marks applications as job_deleted)
       await jobPostService.deleteJobPost(jobId);
 
       // Remove job from state
       setJobPosts(prev => prev.filter(job => job.id !== deleteJobId));
+
+      // Also mark associated applications as job_deleted in local state
+      setRealApplications(prev => prev.map(app =>
+        app.jobId === jobId ? { ...app, status: 'job_deleted' } : app
+      ));
 
       // Show success toast
       setSuccessMessage(language === 'vi' ? 'Đã xóa bài đăng thành công!' : 'Post deleted successfully!');

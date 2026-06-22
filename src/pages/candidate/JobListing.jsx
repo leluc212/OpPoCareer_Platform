@@ -3413,7 +3413,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
       try {
         const apps = await applicationService.getMyCandidateApplications();
-        setCandidateApplications(apps || []);
+        // Filter out applications for deleted jobs
+        setCandidateApplications((apps || []).filter(app => app.status !== 'job_deleted'));
       } catch (error) {
         console.error('Error fetching candidate applications:', error);
       }
@@ -4103,8 +4104,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                      error.message.includes('No profile found') || 
                      error.message.includes('404');
 
+      const isJobDeleted = error.errorCode === 'JOB_DELETED' || error.statusCode === 410;
+      const isJobExpired = error.errorCode === 'JOB_EXPIRED';
+
       if (isAlreadyApplied) {
         errorMessage = language === 'vi' ? 'Bạn đã ứng tuyển công việc này rồi!' : 'You have already applied to this job!';
+      } else if (isJobDeleted || isJobExpired) {
+        errorMessage = language === 'vi' ? 'Bài đăng này đã hết hạn hoặc đã bị xóa, không thể ứng tuyển.' : 'This job has expired or been removed. You cannot apply.';
       } else if (isRateLimited) {
         errorMessage = language === 'vi' ? 'Bạn gửi CV quá nhanh! Vui lòng đợi 30 giây trước khi gửi tiếp.' : 'Sending too fast! Please wait 30 seconds.';
       } else if (isNoCV) {

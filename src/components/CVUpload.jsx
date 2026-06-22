@@ -441,10 +441,12 @@ const CVUpload = () => {
           <Title>
             📄 {language === 'vi' ? 'CV / Hồ Sơ' : 'CV / Resume'} ({cvList.length}/{MAX_CV_COUNT})
           </Title>
-          <CreateCVLink to="/candidate/cv-templates">
-            <Plus size={14} />
-            {language === 'vi' ? 'Tạo CV theo style' : 'Create Styled CV'}
-          </CreateCVLink>
+          {cvList.length < MAX_CV_COUNT && (
+            <CreateCVLink to="/candidate/cv-templates">
+              <Plus size={14} />
+              {language === 'vi' ? 'Tạo CV theo style' : 'Create Styled CV'}
+            </CreateCVLink>
+          )}
         </HeaderRow>
 
         {loadingUserId ? (
@@ -490,50 +492,35 @@ const CVUpload = () => {
               </div>
             )}
 
-            {/* Nút upload - Luôn hiển thị dấu cộng */}
+            {/* Nút upload - Chỉ hiển thị khi chưa đủ 3 CV */}
+            {cvList.length < MAX_CV_COUNT && (
               <UploadArea
                 $isDragging={isDragging}
-                $isFull={cvList.length >= MAX_CV_COUNT}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => {
-                  if (cvList.length >= MAX_CV_COUNT) {
-                    setError(language === 'vi'
-                      ? `Bạn đã tải lên tối đa ${MAX_CV_COUNT} CV. Vui lòng xóa CV cũ để tải lên CV mới.`
-                      : `You have uploaded the maximum of ${MAX_CV_COUNT} CVs. Please delete an old CV to upload a new one.`);
-                    return;
-                  }
-                  fileInputRef.current?.click();
-                }}
+                onClick={() => fileInputRef.current?.click()}
               >
-                {cvList.length >= MAX_CV_COUNT ? (
-                  <UploadIcon style={{ margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                    <Plus size={48} strokeWidth={1} />
-                  </UploadIcon>
-                ) : (
-                  <>
-                    <UploadIcon>📁</UploadIcon>
-                    <UploadText>
-                      {uploading
-                        ? (language === 'vi' ? 'Đang tải lên...' : 'Uploading...')
-                        : (language === 'vi' ? 'Kéo thả file CV vào đây hoặc click để chọn' : 'Drag and drop your CV here or click to select')}
-                    </UploadText>
-                    <UploadHint>
-                      {language === 'vi'
-                        ? `Hỗ trợ: PDF, DOC, DOCX (Tối đa 5MB) • Còn lại: ${MAX_CV_COUNT - cvList.length} CV`
-                        : `Supported: PDF, DOC, DOCX (Max 5MB) • Remaining: ${MAX_CV_COUNT - cvList.length} CV`}
-                    </UploadHint>
-                  </>
-                )}
+                <UploadIcon>📁</UploadIcon>
+                <UploadText>
+                  {uploading
+                    ? (language === 'vi' ? 'Đang tải lên...' : 'Uploading...')
+                    : (language === 'vi' ? 'Kéo thả file CV vào đây hoặc click để chọn' : 'Drag and drop your CV here or click to select')}
+                </UploadText>
+                <UploadHint>
+                  {language === 'vi'
+                    ? `Hỗ trợ: PDF, DOC, DOCX (Tối đa 5MB) • Còn lại: ${MAX_CV_COUNT - cvList.length} CV`
+                    : `Supported: PDF, DOC, DOCX (Max 5MB) • Remaining: ${MAX_CV_COUNT - cvList.length} CV`}
+                </UploadHint>
               </UploadArea>
+            )}
              
              <FileInput
                ref={fileInputRef}
                type="file"
                accept=".pdf,.doc,.docx"
                onChange={handleFileSelect}
-               disabled={uploading || cvList.length >= MAX_CV_COUNT}
+               disabled={uploading}
              />
 
              {uploading && (

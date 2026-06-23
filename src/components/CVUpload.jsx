@@ -226,7 +226,7 @@ const CVUpload = () => {
   const [cvToDelete, setCvToDelete] = useState(null); // CV đang chọn để xóa
   const [loadingUserId, setLoadingUserId] = useState(true);
   const fileInputRef = React.useRef(null);
-  
+
   const MAX_CV_COUNT = 3; // Giới hạn tối đa 3 CV
 
   // Get userId directly from Cognito token
@@ -236,7 +236,7 @@ const CVUpload = () => {
         console.log('🔍 [CVUpload] Getting userId from Cognito...');
         const session = await fetchAuthSession();
         const userIdFromToken = session.tokens?.idToken?.payload?.sub;
-        
+
         if (userIdFromToken) {
           console.log('✅ [CVUpload] UserId from Cognito:', userIdFromToken);
           setUserId(userIdFromToken);
@@ -262,10 +262,10 @@ const CVUpload = () => {
         console.warn('⚠️ [CVUpload] Cannot load CV info - no userId');
         return;
       }
-      
+
       const data = await getCVInfo(userId);
       console.log('✅ [CVUpload] CV info loaded:', data);
-      
+
       // Set CV list from API response
       if (data && data.cvList) {
         setCvList(data.cvList);
@@ -297,7 +297,7 @@ const CVUpload = () => {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       handleFileUpload(files[0]);
@@ -314,7 +314,7 @@ const CVUpload = () => {
   const handleFileUpload = async (file) => {
     setError('');
     setSuccess('');
-    
+
     // Kiểm tra giới hạn số lượng CV
     if (cvList.length >= MAX_CV_COUNT) {
       setError(language === 'vi'
@@ -322,7 +322,7 @@ const CVUpload = () => {
         : `You can only upload a maximum of ${MAX_CV_COUNT} CVs. Please delete an old CV before uploading a new one.`);
       return;
     }
-    
+
     setUploading(true);
     setProgress(0);
 
@@ -330,7 +330,7 @@ const CVUpload = () => {
       console.log('📤 [CVUpload] Starting upload...');
       console.log('📤 [CVUpload] User ID:', userId);
       console.log('📤 [CVUpload] File:', file.name, file.type, file.size);
-      
+
       if (!userId) {
         throw new Error('User ID not found. Please login again.');
       }
@@ -341,15 +341,15 @@ const CVUpload = () => {
       }, 200);
 
       const result = await uploadCV(userId, file);
-      
+
       console.log('✅ [CVUpload] Upload result:', result);
-      
+
       clearInterval(progressInterval);
       setProgress(100);
-      
+
       // Reload CV list to get updated data
       await loadCVInfo();
-      
+
       setSuccess(language === 'vi' ? 'Upload CV thành công!' : 'CV uploaded successfully!');
       setTimeout(() => setSuccess(''), 5000);
     } catch (error) {
@@ -368,21 +368,21 @@ const CVUpload = () => {
 
     try {
       if (!cvToDelete) return;
-      
+
       // Log the full CV object for debugging
       console.log('🗑️ [CVUpload] CV to delete object:', cvToDelete);
-      
+
       // Handle cases where the ID property might be named differently
       const cvId = cvToDelete.id || cvToDelete.cvId;
       console.log('🗑️ [CVUpload] Attempting to delete CV - userId:', userId, 'cvId:', cvId);
 
       // Delete specific CV by ID
       await deleteCV(userId, cvId);
-      
+
       // Reload CV list
       await loadCVInfo();
       setCvToDelete(null);
-      
+
       setSuccess(language === 'vi' ? 'Đã xóa CV thành công!' : 'CV deleted successfully!');
       setTimeout(() => setSuccess(''), 2000);
     } catch (error) {
@@ -395,30 +395,30 @@ const CVUpload = () => {
   const handleView = async (cv) => {
     try {
       setError('');
-      
+
       // Mở CV trực tiếp bằng URL hiện có
       console.log('✅ [CVUpload] Opening CV in new tab...');
       console.log('CV URL:', cv.cvUrl);
-      
+
       if (!cv.cvUrl) {
         throw new Error(language === 'vi' ? 'Không tìm thấy URL của CV.' : 'CV URL not found.');
       }
-      
+
       const newWindow = window.open(cv.cvUrl, '_blank');
-      
+
       // Fallback nếu popup bị block
       if (!newWindow) {
         setError(language === 'vi'
           ? 'Popup bị chặn. Vui lòng cho phép popup hoặc thử lại.'
           : 'Popup blocked. Please allow popups or try again.');
       }
-      
+
     } catch (error) {
       console.error('❌ [CVUpload] Error viewing CV:', error);
       setError(error.message || (language === 'vi' ? 'Không thể mở CV. Vui lòng thử lại.' : 'Cannot open CV. Please try again.'));
     }
   };
-  
+
   const openDeleteModal = (cv) => {
     setCvToDelete(cv);
     setShowDeleteModal(true);
@@ -441,12 +441,10 @@ const CVUpload = () => {
           <Title>
             📄 {language === 'vi' ? 'CV / Hồ Sơ' : 'CV / Resume'} ({cvList.length}/{MAX_CV_COUNT})
           </Title>
-          {cvList.length < MAX_CV_COUNT && (
-            <CreateCVLink to="/candidate/cv-templates">
-              <Plus size={14} />
-              {language === 'vi' ? 'Tạo CV theo style' : 'Create Styled CV'}
-            </CreateCVLink>
-          )}
+          <CreateCVLink to="/candidate/cv-templates">
+            <Plus size={14} />
+            {language === 'vi' ? 'Tạo CV theo style' : 'Create Styled CV'}
+          </CreateCVLink>
         </HeaderRow>
 
         {loadingUserId ? (
@@ -479,8 +477,8 @@ const CVUpload = () => {
                       <IconButton onClick={() => handleView(cv)} title={language === 'vi' ? 'Xem CV' : 'View CV'}>
                         <Eye size={18} />
                       </IconButton>
-                      <IconButton 
-                        $variant="danger" 
+                      <IconButton
+                        $variant="danger"
                         onClick={() => openDeleteModal(cv)}
                         title={language === 'vi' ? 'Xóa CV' : 'Delete CV'}
                       >
@@ -514,20 +512,20 @@ const CVUpload = () => {
                 </UploadHint>
               </UploadArea>
             )}
-             
-             <FileInput
-               ref={fileInputRef}
-               type="file"
-               accept=".pdf,.doc,.docx"
-               onChange={handleFileSelect}
-               disabled={uploading}
-             />
 
-             {uploading && (
-               <ProgressBar>
-                 <ProgressFill progress={progress} />
-               </ProgressBar>
-             )}
+            <FileInput
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={handleFileSelect}
+              disabled={uploading}
+            />
+
+            {uploading && (
+              <ProgressBar>
+                <ProgressFill progress={progress} />
+              </ProgressBar>
+            )}
           </>
         )}
 

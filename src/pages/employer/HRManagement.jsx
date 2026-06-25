@@ -6827,7 +6827,6 @@ const HRManagement = () => {
                     style={{ width: '100%', padding: '12px 16px', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', background: 'white' }}
                   >
                     <option value="part-time">{language === 'vi' ? 'Bán thời gian' : 'Part-time'}</option>
-                    <option value="full-time">{language === 'vi' ? 'Toàn thời gian' : 'Full-time'}</option>
                   </select>
                 </div>
               </div>

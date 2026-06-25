@@ -1411,7 +1411,7 @@ const CandidateDashboard = () => {
                   title: matchedJob.title || 'Untitled',
                   company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
                   location: matchedJob.location || '',
-                  type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (matchedJob.jobType === 'full-time' ? 'Toàn thời gian' : 'Bán thời gian'),
+                  type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
                   salary: jobSalary,
                   postedAt: formatRelativeTime(matchedJob.createdAt),
                   tags: typeof matchedJob.tags === 'string' ? matchedJob.tags.split(',').map(t => t.trim()) : (matchedJob.tags || []),
@@ -1792,7 +1792,6 @@ const CandidateDashboard = () => {
       'Nhân viên Pha chế - Part-time': 'Barista - Part-time',
       'Nhân viên Phục vụ - Part-time': 'Service Staff - Part-time',
       'Nhân viên Phụ bếp - Part-time': 'Kitchen Assistant - Part-time',
-      'Nhân viên Pha chế - Full-time': 'Barista - Full-time',
       'Nhân viên Bưng bê - Part-time': 'Food Runner - Part-time',
       'Nhân viên Phục vụ': 'Service Staff',
       'Nhân viên Pha chế': 'Barista',
@@ -1806,7 +1805,6 @@ const CandidateDashboard = () => {
   const translateJobType = (typeVi) => {
     if (language === 'vi') return typeVi;
     const typeMap = {
-      'Toàn thời gian': 'Full-time',
       'Bán thời gian': 'Part-time',
       'Hợp đồng': 'Contract',
       'Thực tập': 'Internship'
@@ -1832,7 +1830,6 @@ const CandidateDashboard = () => {
       'Nhà hàng': 'Restaurant',
       'Lẩu': 'Hot Pot',
       'Part-time': 'Part-time',
-      'Full-time': 'Full-time',
       'Coffee': 'Coffee',
       'Pizza': 'Pizza',
     };

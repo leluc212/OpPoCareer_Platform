@@ -545,7 +545,6 @@ const PublicJobListing = () => {
   const [loc, setLoc] = useState(initLocation);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [jobType, setJobType] = useState('all');
   const [selectedJob, setSelectedJob] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -556,13 +555,31 @@ const PublicJobListing = () => {
   });
 
   // Extended filter states
-  const [selectedSalary, setSelectedSalary] = useState('');
-  const [selectedDateRange, setSelectedDateRange] = useState('');
-  const [selectedLocations, setSelectedLocations] = useState([]);
+  const [selectedSalaryRanges, setSelectedSalaryRanges] = useState([]);
+  const [selectedWorkTimes, setSelectedWorkTimes] = useState([]);
+  const [selectedPostTimes, setSelectedPostTimes] = useState([]);
+
 
   // Collapsible filter sections
-  const [openSections, setOpenSections] = useState({ type: true, salary: false, date: false, location: false });
+  const [openSections, setOpenSections] = useState({ workTime: true, postTime: true, salary: true });
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }));
+
+  const toggleSalaryRange = (range) => {
+    setSelectedSalaryRanges(prev =>
+      prev.includes(range) ? prev.filter(r => r !== range) : [...prev, range]
+    );
+  };
+
+  const toggleWorkTime = (time) => {
+    setSelectedWorkTimes(prev => prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]);
+  };
+
+  const togglePostTime = (time) => {
+    setSelectedPostTimes(prev => prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]);
+  };
+
+
+
 
   // Sync tab với URL param
   useEffect(() => {
@@ -613,78 +630,79 @@ const PublicJobListing = () => {
   }, []);
 
   // ── Helper: parse salary to a numeric value (thousands VND) ──
-  const parseSalary = (s) => {
-    if (!s) return 0;
-    const str = String(s).replace(/\./g, '').replace(/,/g, '');
-    const nums = str.match(/\d+/g);
-    if (!nums) return 0;
-    return Math.max(...nums.map(Number));
+  const getSalaryValue = (jobOrSalary) => {
+    const job = typeof jobOrSalary === 'object' && jobOrSalary !== null ? jobOrSalary : null;
+    if (job && Number(job.hourlyRate) > 0) return Number(job.hourlyRate) / 1000;
+    const salaryText = job ? (job.salary || '') : String(jobOrSalary || '');
+    const numeric = parseInt(String(salaryText).replace(/[^\d]/g, ''), 10);
+    if (!numeric) return 0;
+    return numeric >= 1000 ? numeric / 1000 : numeric;
   };
 
-  const matchSalary = (job, range) => {
-    if (!range) return true;
-    const sal = String(job.salary || '').toLowerCase();
-    if (range === 'negotiable') return sal.includes('thỏa thuận') || sal.includes('negotiable') || !job.salary;
-    const v = parseSalary(job.salary);
-    // Detect if salary is hourly (contains /giờ or /h) vs monthly
-    const isHourly = sal.includes('giờ') || sal.includes('/h');
-    // Normalize to monthly rough estimate for comparison
-    const monthly = isHourly ? v * 8 * 26 : v; // 8h/day * 26 days
+  const isInSalaryRange = (job, range) => {
+    const value = getSalaryValue(job);
     switch (range) {
-      case 'under-5m': return monthly > 0 && monthly < 5000000;
-      case '5m-10m': return monthly >= 5000000 && monthly < 10000000;
-      case '10m-20m': return monthly >= 10000000 && monthly <= 20000000;
-      case 'over-20m': return monthly > 20000000;
+      case '25k-30k': return value >= 25 && value < 30;
+      case '30k-35k': return value >= 30 && value <= 35;
+      case 'over-35k': return value > 35;
       default: return true;
     }
   };
 
-  const matchDate = (job, range) => {
-    if (!range) return true;
-    const d = job.createdAt;
-    if (!d) return true;
-    const diff = (Date.now() - new Date(d).getTime()) / 3600000; // hours
-    switch (range) {
-      case 'today': return diff <= 24;
-      case '3days': return diff <= 72;
-      case '7days': return diff <= 168;
-      case '30days': return diff <= 720;
-      default: return true;
-    }
+
+
+  const matchesWorkTime = (job, selectedTimes) => {
+    if (selectedTimes.length === 0) return true;
+    
+    let haystack = '';
+    const parseHour = (value) => {
+      const match = String(value || '').match(/(\d{1,2})/);
+      return match ? parseInt(match[1], 10) : null;
+    };
+    
+    const isMorning = () => {
+      const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
+      if (startHour !== null && startHour < 12) return true;
+      haystack = `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('sáng');
+    };
+    
+    const isAfternoon = () => {
+      const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
+      if (startHour !== null && startHour >= 12 && startHour < 18) return true;
+      haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('chiều');
+    };
+    
+    const isEvening = () => {
+      const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
+      if (startHour !== null && startHour >= 18) return true;
+      haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('tối') || haystack.includes('đêm');
+    };
+    
+    const isWeekend = () => {
+      haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('cuối tuần') || haystack.includes('thứ 7') || haystack.includes('t7') || haystack.includes('chủ nhật') || haystack.includes('cn');
+    };
+
+    return selectedTimes.some(t => {
+      if (t === 'morning') return isMorning();
+      if (t === 'afternoon') return isAfternoon();
+      if (t === 'evening') return isEvening();
+      if (t === 'weekend') return isWeekend();
+      return false;
+    });
   };
 
-  // Top cities extracted from jobs
-  const topCities = useMemo(() => {
-    const counts = {};
-    jobs.forEach(j => {
-      const city = (j.location || '').split(',').pop().trim();
-      if (city) counts[city] = (counts[city] || 0) + 1;
-    });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, n]) => ({ city: c, count: n }));
-  }, [jobs]);
-
-  // Top companies from jobs
-  const topCompanies = useMemo(() => {
-    const counts = {};
-    jobs.forEach(j => {
-      const name = j.companyName || j.employerName;
-      if (name) counts[name] = (counts[name] || 0) + 1;
-    });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => ({ name, count }));
-  }, [jobs]);
-
-  const hasActiveFilters = jobType !== 'all' || selectedSalary || selectedDateRange || selectedLocations.length > 0;
+  const hasActiveFilters = selectedSalaryRanges.length > 0 || selectedWorkTimes.length > 0 || selectedPostTimes.length > 0;
 
   const clearAllFilters = () => {
-    setJobType('all');
-    setSelectedSalary('');
-    setSelectedDateRange('');
-    setSelectedLocations([]);
-  };
+    setSelectedSalaryRanges([]);
+    setSelectedWorkTimes([]);
+    setSelectedPostTimes([]);
 
-  const toggleLocation = (city) => setSelectedLocations(prev =>
-    prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]
-  );
+  };
 
   const filtered = useMemo(() => {
     const kw = keyword.toLowerCase();
@@ -692,18 +710,21 @@ const PublicJobListing = () => {
     let result = jobs.filter(j => {
       const matchKw = !kw || (j.title || '').toLowerCase().includes(kw) || (j.companyName || j.employerName || '').toLowerCase().includes(kw);
       const matchLoc = !lc || (j.location || '').toLowerCase().includes(lc);
-      const matchType = jobType === 'all' || j._type === jobType;
-      const matchSal = matchSalary(j, selectedSalary);
-      const matchDt = matchDate(j, selectedDateRange);
-      const matchCo = true;
-      const matchCity = selectedLocations.length === 0 || selectedLocations.some(city => (j.location || '').includes(city));
-      return matchKw && matchLoc && matchType && matchSal && matchDt && matchCo && matchCity;
+      const matchSal = selectedSalaryRanges.length === 0 || selectedSalaryRanges.some(r => isInSalaryRange(j, r));
+      const matchTime = matchesWorkTime(j, selectedWorkTimes);
+      const matchPostTime = (() => {
+        if (selectedPostTimes.length === 0) return true;
+        const maxHours = Math.max(...selectedPostTimes.map(t => t === '3d' ? 72 : t === '1w' ? 168 : t === '2w' ? 336 : 999999));
+        const hoursAgo = j.createdAt ? (Date.now() - new Date(j.createdAt).getTime()) / (1000 * 60 * 60) : 999999;
+        return hoursAgo <= maxHours;
+      })();
+      return matchKw && matchLoc && matchSal && matchTime && matchPostTime;
     });
     if (activeTab === 'saved') {
       result = result.filter(j => savedJobIds.includes(j.idJob || j.jobID));
     }
     return result;
-  }, [jobs, keyword, loc, jobType, selectedSalary, selectedDateRange, selectedLocations, activeTab, savedJobIds]);
+  }, [jobs, keyword, loc, selectedSalaryRanges, selectedWorkTimes, selectedPostTimes, activeTab, savedJobIds]);
 
   const handleSearch = () => {
     // just re-filter, state already updated
@@ -774,89 +795,75 @@ const PublicJobListing = () => {
               )}
             </FilterHeader>
 
-            {/* Job type */}
+            {/* Work Time filter */}
             <FilterSection $isDark={isDarkMode}>
-              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.type} onClick={() => toggleSection('type')}>
-                {language === 'vi' ? 'Loại việc' : 'Job Type'}
+              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.workTime} onClick={() => toggleSection('workTime')}>
+                {language === 'vi' ? 'Thời gian làm việc' : 'Work Time'}
                 <ChevronDown size={14} />
               </FilterSectionHeader>
-              <FilterBody $open={openSections.type}>
+              <FilterBody $open={openSections.workTime}>
                 {[
-                  { val: 'all', label: language === 'vi' ? 'Tất cả' : 'All' },
-                  { val: 'standard', label: language === 'vi' ? 'Tiêu chuẩn' : 'Standard' },
-                  { val: 'urgent', label: language === 'vi' ? 'Tuyển gấp' : 'Urgent' },
+                  { val: 'morning', label: language === 'vi' ? 'Buổi sáng (trước 12:00)' : 'Morning (< 12:00)' },
+                  { val: 'afternoon', label: language === 'vi' ? 'Buổi chiều (12:00 – 18:00)' : 'Afternoon (12:00 - 18:00)' },
+                  { val: 'evening', label: language === 'vi' ? 'Buổi tối (sau 18:00)' : 'Evening (> 18:00)' },
+                  { val: 'weekend', label: language === 'vi' ? 'Cuối tuần (T7 & CN)' : 'Weekend (Sat & Sun)' },
                 ].map(opt => (
                   <FilterOption key={opt.val} $isDark={isDarkMode}>
-                    <input type="radio" name="jobType" checked={jobType === opt.val} onChange={() => setJobType(opt.val)} />
+                    <input type="checkbox" 
+                      checked={selectedWorkTimes.includes(opt.val)} 
+                      onChange={() => toggleWorkTime(opt.val)} 
+                    />
                     {opt.label}
                   </FilterOption>
                 ))}
               </FilterBody>
             </FilterSection>
 
-            {/* Salary */}
+            {/* Post Time filter */}
+            <FilterSection $isDark={isDarkMode}>
+              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.postTime} onClick={() => toggleSection('postTime')}>
+                {language === 'vi' ? 'Mới đăng' : 'Date Posted'}
+                <ChevronDown size={14} />
+              </FilterSectionHeader>
+              <FilterBody $open={openSections.postTime}>
+                {[
+                  { val: '3d', label: language === 'vi' ? 'Trong 3 ngày' : 'Within 3 days' },
+                  { val: '1w', label: language === 'vi' ? 'Trong 1 tuần' : 'Within 1 week' },
+                  { val: '2w', label: language === 'vi' ? 'Trong 2 tuần' : 'Within 2 weeks' }
+                ].map(opt => (
+                  <FilterOption key={opt.val} $isDark={isDarkMode}>
+                    <input type="checkbox" 
+                      checked={selectedPostTimes.includes(opt.val)} 
+                      onChange={() => togglePostTime(opt.val)} 
+                    />
+                    {opt.label}
+                  </FilterOption>
+                ))}
+              </FilterBody>
+            </FilterSection>
+
+            {/* Salary filter - matching logged in part-time hourly ranges */}
             <FilterSection $isDark={isDarkMode}>
               <FilterSectionHeader $isDark={isDarkMode} $open={openSections.salary} onClick={() => toggleSection('salary')}>
-                {language === 'vi' ? 'Mức lương' : 'Salary'}
+                {language === 'vi' ? 'Thu nhập/giờ' : 'Hourly Rate'}
                 <ChevronDown size={14} />
               </FilterSectionHeader>
               <FilterBody $open={openSections.salary}>
                 {[
-                  { val: '', label: language === 'vi' ? 'Tất cả' : 'All' },
-                  { val: 'under-5m', label: language === 'vi' ? 'Dưới 5 triệu' : 'Under 5M' },
-                  { val: '5m-10m', label: '5 – 10 triệu' },
-                  { val: '10m-20m', label: '10 – 20 triệu' },
-                  { val: 'over-20m', label: language === 'vi' ? 'Trên 20 triệu' : 'Over 20M' },
-                  { val: 'negotiable', label: language === 'vi' ? 'Thỏa thuận' : 'Negotiable' },
+                  { val: '25k-30k', label: language === 'vi' ? '25.000 – 30.000đ/giờ' : '25k – 30k/hr' },
+                  { val: '30k-35k', label: language === 'vi' ? '30.000 – 35.000đ/giờ' : '30k – 35k/hr' },
+                  { val: 'over-35k', label: language === 'vi' ? 'Trên 35.000đ/giờ' : 'Over 35k/hr' },
                 ].map(opt => (
-                  <FilterOption key={opt.val || 'all-sal'} $isDark={isDarkMode}>
-                    <input type="radio" name="salary" checked={selectedSalary === opt.val} onChange={() => setSelectedSalary(opt.val)} />
+                  <FilterOption key={opt.val} $isDark={isDarkMode}>
+                    <input type="checkbox" 
+                      checked={selectedSalaryRanges.includes(opt.val)} 
+                      onChange={() => toggleSalaryRange(opt.val)} 
+                    />
                     {opt.label}
                   </FilterOption>
                 ))}
               </FilterBody>
             </FilterSection>
-
-            {/* Date posted */}
-            <FilterSection $isDark={isDarkMode}>
-              <FilterSectionHeader $isDark={isDarkMode} $open={openSections.date} onClick={() => toggleSection('date')}>
-                {language === 'vi' ? 'Ngày đăng' : 'Date Posted'}
-                <ChevronDown size={14} />
-              </FilterSectionHeader>
-              <FilterBody $open={openSections.date}>
-                {[
-                  { val: '', label: language === 'vi' ? 'Tất cả' : 'All time' },
-                  { val: 'today', label: language === 'vi' ? 'Hôm nay' : 'Today' },
-                  { val: '3days', label: language === 'vi' ? '3 ngày qua' : 'Last 3 days' },
-                  { val: '7days', label: language === 'vi' ? '7 ngày qua' : 'Last 7 days' },
-                  { val: '30days', label: language === 'vi' ? '30 ngày qua' : 'Last 30 days' },
-                ].map(opt => (
-                  <FilterOption key={opt.val || 'all-date'} $isDark={isDarkMode}>
-                    <input type="radio" name="dateRange" checked={selectedDateRange === opt.val} onChange={() => setSelectedDateRange(opt.val)} />
-                    {opt.label}
-                  </FilterOption>
-                ))}
-              </FilterBody>
-            </FilterSection>
-
-            {/* Location */}
-            {topCities.length > 0 && (
-              <FilterSection $isDark={isDarkMode}>
-                <FilterSectionHeader $isDark={isDarkMode} $open={openSections.location} onClick={() => toggleSection('location')}>
-                  {language === 'vi' ? 'Địa điểm' : 'Location'}
-                  <ChevronDown size={14} />
-                </FilterSectionHeader>
-                <FilterBody $open={openSections.location}>
-                  {topCities.map(({ city, count }) => (
-                    <FilterOption key={city} $isDark={isDarkMode}>
-                      <input type="checkbox" checked={selectedLocations.includes(city)} onChange={() => toggleLocation(city)} />
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{city}</span>
-                      <span style={{ fontSize: '0.72rem', opacity: 0.4 }}>{count}</span>
-                    </FilterOption>
-                  ))}
-                </FilterBody>
-              </FilterSection>
-            )}
 
           </FilterCard>
 

@@ -1972,8 +1972,8 @@ const translateJobTitle = (titleStr, language) => {
     .replace(/^Ca\s+(Sáng|Chiều|Tối|Đêm|Trưa|Linh\s+Động)\s*-\s*/gi, '')
     .replace(/\s*-\s*Ca\s+(sáng|chiều|tối|đêm|trưa)/gi, '');
 
-  // Remove Part-time and Full-time suffix
-  cleanTitle = cleanTitle.replace(/\s*-\s*(Part-time|Full-time)\s*$/i, '');
+  // Remove Part-time suffix
+  cleanTitle = cleanTitle.replace(/\s*-\s*(Part-time)\s*$/i, '');
 
   if (language === 'vi') return cleanTitle;
 
@@ -2147,16 +2147,15 @@ const translateJobType = (typeStr, language) => {
     return language === 'vi' ? 'Part-time' : 'Part-time';
   }
 
-  // If already Part-time or Full-time, keep it
-  if (typeStr.includes('Part-time') || typeStr.includes('Full-time')) {
+  // If already Part-time, keep it
+  if (typeStr.includes('Part-time')) {
     return typeStr;
   }
 
   // For English translation
   if (language === 'en') {
     return typeStr
-      .replace(/Part-time/g, 'Part-time')
-      .replace(/Full-time/g, 'Full-time');
+      .replace(/Part-time/g, 'Part-time');
   }
 
   return typeStr;
@@ -3120,7 +3119,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               lat: lat, // Add coordinates for location-based filtering
               lng: lng,
               salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable', job.salaryUnit),
-              type: job.jobType === 'part-time' ? (language === 'vi' ? 'Bán thời gian' : 'Part-time') : (language === 'vi' ? 'Toàn thời gian' : 'Full-time'),
+              type: (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
               category: String(job.category || 'standard'), // Use category from DynamoDB
               tags: job.tags ? String(job.tags).split(',').map(t => String(t).trim()).filter(t => t) : [],
               postedDate: String(job.createdAt || new Date().toISOString()),
@@ -3187,12 +3186,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             // Calculate candidate income (85% of totalSalary - 15% platform fee)
             const candidateIncome = Math.round(totalSalary * 0.85);
 
-            // Map jobType from database to display format
-            const jobType = job.jobType === 'part-time'
-              ? 'Part-time'
-              : job.jobType === 'full-time'
-                ? 'Full-time'
-                : job.jobType || 'Part-time';
+            const jobType = 'Part-time';
 
             // Use coordinates from job if available, otherwise use default HCM location
             const lat = job.latitude || job.lat || 10.7769;
@@ -3272,13 +3266,15 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState('list');
   const [expandedFilters, setExpandedFilters] = useState({
-    jobType: true,
+    workTime: true,
+    postTime: true,
     salary: true,
     company: true
   });
 
   // Filter states
-  const [selectedJobTypes, setSelectedJobTypes] = useState([]);
+  const [selectedWorkTimes, setSelectedWorkTimes] = useState([]);
+  const [selectedPostTimes, setSelectedPostTimes] = useState([]);
   const [selectedSalaryRanges, setSelectedSalaryRanges] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
 
@@ -3505,11 +3501,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
   // Auto scroll when filters change
   useEffect(() => {
-    if (selectedJobTypes.length > 0 ||
-      selectedSalaryRanges.length > 0 || selectedCompanies.length > 0) {
+    if (selectedWorkTimes.length > 0 || selectedPostTimes.length > 0 || selectedSalaryRanges.length > 0 || selectedCompanies.length > 0) {
       scrollToResults();
     }
-  }, [selectedJobTypes, selectedSalaryRanges, selectedCompanies]);
+  }, [selectedWorkTimes, selectedPostTimes, selectedSalaryRanges, selectedCompanies]);
 
   // Reset nearby jobs when switching from shift to standard category
   useEffect(() => {
@@ -4184,11 +4179,14 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   };
 
   // Toggle filter handlers
-  const toggleJobType = (type) => {
-    setSelectedJobTypes(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-    );
+  const toggleWorkTime = (time) => {
+    setSelectedWorkTimes(prev => prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]);
   };
+
+  const togglePostTime = (time) => {
+    setSelectedPostTimes(prev => prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]);
+  };
+
 
   const toggleSalaryRange = (range) => {
     setSelectedSalaryRanges(prev =>
@@ -4205,7 +4203,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   const clearAllFilters = () => {
     setSearchKeyword('');
     setSelectedLocation('');
-    setSelectedJobTypes([]);
+    setSelectedWorkTimes([]);
+    setSelectedPostTimes([]);
     setSelectedSalaryRanges([]);
     setSelectedCompanies([]);
     setQuickFilter('all');
@@ -4247,6 +4246,53 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     return numeric >= 1000 ? numeric / 1000 : numeric;
   };
 
+
+
+  const matchesWorkTime = (job, selectedTimes) => {
+    if (selectedTimes.length === 0) return true;
+    
+    let haystack = '';
+    const parseHour = (value) => {
+      const match = String(value || '').match(/(\d{1,2})/);
+      return match ? parseInt(match[1], 10) : null;
+    };
+    
+    // Check if job matches 'Buổi sáng' (before 12:00)
+    const isMorning = () => {
+      const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
+      if (startHour !== null && startHour < 12) return true;
+      haystack = `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('sáng');
+    };
+    
+    const isAfternoon = () => {
+      const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
+      if (startHour !== null && startHour >= 12 && startHour < 18) return true;
+      haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('chiều');
+    };
+    
+    const isEvening = () => {
+      const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
+      if (startHour !== null && startHour >= 18) return true;
+      haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('tối') || haystack.includes('đêm');
+    };
+    
+    const isWeekend = () => {
+      haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
+      return haystack.includes('cuối tuần') || haystack.includes('thứ 7') || haystack.includes('t7') || haystack.includes('chủ nhật') || haystack.includes('cn');
+    };
+
+    return selectedTimes.some(t => {
+      if (t === 'morning') return isMorning();
+      if (t === 'afternoon') return isAfternoon();
+      if (t === 'evening') return isEvening();
+      if (t === 'weekend') return isWeekend();
+      return false;
+    });
+  };
+
   // Dynamic counts for filter options
   const filterCounts = useMemo(() => {
     // Base: category + keyword + location filters applied (same as filteredJobs before type/salary filters)
@@ -4268,7 +4314,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
     const count = (fn) => base.filter(fn).length;
     return {
-      fulltime: count(j => (j.type || '').toLowerCase().includes('full-time') || (j.type || '').toLowerCase().includes('toàn thời gian')),
+      // fulltime count removed
       parttime: count(j => (j.type || '').toLowerCase().includes('part-time') || (j.type || '').toLowerCase().includes('bán thời gian')),
       morning: count(j => getShiftBucket(j) === 'sáng'),
       afternoon: count(j => getShiftBucket(j) === 'chiều'),
@@ -4370,23 +4416,22 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       );
     }
 
-    // Filter by job type
-    if (selectedJobTypes.length > 0) {
-      result = result.filter(job => {
-        if (jobCategory === 'shift') {
-          const shiftTypes = selectedJobTypes.filter(type => ['sáng', 'chiều', 'đêm'].includes(type));
-          if (shiftTypes.length === 0) return true;
-          return shiftTypes.includes(getShiftBucket(job));
-        }
+    // Filter by work time
+    if (selectedWorkTimes.length > 0) {
+      result = result.filter(job => matchesWorkTime(job, selectedWorkTimes));
+    }
 
-        const standardTypes = selectedJobTypes.filter(type => type === 'full-time' || type === 'part-time');
-        if (standardTypes.length === 0) return true;
-        const t = (job.type || '').toLowerCase();
-        return standardTypes.some(type => {
-          if (type === 'full-time') return t.includes('full-time') || t.includes('toàn thời gian');
-          if (type === 'part-time') return t.includes('part-time') || t.includes('bán thời gian');
-          return t.includes(type.toLowerCase());
-        });
+    // Filter by posted time
+    if (selectedPostTimes.length > 0) {
+      const maxHours = Math.max(...selectedPostTimes.map(t => t === '3d' ? 72 : t === '1w' ? 168 : t === '2w' ? 336 : 999999));
+      result = result.filter(job => {
+        let ageInHours = 999999;
+        if (job.createdAt) {
+          ageInHours = (Date.now() - new Date(job.createdAt).getTime()) / (1000 * 60 * 60);
+        } else if (job.postedAt && typeof parseTimeToHours === 'function') {
+          ageInHours = parseTimeToHours(job.postedAt);
+        }
+        return ageInHours <= maxHours;
       });
     }
 
@@ -4428,7 +4473,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     });
 
     return result;
-  }, [jobCategory, searchKeyword, selectedLocation, selectedJobTypes,
+  }, [jobCategory, searchKeyword, selectedLocation, selectedWorkTimes, selectedPostTimes,
     selectedSalaryRanges, selectedCompanies,
     quickFilter, savedJobs, sortBy, userLocation, showNearbyJobs, nearbyJobs, allJobs, showSavedJobsOnly]);
 
@@ -4726,74 +4771,62 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               <ClearButton onClick={clearAllFilters}>{language === 'vi' ? 'Xóa' : 'Clear'}</ClearButton>
             </FilterHeader>
 
-            {jobCategory === 'standard' && (
-              <FilterSection>
-                <FilterTitle onClick={() => toggleFilter('jobType')} $expanded={expandedFilters.jobType}>
-                  <h4>{language === 'vi' ? 'Loại hình công việc' : 'Job Type'}</h4>
-                  <ChevronDown />
-                </FilterTitle>
-                {expandedFilters.jobType && (
-                  <FilterOptions
-                    initial={{ height: 0 }}
-                    animate={{ height: 'auto' }}
-                    exit={{ height: 0 }}
-                  >
-                    <FilterOption>
-                      <input type="checkbox" id="fulltime"
-                        checked={selectedJobTypes.includes('full-time')}
-                        onChange={() => toggleJobType('full-time')} />
-                      <span>{language === 'vi' ? 'Toàn thời gian' : 'Full-time'}</span>
-                      <small>{filterCounts.fulltime}</small>
+            <FilterSection>
+              <FilterTitle onClick={() => toggleFilter('workTime')} $expanded={expandedFilters.workTime}>
+                <h4>{language === 'vi' ? 'Thời gian làm việc' : 'Work Time'}</h4>
+                <ChevronDown />
+              </FilterTitle>
+              {expandedFilters.workTime && (
+                <FilterOptions
+                  initial={{ height: 0 }}
+                  animate={{ height: 'auto' }}
+                  exit={{ height: 0 }}
+                >
+                  {[
+                    { val: 'morning', label: language === 'vi' ? 'Buổi sáng (trước 12:00)' : 'Morning (< 12:00)' },
+                    { val: 'afternoon', label: language === 'vi' ? 'Buổi chiều (12:00 – 18:00)' : 'Afternoon (12:00 - 18:00)' },
+                    { val: 'evening', label: language === 'vi' ? 'Buổi tối (sau 18:00)' : 'Evening (> 18:00)' },
+                    { val: 'weekend', label: language === 'vi' ? 'Cuối tuần (T7 & CN)' : 'Weekend (Sat & Sun)' },
+                  ].map(opt => (
+                    <FilterOption key={opt.val}>
+                      <input type="checkbox" 
+                        checked={selectedWorkTimes.includes(opt.val)} 
+                        onChange={() => toggleWorkTime(opt.val)} 
+                      />
+                      <span>{opt.label}</span>
                     </FilterOption>
-                    <FilterOption>
-                      <input type="checkbox" id="parttime"
-                        checked={selectedJobTypes.includes('part-time')}
-                        onChange={() => toggleJobType('part-time')} />
-                      <span>{language === 'vi' ? 'Bán thời gian' : 'Part-time'}</span>
-                      <small>{filterCounts.parttime}</small>
-                    </FilterOption>
-                  </FilterOptions>
-                )}
-              </FilterSection>
-            )}
+                  ))}
+                </FilterOptions>
+              )}
+            </FilterSection>
 
-            {jobCategory === 'shift' && (
-              <FilterSection>
-                <FilterTitle onClick={() => toggleFilter('jobType')} $expanded={expandedFilters.jobType}>
-                  <h4>{language === 'vi' ? 'Loại ca làm việc' : 'Shift Type'}</h4>
-                  <ChevronDown />
-                </FilterTitle>
-                {expandedFilters.jobType && (
-                  <FilterOptions
-                    initial={{ height: 0 }}
-                    animate={{ height: 'auto' }}
-                    exit={{ height: 0 }}
-                  >
-                    <FilterOption>
-                      <input type="checkbox" id="morning"
-                        checked={selectedJobTypes.includes('sáng')}
-                        onChange={() => toggleJobType('sáng')} />
-                      <span>{language === 'vi' ? '6h - 14h' : '6AM - 2PM'}</span>
-                      <small>{filterCounts.morning}</small>
+            <FilterSection>
+              <FilterTitle onClick={() => toggleFilter('postTime')} $expanded={expandedFilters.postTime}>
+                <h4>{language === 'vi' ? 'Mới đăng' : 'Date Posted'}</h4>
+                <ChevronDown />
+              </FilterTitle>
+              {expandedFilters.postTime && (
+                <FilterOptions
+                  initial={{ height: 0 }}
+                  animate={{ height: 'auto' }}
+                  exit={{ height: 0 }}
+                >
+                  {[
+                    { val: '3d', label: language === 'vi' ? 'Trong 3 ngày' : 'Within 3 days' },
+                    { val: '1w', label: language === 'vi' ? 'Trong 1 tuần' : 'Within 1 week' },
+                    { val: '2w', label: language === 'vi' ? 'Trong 2 tuần' : 'Within 2 weeks' }
+                  ].map(opt => (
+                    <FilterOption key={opt.val}>
+                      <input type="checkbox" 
+                        checked={selectedPostTimes.includes(opt.val)} 
+                        onChange={() => togglePostTime(opt.val)} 
+                      />
+                      <span>{opt.label}</span>
                     </FilterOption>
-                    <FilterOption>
-                      <input type="checkbox" id="afternoon"
-                        checked={selectedJobTypes.includes('chiều')}
-                        onChange={() => toggleJobType('chiều')} />
-                      <span>{language === 'vi' ? '14h - 22h' : '2PM - 10PM'}</span>
-                      <small>{filterCounts.afternoon}</small>
-                    </FilterOption>
-                    <FilterOption>
-                      <input type="checkbox" id="night"
-                        checked={selectedJobTypes.includes('đêm')}
-                        onChange={() => toggleJobType('đêm')} />
-                      <span>{language === 'vi' ? '22h - 6h' : '10PM - 6AM'}</span>
-                      <small>{filterCounts.night}</small>
-                    </FilterOption>
-                  </FilterOptions>
-                )}
-              </FilterSection>
-            )}
+                  ))}
+                </FilterOptions>
+              )}
+            </FilterSection>
 
             <FilterSection>
               <FilterTitle onClick={() => toggleFilter('salary')} $expanded={expandedFilters.salary}>
@@ -4811,21 +4844,18 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       checked={selectedSalaryRanges.includes('25k-30k')}
                       onChange={() => toggleSalaryRange('25k-30k')} />
                     <span>{language === 'vi' ? '25.000 – 30.000đ/giờ' : '25k – 30k/hr'}</span>
-                    <small>{filterCounts['25to30k']}</small>
                   </FilterOption>
                   <FilterOption>
                     <input type="checkbox" id="30k-35k"
                       checked={selectedSalaryRanges.includes('30k-35k')}
                       onChange={() => toggleSalaryRange('30k-35k')} />
                     <span>{language === 'vi' ? '30.000 – 35.000đ/giờ' : '30k – 35k/hr'}</span>
-                    <small>{filterCounts['30to35k']}</small>
                   </FilterOption>
                   <FilterOption>
                     <input type="checkbox" id="over-35k"
                       checked={selectedSalaryRanges.includes('over-35k')}
                       onChange={() => toggleSalaryRange('over-35k')} />
                     <span>{language === 'vi' ? 'Trên 35.000đ/giờ' : 'Over 35k/hr'}</span>
-                    <small>{filterCounts.over35k}</small>
                   </FilterOption>
                 </FilterOptions>
               )}

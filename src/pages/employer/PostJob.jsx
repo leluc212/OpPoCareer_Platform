@@ -641,7 +641,7 @@ const PostJob = () => {
   const [formData, setFormData] = useState({
     title: '',
     location: '',
-    jobType: 'full-time',
+    jobType: 'part-time',
     workDays: '',
     workHours: '',
     salary: '',
@@ -692,7 +692,7 @@ const PostJob = () => {
       setFormData({
         title: editingJob.title || '',
         location: editingJob.location || '',
-        jobType: editingJob.jobType || 'full-time',
+        jobType: editingJob.jobType || 'part-time',
         workDays: editingJob.workDays || '',
         workHours: editingJob.workHours || serializeWorkHours(parsedWorkHours),
         salary: editingJob.salary || '',

@@ -299,7 +299,7 @@ const EmployerProfileView = () => {
       id: 1,
       title: 'Senior React Developer',
       location: 'TP.HCM',
-      type: 'Full-time',
+      type: 'Part-time',
       salary: '120 - 150 triệu VND',
       postedAt: '2 days ago',
       applicants: 45
@@ -308,7 +308,7 @@ const EmployerProfileView = () => {
       id: 2,
       title: 'Backend Engineer (Node.js)',
       location: 'Quận 1, TP.HCM',
-      type: 'Full-time',
+      type: 'Part-time',
       salary: '100 - 130 triệu VND',
       postedAt: '1 week ago',
       applicants: 32

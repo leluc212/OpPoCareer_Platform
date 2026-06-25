@@ -331,7 +331,7 @@ const AdminSupport = () => {
                 </IconWrapper>
                 <ContactInfo>
                   <ContactLabel>{language === 'vi' ? 'Giờ làm việc' : 'Working hours'}</ContactLabel>
-                  <ContactValue>{language === 'vi' ? '24/7 - Hỗ trợ toàn thời gian' : '24/7 - Full-time support'}</ContactValue>
+                  <ContactValue>{language === 'vi' ? 'Hỗ trợ 24/7' : '24/7 Support'}</ContactValue>
                 </ContactInfo>
               </ContactItem>
             </ContactCard>

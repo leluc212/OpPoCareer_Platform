@@ -450,8 +450,8 @@ const JobManagement = () => {
             views: job.views || 0,
             responseRate: job.responseRate || 0,
             location: jobLocation,
-            jobType: job.jobType || 'full-time',
-            department: job.jobType === 'part-time' ? 'Bán thời gian' : 'Toàn thời gian'
+            jobType: job.jobType || 'part-time',
+            department: 'Bán thời gian'
           };
         });
 

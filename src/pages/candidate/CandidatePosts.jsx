@@ -522,7 +522,7 @@ const CandidatePosts = () => {
       time: '2 giờ trước',
       title: 'Tìm việc Nhân viên Pha Chế - Có kinh nghiệm 2 năm',
       content: 'Mình có 2 năm kinh nghiệm làm việc tại các quán cafe lớn, thành thạo các loại máy pha, có khả năng latte art tốt. Mong muốn tìm được một môi trường làm việc chuyên nghiệp và lâu dài.',
-      tags: ['Pha Chế', 'Cafe', 'Toàn thời gian', 'TP.HCM'],
+      tags: ['Pha Chế', 'Cafe', 'Bán thời gian', 'TP.HCM'],
       likes: 24, comments: 8, shares: 3
     },
     {

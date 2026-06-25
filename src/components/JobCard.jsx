@@ -69,7 +69,7 @@ const translateJobTitle = (titleVi, language) => {
 const translateJobType = (typeVi, language) => {
   if (language === 'vi') return typeVi;
   const typeMap = {
-    'Toàn thời gian': 'Full-time',
+
     'Bán thời gian': 'Part-time',
     'Hợp đồng': 'Contract',
     'Thực tập': 'Internship'

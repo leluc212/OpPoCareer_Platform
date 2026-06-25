@@ -2835,7 +2835,7 @@ const Applications = () => {
           title: job.title,
           location: job.location,
           salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable', job.salaryUnit),
-          type: job.jobType === 'part-time' ? (language === 'vi' ? 'Bán thời gian' : 'Part-time') : (language === 'vi' ? 'Toàn thời gian' : 'Full-time'),
+          type: (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
           shift: job.workHours,
           workDays: job.workDays,
           applicants: job.applicants || 0,
@@ -3853,8 +3853,8 @@ const Applications = () => {
                             )}
                           </JobPostMeta>
                           <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                            <JobTypeBadge $partTime={post.type === 'Bán thời gian' || post.type === 'Part-time'}>
-                              {(post.type === 'Bán thời gian' || post.type === 'Part-time') ? 'Part-time' : 'Full-time'}
+                            <JobTypeBadge $partTime={true}>
+                              Part-time
                             </JobTypeBadge>
                             {post.postedDate && (
                               <span style={{

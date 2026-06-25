@@ -371,7 +371,7 @@ export const translations = {
       allJobs: 'Tất Cả Việc Làm',
       filterBy: 'Lọc Theo',
       jobType: 'Loại Hình',
-      fullTime: 'Toàn Thời Gian',
+
       partTime: 'Bán Thời Gian',
       contract: 'Hợp Đồng',
       internship: 'Thực Tập',
@@ -918,7 +918,7 @@ export const translations = {
       allJobs: 'All Jobs',
       filterBy: 'Filter By',
       jobType: 'Job Type',
-      fullTime: 'Full-time',
+
       partTime: 'Part-time',
       contract: 'Contract',
       internship: 'Internship',

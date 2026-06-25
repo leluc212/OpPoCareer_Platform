@@ -813,7 +813,7 @@ const Analytics = () => {
     const mapLabel = (raw) => {
       const r = (raw || '').toLowerCase();
       if (r.includes('part') || r === 'part-time') return language === 'vi' ? 'Bán thời gian' : 'Part-time';
-      if (r.includes('full') || r === 'full-time') return language === 'vi' ? 'Toàn thời gian' : 'Full-time';
+      if (r.includes('full') || r === 'full-time') return language === 'vi' ? 'Bán thời gian' : 'Part-time';
       if (r.includes('standard') || r === 'standard') return language === 'vi' ? 'Tiêu chuẩn' : 'Standard';
       if (r.includes('urgent') || r.includes('gấp')) return language === 'vi' ? 'Tuyển gấp' : 'Urgent';
       if (r.includes('intern') || r.includes('thực tập')) return language === 'vi' ? 'Thực tập' : 'Internship';

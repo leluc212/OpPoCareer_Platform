@@ -44,3 +44,31 @@ Frontend production configuration:
 ```env
 VITE_CV_AI_API_URL=https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod
 ```
+
+## AI interviewer media demo
+
+The interview flow can render an AI interviewer video through an external
+SadTalker-compatible media service. The Lambda only brokers requests, so GPU
+rendering, SadTalker checkpoints, ffmpeg, and Gemini TTS should run outside
+Lambda.
+
+Configure these environment variables before deployment:
+
+```powershell
+$env:INTERVIEW_MEDIA_SERVICE_URL="https://your-media-service.example.com/render"
+$env:INTERVIEW_MEDIA_API_KEY="replace-with-demo-token"
+```
+
+Or pass them directly:
+
+```powershell
+.\deploy-cv-ai-lambda.ps1 `
+  -ApiId sd7ds72m8g `
+  -JwtAuthorizerId 46klga `
+  -InterviewMediaServiceUrl "https://your-media-service.example.com/render" `
+  -InterviewMediaApiKey "replace-with-demo-token"
+```
+
+If `INTERVIEW_MEDIA_SERVICE_URL` is empty, `/api/v1/interview/media` returns
+`status: "unavailable"` and the frontend falls back to the existing browser
+voice interview.

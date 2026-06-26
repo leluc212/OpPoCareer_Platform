@@ -1601,6 +1601,126 @@ def _generate_interview_report_lambda(session):
         }
 
 
+def _interview_media_unavailable(message):
+    return {
+        "media_id": None,
+        "status": "unavailable",
+        "provider": "sadtalker",
+        "tts_provider": "gemini",
+        "video_url": None,
+        "audio_url": None,
+        "duration_ms": None,
+        "message": message,
+    }
+
+
+def _validate_interview_media_payload(body):
+    if not isinstance(body, dict):
+        raise RequestError(400, "INVALID_BODY", "Request body must be a JSON object.")
+
+    question_text = str(body.get("question_text") or body.get("question") or "").strip()
+    if not question_text:
+        raise RequestError(400, "QUESTION_TEXT_REQUIRED", "question_text is required.")
+    if len(question_text) > MAX_TEXT_LENGTH:
+        raise RequestError(400, "QUESTION_TEXT_TOO_LONG", f"question_text must be at most {MAX_TEXT_LENGTH} characters.")
+
+    session_id = str(body.get("session_id") or "").strip()
+    language = str(body.get("language") or "vi").strip() or "vi"
+    voice = str(body.get("voice") or "").strip()
+    try:
+        turn_index = int(body.get("turn_index") or 0)
+    except (TypeError, ValueError):
+        turn_index = 0
+
+    return {
+        "session_id": session_id,
+        "question_text": question_text,
+        "turn_index": max(turn_index, 0),
+        "language": language[:16],
+        "voice": voice[:80],
+    }
+
+
+def request_interview_media(validated, user_id, urlopen=None):
+    service_url = os.environ.get("INTERVIEW_MEDIA_SERVICE_URL", "").strip()
+    if not service_url:
+        return _interview_media_unavailable("INTERVIEW_MEDIA_SERVICE_URL is not configured.")
+
+    if urlopen is None:
+        urlopen = urllib.request.urlopen
+
+    try:
+        timeout = int(os.environ.get("INTERVIEW_MEDIA_TIMEOUT_SECONDS", "24"))
+    except ValueError:
+        timeout = 24
+    timeout = min(max(timeout, 3), 28)
+
+    payload = {
+        "provider": "sadtalker",
+        "tts_provider": "gemini",
+        "user_id": user_id,
+        **validated,
+    }
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("INTERVIEW_MEDIA_API_KEY", "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    request = urllib.request.Request(
+        service_url,
+        data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            raw_body = response.read().decode("utf-8")
+            provider_body = json.loads(raw_body) if raw_body else {}
+    except urllib.error.HTTPError as error:
+        provider_message = ""
+        try:
+            error_body = json.loads(error.read().decode("utf-8"))
+            provider_message = str((error_body.get("error") or {}).get("message") or error_body.get("message") or "")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        print(json.dumps({
+            "event": "interview_media_provider_http_error",
+            "status": error.code,
+            "message": provider_message,
+        }, ensure_ascii=False))
+        return _interview_media_unavailable(
+            f"Interview media service returned status {error.code}."
+        )
+    except (urllib.error.URLError, TimeoutError) as error:
+        print(json.dumps({
+            "event": "interview_media_provider_unavailable",
+            "error": str(error),
+        }, ensure_ascii=False))
+        return _interview_media_unavailable("Interview media service did not respond in time.")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _interview_media_unavailable("Interview media service returned invalid JSON.")
+
+    media_id = provider_body.get("media_id") or provider_body.get("id")
+    video_url = provider_body.get("video_url") or provider_body.get("videoUrl")
+    audio_url = provider_body.get("audio_url") or provider_body.get("audioUrl")
+    duration_ms = provider_body.get("duration_ms") or provider_body.get("durationMs")
+    status = str(provider_body.get("status") or ("ready" if video_url else "unavailable")).strip().lower()
+    if status not in {"ready", "queued", "processing", "unavailable", "failed"}:
+        status = "ready" if video_url else "unavailable"
+
+    return {
+        "media_id": media_id,
+        "status": status,
+        "provider": provider_body.get("provider") or "sadtalker",
+        "tts_provider": provider_body.get("tts_provider") or provider_body.get("ttsProvider") or "gemini",
+        "video_url": video_url,
+        "audio_url": audio_url,
+        "duration_ms": duration_ms,
+        "message": provider_body.get("message"),
+    }
+
+
 def lambda_handler(event, context):
     request_id = getattr(context, "aws_request_id", None) or str(uuid.uuid4())
     method, path = _method_and_path(event)
@@ -1613,7 +1733,8 @@ def lambda_handler(event, context):
         "/cv/analyze", "/cv/generate", "/cv/recommend-candidates", 
         "/job/suggest-jd", "/job/parse-jd", "/candidate/recommend-jobs",
         "/api/v1/cv/screen", "/api/v1/interview/start", "/api/v1/interview/respond",
-        "/api/v1/interview/upload-audio", "/api/v1/interview/audio-upload-url"
+        "/api/v1/interview/upload-audio", "/api/v1/interview/audio-upload-url",
+        "/api/v1/interview/media"
     }:
         return _response(event, 404, {
             "error": {"code": "NOT_FOUND", "message": "Route not found."},
@@ -1826,6 +1947,12 @@ def lambda_handler(event, context):
             cv_url = body.get("cv_url", "")
             ai_result = call_gemini_cv_screen(job_description, cv_text, cv_url)
             return _response(event, 200, ai_result)
+
+        elif path == "/api/v1/interview/media":
+            body = _parse_body(event)
+            validated = _validate_interview_media_payload(body)
+            media_result = request_interview_media(validated, claims.get("sub"))
+            return _response(event, 200, media_result)
 
         elif path == "/api/v1/interview/start":
             body = _parse_body(event)

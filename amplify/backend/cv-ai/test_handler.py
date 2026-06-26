@@ -493,6 +493,74 @@ class HandlerTests(unittest.TestCase):
         self.assertIn("s3_key", body)
         self.assertTrue(body["s3_key"].startswith("interviews/candidate-123/sess_123_"))
 
+    @patch.dict(os.environ, {}, clear=True)
+    def test_interview_media_returns_unavailable_when_service_not_configured(self):
+        response = handler.lambda_handler(
+            event(path="/api/v1/interview/media", method="POST", body={
+                "session_id": "sess_123",
+                "question_text": "Xin chao ban.",
+                "turn_index": 1,
+                "language": "vi"
+            }),
+            None
+        )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["status"], "unavailable")
+        self.assertEqual(body["provider"], "sadtalker")
+        self.assertIsNone(body["video_url"])
+
+    def test_interview_media_rejects_missing_question_text(self):
+        response = handler.lambda_handler(
+            event(path="/api/v1/interview/media", method="POST", body={
+                "session_id": "sess_123"
+            }),
+            None
+        )
+        self.assertEqual(response["statusCode"], 400)
+        body = json.loads(response["body"])
+        self.assertEqual(body["error"]["code"], "QUESTION_TEXT_REQUIRED")
+
+    @patch.dict(os.environ, {
+        "ALLOWED_ORIGINS": "http://localhost:3000",
+        "INTERVIEW_MEDIA_SERVICE_URL": "https://media.example.com/render",
+        "INTERVIEW_MEDIA_API_KEY": "secret"
+    })
+    @patch("urllib.request.urlopen")
+    def test_interview_media_calls_configured_service(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = json.dumps({
+            "media_id": "media_1",
+            "status": "ready",
+            "video_url": "https://cdn.example.com/q1.mp4",
+            "audio_url": "https://cdn.example.com/q1.wav",
+            "duration_ms": 3200
+        }).encode("utf-8")
+
+        response = handler.lambda_handler(
+            event(path="/api/v1/interview/media", method="POST", body={
+                "session_id": "sess_123",
+                "question_text": "Xin chao ban.",
+                "turn_index": 1,
+                "language": "vi",
+                "voice": "vi-VN"
+            }),
+            None
+        )
+        self.assertEqual(response["statusCode"], 200)
+        body = json.loads(response["body"])
+        self.assertEqual(body["status"], "ready")
+        self.assertEqual(body["provider"], "sadtalker")
+        self.assertEqual(body["video_url"], "https://cdn.example.com/q1.mp4")
+        self.assertEqual(body["audio_url"], "https://cdn.example.com/q1.wav")
+        sent_request = mock_urlopen.call_args.args[0]
+        self.assertEqual(sent_request.full_url, "https://media.example.com/render")
+        self.assertEqual(sent_request.get_header("Authorization"), "Bearer secret")
+        sent_payload = json.loads(sent_request.data.decode("utf-8"))
+        self.assertEqual(sent_payload["session_id"], "sess_123")
+        self.assertEqual(sent_payload["question_text"], "Xin chao ban.")
+        self.assertEqual(sent_payload["provider"], "sadtalker")
+
 
 if __name__ == "__main__":
     unittest.main()

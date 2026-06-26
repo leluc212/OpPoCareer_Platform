@@ -3,6 +3,7 @@ import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
+import InterviewAvatarStage from '../../components/InterviewAvatarStage';
 import {
   Search, MapPin, Briefcase, Clock, TrendingUp,
   ChevronDown, Building2, Bookmark, Eye, ArrowUpRight, Filter,
@@ -21,6 +22,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { s3Images } from '../../utils/s3Images';
 import { getActiveBanners } from '../../services/bannerService';
 import { getAuthHeaders } from '../../services/authHeaders';
+import { requestInterviewMedia } from '../../services/interviewMediaService';
 import * as applicationService from '../../services/applicationService';
 
 const CV_AI_API_BASE_URL =
@@ -808,6 +810,31 @@ const VoiceAvatarCircle = styled.div`
 
   &::after {
     animation-delay: 0.6s;
+  }
+`;
+
+const InterviewAvatarVideoFrame = styled.div`
+  width: min(240px, 76vw);
+  aspect-ratio: 3 / 4;
+  border-radius: 22px;
+  overflow: hidden;
+  position: relative;
+  background: #0f172a;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.24);
+  outline: ${props => props.$isListening ? '3px solid rgba(239, 68, 68, 0.42)' : '1px solid rgba(148, 163, 184, 0.35)'};
+  transition: outline-color 0.2s ease, box-shadow 0.2s ease;
+
+  video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    background: #0f172a;
+  }
+
+  @media (max-width: 480px) {
+    width: min(210px, 72vw);
+    border-radius: 18px;
   }
 `;
 
@@ -2230,6 +2257,7 @@ const JobListing = () => {
   const [interviewReport, setInterviewReport] = useState(null);
   const [interviewInputText, setInterviewInputText] = useState('');
   const [interviewQuestionCount, setInterviewQuestionCount] = useState(0);
+  const [interviewMediaByTurn, setInterviewMediaByTurn] = useState({});
 
   // Voice Interaction states & refs
   const [isListening, setIsListening] = useState(false);
@@ -2333,6 +2361,46 @@ const JobListing = () => {
       startListening();
     }
   };
+
+  const playInterviewQuestion = useCallback(async (questionText, turnIndex, sessionId = interviewSessionId) => {
+    const trimmedQuestion = String(questionText || '').trim();
+    if (!trimmedQuestion) return null;
+
+    if (!sessionId || sessionId === 'mock-session-id') {
+      speakVietnamese(trimmedQuestion);
+      return null;
+    }
+
+    setInterviewMediaByTurn(prev => ({
+      ...prev,
+      [turnIndex]: {
+        ...(prev[turnIndex] || {}),
+        status: 'loading',
+        provider: 'sadtalker',
+        videoUrl: null,
+        audioUrl: null,
+      },
+    }));
+
+    const media = await requestInterviewMedia({
+      sessionId,
+      questionText: trimmedQuestion,
+      turnIndex,
+      language,
+      voice: language === 'vi' ? 'vi-VN' : 'en-US',
+    });
+
+    setInterviewMediaByTurn(prev => ({
+      ...prev,
+      [turnIndex]: media,
+    }));
+
+    if (!(media?.status === 'ready' && media?.videoUrl)) {
+      speakVietnamese(trimmedQuestion);
+    }
+
+    return media;
+  }, [interviewSessionId, language, speakVietnamese]);
 
   // Exit fullscreen helper
   const exitFullscreenMode = () => {
@@ -2837,6 +2905,7 @@ Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được
     setInterviewMessages([]);
     setInterviewSessionId(null);
     setInterviewQuestionCount(1);
+    setInterviewMediaByTurn({});
 
     try {
       if (isAiMockMode) {
@@ -2876,7 +2945,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         isMe: false,
         time: new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
       }]);
-      speakVietnamese(initialQuestion);
+      playInterviewQuestion(initialQuestion, 1, data.session_id);
       startAudioRecording();
     } catch (e) {
       console.warn("Connection to FastAPI AI server failed. Falling back to frontend mock AI interview.", e);
@@ -3057,13 +3126,14 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         speakVietnamese(endingText);
       } else {
         const nextQuestion = data.question || "";
+        const nextTurnIndex = interviewQuestionCount + 1;
         setInterviewMessages(prev => [...prev, {
           text: nextQuestion,
           isMe: false,
           time: nextTimeStr
         }]);
-        setInterviewQuestionCount(prev => prev + 1);
-        speakVietnamese(nextQuestion);
+        setInterviewQuestionCount(nextTurnIndex);
+        playInterviewQuestion(nextQuestion, nextTurnIndex, interviewSessionId);
       }
     } catch (e) {
       console.error("Error sending AI interview answer:", e);
@@ -4442,6 +4512,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     return 0;
   }, [isAvailable, showNearbyJobs, nearbyJobs]);
 
+  const currentInterviewMedia = interviewMediaByTurn[interviewQuestionCount] || null;
+  const hasReadyInterviewVideo = currentInterviewMedia?.status === 'ready' && Boolean(currentInterviewMedia?.videoUrl);
+  const isPreparingInterviewMedia = ['loading', 'queued', 'processing'].includes(currentInterviewMedia?.status);
+
   // ─── Verification gate: only blocks quick job apply (not the whole page) ─
   // verifStatus is used below when candidate tries to apply a quick job.
   // ─────────────────────────────────────────────────────────────────────────
@@ -5767,11 +5841,44 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                         : `Question ${interviewQuestionCount}`}
                     </VoiceQuestionCounter>
 
-                    <VoiceAvatarCircle $isSpeaking={isSpeaking} $isListening={isListening}>
-                      {isSpeaking ? <Volume2 size={40} /> : isListening ? <Mic size={40} /> : <Sparkles size={40} />}
-                    </VoiceAvatarCircle>
+                    <InterviewAvatarStage
+                      media={currentInterviewMedia}
+                      turnIndex={interviewQuestionCount}
+                      isListening={isListening}
+                      onPlay={() => {
+                        if (hasReadyInterviewVideo) {
+                          setIsSpeaking(true);
+                        }
+                      }}
+                      onPause={() => {
+                        if (hasReadyInterviewVideo) {
+                          setIsSpeaking(false);
+                        }
+                      }}
+                      onEnded={() => {
+                        if (hasReadyInterviewVideo) {
+                          setIsSpeaking(false);
+                        }
+                      }}
+                      onError={() => {
+                        if (!hasReadyInterviewVideo) return;
+                        const latestQuestion = getLatestAiQuestion();
+                        setInterviewMediaByTurn(prev => ({
+                          ...prev,
+                          [interviewQuestionCount]: {
+                            ...(prev[interviewQuestionCount] || {}),
+                            status: 'unavailable',
+                            videoUrl: null,
+                          },
+                        }));
+                        setIsSpeaking(false);
+                        if (latestQuestion) {
+                          speakVietnamese(latestQuestion);
+                        }
+                      }}
+                    />
 
-                    <VoiceWaveformBar $active={isSpeaking || isListening} $color={isListening ? '#ef4444' : '#7c3aed'}>
+                    <VoiceWaveformBar $active={isSpeaking || isListening || isPreparingInterviewMedia} $color={isListening ? '#ef4444' : '#7c3aed'}>
                       <span /><span /><span /><span /><span /><span /><span />
                     </VoiceWaveformBar>
 
@@ -5779,20 +5886,24 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       <h3>
                         {interviewSending
                           ? (language === 'vi' ? 'AI đang xử lý...' : 'AI is processing...')
-                          : isSpeaking
-                            ? (language === 'vi' ? 'AI đang nói...' : 'AI is speaking...')
-                            : isListening
-                              ? (language === 'vi' ? '🎙️ Đang lắng nghe bạn...' : '🎙️ Listening to you...')
-                              : (language === 'vi' ? 'Nhấn nút micro để trả lời' : 'Press the mic to answer')}
+                          : isPreparingInterviewMedia
+                            ? (language === 'vi' ? 'AI Interviewer đang chuẩn bị...' : 'AI Interviewer is getting ready...')
+                            : isSpeaking
+                              ? (language === 'vi' ? 'AI đang nói...' : 'AI is speaking...')
+                              : isListening
+                                ? (language === 'vi' ? '🎙️ Đang lắng nghe bạn...' : '🎙️ Listening to you...')
+                                : (language === 'vi' ? 'Nhấn nút micro để trả lời' : 'Press the mic to answer')}
                       </h3>
                       <p>
                         {interviewSending
                           ? (language === 'vi' ? 'Vui lòng đợi trong giây lát' : 'Please wait a moment')
-                          : isSpeaking
-                            ? (language === 'vi' ? 'Hãy lắng nghe câu hỏi của AI' : 'Listen to the AI\'s question')
-                            : isListening
-                              ? (language === 'vi' ? 'Nói rõ ràng câu trả lời của bạn' : 'Speak your answer clearly')
-                              : (language === 'vi' ? 'Bấm nút micro bên dưới để bắt đầu nói' : 'Press the mic button below to start speaking')}
+                          : isPreparingInterviewMedia
+                            ? (language === 'vi' ? 'Vui lòng chờ trong giây lát' : 'Please wait a moment')
+                            : isSpeaking
+                              ? (language === 'vi' ? 'Hãy lắng nghe câu hỏi của AI' : 'Listen to the AI\'s question')
+                              : isListening
+                                ? (language === 'vi' ? 'Nói rõ ràng câu trả lời của bạn' : 'Speak your answer clearly')
+                                : (language === 'vi' ? 'Bấm nút micro bên dưới để bắt đầu nói' : 'Press the mic button below to start speaking')}
                       </p>
                     </VoiceStatusText>
                   </VoiceInterviewArea>

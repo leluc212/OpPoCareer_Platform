@@ -7,7 +7,10 @@ param(
     [string]$JwtAuthorizerId,
     [string]$StageName = "prod",
     [string]$GeminiSecretName = "opporeview/gemini",
-    [string]$AllowedOrigins = "http://localhost:3000,https://oppocareer.com,https://www.oppocareer.com"
+    [string]$AllowedOrigins = "http://localhost:3000,https://oppocareer.com,https://www.oppocareer.com",
+    [string]$InterviewMediaServiceUrl = $env:INTERVIEW_MEDIA_SERVICE_URL,
+    [string]$InterviewMediaApiKey = $env:INTERVIEW_MEDIA_API_KEY,
+    [string]$InterviewMediaTimeoutSeconds = "24"
 )
 
 $ErrorActionPreference = "Stop"
@@ -85,6 +88,9 @@ $LambdaEnvironment = @{
         GEMINI_MODEL = $GeminiModel
         ALLOWED_ORIGINS = $AllowedOrigins
         GEMINI_TIMEOUT_SECONDS = "24"
+        INTERVIEW_MEDIA_SERVICE_URL = $InterviewMediaServiceUrl
+        INTERVIEW_MEDIA_API_KEY = $InterviewMediaApiKey
+        INTERVIEW_MEDIA_TIMEOUT_SECONDS = $InterviewMediaTimeoutSeconds
     }
 } | ConvertTo-Json -Compress
 
@@ -183,6 +189,8 @@ Ensure-Route "POST /api/v1/interview/start" $true
 Ensure-Route "OPTIONS /api/v1/interview/start" $false
 Ensure-Route "POST /api/v1/interview/respond" $true
 Ensure-Route "OPTIONS /api/v1/interview/respond" $false
+Ensure-Route "POST /api/v1/interview/media" $true
+Ensure-Route "OPTIONS /api/v1/interview/media" $false
 Ensure-Route "POST /api/v1/interview/upload-audio" $true
 Ensure-Route "OPTIONS /api/v1/interview/upload-audio" $false
 Ensure-Route "POST /api/v1/interview/audio-upload-url" $true

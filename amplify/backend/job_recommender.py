@@ -145,22 +145,22 @@ def is_match(candidate, job, is_quick_job=False):
     # Core Occupational Fallback (if no specific skill/title match found)
     if not matched_reasons:
         occupations = [
-            ("pha che", "Pha chế / Barista"),
-            ("barista", "Pha chế / Barista"),
-            ("phuc vu", "Phục vụ / Server"),
-            ("phu kho", "Phụ kho / Logistics"),
-            ("bep", "Bếp / Chef"),
-            ("chef", "Bếp / Chef"),
-            ("thu ngan", "Thu ngân / Cashier"),
-            ("cashier", "Thu ngân / Cashier"),
-            ("ban hang", "Bán hàng / Sales"),
-            ("sales", "Bán hàng / Sales"),
-            ("giao hang", "Giao hàng / Shipper"),
-            ("shipper", "Giao hàng / Shipper"),
-            ("ke toan", "Kế toán / Accounting"),
+            ("pha che", "Pha chế"),
+            ("barista", "Pha chế"),
+            ("phuc vu", "Phục vụ"),
+            ("phu kho", "Phụ kho"),
+            ("bep", "Bếp"),
+            ("chef", "Bếp"),
+            ("thu ngan", "Thu ngân"),
+            ("cashier", "Thu ngân"),
+            ("ban hang", "Bán hàng"),
+            ("sales", "Bán hàng"),
+            ("giao hang", "Giao hàng"),
+            ("shipper", "Giao hàng"),
+            ("ke toan", "Kế toán"),
             ("marketing", "Marketing"),
-            ("le tan", "Lễ tân / Receptionist"),
-            ("bao ve", "Bảo vệ / Security")
+            ("le tan", "Lễ tân"),
+            ("bao ve", "Bảo vệ")
         ]
         cand_text = remove_accents((cand_title + " " + " ".join(cand_skills)).lower())
         job_text_title = remove_accents(job_title.lower())
@@ -169,6 +169,40 @@ def is_match(candidate, job, is_quick_job=False):
                 matched_reasons.append(f"Phù hợp lĩnh vực {occ_name}")
                 
     return len(matched_reasons) > 0, matched_reasons
+
+def format_work_hours_readable(work_hours_str):
+    if not work_hours_str:
+        return "Theo thỏa thuận"
+    
+    slots = []
+    parts = re.split(r'\s*(?:\|)\s*', str(work_hours_str))
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if '@' in part:
+            days_part, time_part = part.split('@', 1)
+            days_list = [d.strip() for d in days_part.split(',') if d.strip()]
+            
+            day_map = {
+                '2': 'Thứ 2',
+                '3': 'Thứ 3',
+                '4': 'Thứ 4',
+                '5': 'Thứ 5',
+                '6': 'Thứ 6',
+                '7': 'Thứ 7',
+                'CN': 'Chủ Nhật'
+            }
+            readable_days = []
+            for d in days_list:
+                readable_days.append(day_map.get(d, d))
+                
+            days_str = ", ".join(readable_days)
+            slots.append(f"{days_str}: {time_part.strip()}")
+        else:
+            slots.append(part)
+            
+    return "<br>".join(slots)
 
 def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
     email = candidate.get('email')
@@ -192,16 +226,21 @@ def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
         except Exception:
             salary_str = f"Thỏa thuận"
     else:
-        salary = job.get('salary', 'Thỏa thuận')
-        try:
-            clean_sal = re.sub(r'\D', '', str(salary))
-            if clean_sal:
-                val = int(clean_sal)
-                salary_str = f"{val:,} VNĐ"
-            else:
-                salary_str = str(salary)
-        except Exception:
-            salary_str = str(salary)
+        salary = job.get('salary', '')
+        if not salary or str(salary).strip().lower() in ['thỏa thuận', 'thoa thuan', 'negotiable', '']:
+            salary_str = "Thỏa thuận"
+        else:
+            salary_unit = job.get('salaryUnit', 'hour')
+            unit_str = "/h" if salary_unit == 'hour' else "/tháng"
+            try:
+                clean_sal = re.sub(r'\D', '', str(salary))
+                if clean_sal:
+                    val = int(clean_sal)
+                    salary_str = f"{val:,} VNĐ{unit_str}"
+                else:
+                    salary_str = f"{salary} VNĐ{unit_str}"
+            except Exception:
+                salary_str = f"{salary} VNĐ{unit_str}"
         
     location = job.get('location', 'Chưa cập nhật')
     job_type_db = job.get('jobType', 'part-time')
@@ -217,15 +256,17 @@ def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
         work_time = f"<p style='margin: 6px 0; color: #475569;'><strong>Thời gian làm việc:</strong> {start_time} - {end_time} ngày {work_date}</p>"
     else:
         work_hours = job.get('workHours', '')
-        work_days = job.get('workDays', '')
-        if work_hours or work_days:
-            work_time = f"<p style='margin: 6px 0; color: #475569;'><strong>Thời gian:</strong> {work_hours} ({work_days})</p>"
+        work_time_str = format_work_hours_readable(work_hours)
+        work_time = f"<p style='margin: 6px 0; color: #475569;'><strong>Thời gian:</strong> <br>{work_time_str}</p>"
             
     reasons_html = ""
     for reason in reasons:
+        clean_reason = reason
+        if "Phù hợp lĩnh vực" in reason and " / " in reason:
+            clean_reason = reason.split(" / ")[0]
         reasons_html += f"""
         <div style="margin-bottom: 8px; padding-left: 10px; border-left: 3px solid #10b981;">
-            <span style="color: #374151; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif; font-weight: 500;">{reason}</span>
+            <span style="color: #374151; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif; font-weight: 500;">{clean_reason}</span>
         </div>
         """
         
@@ -315,23 +356,172 @@ def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
                                 </table>
                             </td>
                         </tr>
-# Footer
-                                <tr>
-                                    <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 30px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">
-                                        <p style="margin: 0 0 8px 0;">Email này được gửi tự động từ hệ thống Ốp Pờ.</p>
-                                        <p style="margin: 0 0 8px 0;">Địa chỉ liên hệ: <a href="mailto:tuyendung.oppo@oppocareer.com" style="color: #3b82f6; text-decoration: none; font-weight: 500;">tuyendung.oppo@oppocareer.com</a>
-                                        <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; 2026 Ốp Pờ. All rights reserved.</p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                </table>
-            </body>
-            </html>
-            """
+                        <!-- Footer -->
+                        <tr>
+                            <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 30px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">
+                                <p style="margin: 0 0 8px 0;">Email này được gửi tự động từ hệ thống Ốp Pờ.</p>
+                                <p style="margin: 0 0 8px 0;">Địa chỉ liên hệ: <a href="mailto:tuyendung.oppo@oppocareer.com" style="color: #3b82f6; text-decoration: none; font-weight: 500;">tuyendung.oppo@oppocareer.com</a>
+                                <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; 2026 Ốp Pờ. All rights reserved.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
     
     safe_print(f"[Recommender] Dispatching email to {email}")
+    res = send_email(email, subject, html_content)
+    return res.get('success', False)
+
+def send_recommendations_email(candidate, jobs_list):
+    if not jobs_list:
+        return False
+        
+    email = candidate.get('email')
+    name = candidate.get('fullName') or "Bạn"
+    
+    if len(jobs_list) == 1:
+        job, _ = jobs_list[0]
+        job_title = job.get('title', 'Untitled Job')
+        company = job.get('employerName', job.get('employerEmail', 'Công ty tuyển dụng'))
+        subject = f"[Ốp Pờ] Gợi ý việc làm: {job_title} tại {company}"
+    else:
+        subject = f"[Ốp Pờ] Gợi ý {len(jobs_list)} công việc phù hợp dành cho bạn"
+        
+    jobs_html = ""
+    for idx, (job, reasons) in enumerate(jobs_list):
+        job_id = job.get('idJob')
+        job_title = job.get('title', 'Untitled Job')
+        company = job.get('employerName', job.get('employerEmail', 'Công ty tuyển dụng'))
+        
+        salary = job.get('salary', '')
+        if not salary or str(salary).strip().lower() in ['thỏa thuận', 'thoa thuan', 'negotiable', '']:
+            salary_str = "Thỏa thuận"
+        else:
+            salary_unit = job.get('salaryUnit', 'hour')
+            unit_str = "/h" if salary_unit == 'hour' else "/tháng"
+            try:
+                clean_sal = re.sub(r'\D', '', str(salary))
+                if clean_sal:
+                    val = int(clean_sal)
+                    salary_str = f"{val:,} VNĐ{unit_str}"
+                else:
+                    salary_str = f"{salary} VNĐ{unit_str}"
+            except Exception:
+                salary_str = f"{salary} VNĐ{unit_str}"
+                
+        location = job.get('location', 'Chưa cập nhật')
+        job_type_db = job.get('jobType', 'part-time')
+        job_type = "Bán thời gian (Part-time)" if job_type_db == 'part-time' else "Toàn thời gian (Full-time)"
+        
+        work_hours = job.get('workHours', '')
+        work_time_str = format_work_hours_readable(work_hours)
+        work_time = f"<p style='margin: 6px 0; color: #475569;'><strong>Thời gian:</strong> <br>{work_time_str}</p>"
+            
+        reasons_html = ""
+        for reason in reasons:
+            clean_reason = reason
+            if "Phù hợp lĩnh vực" in reason and " / " in reason:
+                clean_reason = reason.split(" / ")[0]
+            reasons_html += f"""
+            <div style="margin-bottom: 8px; padding-left: 10px; border-left: 3px solid #10b981;">
+                <span style="color: #374151; font-size: 14px; font-family: 'Segoe UI', Arial, sans-serif; font-weight: 500;">{clean_reason}</span>
+            </div>
+            """
+            
+        app_url = "https://oppocareer.com"
+        job_link = f"{app_url}/candidate/jobs?selectedJobId={job_id}&tab=standard"
+        
+        card_margin = "margin-top: 25px;" if idx > 0 else ""
+        
+        jobs_html += f"""
+        <div style="border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; background-color: #ffffff; {card_margin} box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);">
+            <div style="background-color: #f0fdf4; border: 1px solid #dcfce7; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+                <h4 style="color: #14532d; margin-top: 0; margin-bottom: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; font-family: 'Segoe UI', Arial, sans-serif;">
+                    Tại sao công việc này phù hợp với bạn?
+                </h4>
+                {reasons_html}
+            </div>
+            
+            <h2 style="color: #1d4ed8; margin-top: 0; margin-bottom: 8px; font-size: 18px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">
+                {job_title}
+            </h2>
+            <p style="color: #475569; font-weight: 600; font-size: 15px; margin-top: 0; margin-bottom: 18px; font-family: 'Segoe UI', Arial, sans-serif;">
+                {company}
+            </p>
+            
+            <div style="border-top: 1px solid #f1f5f9; padding-top: 18px; color: #334155; font-size: 14px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif; margin-bottom: 18px;">
+                <p style="margin: 6px 0; color: #475569;"><strong>Thu nhập:</strong> <span style="color: #dc2626; font-weight: 700; font-size: 15px;">{salary_str}</span></p>
+                <p style="margin: 6px 0; color: #475569;"><strong>Địa điểm:</strong> {location}</p>
+                <p style="margin: 6px 0; color: #475569;"><strong>Loại công việc:</strong> {job_type}</p>
+                {work_time}
+            </div>
+            
+            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                    <td align="center">
+                        <a href="{job_link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-weight: 700; font-size: 14px; text-decoration: none; padding: 10px 24px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); font-family: 'Segoe UI', Arial, sans-serif;">
+                            Xem Chi Tiết & Ứng Tuyển
+                        </a>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        """
+        
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{subject}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; padding: 40px 10px;">
+            <tr>
+                <td align="center">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);">
+                        <!-- Header Banner -->
+                        <tr>
+                            <td style="background: linear-gradient(135deg, #f8fafc, #eff6ff); border-bottom: 1px solid #e2e8f0; padding: 40px 30px; text-align: center;">
+                                <img src="https://opporeview-cv-storage.s3.ap-southeast-1.amazonaws.com/system/logo.png" alt="Ốp Pờ Logo" style="height: 48px; margin-bottom: 10px; display: inline-block; vertical-align: middle;">
+                                <h1 style="color: #1e3a8a; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: 'Segoe UI', Arial, sans-serif;">Ốp Pờ</h1>
+                                <p style="color: #475569; margin: 4px 0 0 0; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;">Đề xuất việc làm phù hợp cho bạn</p>
+                            </td>
+                        </tr>
+                        
+                        <!-- Main Content -->
+                        <tr>
+                            <td style="padding: 40px 35px; background-color: #ffffff;">
+                                <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 20px; font-size: 20px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Chào {name},</h2>
+                                <p style="color: #334155; font-size: 15px; line-height: 1.6; margin-bottom: 24px; font-family: 'Segoe UI', Arial, sans-serif;">
+                                    Chúng tôi tìm thấy các công việc mới phù hợp với năng lực và hồ sơ của bạn trên hệ thống <strong>Ốp Pờ</strong>. Hãy xem các thông tin chi tiết dưới đây:
+                                </p>
+                                
+                                {jobs_html}
+                            </td>
+                        </tr>
+                        <!-- Footer -->
+                        <tr>
+                            <td style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 30px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">
+                                <p style="margin: 0 0 8px 0;">Email này được gửi tự động từ hệ thống Ốp Pờ.</p>
+                                <p style="margin: 0 0 8px 0;">Địa chỉ liên hệ: <a href="mailto:tuyendung.oppo@oppocareer.com" style="color: #3b82f6; text-decoration: none; font-weight: 500;">tuyendung.oppo@oppocareer.com</a>
+                                <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; 2026 Ốp Pờ. All rights reserved.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
+    
+    safe_print(f"[Recommender] Dispatching multi-job email to {email}")
     res = send_email(email, subject, html_content)
     return res.get('success', False)
 
@@ -422,6 +612,15 @@ def recommend_job_to_candidates(job_item, is_quick_job=False):
                         
         else:
             # Traditional matching logic for standard jobs
+            # Fetch all active standard jobs from DB
+            std_table = dynamodb.Table('PostStandardJob')
+            response_std = std_table.scan(
+                FilterExpression='#s = :status',
+                ExpressionAttributeNames={'#s': 'status'},
+                ExpressionAttributeValues={':status': 'active'}
+            )
+            all_active_std_jobs = response_std.get('Items', [])
+            
             for cand in active_candidates:
                 cand_id = cand.get('userId')
                 
@@ -432,11 +631,32 @@ def recommend_job_to_candidates(job_item, is_quick_job=False):
                     
                 matched, reasons = is_match(cand, job_item, is_quick_job=False)
                 if matched:
-                    safe_print(f"[Recommender] Candidate matched (traditional): {cand.get('fullName')} ({cand.get('email')})")
-                    success = send_recommendation_email(cand, job_item, reasons, is_quick_job=False)
+                    safe_print(f"[Recommender] Candidate matched new job (traditional): {cand.get('fullName')} ({cand.get('email')})")
+                    
+                    # Look for other matching active standard jobs that have NOT been recommended yet
+                    other_matched = []
+                    for other_job in all_active_std_jobs:
+                        other_job_id = other_job.get('idJob')
+                        if other_job_id == job_id:
+                            continue
+                        if is_job_already_recommended(cand, other_job_id):
+                            continue
+                        o_matched, o_reasons = is_match(cand, other_job, is_quick_job=False)
+                        if o_matched:
+                            other_matched.append((other_job, o_reasons))
+                            
+                    # Combine new job and other matched jobs (up to 5 total)
+                    jobs_to_recommend = [(job_item, reasons)]
+                    for o_job, o_reasons in other_matched:
+                        if len(jobs_to_recommend) >= 5:
+                            break
+                        jobs_to_recommend.append((o_job, o_reasons))
+                        
+                    success = send_recommendations_email(cand, jobs_to_recommend)
                     if success:
                         emails_sent += 1
-                        mark_job_as_recommended(cand_id, job_id)
+                        for r_job, _ in jobs_to_recommend:
+                            mark_job_as_recommended(cand_id, r_job.get('idJob'))
                         
         safe_print(f"[Recommender] Processed. Emails sent: {emails_sent}")
         return emails_sent
@@ -469,18 +689,41 @@ def recommend_active_jobs_to_candidate(candidate):
         )
         std_jobs = response_std.get('Items', [])
         
-        # Combine jobs (job_item, is_quick_job)
-        all_jobs = [(j, True) for j in quick_jobs] + [(j, False) for j in std_jobs]
-        
         emails_sent = 0
-        for job, is_quick in all_jobs:
-            matched, reasons = is_match(candidate, job, is_quick)
+        
+        # A. Quick Jobs: Sent individually (1 quick job per email)
+        for job in quick_jobs:
+            job_id = job.get('jobID')
+            if is_job_already_recommended(candidate, job_id):
+                continue
+            matched, reasons = is_match(candidate, job, is_quick_job=True)
             if matched:
-                safe_print(f"[Recommender] Active job matched: {job.get('title')} (is_quick={is_quick})")
-                success = send_recommendation_email(candidate, job, reasons, is_quick)
+                safe_print(f"[Recommender] Quick job matched: {job.get('title')}")
+                success = send_recommendation_email(candidate, job, reasons, is_quick_job=True)
                 if success:
                     emails_sent += 1
+                    mark_job_as_recommended(cand_id, job_id)
                     
+        # B. Standard Jobs: Batched together (3-5 jobs per email)
+        matched_standard_jobs = []
+        for job in std_jobs:
+            job_id = job.get('idJob')
+            if is_job_already_recommended(candidate, job_id):
+                continue
+            matched, reasons = is_match(candidate, job, is_quick_job=False)
+            if matched:
+                matched_standard_jobs.append((job, reasons))
+                
+        if matched_standard_jobs:
+            for i in range(0, len(matched_standard_jobs), 5):
+                batch = matched_standard_jobs[i:i+5]
+                safe_print(f"[Recommender] Sending batch of {len(batch)} standard jobs to candidate {cand_id}")
+                success = send_recommendations_email(candidate, batch)
+                if success:
+                    emails_sent += 1
+                    for job, _ in batch:
+                        mark_job_as_recommended(cand_id, job.get('idJob'))
+                        
         safe_print(f"[Recommender] Done matching active jobs for candidate. Emails sent: {emails_sent}")
         return emails_sent
     except Exception as e:

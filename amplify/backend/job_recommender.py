@@ -111,6 +111,20 @@ def is_match(candidate, job, is_quick_job=False):
                         if city in cand_loc_clean and city in job_loc_clean:
                             location_ok = True
                             break
+                    
+                    # If city terms don't match directly, resolve HCMC/Hanoi districts
+                    if not location_ok:
+                        hcm_districts = ['thu duc', 'quan 1', 'quan 2', 'quan 3', 'quan 4', 'quan 5', 'quan 6', 'quan 7', 'quan 8', 'quan 9', 'quan 10', 'quan 11', 'quan 12', 'tan binh', 'binh thanh', 'phu nhuan', 'go vap', 'tan phu', 'binh tan', 'binh chanh', 'hoc mon', 'nha be', 'cu chi', 'can gio']
+                        hn_districts = ['hoan kiem', 'ba dinh', 'dong da', 'hai ba trung', 'tay ho', 'cau giay', 'thanh xuan', 'hoang mai', 'long bien', 'nam tu liem', 'bac tu liem', 'ha dong', 'thanh tri', 'gia lam', 'dong anh', 'soc son']
+                        
+                        cand_in_hcm = any(d in cand_loc_clean for d in hcm_districts + ['hcm', 'ho chi minh'])
+                        job_in_hcm = any(d in job_loc_clean for d in hcm_districts + ['hcm', 'ho chi minh'])
+                        
+                        cand_in_hn = any(d in cand_loc_clean for d in hn_districts + ['ha noi'])
+                        job_in_hn = any(d in job_loc_clean for d in hn_districts + ['ha noi'])
+                        
+                        if (cand_in_hcm and job_in_hcm) or (cand_in_hn and job_in_hn):
+                            location_ok = True
                             
                 # Fallback to direct string containment (excluding broad city terms for quick jobs)
                 if not location_ok:

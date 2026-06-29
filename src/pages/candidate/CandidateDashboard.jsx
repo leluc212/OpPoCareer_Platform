@@ -1404,7 +1404,7 @@ const CandidateDashboard = () => {
                   ? (candidateIncome > 0
                     ? `${candidateIncome.toLocaleString('vi-VN')} VNĐ/${totalHours}h`
                     : `${Math.round(hourlyRate * 0.85).toLocaleString('vi-VN')} VNĐ/giờ`)
-                  : formatSalary(matchedJob.salary || matchedJob.totalSalary);
+                  : formatSalary(matchedJob.salary || matchedJob.totalSalary, matchedJob.salaryUnit);
 
                 recommended.push({
                   id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
@@ -1517,7 +1517,7 @@ const CandidateDashboard = () => {
             ? (candidateIncome > 0
               ? `${candidateIncome.toLocaleString('vi-VN')} VNĐ/${totalHours}h`
               : `${Math.round(hourlyRate * 0.85).toLocaleString('vi-VN')} VNĐ/giờ`)
-            : formatSalary(job.salary || job.totalSalary);
+            : formatSalary(job.salary || job.totalSalary, job.salaryUnit);
 
           setCurrentJob({
             jobId: job.idJob || job.id || job.jobID,
@@ -1587,8 +1587,12 @@ const CandidateDashboard = () => {
   }, [fetchData]);
 
   // Helper: Format salary
-  const formatSalary = (salary) => {
+  const formatSalary = (salary, salaryUnit = 'hour') => {
     if (!salary) return language === 'vi' ? 'Thỏa thuận' : 'Negotiable';
+
+    const unit = salaryUnit === 'month'
+      ? (language === 'vi' ? ' VNĐ/tháng' : ' VND/month')
+      : (language === 'vi' ? ' VNĐ/h' : ' VND/hr');
 
     // If it's a number string (e.g., "24" or "25.000")
     if (typeof salary === 'string') {
@@ -1597,14 +1601,14 @@ const CandidateDashboard = () => {
       if (!isNaN(num)) {
         // If the number is small (e.g., 24), treat it as thousands
         const finalNum = num < 1000 ? num * 1000 : num;
-        return `${finalNum.toLocaleString('vi-VN')} VNĐ/h`;
+        return `${finalNum.toLocaleString('vi-VN')}${unit}`;
       }
       return salary; // Return as is if it's already non-numeric string like "6 triệu"
     }
 
     if (typeof salary === 'number') {
       const finalNum = salary < 1000 ? salary * 1000 : salary;
-      return `${finalNum.toLocaleString('vi-VN')} VNĐ/h`;
+      return `${finalNum.toLocaleString('vi-VN')}${unit}`;
     }
 
     return salary;

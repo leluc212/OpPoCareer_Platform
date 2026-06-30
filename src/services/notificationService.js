@@ -1161,12 +1161,8 @@ export const markAsRead = async (notificationId) => {
  */
 export const markAllAsRead = async (userId, role) => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/notifications/mark-all-read`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ recipientId: userId, recipientRole: role })
+    const response = await fetch(`${API_ENDPOINT}/notifications/mark-all-read/${userId}?role=${role}`, {
+      method: 'PUT'
     });
 
     if (!response.ok) {

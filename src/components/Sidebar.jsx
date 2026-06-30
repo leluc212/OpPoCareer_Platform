@@ -433,7 +433,6 @@ const Sidebar = ({ role, onHoverChange }) => {
     ]},
     { section: t.sidebar.utilities || 'Utilities', items: [
       { to: '/admin/wallet', icon: Wallet, label: t.sidebar.digitalWallet },
-      { to: '/admin/escrow', icon: ShieldCheck, label: language === 'vi' ? 'Quản lý thanh toán' : 'Payment Management' },
       { to: '/admin/notifications', icon: Bell, label: t.sidebar.notifications },
       { to: '/admin/profile', icon: User, label: t.sidebar.myProfile },
       { to: 'logout', icon: LogOut, label: language === 'vi' ? 'Đăng xuất' : 'Log Out', isLogout: true }

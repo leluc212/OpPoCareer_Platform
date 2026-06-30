@@ -27,10 +27,7 @@ import {
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
 import applicationService from '../../services/applicationService';
-import { getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
 import {
-  createWithdrawalApprovedNotification,
-  createWithdrawalRejectedNotification,
   createQuickJobActivationApprovedNotification,
   createQuickJobActivationRejectedNotification,
   createQuickJobActivationDeactivatedNotification,
@@ -448,6 +445,81 @@ const TabBadge = styled.span`
   justify-content: center;
 `;
 
+const MainTabsContainer = styled.div`
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid ${props => props.theme.colors.border || '#E2E8F0'};
+  padding-bottom: 4px;
+  flex-wrap: wrap;
+`;
+
+const MainTabButton = styled.button`
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: ${props => props.$active ? props.theme.colors.primary : props.theme.colors.textLight || '#64748B'};
+  position: relative;
+  transition: all 0.25s ease-in-out;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px 12px 0 0;
+  
+  &:hover {
+    color: ${props => props.theme.colors.primary};
+    background: ${props => props.theme.colors.bgLight || '#F8FAFC'};
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: ${props => props.$active ? `linear-gradient(90deg, ${props.theme.colors.primary} 0%, #3b82f6 100%)` : 'transparent'};
+    border-radius: 4px;
+    transition: all 0.25s ease-in-out;
+  }
+`;
+
+const SubTabsContainer = styled.div`
+  display: flex;
+  gap: 8px;
+  background: ${props => props.theme.colors.bgLight || '#F1F5F9'};
+  padding: 6px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  border: 1px solid ${props => props.theme.colors.border || '#E2E8F0'};
+  width: fit-content;
+  align-items: center;
+  flex-wrap: wrap;
+`;
+
+const SubTabButton = styled.button`
+  padding: 8px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: ${props => props.$active ? 'white' : 'transparent'};
+  border: none;
+  border-radius: 8px;
+  color: ${props => props.$active ? props.theme.colors.primary : props.theme.colors.textLight || '#64748B'};
+  box-shadow: ${props => props.$active ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'};
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    color: ${props => props.theme.colors.primary};
+  }
+`;
+
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -545,13 +617,24 @@ const EmployersManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'approved' or 'withdrawals' or 'change_requests'
+  const [activeTab, setActiveTab] = useState('verifications');
+  const [mainTab, setMainTab] = useState('verification');
+
+  useEffect(() => {
+    if (['pending', 'approved', 'verifications'].includes(activeTab)) {
+      setMainTab('verification');
+    } else if (activeTab === 'all_employers') {
+      setMainTab('all_employers');
+    } else if (activeTab === 'change_requests') {
+      setMainTab('change_requests');
+    } else if (activeTab === 'quick_jobs') {
+      setMainTab('features');
+    }
+  }, [activeTab]);
+
   const itemsPerPage = 20;
 
   const [employers, setEmployers] = useState([]);
-  const [withdrawRequests, setWithdrawRequests] = useState([]);
-  const [withdrawStatusFilter, setWithdrawStatusFilter] = useState('all'); // 'all' | 'pending' | 'approved' | 'rejected'
-  const [withdrawWeekFilter, setWithdrawWeekFilter] = useState(false); // true = chỉ tuần này
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -563,72 +646,7 @@ const EmployersManagement = () => {
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [isProcessingVerification, setIsProcessingVerification] = useState(false);
 
-  const loadWithdrawRequests = async () => {
-    try {
-      const data = await getWithdrawalRequests();
-      const mapped = (data || []).map(item => ({
-        ...item,
-        id: item.requestId || item.id
-      })).filter(req => req.isCandidate !== true);
-      setWithdrawRequests(mapped);
-    } catch (e) {
-      console.error('Error loading withdraw requests:', e);
-    }
-  };
 
-  const handleApproveWithdrawal = async (requestId) => {
-    const req = withdrawRequests.find(r => r.id === requestId);
-    try {
-      await updateWithdrawalStatus(requestId, 'approved');
-      setWithdrawRequests(prev =>
-        prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r)
-      );
-
-      // Send notification to employer
-      if (req?.employerId) {
-        try {
-          await createWithdrawalApprovedNotification({
-            employerId: req.employerId,
-            amount: req.amount || 0,
-            bankName: req.bankName || req.bank || '',
-            accountNumber: req.accountNumber || req.bankAccount || '',
-          });
-        } catch (notifErr) {
-          console.warn('Notification error (withdrawal approved):', notifErr.message);
-        }
-      }
-    } catch (err) {
-      console.error('Error approving withdrawal:', err);
-      alert(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền' : 'Failed to approve withdrawal');
-    }
-  };
-
-  const handleRejectWithdrawal = async (requestId) => {
-    const req = withdrawRequests.find(r => r.id === requestId);
-    try {
-      await updateWithdrawalStatus(requestId, 'rejected');
-      setWithdrawRequests(prev =>
-        prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r)
-      );
-
-      // Send notification to employer
-      if (req?.employerId) {
-        try {
-          await createWithdrawalRejectedNotification({
-            employerId: req.employerId,
-            amount: req.amount || 0,
-            bankName: req.bankName || req.bank || '',
-            accountNumber: req.accountNumber || req.bankAccount || '',
-          });
-        } catch (notifErr) {
-          console.warn('Notification error (withdrawal rejected):', notifErr.message);
-        }
-      }
-    } catch (err) {
-      console.error('Error rejecting withdrawal:', err);
-      alert(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền' : 'Failed to reject withdrawal');
-    }
-  };
 
   const loadChangeRequests = async () => {
     try {
@@ -695,13 +713,13 @@ const EmployersManagement = () => {
 
         const normalizedCR = cr
           ? {
-              ...cr,
-              reason: reason || '',
-              reasonCode: reasonCode || '',
-              typeLabel: typeLabel || cr.typeLabel || '',
-              requestedAt: requestedAt || '',
-              urgency: urgency
-            }
+            ...cr,
+            reason: reason || '',
+            reasonCode: reasonCode || '',
+            typeLabel: typeLabel || cr.typeLabel || '',
+            requestedAt: requestedAt || '',
+            urgency: urgency
+          }
           : null;
 
         // Fallback: if server returned null, try to load from localStorage (client saved on submit)
@@ -832,8 +850,8 @@ const EmployersManagement = () => {
 
   const handleDeleteChangeRequest = async (appId) => {
     const confirmDelete = window.confirm(
-      language === 'vi' 
-        ? 'Bạn có chắc chắn muốn xóa yêu cầu thay đổi này?' 
+      language === 'vi'
+        ? 'Bạn có chắc chắn muốn xóa yêu cầu thay đổi này?'
         : 'Are you sure you want to delete this change request?'
     );
     if (!confirmDelete) return;
@@ -847,7 +865,7 @@ const EmployersManagement = () => {
       // Remove from local list
       setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
       setSelectedChangeRequest(null);
-      
+
       alert(language === 'vi' ? 'Đã xóa yêu cầu thay đổi thành công' : 'Change request deleted successfully');
     } catch (err) {
       console.error('Error deleting change request:', err);
@@ -904,15 +922,11 @@ const EmployersManagement = () => {
   // Initial load
   useEffect(() => {
     loadEmployers();
-    loadWithdrawRequests();
     loadChangeRequests();
   }, []);
 
   // Reload data when tabs change
   useEffect(() => {
-    if (activeTab === 'withdrawals') {
-      loadWithdrawRequests();
-    }
     if (activeTab === 'change_requests') {
       loadChangeRequests();
     }
@@ -922,7 +936,6 @@ const EmployersManagement = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadEmployers();
-    await loadWithdrawRequests();
     await loadChangeRequests();
   };
 
@@ -1031,9 +1044,6 @@ const EmployersManagement = () => {
     }
   };
 
-  const pendingWithdrawCount = useMemo(() => {
-    return withdrawRequests.filter(req => req.status === 'pending').length;
-  }, [withdrawRequests]);
   const pendingQuickJobCount = useMemo(() => {
     return employers.filter(e => e.quickJobStatus === 'pending').length;
   }, [employers]);
@@ -1060,6 +1070,8 @@ const EmployersManagement = () => {
       } else if (activeTab === 'verifications') {
         // Show employers that have submitted verification (pending or already verified)
         matchesTab = !!(employer.verificationStatus || employer.isVerified);
+      } else if (activeTab === 'all_employers') {
+        matchesTab = true;
       }
 
       const matchesSearch = searchTerm === '' ||
@@ -1075,28 +1087,6 @@ const EmployersManagement = () => {
     });
   }, [employers, searchTerm, filters, activeTab]);
 
-  const filteredWithdrawRequests = useMemo(() => {
-    return withdrawRequests.filter(req => {
-      const matchesSearch = searchTerm === '' ||
-        req.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        req.bankName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        req.accountNumber.includes(searchTerm);
-
-      const matchesStatus = withdrawStatusFilter === 'all' || req.status === withdrawStatusFilter;
-
-      const matchesWeek = !withdrawWeekFilter || (() => {
-        const now = new Date();
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay());
-        startOfWeek.setHours(0, 0, 0, 0);
-        const reqDate = new Date(req.createdAt);
-        return reqDate >= startOfWeek;
-      })();
-
-      return matchesSearch && matchesStatus && matchesWeek;
-    });
-  }, [withdrawRequests, searchTerm, withdrawStatusFilter, withdrawWeekFilter]);
-
   const filteredChangeRequests = useMemo(() => {
     return changeRequests.filter(req => {
       const matchesSearch = searchTerm === '' ||
@@ -1108,17 +1098,14 @@ const EmployersManagement = () => {
   }, [changeRequests, searchTerm]);
 
   // Pagination
-  const totalPages = activeTab === 'withdrawals'
-    ? Math.ceil(filteredWithdrawRequests.length / itemsPerPage)
-    : activeTab === 'change_requests'
-      ? Math.ceil(filteredChangeRequests.length / itemsPerPage)
-      : Math.ceil(filteredEmployers.length / itemsPerPage);
+  const totalPages = activeTab === 'change_requests'
+    ? Math.ceil(filteredChangeRequests.length / itemsPerPage)
+    : Math.ceil(filteredEmployers.length / itemsPerPage);
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
 
   const currentEmployers = filteredEmployers.slice(startIndex, endIndex);
-  const currentWithdrawRequests = filteredWithdrawRequests.slice(startIndex, endIndex);
   const currentChangeRequests = filteredChangeRequests.slice(startIndex, endIndex);
 
   // Reset to page 1 when search, filters or tab change
@@ -1203,54 +1190,82 @@ const EmployersManagement = () => {
               </StatBox>
             </StatsRow>
 
-            <TabsContainer>
-              <Tab
-                $active={activeTab === 'pending'}
-                onClick={() => setActiveTab('pending')}
+            {/* Main Tabs Navigation */}
+            <MainTabsContainer>
+              <MainTabButton
+                $active={mainTab === 'verification'}
+                onClick={() => {
+                  setMainTab('verification');
+                  setActiveTab('verifications');
+                }}
               >
-                <Clock size={18} style={{ marginRight: '8px' }} />
-                {language === 'vi' ? 'Chờ duyệt' : 'Pending Approval'}
-              </Tab>
-              <Tab
-                $active={activeTab === 'approved'}
-                onClick={() => setActiveTab('approved')}
-              >
-                <CheckCircle size={18} style={{ marginRight: '8px' }} />
-                {language === 'vi' ? 'Đã duyệt' : 'Approved'}
-              </Tab>
-              <Tab
-                $active={activeTab === 'withdrawals'}
-                onClick={() => setActiveTab('withdrawals')}
-              >
-                <TrendingUp size={18} style={{ marginRight: '8px' }} />
-                {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
-                {pendingWithdrawCount > 0 && <TabBadge>{pendingWithdrawCount}</TabBadge>}
-              </Tab>
-              <Tab
-                $active={activeTab === 'quick_jobs'}
-                onClick={() => setActiveTab('quick_jobs')}
-              >
-                <Zap size={18} style={{ marginRight: '8px' }} />
-                {language === 'vi' ? 'Duyệt tuyển gấp' : 'Urgent Jobs'}
-                {pendingQuickJobCount > 0 && <TabBadge>{pendingQuickJobCount}</TabBadge>}
-              </Tab>
-              <Tab
-                $active={activeTab === 'change_requests'}
-                onClick={() => setActiveTab('change_requests')}
-              >
-                <RefreshCw size={18} style={{ marginRight: '8px' }} />
-                {language === 'vi' ? 'Yêu cầu thay đổi' : 'Change Requests'}
-                {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
-              </Tab>
-              <Tab
-                $active={activeTab === 'verifications'}
-                onClick={() => setActiveTab('verifications')}
-              >
-                <FileText size={18} style={{ marginRight: '8px' }} />
-                {language === 'vi' ? 'Xác thực hồ sơ' : 'Verifications'}
+                <Award size={20} />
+                {language === 'vi' ? 'Xác thực nhà tuyển dụng' : 'Employer Verification'}
                 {pendingVerificationCount > 0 && <TabBadge>{pendingVerificationCount}</TabBadge>}
-              </Tab>
-            </TabsContainer>
+              </MainTabButton>
+              <MainTabButton
+                $active={mainTab === 'all_employers'}
+                onClick={() => {
+                  setMainTab('all_employers');
+                  setActiveTab('all_employers');
+                }}
+              >
+                <Building2 size={20} />
+                {language === 'vi' ? 'Danh sách nhà tuyển dụng' : 'Employers List'}
+              </MainTabButton>
+              <MainTabButton
+                $active={mainTab === 'change_requests'}
+                onClick={() => {
+                  setMainTab('change_requests');
+                  setActiveTab('change_requests');
+                }}
+              >
+                <RefreshCw size={20} />
+                {language === 'vi' ? 'Yêu cầu thay đổi ứng viên' : 'Change Candidate Requests'}
+                {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
+              </MainTabButton>
+              <MainTabButton
+                $active={mainTab === 'features'}
+                onClick={() => {
+                  setMainTab('features');
+                  setActiveTab('quick_jobs');
+                }}
+              >
+                <Briefcase size={20} />
+                {language === 'vi' ? 'Chức năng của Nhà tuyển dụng' : 'Employer Features'}
+                {pendingQuickJobCount > 0 && (
+                  <TabBadge>{pendingQuickJobCount}</TabBadge>
+                )}
+              </MainTabButton>
+            </MainTabsContainer>
+
+            {/* Sub-tabs Navigation */}
+            {mainTab === 'verification' && (
+              <SubTabsContainer>
+                <SubTabButton
+                  $active={activeTab === 'verifications'}
+                  onClick={() => setActiveTab('verifications')}
+                >
+                  <FileText size={16} style={{ marginRight: '6px' }} />
+                  {language === 'vi' ? 'Xác thực hồ sơ' : 'Profile Verifications'}
+                  {pendingVerificationCount > 0 && <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>{pendingVerificationCount}</TabBadge>}
+                </SubTabButton>
+                <SubTabButton
+                  $active={activeTab === 'pending'}
+                  onClick={() => setActiveTab('pending')}
+                >
+                  <Clock size={16} style={{ marginRight: '6px' }} />
+                  {language === 'vi' ? 'Chờ duyệt' : 'Pending Approval'}
+                </SubTabButton>
+                <SubTabButton
+                  $active={activeTab === 'approved'}
+                  onClick={() => setActiveTab('approved')}
+                >
+                  <CheckCircle size={16} style={{ marginRight: '6px' }} />
+                  {language === 'vi' ? 'Đã duyệt' : 'Approved'}
+                </SubTabButton>
+              </SubTabsContainer>
+            )}
 
             <FilterSection>
               <FilterWrapper>
@@ -1263,50 +1278,6 @@ const EmployersManagement = () => {
                   searchPlaceholder={language === 'vi' ? 'Tìm kiếm công ty, email, ngành...' : 'Search company, email, industry...'}
                 />
               </FilterWrapper>
-              {activeTab === 'withdrawals' && (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  {[
-                    { value: 'all',      labelVi: 'Tất cả',   labelEn: 'All'      },
-                    { value: 'pending',  labelVi: 'Chờ duyệt',labelEn: 'Pending'  },
-                    { value: 'approved', labelVi: 'Đồng ý',   labelEn: 'Approved' },
-                    { value: 'rejected', labelVi: 'Từ chối',  labelEn: 'Rejected' },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => { setWithdrawStatusFilter(opt.value); setCurrentPage(1); }}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: '8px',
-                        border: `2px solid ${withdrawStatusFilter === opt.value ? '#667eea' : '#e2e8f0'}`,
-                        background: withdrawStatusFilter === opt.value ? '#667eea' : 'white',
-                        color: withdrawStatusFilter === opt.value ? 'white' : '#475569',
-                        fontWeight: 600,
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      {language === 'vi' ? opt.labelVi : opt.labelEn}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => { setWithdrawWeekFilter(prev => !prev); setCurrentPage(1); }}
-                    style={{
-                      padding: '7px 14px',
-                      borderRadius: '8px',
-                      border: `2px solid ${withdrawWeekFilter ? '#f59e0b' : '#e2e8f0'}`,
-                      background: withdrawWeekFilter ? '#f59e0b' : 'white',
-                      color: withdrawWeekFilter ? 'white' : '#475569',
-                      fontWeight: 600,
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                     {language === 'vi' ? 'Tuần này' : 'This Week'}
-                  </button>
-                </div>
-              )}
               <RefreshButton onClick={handleRefresh} disabled={refreshing} $loading={refreshing}>
                 <RefreshCw size={18} />
                 {refreshing
@@ -1317,102 +1288,7 @@ const EmployersManagement = () => {
             </FilterSection>
 
             <TableWrapper>
-              {activeTab === 'withdrawals' ? (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</th>
-                      <th>{language === 'vi' ? 'Số tiền rút' : 'Withdraw Amount'}</th>
-                      <th>{language === 'vi' ? 'Thông tin thụ hưởng' : 'Beneficiary Details'}</th>
-                      <th>{language === 'vi' ? 'Ngày yêu cầu' : 'Requested Date'}</th>
-                      <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
-                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentWithdrawRequests.map((req, index) => {
-                      const colorScheme = getColorScheme(index);
-                      const initials = getCompanyInitials(req.companyName);
-
-                      return (
-                        <tr key={req.id}>
-                          <td>
-                            <CompanyInfo>
-                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
-                                {req.companyLogo ? (
-                                  <img src={req.companyLogo} alt={req.companyName} />
-                                ) : (
-                                  initials
-                                )}
-                              </CompanyLogo>
-                              <CompanyDetails>
-                                <CompanyName>{req.companyName}</CompanyName>
-                                <CompanyMeta>
-                                  <Building2 size={12} />
-                                  ID: {req.employerId}
-                                </CompanyMeta>
-                              </CompanyDetails>
-                            </CompanyInfo>
-                          </td>
-                          <td>
-                            <span style={{ fontWeight: 800, color: '#b45309', fontSize: '15px' }}>
-                              -{req.amount.toLocaleString('vi-VN')} VND
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '13px', lineHeight: '1.5' }}>
-                              <div><strong>NH:</strong> {req.bankName}</div>
-                              <div><strong>STK:</strong> {req.accountNumber}</div>
-                              <div style={{ textTransform: 'uppercase', color: '#64748B', fontWeight: 600 }}>
-                                <strong>Tên:</strong> {req.accountName}
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={12} />
-                              {new Date(req.createdAt).toLocaleDateString('vi-VN')}
-                            </div>
-                          </td>
-                          <td>
-                            <StatusBadge $status={req.status}>
-                              {req.status === 'approved' && <CheckCircle size={12} />}
-                              {req.status === 'pending' && <Clock size={12} />}
-                              {req.status === 'rejected' && <XCircle size={12} />}
-                              {getStatusText(req.status)}
-                            </StatusBadge>
-                          </td>
-                          <td>
-                            {req.status === 'pending' ? (
-                              <ActionButtons>
-                                <ApproveButton onClick={() => handleApproveWithdrawal(req.id)}>
-                                  <CheckCircle size={16} />
-                                  {language === 'vi' ? 'Duyệt' : 'Approve'}
-                                </ApproveButton>
-                                <RejectButton onClick={() => handleRejectWithdrawal(req.id)}>
-                                  <XCircle size={16} />
-                                  {language === 'vi' ? 'Từ chối' : 'Reject'}
-                                </RejectButton>
-                              </ActionButtons>
-                            ) : (
-                              <span style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
-                                {language === 'vi' ? 'Đã xử lý' : 'Processed'}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {currentWithdrawRequests.length === 0 && (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
-                          {language === 'vi' ? 'Không tìm thấy yêu cầu rút tiền nào' : 'No withdrawal requests found'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
-              ) : activeTab === 'quick_jobs' ? (
+              {activeTab === 'quick_jobs' ? (
                 <Table>
                   <thead>
                     <tr>
@@ -1582,7 +1458,7 @@ const EmployersManagement = () => {
                           <td>
                             <StatusBadge $status={
                               req.changeRequestStatus === 'approved' ? 'approved' :
-                              req.changeRequestStatus === 'rejected' ? 'rejected' : 'pending'
+                                req.changeRequestStatus === 'rejected' ? 'rejected' : 'pending'
                             }>
                               {req.changeRequestStatus === 'approved' && <CheckCircle size={12} />}
                               {req.changeRequestStatus === 'rejected' && <XCircle size={12} />}
@@ -1602,13 +1478,13 @@ const EmployersManagement = () => {
                               </IconButton>
                               {(!req.changeRequestStatus || req.changeRequestStatus === 'pending') && (
                                 <>
-                                  <ApproveButton 
+                                  <ApproveButton
                                     title={language === 'vi' ? 'Duyệt' : 'Approve'}
                                     onClick={() => handleApproveChange(req.applicationId)}
                                   >
                                     <CheckCircle size={16} />
                                   </ApproveButton>
-                                  <RejectButton 
+                                  <RejectButton
                                     title={language === 'vi' ? 'Từ chối' : 'Reject'}
                                     onClick={() => handleRejectChange(req.applicationId)}
                                   >
@@ -1935,91 +1811,91 @@ const EmployersManagement = () => {
       )}
 
       {/* Change Request Detail Modal */}
-      {selectedChangeRequest && (        <ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
-                <AlertCircle style={{ color: '#F97316' }} />
+      {selectedChangeRequest && (<ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
+              <AlertCircle style={{ color: '#F97316' }} />
+            </div>
+            <div>
+              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                {language === 'vi' ? 'Chi Tiết Yêu Cầu Thay Đổi' : 'Change Request Details'}
+              </ModalTitle>
+              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                {selectedChangeRequest.changeRequest?.requestedAt}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.companyName}</div>
               </div>
               <div>
-                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
-                  {language === 'vi' ? 'Chi Tiết Yêu Cầu Thay Đổi' : 'Change Request Details'}
-                </ModalTitle>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                  {selectedChangeRequest.changeRequest?.requestedAt}
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Ứng viên' : 'Candidate'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.candidateName}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Loại yêu cầu' : 'Request Type'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
+                  {selectedChangeRequest.changeRequest?.typeLabel}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Mức độ' : 'Urgency'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: selectedChangeRequest.changeRequest?.urgency === 'urgent' ? '#EF4444' : '#10B981' }}>
+                  {selectedChangeRequest.changeRequest?.urgency === 'urgent' ? (language === 'vi' ? 'Khẩn cấp' : 'Urgent') : (language === 'vi' ? 'Bình thường' : 'Normal')}
                 </div>
               </div>
             </div>
+          </div>
 
-            <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.companyName}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Ứng viên' : 'Candidate'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.candidateName}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Loại yêu cầu' : 'Request Type'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
-                    {selectedChangeRequest.changeRequest?.typeLabel}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Mức độ' : 'Urgency'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: selectedChangeRequest.changeRequest?.urgency === 'urgent' ? '#EF4444' : '#10B981' }}>
-                    {selectedChangeRequest.changeRequest?.urgency === 'urgent' ? (language === 'vi' ? 'Khẩn cấp' : 'Urgent') : (language === 'vi' ? 'Bình thường' : 'Normal')}
-                  </div>
-                </div>
-              </div>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileText size={14} />
+              {language === 'vi' ? 'Nội dung chi tiết/Lý do:' : 'Detailed content/Reason:'}
+            </div>
+            <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B', whiteSpace: 'pre-wrap' }}>
+              {selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <FileText size={14} />
-                {language === 'vi' ? 'Nội dung chi tiết/Lý do:' : 'Detailed content/Reason:'}
-              </div>
-                  <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B', whiteSpace: 'pre-wrap' }}>
-                    {selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
-                  </div>
+            {/* Raw payload display removed per request */}
+          </div>
 
-                  {/* Raw payload display removed per request */}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <ModalButton
-                onClick={() => handleRejectChange(selectedChangeRequest.applicationId)}
-                style={{ background: '#ef4444' }}
-                disabled={isProcessingChange}
-              >
-                {isProcessingChange ? '...' : (language === 'vi' ? 'Từ chối' : 'Reject')}
-              </ModalButton>
-              <ModalButton
-                onClick={() => handleApproveChange(selectedChangeRequest.applicationId)}
-                disabled={isProcessingChange}
-              >
-                {isProcessingChange ? '...' : (language === 'vi' ? 'Duyệt yêu cầu' : 'Approve')}
-              </ModalButton>
-            </div>
-
-            <button
-              onClick={() => setSelectedChangeRequest(null)}
-              style={{ width: '100%', marginTop: '12px', background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <ModalButton
+              onClick={() => handleRejectChange(selectedChangeRequest.applicationId)}
+              style={{ background: '#ef4444' }}
+              disabled={isProcessingChange}
             >
-              {language === 'vi' ? 'Đóng' : 'Close'}
-            </button>
-          </ModalContent>
-        </ModalOverlay>
+              {isProcessingChange ? '...' : (language === 'vi' ? 'Từ chối' : 'Reject')}
+            </ModalButton>
+            <ModalButton
+              onClick={() => handleApproveChange(selectedChangeRequest.applicationId)}
+              disabled={isProcessingChange}
+            >
+              {isProcessingChange ? '...' : (language === 'vi' ? 'Duyệt yêu cầu' : 'Approve')}
+            </ModalButton>
+          </div>
+
+          <button
+            onClick={() => setSelectedChangeRequest(null)}
+            style={{ width: '100%', marginTop: '12px', background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            {language === 'vi' ? 'Đóng' : 'Close'}
+          </button>
+        </ModalContent>
+      </ModalOverlay>
       )}
 
       {/* Verification Detail Modal */}

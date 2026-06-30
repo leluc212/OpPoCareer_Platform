@@ -1883,9 +1883,6 @@ const translateLocation = (locationStr, language) => {
     // Cities & provinces
     .replace(/TP\.HCM/g, 'HCMC')
     .replace(/TP HCM/g, 'HCMC')
-    .replace(/Hà Nội/g, 'Hanoi')
-    .replace(/Đà Nẵng/g, 'Da Nang')
-    .replace(/Cần Thơ/g, 'Can Tho')
     // Districts of HCMC
     .replace(/Tân Bình/g, 'Tan Binh')
     .replace(/Tân Phú/g, 'Tan Phu')
@@ -1899,18 +1896,15 @@ const translateLocation = (locationStr, language) => {
     .replace(/Bình Chánh/g, 'Binh Chanh')
     .replace(/Nhà Bè/g, 'Nha Be')
     .replace(/Cần Giờ/g, 'Can Gio')
-    // Other
-    .replace(/Toàn quốc/g, 'Nationwide')
-    .replace(/Toàn/g, 'All');
 };
 
 // Translate time indicators
 const translateTimePosted = (timeStr, language) => {
   if (language === 'vi') return timeStr;
   return timeStr
-    .replace(/(\d+)\s*ngày trước/g, '$1 days ago')
-    .replace(/(\d+)\s*giờ trước/g, '$1 hours ago')
-    .replace(/(\d+)\s*phút trước/g, '$1 minutes ago')
+    .replace(/(\d+)\s*ngày trước/g, '1 days ago')
+    .replace(/(\d+)\s*giờ trước/g, '1 hours ago')
+    .replace(/(\d+)\s*phút trước/g, '1 minutes ago')
     .replace(/1\s*days ago/g, '1 day ago')
     .replace(/1\s*hours ago/g, '1 hour ago');
 };
@@ -1973,9 +1967,8 @@ const parseTimeToHours = (timeStr) => {
     }
   }
 
-  // Handle text format (e.g., "2 giờ trước", "3 days ago")
   const match = String(timeStr).match(/(\d+)/);
-  if (!match) return 999999; // Unknown time goes to end
+  if (!match) return 999999;
 
   const num = parseInt(match[1]);
 
@@ -4347,13 +4340,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
   const matchesWorkTime = (job, selectedTimes) => {
     if (selectedTimes.length === 0) return true;
-    
+
     let haystack = '';
     const parseHour = (value) => {
       const match = String(value || '').match(/(\d{1,2})/);
       return match ? parseInt(match[1], 10) : null;
     };
-    
+
     // Check if job matches 'Buổi sáng' (before 12:00)
     const isMorning = () => {
       const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
@@ -4361,21 +4354,21 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       haystack = `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
       return haystack.includes('sáng');
     };
-    
+
     const isAfternoon = () => {
       const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
       if (startHour !== null && startHour >= 12 && startHour < 18) return true;
       haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
       return haystack.includes('chiều');
     };
-    
+
     const isEvening = () => {
       const startHour = parseHour(job?.startTime || String(job?.workHours || '').split('-')[0]);
       if (startHour !== null && startHour >= 18) return true;
       haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
       return haystack.includes('tối') || haystack.includes('đêm');
     };
-    
+
     const isWeekend = () => {
       haystack = haystack || `${job?.workHours || ''} ${job?.title || ''} ${job?.description || ''}`.toLowerCase();
       return haystack.includes('cuối tuần') || haystack.includes('thứ 7') || haystack.includes('t7') || haystack.includes('chủ nhật') || haystack.includes('cn');
@@ -4890,9 +4883,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     { val: 'weekend', label: language === 'vi' ? 'Cuối tuần (T7 & CN)' : 'Weekend (Sat & Sun)' },
                   ].map(opt => (
                     <FilterOption key={opt.val}>
-                      <input type="checkbox" 
-                        checked={selectedWorkTimes.includes(opt.val)} 
-                        onChange={() => toggleWorkTime(opt.val)} 
+                      <input type="checkbox"
+                        checked={selectedWorkTimes.includes(opt.val)}
+                        onChange={() => toggleWorkTime(opt.val)}
                       />
                       <span>{opt.label}</span>
                     </FilterOption>
@@ -4918,9 +4911,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     { val: '2w', label: language === 'vi' ? 'Trong 2 tuần' : 'Within 2 weeks' }
                   ].map(opt => (
                     <FilterOption key={opt.val}>
-                      <input type="checkbox" 
-                        checked={selectedPostTimes.includes(opt.val)} 
-                        onChange={() => togglePostTime(opt.val)} 
+                      <input type="checkbox"
+                        checked={selectedPostTimes.includes(opt.val)}
+                        onChange={() => togglePostTime(opt.val)}
                       />
                       <span>{opt.label}</span>
                     </FilterOption>
@@ -6648,10 +6641,10 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
       <JobCardHeader>
         <CompanyLogo>
           {job.companyLogo ? (
-            <img 
-              src={job.companyLogo} 
-              alt={job.company} 
-              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} 
+            <img
+              src={job.companyLogo}
+              alt={job.company}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
             />
           ) : (
             getCompanyInitial(job.company)

@@ -81,7 +81,6 @@ import PackagesManagement from './pages/admin/PackagesManagement';
 import Reports from './pages/admin/Reports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminWallet from './pages/admin/AdminWallet';
-import AdminEscrow from './pages/admin/AdminEscrow';
 import PostsManagement from './pages/admin/PostsManagement';
 import AdminSupport from './pages/admin/AdminSupport';
 import AdminNotifications from './pages/admin/AdminNotifications';
@@ -93,7 +92,7 @@ import BannersManagement from './pages/admin/BannersManagement';
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
-  
+
   if (!isAuthenticated) {
     const redirect = location.pathname + location.search;
     return <Navigate to={`/login?redirect=${encodeURIComponent(redirect)}`} replace />;
@@ -125,18 +124,18 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       </div>
     );
   }
-  
+
   return children;
 };
 
 // Guest Route Component (redirects logged-in users away from public pages)
 const GuestRoute = ({ children }) => {
   const { isAuthenticated, user, isLoading } = useAuth();
-  
+
   if (isLoading) {
     return null;
   }
-  
+
   // If there is a pending Google login error, keep user on login page so modal can show
   try {
     const googleErr = localStorage.getItem('googleLoginError');
@@ -147,13 +146,13 @@ const GuestRoute = ({ children }) => {
     const dashboardPath = `/${user.role === 'admin' ? 'admin' : user.role === 'employer' ? 'employer' : 'candidate'}/dashboard`;
     return <Navigate to={dashboardPath} replace />;
   }
-  
+
   return children;
 };
 
 function AppRoutes() {
   const { isLoading } = useAuth();
-  
+
   // Show loading spinner while checking auth
   if (isLoading) {
     return (
@@ -169,7 +168,7 @@ function AppRoutes() {
       </div>
     );
   }
-  
+
   return (
     <Routes>
       {/* Public Routes */}
@@ -208,7 +207,7 @@ function AppRoutes() {
           <CVTemplates />
         </ProtectedRoute>
       } />
-      
+
       {/* Candidate Routes */}
       <Route path="/candidate" element={<Navigate to="/candidate/dashboard" replace />} />
       <Route path="/candidate/dashboard" element={
@@ -289,7 +288,7 @@ function AppRoutes() {
           <CandidatePrivacyPage />
         </ProtectedRoute>
       } />
-      
+
       {/* Employer Routes */}
       <Route path="/employer/dashboard" element={
         <ProtectedRoute allowedRoles={['employer']}>
@@ -368,7 +367,7 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
 
-      
+
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={
         <ProtectedRoute allowedRoles={['admin']}>
@@ -415,11 +414,7 @@ function AppRoutes() {
           <AdminWallet />
         </ProtectedRoute>
       } />
-      <Route path="/admin/escrow" element={
-        <ProtectedRoute allowedRoles={['admin']}>
-          <AdminEscrow />
-        </ProtectedRoute>
-      } />
+
       <Route path="/admin/posts" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <PostsManagement />

@@ -799,6 +799,47 @@ const PackageEditButton = styled.button`
   }
 `;
 
+const CollapsibleSection = styled.div`
+  margin-bottom: 24px;
+  border-radius: ${props => props.theme.borderRadius.lg};
+  border: 1px solid ${props => props.theme.colors.border};
+  overflow: hidden;
+  box-shadow: ${props => props.theme.shadows.sm};
+`;
+
+const CollapsibleHeader = styled.button`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: ${props => props.theme.colors.bgLight};
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  color: ${props => props.theme.colors.text};
+  transition: background 0.2s;
+
+  &:hover {
+    background: ${props => props.theme.colors.bgDark};
+  }
+
+  .arrow {
+    font-size: 14px;
+    transition: transform 0.3s ease;
+    transform: ${props => props.$open ? 'rotate(180deg)' : 'rotate(0deg)'};
+  }
+`;
+
+const CollapsibleBody = styled.div`
+  max-height: ${props => props.$open ? '2000px' : '0'};
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+  background: ${props => props.theme.colors.bgDark};
+  padding: ${props => props.$open ? '20px' : '0'};
+`;
+
 const EditModalHeader = styled(ModalHeader)`
   background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
 `;
@@ -1050,6 +1091,22 @@ const PackagesManagement = () => {
   const [editingPackage, setEditingPackage] = useState(null);
   const [savingPackage, setSavingPackage] = useState(false);
   const [packageSaveError, setPackageSaveError] = useState(null);
+
+  const [statsOpen, setStatsOpen] = useState(() => {
+    try {
+      return localStorage.getItem('adminPackageStatsOpen') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleStats = () => {
+    setStatsOpen(prev => {
+      const next = !prev;
+      try { localStorage.setItem('adminPackageStatsOpen', String(next)); } catch {}
+      return next;
+    });
+  };
 
   const formatDateTime = (value) => {
     if (!value) return '';
@@ -1729,6 +1786,12 @@ const PackagesManagement = () => {
 
         {!loading && !error && (
           <>
+        <CollapsibleSection>
+          <CollapsibleHeader $open={statsOpen} onClick={toggleStats}>
+            <span>📊 Thống Kê Gói Dịch Vụ</span>
+            <span className="arrow">▼</span>
+          </CollapsibleHeader>
+          <CollapsibleBody $open={statsOpen}>
         <StatsRow>
           <StatBox $color="#1e40af">
             <h3>{language === 'vi' ? 'Tổng gói đã bán' : 'Total Purchases'}</h3>
@@ -1836,6 +1899,8 @@ const PackagesManagement = () => {
             </PieChartContainer>
           </ChartCard>
         </ChartsContainer>
+          </CollapsibleBody>
+        </CollapsibleSection>
 
         <TabsContainer>
           <Tab 

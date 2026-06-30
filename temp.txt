@@ -1,0 +1,20 @@
+3358:  const allJobs = useMemo(() => {
+3531:    if (allJobs.length > 0 && location.state?.selectedJobId) {
+3535:      const job = allJobs.find(j =>
+3577:  }, [allJobs, location.state, showSavedJobsOnly]);
+3719:    const job = allJobs.find(j => j.id === jobId);
+3825:      allJobs.length > 0 &&
+3831:      const job = allJobs.find(j =>
+3857:  }, [allJobs, candidateApplications, location.state]);
+4396:    let base = allJobs.filter(j => j.category === jobCategory);
+4425:  }, [allJobs, jobCategory, searchKeyword, selectedLocation]);
+4442:    const jobsWithCoords = allJobs
+4461:  }, [userLocation, jobCategory, nearbyRadius, allJobs]);
+4465:    let result = allJobs;
+4575:    quickFilter, savedJobs, sortBy, userLocation, showNearbyJobs, nearbyJobs, allJobs, showSavedJobsOnly]);
+4577:  const categoryJobs = allJobs.filter(job => job.category === jobCategory);
+4619:                    ? `Hơn ${allJobs.filter(j => j.category === 'standard').length} công việc tiêu chuẩn đang chờ bạn khám phá`
+4620:                    : `Over ${allJobs.filter(j => j.category === 'standard').length} standard jobs waiting for you to explore`)
+4622:                    ? `${allJobs.filter(j => j.category === 'shift').length} công việc đang tuyển gấp, làm ngay hôm nay!`
+4623:                    : `${allJobs.filter(j => j.category === 'shift').length} shift jobs hiring urgently, start today!`)}
+4818:              ({allJobs.filter(j => j.category === 'standard').length})

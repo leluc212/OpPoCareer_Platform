@@ -87,6 +87,29 @@ def lambda_handler(event, context):
             print(f"✅ Matched job applications route: job_id={job_id}")
             return get_job_applications(job_id, candidate_id, create_response)
         
+        # GET /applications/change-requests - Admin: list all pending_change applications
+        elif http_method == 'GET' and normalized_path == '/applications/change-requests':
+            print(f"✅ Matched list change requests route")
+            return list_change_requests(create_response)
+
+        # GET /applications/available-workers/{jobId} - Employer: get available workers for replacement
+        elif http_method == 'GET' and normalized_path.startswith('/applications/available-workers/'):
+            job_id = normalized_path.split('/')[-1]
+            print(f"✅ Matched available workers route: job_id={job_id}")
+            return get_available_workers(job_id, create_response)
+
+        # PUT /applications/{applicationId}/approve-change - Admin: approve change request
+        elif http_method == 'PUT' and normalized_path.endswith('/approve-change'):
+            application_id = normalized_path.split('/')[-2]
+            print(f"✅ Matched approve change request route: application_id={application_id}")
+            return approve_change_request(event, application_id, create_response)
+
+        # PUT /applications/{applicationId}/reject-change - Admin: reject change request
+        elif http_method == 'PUT' and normalized_path.endswith('/reject-change'):
+            application_id = normalized_path.split('/')[-2]
+            print(f"✅ Matched reject change request route: application_id={application_id}")
+            return reject_change_request(event, application_id, create_response)
+
         # PUT /applications/{applicationId}/status - Update application status (employer only)
         elif http_method == 'PUT' and normalized_path.endswith('/status'):
             application_id = path.split('/')[-2]
@@ -693,4 +716,337 @@ def get_all_applications(create_response):
         })
     except Exception as e:
         print(f"❌ Error getting all applications: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+
+def list_change_requests(create_response):
+    """Admin: get all applications with status pending_change"""
+    try:
+        print("🔍 Scanning for pending_change applications...")
+        response = applications_table.scan(
+            FilterExpression='#st = :status',
+            ExpressionAttributeNames={'#st': 'status'},
+            ExpressionAttributeValues={':status': 'pending_change'}
+        )
+        applications = response.get('Items', [])
+
+        # Handle DynamoDB pagination
+        while 'LastEvaluatedKey' in response:
+            response = applications_table.scan(
+                FilterExpression='#st = :status',
+                ExpressionAttributeNames={'#st': 'status'},
+                ExpressionAttributeValues={':status': 'pending_change'},
+                ExclusiveStartKey=response['LastEvaluatedKey']
+            )
+            applications.extend(response.get('Items', []))
+
+        # Enrich each request with job info (startTime, endTime, hourlyRate)
+        for app in applications:
+            job_id = app.get('jobId')
+            if job_id:
+                try:
+                    qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
+                    if qj:
+                        app['_jobStartTime'] = qj.get('startTime', '')
+                        app['_jobEndTime'] = qj.get('endTime', '')
+                        app['_jobHourlyRate'] = str(qj.get('hourlyRate', '0'))
+                        app['_jobTitle'] = qj.get('title', '')
+                        app['_jobLocation'] = qj.get('location', '')
+                except Exception as je:
+                    print(f"⚠️ Could not enrich job info for app {app.get('applicationId')}: {je}")
+
+        # Sort by createdAt descending (newest first)
+        applications.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
+
+        print(f"✅ Found {len(applications)} pending change requests")
+        return create_response(200, {
+            'success': True,
+            'applications': applications,
+            'count': len(applications)
+        })
+    except Exception as e:
+        print(f"❌ Error listing change requests: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+
+def get_available_workers(job_id, create_response):
+    """Employer: get KYC-verified candidates available for worker replacement.
+    Returns candidates who:
+    - Have kycCompleted = true
+    - Are NOT currently accepted/active on a job that overlaps with the target job's time slot
+    """
+    try:
+        print(f"🔍 Finding available workers for job: {job_id}")
+
+        # Fetch target job details to get workDate, startTime, endTime
+        target_job = None
+        try:
+            qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item')
+            if qj:
+                target_job = qj
+        except Exception as je:
+            print(f"⚠️ Could not fetch target job: {je}")
+
+        target_work_date = target_job.get('workDate', '') if target_job else ''
+        target_start = target_job.get('startTime', '') if target_job else ''
+        target_end = target_job.get('endTime', '') if target_job else ''
+
+        # Scan all accepted/active applications on the same workDate
+        busy_candidate_ids = set()
+        if target_work_date:
+            try:
+                resp = applications_table.scan(
+                    FilterExpression='#st IN (:s1, :s2, :s3)',
+                    ExpressionAttributeNames={'#st': 'status'},
+                    ExpressionAttributeValues={
+                        ':s1': 'accepted',
+                        ':s2': 'pending_change',
+                        ':s3': 'pending'
+                    }
+                )
+                all_active = resp.get('Items', [])
+                while 'LastEvaluatedKey' in resp:
+                    resp = applications_table.scan(
+                        FilterExpression='#st IN (:s1, :s2, :s3)',
+                        ExpressionAttributeNames={'#st': 'status'},
+                        ExpressionAttributeValues={
+                            ':s1': 'accepted',
+                            ':s2': 'pending_change',
+                            ':s3': 'pending'
+                        },
+                        ExclusiveStartKey=resp['LastEvaluatedKey']
+                    )
+                    all_active.extend(resp.get('Items', []))
+
+                for active_app in all_active:
+                    # Skip the job being replaced itself
+                    if active_app.get('jobId') == str(job_id):
+                        continue
+                    # Check if this app's job overlaps with target job
+                    active_job_id = active_app.get('jobId')
+                    if not active_job_id:
+                        continue
+                    try:
+                        aqj = quick_jobs_table.get_item(Key={'idJob': str(active_job_id)}).get('Item', {})
+                        if aqj.get('workDate') != target_work_date:
+                            continue
+                        # Check time overlap
+                        a_start = aqj.get('startTime', '')
+                        a_end = aqj.get('endTime', '')
+                        if a_start and a_end and target_start and target_end:
+                            # Simple string comparison (HH:MM format works)
+                            overlaps = not (a_end <= target_start or a_start >= target_end)
+                            if overlaps:
+                                busy_candidate_ids.add(active_app.get('candidateId'))
+                        else:
+                            # No time info — mark as busy to be safe
+                            busy_candidate_ids.add(active_app.get('candidateId'))
+                    except Exception:
+                        pass
+            except Exception as ae:
+                print(f"⚠️ Could not scan active applications: {ae}")
+
+        # Get current worker of the job being replaced — exclude from results
+        current_worker_id = None
+        try:
+            current_apps = applications_table.query(
+                IndexName='JobIndex',
+                KeyConditionExpression='jobId = :jid',
+                ExpressionAttributeValues={':jid': str(job_id)}
+            ).get('Items', [])
+            for ca in current_apps:
+                if ca.get('status') in ('accepted', 'pending_change'):
+                    current_worker_id = ca.get('candidateId')
+                    break
+        except Exception:
+            pass
+
+        # Scan CandidateProfiles for KYC-verified candidates
+        candidate_table = dynamodb.Table('CandidateProfiles')
+        resp = candidate_table.scan(
+            FilterExpression='kycCompleted = :kyc',
+            ExpressionAttributeValues={':kyc': True}
+        )
+        candidates = resp.get('Items', [])
+        while 'LastEvaluatedKey' in resp:
+            resp = candidate_table.scan(
+                FilterExpression='kycCompleted = :kyc',
+                ExpressionAttributeValues={':kyc': True},
+                ExclusiveStartKey=resp['LastEvaluatedKey']
+            )
+            candidates.extend(resp.get('Items', []))
+
+        available = []
+        for c in candidates:
+            cid = c.get('userId', '')
+            if not cid:
+                continue
+            if cid in busy_candidate_ids:
+                continue
+            if cid == current_worker_id:
+                continue
+            available.append({
+                'candidateId': cid,
+                'fullName': c.get('fullName') or c.get('name') or c.get('email', '').split('@')[0] or 'Worker',
+                'email': c.get('email', ''),
+                'phone': c.get('phone', ''),
+                'location': c.get('location', ''),
+                'rating': str(c.get('rating', '0'))
+            })
+
+        print(f"✅ Found {len(available)} available workers")
+        return create_response(200, {
+            'success': True,
+            'workers': available,
+            'count': len(available)
+        })
+    except Exception as e:
+        print(f"❌ Error getting available workers: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+
+def approve_change_request(event, application_id, create_response):
+    """Admin: approve a pending_change request.
+    Flow đơn giản:
+    1. Đổi candidateId/Email/Name sang worker mới trên application hiện tại
+    2. Giữ nguyên status='accepted', startTime, endTime, hourlyRate, jobSalary
+    3. Xoá changeRequest, set changeRequestStatus='approved', approvedAt
+    Không tạo record mới, không tính tiền.
+    """
+    try:
+        from datetime import timezone, timedelta
+
+        # Lấy application hiện tại
+        current_item = applications_table.get_item(
+            Key={'applicationId': application_id},
+            ConsistentRead=True
+        ).get('Item')
+        if not current_item:
+            return create_response(404, {'error': 'Application not found'})
+
+        if current_item.get('status') != 'pending_change':
+            return create_response(400, {'error': f'Application is not in pending_change status (current: {current_item.get("status")})'})
+
+        now_dt = datetime.utcnow()
+        now_iso = now_dt.isoformat() + 'Z'
+
+        # Lấy changeRequest data
+        change_req = current_item.get('changeRequest') or {}
+        if isinstance(change_req, str):
+            try:
+                change_req = json.loads(change_req)
+            except Exception:
+                change_req = {}
+
+        old_worker_id    = current_item.get('candidateId', '')
+        new_worker_id    = change_req.get('newWorkerId', '')
+        new_worker_email = change_req.get('newWorkerEmail', '')
+        new_worker_name  = change_req.get('newWorkerName', '')
+
+        if not new_worker_id:
+            return create_response(400, {'error': 'newWorkerId missing from changeRequest'})
+
+        # Lấy thông tin job để trả về cho frontend thông báo
+        job_id       = current_item.get('jobId', '')
+        job_location = current_item.get('jobLocation', '')
+        job_title    = current_item.get('jobTitle', '')
+        job_shift    = current_item.get('jobShift', '')   # e.g. "08:00 - 17:00"
+        job_workdate = current_item.get('jobWorkDate', '')
+
+        if job_id:
+            try:
+                qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
+                if qj:
+                    job_location = job_location or qj.get('location', '')
+                    job_title    = job_title    or qj.get('title', '')
+                    start_t      = qj.get('startTime', '')
+                    end_t        = qj.get('endTime', '')
+                    if start_t and end_t:
+                        job_shift = f"{start_t} - {end_t}"
+                    job_workdate = job_workdate or qj.get('workDate', '')
+            except Exception as je:
+                print(f"⚠️ Could not fetch job details: {je}")
+
+        # Định dạng workDate dạng DD/MM/YYYY để dùng trong thông báo
+        workdate_display = job_workdate
+        if job_workdate and '-' in job_workdate:
+            try:
+                parts = job_workdate.split('-')  # YYYY-MM-DD
+                workdate_display = f"{parts[2]}/{parts[1]}/{parts[0]}"
+            except Exception:
+                pass
+
+        # === Cập nhật application: đổi worker, giữ nguyên mọi thứ khác ===
+        applications_table.update_item(
+            Key={'applicationId': application_id},
+            UpdateExpression=(
+                'SET candidateId = :newCid, candidateEmail = :newEmail, candidateName = :newName, '
+                'changeRequestStatus = :crs, approvedAt = :now, updatedAt = :now '
+                'REMOVE changeRequest'
+            ),
+            ExpressionAttributeValues={
+                ':newCid':   new_worker_id,
+                ':newEmail': new_worker_email,
+                ':newName':  new_worker_name,
+                ':crs':      'approved',
+                ':now':      now_iso
+            }
+        )
+        print(f"✅ Worker swapped on application {application_id}: {old_worker_id} → {new_worker_id}")
+
+        return create_response(200, {
+            'success':        True,
+            'message':        'Yêu cầu thay đổi nhân viên đã được duyệt',
+            'applicationId':  application_id,
+            'approvedAt':     now_iso,
+            'oldWorkerId':    old_worker_id,
+            'newWorkerId':    new_worker_id,
+            'newWorkerName':  new_worker_name,
+            'jobLocation':    job_location,
+            'jobTitle':       job_title,
+            'jobShift':       job_shift,
+            'jobWorkDate':    job_workdate,
+            'workDateDisplay': workdate_display
+        })
+    except Exception as e:
+        print(f"❌ Error approving change request: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+
+def reject_change_request(event, application_id, create_response):
+    """Admin: reject a pending_change request — worker cũ tiếp tục làm, không cần lý do"""
+    try:
+        current_item = applications_table.get_item(
+            Key={'applicationId': application_id},
+            ConsistentRead=True
+        ).get('Item')
+        if not current_item:
+            return create_response(404, {'error': 'Application not found'})
+
+        if current_item.get('status') != 'pending_change':
+            return create_response(400, {'error': f'Application is not in pending_change status (current: {current_item.get("status")})'})
+
+        now_iso = datetime.utcnow().isoformat() + 'Z'
+
+        # Khôi phục worker cũ về accepted, xóa changeRequest
+        applications_table.update_item(
+            Key={'applicationId': application_id},
+            UpdateExpression='SET #status = :status, changeRequestStatus = :crs, updatedAt = :now REMOVE changeRequest',
+            ExpressionAttributeNames={'#status': 'status'},
+            ExpressionAttributeValues={
+                ':status': 'accepted',
+                ':crs': 'rejected',
+                ':now': now_iso
+            }
+        )
+
+        print(f"✅ Change request rejected for applicationId={application_id}")
+        return create_response(200, {
+            'success': True,
+            'message': 'Yêu cầu thay đổi đã bị từ chối',
+            'applicationId': application_id,
+            'rejectedAt': now_iso
+        })
+    except Exception as e:
+        print(f"❌ Error rejecting change request: {str(e)}")
         return create_response(500, {'error': str(e)})

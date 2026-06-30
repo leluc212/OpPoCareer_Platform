@@ -338,6 +338,84 @@ const applicationService = {
       defaultUrl: 'https://65fnfwjx5m7iq5ilmoj5ea7nwq0cespm.lambda-url.ap-southeast-1.on.aws/applications',
       serviceName: 'ApplicationService'
     });
+  },
+
+  /**
+   * Admin: List all applications with status pending_change
+   */
+  async listChangeRequests() {
+    try {
+      const headers = await getAuthHeaders();
+      const url = import.meta.env.DEV
+        ? '/api-applications/change-requests'
+        : `${API_BASE_URL}/applications/change-requests`;
+      const response = await fetch(url, { method: 'GET', headers });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      return data.applications || [];
+    } catch (err) {
+      console.error('❌ Error listing change requests:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Employer: Get available workers for replacement in a specific job
+   */
+  async getAvailableWorkers(jobId) {
+    try {
+      const headers = await getAuthHeaders();
+      const url = import.meta.env.DEV
+        ? `/api-applications/available-workers/${jobId}`
+        : `${API_BASE_URL}/applications/available-workers/${jobId}`;
+      const response = await fetch(url, { method: 'GET', headers });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      return data.workers || [];
+    } catch (err) {
+      console.error('❌ Error fetching available workers:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Admin: Approve a pending_change request — performs real-time worker swap
+   */
+  async approveChangeRequest(applicationId) {
+    const headers = await getAuthHeaders();
+    const url = import.meta.env.DEV
+      ? `/api-applications/${applicationId}/approve-change`
+      : `${API_BASE_URL}/applications/${applicationId}/approve-change`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Admin: Reject a pending_change request — worker cũ tiếp tục làm
+   */
+  async rejectChangeRequest(applicationId) {
+    const headers = await getAuthHeaders();
+    const url = import.meta.env.DEV
+      ? `/api-applications/${applicationId}/reject-change`
+      : `${API_BASE_URL}/applications/${applicationId}/reject-change`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+    return response.json();
   }
 };
 

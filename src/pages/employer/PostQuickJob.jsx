@@ -10,6 +10,7 @@ import { Save, ArrowLeft, AlertCircle, CheckCircle, Clock, Zap, Globe, X, Bankno
 import { useLanguage } from '../../context/LanguageContext';
 import quickJobService from '../../services/quickJobService';
 import employerProfileService from '../../services/employerProfileService';
+import hybridGeocodingService from '../../services/hybridGeocodingService';
 import { useAuth } from '../../context/AuthContext';
 import { getWallet, createWalletTransaction } from '../../services/packageCatalogService';
 import cvAiService from '../../services/cvAiService';
@@ -1314,6 +1315,32 @@ const PostQuickJob = () => {
       return;
     }
 
+    let finalLat = formData.latitude;
+    let finalLng = formData.longitude;
+
+    if (!finalLat || !finalLng) {
+      try {
+        const geoInfo = await hybridGeocodingService.geocodeAddress(formData.location);
+        if (geoInfo && geoInfo.lat && geoInfo.lng) {
+          finalLat = geoInfo.lat.toString();
+          finalLng = geoInfo.lng.toString();
+        } else {
+          throw new Error('Geocoding result missing coordinates');
+        }
+      } catch (err) {
+        console.error('Failed to geocode address on submit:', err);
+        setModalType('error');
+        setPaymentInfo({
+          error: true,
+          message: language === 'vi' 
+            ? 'Không thể xác định tọa độ GPS từ địa chỉ cung cấp. Vui lòng chọn địa chỉ cụ thể từ gợi ý.'
+            : 'Could not resolve GPS coordinates from the provided address. Please select a specific address from suggestions.'
+        });
+        setShowModal(true);
+        return;
+      }
+    }
+
     // Validate work date is not in the past
     const today = new Date().toISOString().split('T')[0];
     if (formData.workDate < today) {
@@ -1445,8 +1472,8 @@ const PostQuickJob = () => {
       const jobData = {
         title: formData.title,
         location: formData.location,
-        latitude: formData.latitude ? Math.round(parseFloat(formData.latitude) * 1000000) / 1000000 : null,
-        longitude: formData.longitude ? Math.round(parseFloat(formData.longitude) * 1000000) / 1000000 : null,
+        latitude: finalLat ? Math.round(parseFloat(finalLat) * 1000000) / 1000000 : null,
+        longitude: finalLng ? Math.round(parseFloat(finalLng) * 1000000) / 1000000 : null,
         jobType: formData.jobType || 'part-time',
         hourlyRate: Math.round(rate), // Ensure integer
         startTime: validSlots[0].startTime,

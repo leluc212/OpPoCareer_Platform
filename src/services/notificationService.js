@@ -1318,14 +1318,14 @@ export const createCandidateWithdrawalStatusNotification = async (request, statu
  * Notify employer when their change request is approved
  */
 export const createChangeRequestApprovedNotification = async ({ employerId, companyName, candidateName, changeRequestType, applicationId }) => {
+  if (!employerId) return null;
   const safeCompanyName = companyName || 'Nhà tuyển dụng';
-  const typeText = changeRequestType || 'thay đổi nhân sự';
   const notification = {
     type: 'change_request_approved',
-    title: 'Yêu cầu thay đổi nhân sự đã được duyệt',
-    titleEn: 'Personnel Change Request Approved',
-    message: `Yêu cầu thay đổi cho ứng viên "${candidateName || 'N/A'}" (${typeText}) của ${safeCompanyName} đã được admin phê duyệt thành công.`,
-    messageEn: `Your personnel change request for candidate "${candidateName || 'N/A'}" (${typeText}) has been approved by admin.`,
+    title: 'Yêu cầu đổi nhân viên đã được chấp nhận',
+    titleEn: 'Worker Replacement Request Approved',
+    message: 'Yêu cầu đổi nhân viên của bạn đã được chấp nhận.',
+    messageEn: 'Your worker replacement request has been approved.',
     recipientId: employerId,
     recipientRole: 'employer',
     senderId: 'admin',
@@ -1341,17 +1341,74 @@ export const createChangeRequestApprovedNotification = async ({ employerId, comp
 };
 
 /**
+ * Notify old worker when their shift is cancelled due to employer replacement
+ * @param {{ workerId, jobLocation, workDateDisplay }} payload
+ */
+export const createWorkerReplacedNotification = async ({ workerId, jobLocation, workDateDisplay, jobTitle }) => {
+  if (!workerId) return null;
+  const safeLocation = jobLocation || 'địa điểm làm việc';
+  const safeDate = workDateDisplay || 'ngày làm việc';
+  const notification = {
+    type: 'worker_replaced_shift_cancelled',
+    title: 'Ca làm của bạn đã bị huỷ',
+    titleEn: 'Your shift has been cancelled',
+    message: `Ca làm của bạn tại ${safeLocation} ngày ${safeDate} đã bị huỷ.`,
+    messageEn: `Your shift at ${safeLocation} on ${safeDate} has been cancelled.`,
+    recipientId: workerId,
+    recipientRole: 'candidate',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: { workerId, jobLocation: safeLocation, workDateDisplay: safeDate, jobTitle },
+    icon: 'x-circle',
+    color: '#EF4444',
+    actionUrl: '/candidate/applications',
+    actionText: 'Xem lịch sử làm việc',
+    actionTextEn: 'View work history'
+  };
+  return await saveNotification(notification);
+};
+
+/**
+ * Notify new worker when they are assigned to a shift via replacement
+ * @param {{ workerId, jobLocation, workDateDisplay, jobShift }} payload
+ */
+export const createNewWorkerAssignedNotification = async ({ workerId, jobTitle, jobLocation, workDateDisplay, jobShift, originalEndTime }) => {
+  if (!workerId) return null;
+  const safeLocation = jobLocation || 'địa điểm làm việc';
+  const safeDate = workDateDisplay || 'ngày làm việc';
+  const safeShift = jobShift || originalEndTime || '';
+  const notification = {
+    type: 'new_worker_assigned_shift',
+    title: 'Bạn có ca làm mới',
+    titleEn: 'You have a new shift',
+    message: `Bạn có ca làm mới tại ${safeLocation} ngày ${safeDate}${safeShift ? `, ${safeShift}` : ''}.`,
+    messageEn: `You have a new shift at ${safeLocation} on ${safeDate}${safeShift ? `, ${safeShift}` : ''}.`,
+    recipientId: workerId,
+    recipientRole: 'candidate',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: { workerId, jobTitle, jobLocation: safeLocation, workDateDisplay: safeDate, jobShift: safeShift },
+    icon: 'zap',
+    color: '#10b981',
+    actionUrl: '/candidate/applications',
+    actionText: 'Xem ca làm',
+    actionTextEn: 'View shift'
+  };
+  return await saveNotification(notification);
+};
+
+/**
  * Notify employer when their change request is rejected
  */
 export const createChangeRequestRejectedNotification = async ({ employerId, companyName, candidateName, changeRequestType, applicationId, reason }) => {
+  if (!employerId) return null;
   const safeCompanyName = companyName || 'Nhà tuyển dụng';
-  const typeText = changeRequestType || 'thay đổi nhân sự';
   const notification = {
     type: 'change_request_rejected',
-    title: 'Yêu cầu thay đổi nhân sự bị từ chối',
-    titleEn: 'Personnel Change Request Rejected',
-    message: `Yêu cầu thay đổi cho ứng viên "${candidateName || 'N/A'}" (${typeText}) của ${safeCompanyName} đã bị admin từ chối${reason ? `: ${reason}` : ''}.`,
-    messageEn: `Your personnel change request for candidate "${candidateName || 'N/A'}" (${typeText}) has been rejected by admin.`,
+    title: 'Yêu cầu đổi nhân viên bị từ chối',
+    titleEn: 'Worker Replacement Request Rejected',
+    message: 'Yêu cầu đổi nhân viên của bạn đã bị từ chối. Worker hiện tại vẫn tiếp tục ca làm.',
+    messageEn: 'Your worker replacement request has been rejected. The current worker continues the shift.',
     recipientId: employerId,
     recipientRole: 'employer',
     senderId: 'admin',
@@ -1363,6 +1420,49 @@ export const createChangeRequestRejectedNotification = async ({ employerId, comp
     actionText: 'Xem danh sách',
     actionTextEn: 'View List'
   };
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification to Admin when Employer submits a Change Request for a candidate
+ * @param {object} payload - { employerId, companyName, candidateName, changeRequestType, changeRequestReason, applicationId }
+ */
+export const createChangeRequestSubmittedNotification = async (payload) => {
+  const { employerId, companyName, candidateName, changeRequestType, changeRequestReason, applicationId } = payload;
+  
+  if (!employerId) {
+    console.error('❌ employerId is required for change request notification');
+    return null;
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+  const safeCandidateName = candidateName || 'nhân viên';
+
+  const notification = {
+    type: 'change_request_submitted',
+    title: 'Yêu cầu thay đổi nhân sự mới',
+    titleEn: 'New personnel change request',
+    message: `${safeCompanyName} vừa gửi yêu cầu đổi ứng viên ${safeCandidateName}. Lý do: ${changeRequestType}. ${changeRequestReason ? `Chi tiết: ${changeRequestReason}` : ''}`,
+    messageEn: `${safeCompanyName} requested a change for ${safeCandidateName}. Reason: ${changeRequestType}. ${changeRequestReason ? `Detail: ${changeRequestReason}` : ''}`,
+    recipientId: 'admin',
+    recipientRole: 'admin',
+    senderId: employerId,
+    senderName: safeCompanyName,
+    data: {
+      employerId,
+      companyName: safeCompanyName,
+      candidateName: safeCandidateName,
+      changeRequestType,
+      changeRequestReason: changeRequestReason || '',
+      applicationId: applicationId || null
+    },
+    icon: 'refresh-cw',
+    color: '#F97316',
+    actionUrl: '/admin/employers',
+    actionText: 'Xem chi tiết',
+    actionTextEn: 'View details'
+  };
+
   return await saveNotification(notification);
 };
 
@@ -1392,8 +1492,11 @@ export default {
   createCandidateWithdrawalStatusNotification,
   createCandidateAiScreeningPassedNotification,
   createCandidateApplicationSubmittedNotification,
+  createChangeRequestSubmittedNotification,
   createChangeRequestApprovedNotification,
   createChangeRequestRejectedNotification,
+  createWorkerReplacedNotification,
+  createNewWorkerAssignedNotification,
   markAsRead,
   markAllAsRead,
   deleteNotification,

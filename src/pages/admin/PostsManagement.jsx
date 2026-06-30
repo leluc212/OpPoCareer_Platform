@@ -6,8 +6,15 @@ import Modal from '../../components/Modal';
 import { useLanguage } from '../../context/LanguageContext';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
+import applicationService from '../../services/applicationService';
 import { Button } from '../../components/FormElements';
 import notificationService from '../../services/notificationService';
+import {
+  createChangeRequestApprovedNotification,
+  createChangeRequestRejectedNotification,
+  createWorkerReplacedNotification,
+  createNewWorkerAssignedNotification,
+} from '../../services/notificationService';
 import adminReportService from '../../services/adminReportService';
 import {
   Briefcase,
@@ -23,8 +30,180 @@ import {
   Mail,
   Phone,
   Building2,
-  User
+  User,
+  RefreshCw,
+  AlertCircle,
+  X,
+  ArrowRight,
+  MapPin
 } from 'lucide-react';
+
+// ─── Change Request Styles ───────────────────────────────
+const ChangeRequestGrid = styled.div`
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 20px;
+  margin-top: 8px;
+`;
+
+const ChangeRequestCard = styled.div`
+  background: #ffffff;
+  border: 1.5px solid #FED7AA;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.08);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: #F97316;
+  }
+`;
+
+const CRHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+`;
+
+const CRBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #FFEDD5;
+  color: #C2410C;
+  border: 1px solid #FED7AA;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+`;
+
+const CRWorkerRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  .worker-box {
+    flex: 1;
+    background: #F8FAFC;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .worker-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 3px;
+  }
+
+  .worker-name {
+    font-weight: 700;
+    color: #1E293B;
+    font-size: 14px;
+  }
+
+  .arrow {
+    color: #F97316;
+    flex-shrink: 0;
+  }
+`;
+
+const CRMeta = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #64748B;
+
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    svg { width: 13px; height: 13px; color: #94A3B8; }
+  }
+`;
+
+const CRReason = styled.div`
+  background: #FFF7ED;
+  border: 1px dashed #FED7AA;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #7C2D12;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  font-style: italic;
+`;
+
+const CRActions = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const CRButton = styled.button`
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: ${p => p.disabled ? 'not-allowed' : 'pointer'};
+  opacity: ${p => p.disabled ? 0.55 : 1};
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.2s;
+
+  background: ${p => p.$variant === 'approve'
+    ? 'linear-gradient(135deg, #10B981, #059669)'
+    : '#FEE2E2'};
+  color: ${p => p.$variant === 'approve' ? '#fff' : '#DC2626'};
+  border: ${p => p.$variant === 'approve' ? 'none' : '1.5px solid #FECACA'};
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: ${p => p.$variant === 'approve'
+      ? '0 4px 12px rgba(16,185,129,0.3)'
+      : '0 4px 12px rgba(220,38,38,0.15)'};
+  }
+`;
+
+const EmptyChangeRequests = styled.div`
+  text-align: center;
+  padding: 60px 20px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1.5px dashed #E2E8F0;
+  margin-top: 8px;
+
+  .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+  h3 { font-size: 17px; font-weight: 700; color: #334155; margin-bottom: 6px; }
+  p { font-size: 13.5px; color: #94A3B8; }
+`;
 
 const PageContainer = styled.div``;
 
@@ -508,6 +687,154 @@ const PostsManagement = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const itemsPerPage = 20;
+
+  // ─── Change Requests state ────────────────────────────────
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [loadingCR, setLoadingCR] = useState(false);
+  const [processingCRId, setProcessingCRId] = useState(null);
+  const [crToast, setCrToast] = useState(null); // { type: 'success'|'error', message }
+  const [selectedCR, setSelectedCR] = useState(null); // modal chi tiết
+
+  const showCRToast = (type, message) => {
+    setCrToast({ type, message });
+    setTimeout(() => setCrToast(null), 3500);
+  };
+
+  const loadChangeRequests = async () => {
+    try {
+      setLoadingCR(true);
+      const list = await applicationService.listChangeRequests();
+      setChangeRequests(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error('❌ Failed to load change requests:', err);
+      setChangeRequests([]);
+    } finally {
+      setLoadingCR(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'change_requests') {
+      loadChangeRequests();
+    }
+  }, [activeTab]);
+
+  // Format thời gian HH:mm từ ISO string
+  const fmtTime = (iso) => {
+    if (!iso) return '--:--';
+    try {
+      const d = new Date(iso);
+      return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    } catch { return '--:--'; }
+  };
+
+  // Tính thời gian đã làm tính đến hiện tại
+  const calcWorkedTime = (startIso) => {
+    if (!startIso) return 'N/A';
+    try {
+      const start = new Date(startIso);
+      const now = new Date();
+      const diffMs = now - start;
+      if (diffMs < 0) return '0 phút';
+      const totalMins = Math.floor(diffMs / 60000);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      if (h > 0) return `${h} giờ ${m} phút`;
+      return `${m} phút`;
+    } catch { return 'N/A'; }
+  };
+
+  const handleApproveCR = async (cr) => {
+    if (processingCRId) return;
+    setProcessingCRId(cr.applicationId);
+    try {
+      const result = await applicationService.approveChangeRequest(cr.applicationId);
+
+      // Gửi thông báo 3 bên
+      try {
+        const jobLocation    = result.jobLocation    || cr._jobLocation  || cr.jobLocation  || '';
+        const workDateDisp   = result.workDateDisplay || cr._jobWorkDate  || cr.jobWorkDate  || '';
+        const jobShift       = result.jobShift        || cr._jobShift     || cr.jobShift     || '';
+        const jobTitle       = result.jobTitle        || cr._jobTitle     || cr.jobTitle     || 'Ca làm';
+        const oldWorkerId    = result.oldWorkerId     || cr.candidateId   || '';
+        const newWorkerId    = result.newWorkerId     || cr.changeRequest?.newWorkerId || '';
+
+        // 1. Worker cũ — ca bị huỷ
+        if (oldWorkerId) {
+          await createWorkerReplacedNotification({
+            workerId: oldWorkerId,
+            jobLocation,
+            workDateDisplay: workDateDisp,
+            jobTitle
+          }).catch(() => {});
+        }
+
+        // 2. Worker mới — có ca mới
+        if (newWorkerId) {
+          await createNewWorkerAssignedNotification({
+            workerId: newWorkerId,
+            jobTitle,
+            jobLocation,
+            workDateDisplay: workDateDisp,
+            jobShift,
+            originalEndTime: ''
+          }).catch(() => {});
+        }
+
+        // 3. Employer — yêu cầu được duyệt
+        if (cr.employerId) {
+          await createChangeRequestApprovedNotification({
+            employerId: cr.employerId,
+            companyName: cr.companyName || '',
+            candidateName: cr.candidateName || cr.candidateEmail || '',
+            changeRequestType: 'Thay thế nhân viên',
+            applicationId: cr.applicationId
+          }).catch(() => {});
+        }
+      } catch (notifErr) {
+        console.warn('⚠️ Notification error (non-critical):', notifErr);
+      }
+
+      showCRToast('success', 'Đã duyệt yêu cầu thay đổi nhân viên');
+      setSelectedCR(null);
+      await loadChangeRequests();
+    } catch (err) {
+      console.error('❌ Approve CR failed:', err);
+      showCRToast('error', err.message || 'Lỗi khi duyệt yêu cầu');
+    } finally {
+      setProcessingCRId(null);
+    }
+  };
+
+  const handleRejectCR = async (cr) => {
+    if (processingCRId) return;
+    setProcessingCRId(cr.applicationId);
+    try {
+      await applicationService.rejectChangeRequest(cr.applicationId);
+
+      // Chỉ thông báo cho employer — worker cũ/mới không nhận gì
+      if (cr.employerId) {
+        await createChangeRequestRejectedNotification({
+          employerId: cr.employerId,
+          companyName: cr.companyName || 'Nhà tuyển dụng',
+          candidateName: cr.candidateName || cr.candidateEmail || 'Worker',
+          changeRequestType: 'Thay thế nhân viên',
+          applicationId: cr.applicationId,
+          reason: ''
+        }).catch(() => {});
+      }
+
+      showCRToast('success', 'Đã từ chối yêu cầu thay đổi nhân viên');
+      setSelectedCR(null);
+      await loadChangeRequests();
+    } catch (err) {
+      console.error('❌ Reject CR failed:', err);
+      showCRToast('error', err.message || 'Lỗi khi từ chối yêu cầu');
+    } finally {
+      setProcessingCRId(null);
+    }
+  };
+  // ─────────────────────────────────────────────────────────
 
   const sortJobsForModeration = (jobs) => {
     const statusPriority = {
@@ -1003,7 +1330,32 @@ const PostsManagement = () => {
               {urgentJobs.length}
             </span>
           </Tab>
+          <Tab
+            $active={activeTab === 'change_requests'}
+            onClick={() => setActiveTab('change_requests')}
+            style={{ position: 'relative' }}
+          >
+            <RefreshCw size={16} />
+            Yêu cầu đổi nhân viên
+            {changeRequests.filter(r => r.status === 'pending_change').length > 0 && (
+              <span style={{
+                marginLeft: '4px',
+                padding: '2px 8px',
+                background: activeTab === 'change_requests' ? '#F97316' : '#EF4444',
+                color: 'white',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: '700',
+                animation: 'pulse 1.5s infinite'
+              }}>
+                {changeRequests.filter(r => r.status === 'pending_change').length}
+              </span>
+            )}
+          </Tab>
         </TabContainer>
+
+        {activeTab !== 'change_requests' && (
+        <>
 
         <ChartsContainer>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1453,6 +1805,9 @@ const PostsManagement = () => {
           </PaginationContainer>
         )}
 
+        </> /* end activeTab !== 'change_requests' */
+        )}
+
         {showDetailModal && selectedJob && (<>
           <Modal
             isOpen={showDetailModal}
@@ -1661,6 +2016,186 @@ const PostsManagement = () => {
             </div>
           </div>
         </Modal>
+
+        {/* ═══ CHANGE REQUESTS PANEL ═══════════════════════════════════════ */}
+        {activeTab === 'change_requests' && (
+          <>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div>
+                  <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#1E293B', margin: '0 0 4px' }}>
+                    Yêu cầu đổi nhân viên đang chờ duyệt
+                  </h2>
+                  <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                    Ca đang diễn ra — duyệt sẽ thực hiện ngay lập tức
+                  </p>
+                </div>
+                <button
+                  onClick={loadChangeRequests}
+                  disabled={loadingCR}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '8px 16px', borderRadius: '8px',
+                    border: '1.5px solid #E2E8F0', background: '#F8FAFC',
+                    fontSize: '13px', fontWeight: '600', color: '#64748B',
+                    cursor: loadingCR ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <RefreshCw size={14} style={{ animation: loadingCR ? 'spin 1s linear infinite' : 'none' }} />
+                  Tải lại
+                </button>
+              </div>
+            </div>
+
+            {loadingCR ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748B' }}>
+                <RefreshCw size={32} style={{ margin: '0 auto 12px', display: 'block', animation: 'spin 1s linear infinite', color: '#F97316' }} />
+                <p style={{ fontSize: '14px', fontWeight: '600' }}>Đang tải yêu cầu...</p>
+              </div>
+            ) : changeRequests.length === 0 ? (
+              <EmptyChangeRequests>
+                <div className="icon">✅</div>
+                <h3>Không có yêu cầu nào đang chờ</h3>
+                <p>Tất cả yêu cầu đổi nhân viên đã được xử lý</p>
+              </EmptyChangeRequests>
+            ) : (
+              <ChangeRequestGrid>
+                {changeRequests.map(cr => {
+                  const changeReq = cr.changeRequest || {};
+                  const isProcessing = processingCRId === cr.applicationId;
+                  const startIso = cr.acceptedAt || cr.appliedAt || cr.createdAt;
+                  const workedTime = calcWorkedTime(startIso);
+                  const startDisplay = fmtTime(startIso);
+
+                  return (
+                    <ChangeRequestCard key={cr.applicationId}>
+                      <CRHeader>
+                        <CRBadge>
+                          <RefreshCw size={10} />
+                          Chờ duyệt
+                        </CRBadge>
+                        <span style={{ fontSize: '11px', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={11} />
+                          {changeReq.requestedAt || fmtTime(cr.updatedAt)}
+                        </span>
+                      </CRHeader>
+
+                      {/* Tên job + địa điểm */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontWeight: '700', fontSize: '14.5px', color: '#1E293B', marginBottom: '3px' }}>
+                          {cr._jobTitle || cr.jobTitle || 'Ca làm việc'}
+                        </div>
+                        {(cr._jobLocation || cr.jobLocation) && (
+                          <div style={{ fontSize: '12.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={11} />
+                            {cr._jobLocation || cr.jobLocation}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Worker cũ → Worker mới */}
+                      <CRWorkerRow>
+                        <div className="worker-box" style={{ borderColor: '#FECACA', background: '#FEF2F2' }}>
+                          <div className="worker-label" style={{ color: '#F87171' }}>Worker hiện tại</div>
+                          <div className="worker-name">{cr.candidateName || cr.candidateEmail?.split('@')[0] || 'Worker cũ'}</div>
+                        </div>
+                        <ArrowRight size={18} className="arrow" />
+                        <div className="worker-box" style={{ borderColor: '#A7F3D0', background: '#ECFDF5' }}>
+                          <div className="worker-label" style={{ color: '#34D399' }}>Worker mới</div>
+                          <div className="worker-name">{changeReq.newWorkerName || changeReq.newWorkerId?.slice(0, 8) || '---'}</div>
+                        </div>
+                      </CRWorkerRow>
+
+                      {/* Meta: giờ bắt đầu, đã làm bao lâu */}
+                      <CRMeta>
+                        <div className="meta-row">
+                          <Clock />
+                          <span>Ca bắt đầu: <strong>{cr._jobStartTime || startDisplay}</strong></span>
+                          {cr._jobEndTime && <span>— kết thúc: <strong>{cr._jobEndTime}</strong></span>}
+                        </div>
+                        <div className="meta-row">
+                          <AlertCircle />
+                          <span>Đã làm: <strong style={{ color: '#F97316' }}>{workedTime}</strong></span>
+                        </div>
+                        {cr.companyName && (
+                          <div className="meta-row">
+                            <Briefcase />
+                            <span>{cr.companyName}</span>
+                          </div>
+                        )}
+                      </CRMeta>
+
+                      {/* Lý do */}
+                      {changeReq.reason && (
+                        <CRReason>
+                          "{changeReq.reason}"
+                        </CRReason>
+                      )}
+
+                      {/* Cảnh báo */}
+                      <div style={{
+                        background: '#FFF7ED', border: '1px solid #FFEDD5',
+                        borderRadius: '8px', padding: '10px 12px',
+                        fontSize: '12.5px', color: '#7C2D12', lineHeight: '1.5',
+                        marginBottom: '14px', display: 'flex', gap: '8px', alignItems: 'flex-start'
+                      }}>
+                        <AlertCircle size={14} color="#F97316" style={{ flexShrink: 0, marginTop: '1px' }} />
+                        <span>
+                          Nếu duyệt, worker cũ kết thúc ca <strong>ngay lập tức</strong>.
+                          Tiền công tính đến thời điểm bấm Duyệt.
+                        </span>
+                      </div>
+
+                      <CRActions>
+                        <CRButton
+                          $variant="approve"
+                          disabled={isProcessing}
+                          onClick={() => handleApproveCR(cr)}
+                        >
+                          {isProcessing ? (
+                            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                          ) : (
+                            <CheckCircle size={14} />
+                          )}
+                          {isProcessing ? 'Đang xử lý...' : 'Duyệt'}
+                        </CRButton>
+                        <CRButton
+                          disabled={isProcessing}
+                          onClick={() => handleRejectCR(cr)}
+                        >
+                          {isProcessing ? (
+                            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                          ) : (
+                            <X size={14} />
+                          )}
+                          Từ chối
+                        </CRButton>
+                      </CRActions>
+                    </ChangeRequestCard>
+                  );
+                })}
+              </ChangeRequestGrid>
+            )}
+          </>
+        )}
+
+        {/* Toast thông báo cho change request actions */}
+        {crToast && (
+          <div style={{
+            position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+            padding: '14px 20px', borderRadius: '12px', maxWidth: '360px',
+            background: crToast.type === 'success'
+              ? 'linear-gradient(135deg, #10B981, #059669)'
+              : 'linear-gradient(135deg, #EF4444, #DC2626)',
+            color: 'white', fontWeight: '700', fontSize: '14px',
+            display: 'flex', alignItems: 'center', gap: '10px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            animation: 'slideIn 0.3s ease'
+          }}>
+            {crToast.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+            {crToast.message}
+          </div>
+        )}
 
       </PageContainer>
     </DashboardLayout>

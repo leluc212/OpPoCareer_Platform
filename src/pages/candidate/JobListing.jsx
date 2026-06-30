@@ -9,7 +9,7 @@ import {
   ChevronDown, Building2, Bookmark, Eye, ArrowUpRight, Filter,
   X, SlidersHorizontal, Grid, List, Sparkles, Zap, Navigation, Target,
   Power, XCircle, AlertCircle, CheckCircle, RotateCw,
-  Volume2, VolumeX, Mic, MicOff, ChevronRight
+  Volume2, VolumeX, Mic, MicOff, ChevronRight, Calendar
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import StatusBadge from '../../components/StatusBadge';
@@ -3263,7 +3263,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           if (!job.workDate) return true; // No work date set → always show
           const workDay = new Date(job.workDate);
           workDay.setHours(0, 0, 0, 0);
-          return workDay > todayOnly; // Hide on and after the work date
+          return workDay >= todayOnly; // Keep jobs for today and the future
         })
         .map(job => {
           try {
@@ -3278,10 +3278,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             const jobType = 'Part-time';
 
             // Use coordinates from job if available, otherwise use default HCM location
-            const lat = job.latitude || job.lat || 10.7769;
-            const lng = job.longitude || job.lng || 106.7009;
+            // Always parseFloat to handle Decimal / string types from DynamoDB
+            const rawLat = parseFloat(job.latitude ?? job.lat);
+            const rawLng = parseFloat(job.longitude ?? job.lng);
+            const lat = (rawLat && !isNaN(rawLat)) ? rawLat : 10.7769;
+            const lng = (rawLng && !isNaN(rawLng)) ? rawLng : 106.7009;
 
-            console.log(`📍 Quick Job: ${job.title} at ${job.location} - Coords: ${lat}, ${lng}`);
+            console.log(`📍 Quick Job: ${job.title} at ${job.location} - Coords: ${lat}, ${lng} (raw: ${job.latitude}, ${job.longitude})`);
 
             return {
               id: `quick-${jobId}`,
@@ -3338,6 +3341,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     loadQuickJobs();
   }, [language]);
 
+  // Set up polling for quick jobs every 15 seconds when on shift tab
+  useEffect(() => {
+    let intervalId;
+    if (jobCategory === 'shift') {
+      intervalId = setInterval(() => {
+        loadQuickJobs();
+      }, 15000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [jobCategory, language]);
+
   const handleReloadJobs = async () => {
     setIsReloading(true);
     await Promise.all([
@@ -3372,7 +3388,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   const [userLocation, setUserLocation] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showNearbyJobs, setShowNearbyJobs] = useState(false);
-  const [nearbyRadius, setNearbyRadius] = useState(3); // km - radius to find jobs near candidate
+  const [nearbyRadius, setNearbyRadius] = useState(5); // km - radius to find jobs near candidate
   const [showSavedJobsOnly, setShowSavedJobsOnly] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
@@ -3603,39 +3619,54 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     }
   }, [jobCategory]);
 
-  // Get user's current location
+  const locationWatchIdRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (locationWatchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current);
+      }
+    };
+  }, []);
+
+  // Get user's current location continuously with watchPosition
   const getUserLocation = () => {
     setIsLoadingLocation(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-          setIsLoadingLocation(false);
-          setShowNearbyJobs(true);
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          // Fallback to a default location in Ho Chi Minh City (Ben Thanh Market)
-          setUserLocation({
-            lat: 10.7723,
-            lng: 106.6981
-          });
-          setIsLoadingLocation(false);
-          setShowNearbyJobs(true);
-        }
-      );
-    } else {
-      // Browser doesn't support geolocation, use default location
-      setUserLocation({
-        lat: 10.7723,
-        lng: 106.6981
-      });
+    if (!navigator.geolocation) {
+      setUserLocation(null);
       setIsLoadingLocation(false);
       setShowNearbyJobs(true);
+      toast.error(language === 'vi' ? 'Trình duyệt không hỗ trợ định vị GPS.' : 'Browser does not support GPS.');
+      return;
     }
+
+    // Clear existing watch if any
+    if (locationWatchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(locationWatchIdRef.current);
+    }
+
+    locationWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setIsLoadingLocation(false);
+        setShowNearbyJobs(true);
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        setUserLocation(null);
+        setIsLoadingLocation(false);
+        setShowNearbyJobs(true);
+        toast.error(language === 'vi' ? 'Vui lòng cấp quyền truy cập vị trí (GPS) để tìm việc tuyển gấp gần bạn.' : 'Please allow location GPS access to find urgent jobs nearby.');
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 5000
+      }
+    );
   };
 
   const handleSaveJob = async (jobId, e) => {
@@ -4445,10 +4476,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         ...job,
         distance: calculateDistance(userLocation.lat, userLocation.lng, job.lat, job.lng)
       }))
-      .filter(job => job.distance <= nearbyRadius)
+      .filter(job => job.distance <= 5.0)
       .sort((a, b) => a.distance - b.distance);
 
-    console.log(`📍 Found ${nearby.length} jobs within ${nearbyRadius}km`);
+    console.log(`📍 Found ${nearby.length} urgent jobs within 5km`);
 
     return nearby;
   }, [userLocation, jobCategory, nearbyRadius, allJobs]);
@@ -5104,23 +5135,35 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       <p style={{ fontSize: '15px', color: '#6b7280', marginBottom: '20px' }}>
                         {language === 'vi'
                           ? !isAvailable
-                            ? 'Vui lòng bật trạng thái làm việc ở phía trên, sau đó nhấn "Tìm việc gần tôi" để tìm các công việc tuyển gấp trong bán kính 3km'
+                            ? 'Vui lòng bật trạng thái làm việc ở phía trên, '
                             : 'Vui lòng nhấn nút "Tìm việc gần tôi" ở phía trên để tìm các công việc tuyển gấp trong bán kính 3km'
                           : !isAvailable
-                            ? 'Please enable work status above, then click "Find Jobs Near Me" to see shift jobs within 3km radius'
-                            : 'Click "Find Jobs Near Me" button above to see shift jobs within 3km radius'}
+                            ? 'Please enable work status above, '
+                            : ''}
                       </p>
                     </>
-                  ) : jobCategory === 'shift' && showNearbyJobs ? (
+                  ) : jobCategory === 'shift' && showNearbyJobs && !userLocation ? (
                     <>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📍</div>
                       <p style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
-                        {language === 'vi' ? 'Không tìm thấy công việc gần bạn' : 'No jobs found near you'}
+                        {language === 'vi' ? 'Chưa xác định được vị trí' : 'Location Cannot Be Determined'}
                       </p>
                       <p style={{ fontSize: '15px', color: '#6b7280' }}>
                         {language === 'vi'
-                          ? 'Không có công việc tuyển gấp trong bán kính 3km. Thử lại sau hoặc di chuyển đến khu vực khác.'
-                          : 'No shift jobs within 3km radius. Try again later or move to another area.'}
+                          ? 'Vui lòng cấp quyền truy cập GPS trên trình duyệt để tìm việc gần bạn.'
+                          : 'Please allow GPS access on your browser to find jobs near you.'}
+                      </p>
+                    </>
+                  ) : jobCategory === 'shift' ? (
+                    <>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+                      <p style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
+                        {language === 'vi' ? 'Không có việc làm tuyển gấp' : 'No urgent jobs found'}
+                      </p>
+                      <p style={{ fontSize: '15px', color: '#6b7280' }}>
+                        {language === 'vi'
+                          ? 'Hiện tại chưa có công việc tuyển gấp nào. Vui lòng thử lại sau.'
+                          : 'No urgent jobs are available right now. Please check back later.'}
                       </p>
                     </>
                   ) : (
@@ -5232,7 +5275,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 </span>
               </div>
               <div className="info-row">
-                <span className="info-label">{language === 'vi' ? 'Ngày làm' : 'Work Date'}:</span>
+                <span className="info-label">{language === 'vi' ? 'Hạn nộp' : 'Work Date'}:</span>
                 <span className="info-value">
                   {applyModal.job.workDate
                     ? (() => {
@@ -6705,6 +6748,26 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
           <span style={{ fontWeight: '500' }}>{language === 'vi' ? 'Thu nhập:' : 'Income:'}</span>
           <span>{translateSalary(job.category === 'shift' ? calculateShiftSalary(job, language) : job.salary, language)}</span>
         </JobSalary>
+
+        {(job.workDate || job.workDays) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: 'var(--text-secondary, #6B7280)' }}>
+            <Calendar size={13} style={{ flexShrink: 0 }} />
+            <span>
+              {language === 'vi' ? 'Hạn nộp:' : 'Deadline:'}
+              {' '}
+              {job.workDate
+                ? (() => {
+                    try {
+                      const [year, month, day] = job.workDate.split('-');
+                      return `${day}/${month}/${year}`;
+                    } catch (e) {
+                      return job.workDate;
+                    }
+                  })()
+                : job.workDays}
+            </span>
+          </div>
+        )}
       </JobCardBody>
 
       <JobCardFooter>

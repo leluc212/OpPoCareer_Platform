@@ -331,7 +331,7 @@ def create_quick_job(body_str, user_id, headers):
             'description': body['description'],
             'requirements': body.get('requirements', ''),
             'customFields': body.get('customFields', []),
-            'status': body.get('status', 'pending'),
+            'status': 'pending', # Enforce pending status on creation for Admin moderation
             'category': 'quick-jobs',
             'applicants': 0,
             'views': 0,

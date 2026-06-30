@@ -1488,7 +1488,7 @@ const PostQuickJob = () => {
           .map(f => ({ label: (f.label || '').trim(), value: (f.value || '').trim() }))
           .filter(f => f.label.length > 0 || f.value.length > 0),
         companyName: companyName,  // Add company name here
-        status: 'active',  // Quick jobs go live immediately (employer already approved for quick jobs)
+        status: 'pending',  // Quick jobs require admin approval
         workDate: formData.workDate || '' // Store work date in workDate attribute
       };
 

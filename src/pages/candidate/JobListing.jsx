@@ -3388,7 +3388,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   const [userLocation, setUserLocation] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showNearbyJobs, setShowNearbyJobs] = useState(false);
-  const [nearbyRadius, setNearbyRadius] = useState(5); // km - radius to find jobs near candidate
+  const [nearbyRadius, setNearbyRadius] = useState(10); // km - radius to find jobs near candidate
   const [showSavedJobsOnly, setShowSavedJobsOnly] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
@@ -4476,10 +4476,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         ...job,
         distance: calculateDistance(userLocation.lat, userLocation.lng, job.lat, job.lng)
       }))
-      .filter(job => job.distance <= 5.0)
+      .filter(job => job.distance <= nearbyRadius)
       .sort((a, b) => a.distance - b.distance);
 
-    console.log(`📍 Found ${nearby.length} urgent jobs within 5km`);
+    console.log(`📍 Found ${nearby.length} urgent jobs within ${nearbyRadius}km`);
 
     return nearby;
   }, [userLocation, jobCategory, nearbyRadius, allJobs]);
@@ -4500,7 +4500,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       if (jobCategory === 'shift') {
         // IMPORTANT: Only show shift jobs when work status is ON and location is enabled
         if (isAvailable && showNearbyJobs) {
-          // Location enabled: only show jobs within radius (strict ≤3km)
+          // Location enabled: only show jobs within radius (strict ≤10km)
           return nearbyJobs;
         }
         // If work status is OFF or location not enabled: hide all shift jobs
@@ -5136,7 +5136,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                         {language === 'vi'
                           ? !isAvailable
                             ? 'Vui lòng bật trạng thái làm việc ở phía trên, '
-                            : 'Vui lòng nhấn nút "Tìm việc gần tôi" ở phía trên để tìm các công việc tuyển gấp trong bán kính 3km'
+                            : `Vui lòng nhấn nút "Tìm việc gần tôi" ở phía trên để tìm các công việc tuyển gấp trong bán kính ${nearbyRadius}km`
                           : !isAvailable
                             ? 'Please enable work status above, '
                             : ''}

@@ -572,7 +572,7 @@ def recommend_job_to_candidates(job_item, is_quick_job=False):
             job_lat = job_item.get('latitude')
             job_lng = job_item.get('longitude')
             
-            # Step 1: Distance filtering (<= 3.0 km) & Deduplication check
+            # Step 1: Distance filtering (<= 10.0 km) & Deduplication check
             candidates_within_radius = []
             for cand in active_candidates:
                 cand_id = cand.get('userId')
@@ -590,13 +590,13 @@ def recommend_job_to_candidates(job_item, is_quick_job=False):
                     continue
                     
                 dist = get_distance_km(cand_lat, cand_lng, job_lat, job_lng)
-                if dist is None or dist > 3.0:
-                    safe_print(f"[Recommender] Skipping candidate {cand_id} (distance {dist:.2f} km > 3.0 km).")
+                if dist is None or dist > 10.0:
+                    safe_print(f"[Recommender] Skipping candidate {cand_id} (distance {dist:.2f} km > 10.0 km).")
                     continue
                     
                 candidates_within_radius.append(cand)
                 
-            safe_print(f"[Recommender] Candidates within 3.0 km radius: {len(candidates_within_radius)}")
+            safe_print(f"[Recommender] Candidates within 10.0 km radius: {len(candidates_within_radius)}")
             
             if not candidates_within_radius:
                 return 0

@@ -3077,7 +3077,9 @@ const HRManagement = () => {
       setTimeout(() => setShowSuccessToast(false), 4000);
     } catch (err) {
       console.error('Error requesting quick jobs activation:', err);
-      alert(language === 'vi' ? 'Không thể gửi yêu cầu, vui lòng thử lại sau.' : 'Failed to send request, please try again later.');
+      setErrorNotificationMessage(language === 'vi' ? 'Không thể gửi yêu cầu, vui lòng thử lại sau.' : 'Failed to send request, please try again later.');
+      setShowErrorNotification(true);
+      setTimeout(() => setShowErrorNotification(false), 4000);
     } finally {
       setRequestSending(false);
     }
@@ -3100,7 +3102,9 @@ const HRManagement = () => {
       setTimeout(() => setShowSuccessToast(false), 4000);
     } catch (err) {
       console.error('Error cancelling quick jobs request:', err);
-      alert(language === 'vi' ? 'Không thể hủy yêu cầu, vui lòng thử lại sau.' : 'Failed to cancel request, please try again later.');
+      setErrorNotificationMessage(language === 'vi' ? 'Không thể hủy yêu cầu, vui lòng thử lại sau.' : 'Failed to cancel request, please try again later.');
+      setShowErrorNotification(true);
+      setTimeout(() => setShowErrorNotification(false), 4000);
     } finally {
       setRequestSending(false);
     }
@@ -3430,12 +3434,14 @@ const HRManagement = () => {
 
         // ─── FIX: Check server-finalized state FIRST ─────────────────────────────
         // 'change_approved' = admin approved (worker swap) → old worker is DONE
-        // 'ĐÃ_HUỶ' = admin approved shift cancellation → ca bị huỷ, remove khỏi Đang làm
+        // 'ĐÃ_BỊ_THAY_THẾ' = admin duyệt yêu cầu thay đổi → worker bị thay thế, remove khỏi Đang làm
+        // 'ĐÃ_HUỶ' = (legacy) ca bị huỷ bởi admin → remove khỏi Đang làm
         // 'rejected'/'cancelled' = old worker stays (reject means keep)
         const serverIsActive = app.status === 'active' || app.status === 'accepted';
         const serverIsChangeApproved = app.status === 'change_approved';
+        const serverIsReplaced = app.status === 'ĐÃ_BỊ_THAY_THẾ';
         const serverIsCancelled = app.status === 'ĐÃ_HUỶ' || app.status === 'CANCELLED' || app.status === 'cancelled';
-        if (serverIsChangeApproved || serverIsCancelled || isFinalizedChangeRequest || (serverIsActive && overrideStatus === 'pending_change')) {
+        if (serverIsChangeApproved || serverIsReplaced || serverIsCancelled || isFinalizedChangeRequest || (serverIsActive && overrideStatus === 'pending_change')) {
           // Lazily clean up the stale override from state
           if (overrideEntry !== undefined) {
             setChangeRequestStatusOverridesSync(prev => {
@@ -3444,7 +3450,7 @@ const HRManagement = () => {
               return next;
             });
           }
-          // change_approved → worker is replaced → keep as change_approved so tab filter hides them
+          // change_approved → worker is replaced (old flow) → keep as change_approved so tab filter hides them
           if (serverIsChangeApproved) {
             return {
               ...app,
@@ -3455,7 +3461,16 @@ const HRManagement = () => {
               change_request_status: 'approved',
             };
           }
-          // ĐÃ_HUỶ → ca đã bị huỷ bởi admin → giữ nguyên status để bị loại khỏi Đang làm
+          // ĐÃ_BỊ_THAY_THẾ → worker mới được tuyển thay thế → loại khỏi Đang làm, giữ lịch sử
+          if (serverIsReplaced) {
+            return {
+              ...app,
+              status: 'ĐÃ_BỊ_THAY_THẾ',
+              changeRequestStatus: 'approved',
+              change_request_status: 'approved',
+            };
+          }
+          // ĐÃ_HUỶ → (legacy) ca đã bị huỷ bởi admin → giữ nguyên status để bị loại khỏi Đang làm
           if (serverIsCancelled) {
             return {
               ...app,
@@ -3518,7 +3533,11 @@ const HRManagement = () => {
     }
 
     return realApplications
-      .filter(app => app.status === 'accepted' || app.status === 'completed_pending_candidate')
+      .filter(app =>
+        app.status === 'accepted' ||
+        app.status === 'completed_pending_candidate' ||
+        app.status === 'ĐÃ_BỊ_THAY_THẾ'  // Giữ trong danh sách để lock chat thay vì biến mất đột ngột
+      )
       .map(app => {
         let unread = 0;
         let lastMessageText = language === 'vi' ? 'Bắt đầu trò chuyện...' : 'Start conversation...';
@@ -3555,6 +3574,7 @@ const HRManagement = () => {
           time: lastMessageTime || new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
           unread: unread,
           isCompleted: app.status === 'completed',
+          isReplaced: app.status === 'ĐÃ_BỊ_THAY_THẾ', // worker đã bị thay thế — lock chat
           candidateId: app.candidateId,
           jobId: app.jobId
         };
@@ -3656,6 +3676,7 @@ const HRManagement = () => {
 
     return realApplications
       .filter(app => app.status === 'pending' || app.status === 'accepted' || app.status === 'pending_change' || app.status === 'change_approved')
+      // Loại trừ worker đã bị thay thế khỏi danh sách nhân sự đang làm
       .filter(app => {
         // Guard: hide applications whose job has already expired
         let workDate = app.jobWorkDate || '';
@@ -3755,13 +3776,16 @@ const HRManagement = () => {
         const hasPendingChangeRequest = Boolean(effectiveChangeRequest) && !isFinalizedChangeRequest;
 
         // Map status: pending -> pending_confirmation, pending_change only when the change request is still active.
+        // Bug 5 fix: thêm case cho ĐÃ_BỊ_THAY_THẾ — không được fallback về 'active'
         const mappedStatus = app.status === 'pending'
           ? 'pending_confirmation'
           : app.status === 'change_approved'
             ? 'completed'
-            : (app.status === 'pending_change' || hasPendingChangeRequest)
-              ? 'pending_change'
-              : 'active';
+            : app.status === 'ĐÃ_BỊ_THAY_THẾ'
+              ? 'replaced'          // Tab lịch sử — hiện thị đúng, không xuất hiện trong "Đang làm"
+              : (app.status === 'pending_change' || hasPendingChangeRequest)
+                ? 'pending_change'
+                : 'active';
 
         // Calculate unread count for this application
         let unreadCount = 0;
@@ -3828,13 +3852,15 @@ const HRManagement = () => {
     const counts = {
       working: 0,
       pending_confirm: 0,
-      pending_change: 0
+      pending_change: 0,
+      replaced: 0  // Bug 5 fix: đếm workers đã bị thay thế cho tab lịch sử
     };
 
     allStaff.forEach(staff => {
       if (staff.status === 'active') counts.working += 1;
       if (staff.status === 'pending_confirmation') counts.pending_confirm += 1;
       if (staff.status === 'pending_change') counts.pending_change += 1;
+      if (staff.status === 'replaced') counts.replaced += 1;
     });
 
     return counts;
@@ -3994,7 +4020,7 @@ const HRManagement = () => {
   };
 
   const handleSendMessage = () => {
-    if (!messageInput.trim() || !activeChatId || activeChat?.isCompleted) return;
+    if (!messageInput.trim() || !activeChatId || activeChat?.isCompleted || activeChat?.isReplaced) return;
 
     const newMessage = {
       id: Date.now(), // Use timestamp for unique ID
@@ -4725,9 +4751,9 @@ const HRManagement = () => {
   return (
     <DashboardLayout role="employer" key={language}>
       <PageContainer
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
       >
         {/* Header */}
         <PageHeader>
@@ -4805,6 +4831,8 @@ const HRManagement = () => {
                 { key: 'pending_confirm', label: language === 'vi' ? 'Chờ xác nhận' : 'Pending Confirmation', color: '#EF4444', status: 'pending_confirmation' },
                 { key: 'pending_change', label: language === 'vi' ? 'Chờ thay đổi' : 'Pending Changes', color: '#F97316', status: 'pending_change' },
                 { key: 'completed', label: language === 'vi' ? 'Đã hoàn thành' : 'Completed', color: '#6366F1', status: 'completed' },
+                // Bug 5 fix: tab lịch sử nhân sự đã bị thay thế — không bị xóa khỏi hệ thống
+                { key: 'replaced', label: language === 'vi' ? `Đã thay thế${staffTabCounts.replaced > 0 ? ` (${staffTabCounts.replaced})` : ''}` : `Replaced${staffTabCounts.replaced > 0 ? ` (${staffTabCounts.replaced})` : ''}`, color: '#8B5CF6', status: 'replaced' },
               ].map(tab => (
                 <StaffTabButton
                   key={tab.key}
@@ -4824,6 +4852,8 @@ const HRManagement = () => {
               if (staffTabFilter === 'pending_confirm') return staff.status === 'pending_confirmation';
               if (staffTabFilter === 'pending_change') return staff.status === 'pending_change';
               if (staffTabFilter === 'completed') return staff.status === 'completed' || staff.isEarlyEnd;
+              // Bug 5 fix: tab lịch sử nhân sự đã bị thay thế
+              if (staffTabFilter === 'replaced') return staff.status === 'replaced';
               return false;
             }).length === 0 ? (
               <div style={{
@@ -4850,6 +4880,8 @@ const HRManagement = () => {
                       if (staffTabFilter === 'pending_confirm') return staff.status === 'pending_confirmation';
                       if (staffTabFilter === 'pending_change') return staff.status === 'pending_change';
                       if (staffTabFilter === 'completed') return staff.status === 'completed' || staff.isEarlyEnd;
+                      // Bug 5 fix: tab lịch sử nhân sự đã bị thay thế
+                      if (staffTabFilter === 'replaced') return staff.status === 'replaced';
                       return false;
                     })
                     .map((staff, index) => (
@@ -4857,7 +4889,7 @@ const HRManagement = () => {
                         key={staff.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.1 }}
+                        transition={{ duration: 0.15 }}
                       >
                         <StaffHeader>
                           <div>
@@ -5061,7 +5093,7 @@ const HRManagement = () => {
                                 Worker mới đề xuất: <strong>{staff.changeRequest.newWorkerName}</strong>
                               </div>
                             )}
-                            <div className="cr-reason">"{staff.changeRequest.reason}"</div>
+                            <div className="cr-reason">"{staff.changeRequest.reasonDetail || staff.changeRequest.reason}"</div>
                             <div className="cr-time">
                               <Clock />{language === 'vi' ? 'Gửi lúc:' : 'Sent at:'} {staff.changeRequest.requestedAt}
                             </div>
@@ -5546,7 +5578,7 @@ const HRManagement = () => {
                   <div ref={chatMessagesEndRef} />
                 </ChatModalMessages>
 
-                {activeChat.isCompleted ? (
+                {activeChat.isCompleted || activeChat.isReplaced ? (
                   <div style={{
                     padding: '18px 24px',
                     textAlign: 'center',
@@ -5561,7 +5593,10 @@ const HRManagement = () => {
                     gap: '6px',
                     width: '100%'
                   }}>
-                    🔒 {language === 'vi' ? 'Cuộc trò chuyện đã khóa do công việc đã hoàn thành' : 'Chat locked because the job is completed'}
+                    🔒 {activeChat.isReplaced
+                      ? (language === 'vi' ? 'Cuộc trò chuyện đã kết thúc do ca làm đã thay đổi.' : 'Conversation ended because the shift has been changed.')
+                      : (language === 'vi' ? 'Cuộc trò chuyện đã khóa do công việc đã hoàn thành' : 'Chat locked because the job is completed')
+                    }
                   </div>
                 ) : (
                   <ChatModalInput>
@@ -5727,7 +5762,8 @@ const HRManagement = () => {
                       {language === 'vi' ? 'Lý do gửi Admin:' : 'Reason sent to Admin:'}
                     </div>
                     <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B' }}>
-                      {viewedChangeRequest.changeRequest?.reason}
+                      {/* Bug 1 fix: field thực tế là reasonDetail, fallback về reason để tương thích bản cũ */}
+                      {viewedChangeRequest.changeRequest?.reasonDetail || viewedChangeRequest.changeRequest?.reason}
                     </div>
                   </div>
 
@@ -5884,7 +5920,7 @@ const HRManagement = () => {
                     return (
                       <div style={{ marginBottom: '20px' }}>
                         <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#334155', marginBottom: '10px' }}>
-                          Lý do thay đổi nhân viên <span style={{ color: '#EF4444' }}>*</span>
+                          Lý do thay đổi nhân viên <span style={{ fontSize: '12px', fontWeight: '500', color: '#94A3B8' }}>(tùy chọn)</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {cancelReasons.map(({ label, icon }) => {
@@ -5925,7 +5961,7 @@ const HRManagement = () => {
 
                   {/* Mô tả chi tiết — luôn hiển thị, bắt buộc */}
                   {(() => {
-                    const detailError = changeRequestDetailTouched && changeRequestReason.trim().length < 10;
+                    const detailError = changeRequestDetailTouched && changeRequestReason.trim().length < 1;
                     return (
                       <div style={{ marginBottom: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13.5px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
@@ -5940,7 +5976,7 @@ const HRManagement = () => {
                           onBlur={() => setChangeRequestDetailTouched(true)}
                           style={{
                             width: '100%', padding: '12px 14px', borderRadius: '10px', boxSizing: 'border-box',
-                            border: `1.5px solid ${detailError ? '#EF4444' : (changeRequestReason.trim().length >= 10 ? '#3B82F6' : '#E2E8F0')}`,
+                            border: `1.5px solid ${detailError ? '#EF4444' : (changeRequestReason.trim().length >= 1 ? '#3B82F6' : '#E2E8F0')}`,
                             fontSize: '13.5px', fontWeight: '500', color: '#1E293B', resize: 'none',
                             background: '#FAFAFA', fontFamily: 'inherit', outline: 'none',
                             transition: 'border-color 0.15s ease',
@@ -5968,7 +6004,8 @@ const HRManagement = () => {
 
                 <div style={{ padding: '20px 24px 28px', background: 'white', borderTop: '1.5px solid #F1F5F9' }}>
                   {(() => {
-                    const canSubmit = changeRequestType && changeRequestReason.trim().length >= 10 && !isSubmittingChangeRequest;
+                    // Chỉ cần mô tả chi tiết ≥1 ký tự là có thể gửi — radio không bắt buộc
+                    const canSubmit = changeRequestReason.trim().length >= 1 && !isSubmittingChangeRequest;
                     return (
                       <motion.button
                         whileHover={canSubmit ? { scale: 1.02 } : {}}
@@ -5983,7 +6020,8 @@ const HRManagement = () => {
                             const dateStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
                             const changeReq = {
                               type: 'cancel_shift',
-                              reasonType: changeRequestType,
+                              // Nếu không chọn radio, dùng 'Lý do khác' làm fallback
+                              reasonType: changeRequestType || 'Lý do khác',
                               reasonDetail: changeRequestReason.trim(),
                               requestedAt: `${dateStr} - ${timeStr}`,
                               sentToAdmin: true,
@@ -6238,7 +6276,9 @@ const HRManagement = () => {
                                 }
                               } catch (err) {
                                 console.error('Failed to submit employer rating:', err);
-                                alert(language === 'vi' ? 'Đánh giá thất bại, vui lòng thử lại!' : 'Failed to submit rating, please try again!');
+                                setErrorNotificationMessage(language === 'vi' ? 'Đánh giá thất bại, vui lòng thử lại!' : 'Failed to submit rating, please try again!');
+                                setShowErrorNotification(true);
+                                setTimeout(() => setShowErrorNotification(false), 4000);
                               } finally {
                                 setRequestSending(false);
                               }

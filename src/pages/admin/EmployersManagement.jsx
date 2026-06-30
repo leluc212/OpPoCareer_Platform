@@ -765,7 +765,7 @@ const EmployersManagement = () => {
   const handleGrantPackage = async (e) => {
     e.preventDefault();
     if (!selectedEmployerId || !selectedPackageId || !selectedDuration) {
-      alert(language === 'vi' ? 'Vui lòng điền đầy đủ thông tin' : 'Please fill out all fields');
+      showEmpToast('warning', language === 'vi' ? 'Vui lòng điền đầy đủ thông tin' : 'Please fill out all fields');
       return;
     }
 
@@ -834,14 +834,14 @@ const EmployersManagement = () => {
         console.error('❌ Error sending notification:', notifyErr);
       }
 
-      alert(language === 'vi' ? 'Cấp gói dịch vụ thành công!' : 'Package granted successfully!');
+      showEmpToast('success', language === 'vi' ? 'Cấp gói dịch vụ thành công!' : 'Package granted successfully!');
       setSelectedEmployerId('');
       setSelectedPackageId('');
       setSelectedDuration('');
       await loadPurchases();
     } catch (err) {
       console.error('Error granting package:', err);
-      alert(language === 'vi' ? `Lỗi khi cấp gói: ${err.message}` : `Error granting package: ${err.message}`);
+      showEmpToast('error', language === 'vi' ? `Lỗi khi cấp gói: ${err.message}` : `Error granting package: ${err.message}`);
     } finally {
       setGranting(false);
     }
@@ -1040,7 +1040,7 @@ const EmployersManagement = () => {
       
     } catch (error) {
       console.error('❌ Error approving subscription:', error);
-      alert('Có lỗi xảy ra: ' + error.message);
+      showEmpToast('error', 'Có lỗi xảy ra: ' + error.message);
     }
   };
 
@@ -1071,7 +1071,7 @@ const EmployersManagement = () => {
       ));
     } catch (error) {
       console.error('❌ Error locking subscription:', error);
-      alert('Có lỗi xảy ra: ' + error.message);
+      showEmpToast('error', 'Có lỗi xảy ra: ' + error.message);
     }
   };
 
@@ -1102,7 +1102,7 @@ const EmployersManagement = () => {
       ));
     } catch (error) {
       console.error('❌ Error unlocking subscription:', error);
-      alert('Có lỗi xảy ra: ' + error.message);
+      showEmpToast('error', 'Có lỗi xảy ra: ' + error.message);
     }
   };
 
@@ -1130,6 +1130,14 @@ const EmployersManagement = () => {
   const [changeRequests, setChangeRequests] = useState([]);
   const [selectedChangeRequest, setSelectedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
+
+  // Toast state — thay thế toàn bộ alert() / confirm() trong trang này
+  const [empToast, setEmpToast] = useState(null); // { type: 'success'|'error'|'warning', message }
+  const [empConfirm, setEmpConfirm] = useState(null); // { message, onConfirm }
+  const showEmpToast = (type, message) => {
+    setEmpToast({ type, message });
+    setTimeout(() => setEmpToast(null), 3500);
+  };
   const [selectedVerification, setSelectedVerification] = useState(null); // { employer, verificationData, submittedAt, status }
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [isProcessingVerification, setIsProcessingVerification] = useState(false);
@@ -1320,14 +1328,14 @@ const EmployersManagement = () => {
         console.warn('Could not reload change requests after approve:', e.message);
       }
 
-      alert(language === 'vi' ? 'Đã duyệt — ca làm việc đã được huỷ thành công' : 'Approved — shift has been successfully cancelled');
+      showEmpToast('success', language === 'vi' ? 'Đã duyệt — ca làm việc đã được huỷ thành công' : 'Approved — shift has been successfully cancelled');
     } catch (err) {
       console.error('Error approving change request:', err);
       const msg = err.message || '';
       if (msg.includes('không có quyền') || msg.includes('403')) {
-        alert('Bạn không có quyền thực hiện hành động này. Vui lòng đăng xuất và đăng nhập lại.');
+        showEmpToast('error', 'Bạn không có quyền thực hiện hành động này. Vui lòng đăng xuất và đăng nhập lại.');
       } else {
-        alert(language === 'vi' ? `Lỗi khi duyệt yêu cầu: ${msg}` : `Error approving request: ${msg}`);
+        showEmpToast('error', language === 'vi' ? `Lỗi khi duyệt yêu cầu: ${msg}` : `Error approving request: ${msg}`);
       }
     } finally {
       setIsProcessingChange(false);
@@ -1335,77 +1343,73 @@ const EmployersManagement = () => {
   };
 
   const handleRejectChange = async (appId) => {
-    const confirmed = window.confirm(
-      language === 'vi'
+    // Dùng empConfirm state thay vì window.confirm()
+    setEmpConfirm({
+      message: language === 'vi'
         ? 'Từ chối yêu cầu thay đổi? Worker hiện tại sẽ tiếp tục làm việc.'
-        : 'Reject change request? The current worker will continue the shift.'
-    );
-    if (!confirmed) return;
-
-    try {
-      setIsProcessingChange(true);
-      await applicationService.rejectChangeRequest(appId);
-
-      // Optimistically update status locally
-      setChangeRequests(prev => prev.map(r => r.applicationId === appId ? { ...r, changeRequestStatus: 'rejected' } : r));
-      setSelectedChangeRequest(null);
-
-      // Thông báo employer
-      const reqItem = changeRequests.find(r => r.applicationId === appId);
-      if (reqItem) {
+        : 'Reject change request? The current worker will continue the shift.',
+      onConfirm: async () => {
+        setEmpConfirm(null);
         try {
-          await createChangeRequestRejectedNotification({
-            employerId: reqItem.employerId,
-            companyName: reqItem.companyName,
-            candidateName: reqItem.candidateName,
-            changeRequestType: 'Thay thế nhân viên',
-            applicationId: appId
-          });
-        } catch (notifErr) {
-          console.warn('Failed to send rejection notification:', notifErr.message);
+          setIsProcessingChange(true);
+          await applicationService.rejectChangeRequest(appId);
+
+          setChangeRequests(prev => prev.map(r => r.applicationId === appId ? { ...r, changeRequestStatus: 'rejected' } : r));
+          setSelectedChangeRequest(null);
+
+          const reqItem = changeRequests.find(r => r.applicationId === appId);
+          if (reqItem) {
+            try {
+              await createChangeRequestRejectedNotification({
+                employerId: reqItem.employerId,
+                companyName: reqItem.companyName,
+                candidateName: reqItem.candidateName,
+                changeRequestType: 'Thay thế nhân viên',
+                applicationId: appId
+              });
+            } catch (notifErr) {
+              console.warn('Failed to send rejection notification:', notifErr.message);
+            }
+          }
+
+          try { await loadChangeRequests(); } catch (e) { /* ignore */ }
+
+          showEmpToast('success', language === 'vi' ? 'Đã từ chối — worker hiện tại tiếp tục ca làm việc' : 'Rejected — current worker continues the shift');
+        } catch (err) {
+          console.error('Error rejecting change request:', err);
+          showEmpToast('error', language === 'vi' ? 'Lỗi khi từ chối yêu cầu' : 'Error rejecting request');
+        } finally {
+          setIsProcessingChange(false);
         }
       }
-
-      try {
-        await loadChangeRequests();
-      } catch (e) {
-        console.warn('Could not reload change requests after reject:', e.message);
-      }
-
-      alert(language === 'vi' ? 'Đã từ chối — worker hiện tại tiếp tục ca làm việc' : 'Rejected — current worker continues the shift');
-    } catch (err) {
-      console.error('Error rejecting change request:', err);
-      alert(language === 'vi' ? 'Lỗi khi từ chối yêu cầu' : 'Error rejecting request');
-    } finally {
-      setIsProcessingChange(false);
-    }
+    });
   };
 
   const handleDeleteChangeRequest = async (appId) => {
-    const confirmDelete = window.confirm(
-      language === 'vi'
+    setEmpConfirm({
+      message: language === 'vi'
         ? 'Bạn có chắc chắn muốn xóa yêu cầu thay đổi này?'
-        : 'Are you sure you want to delete this change request?'
-    );
-    if (!confirmDelete) return;
+        : 'Are you sure you want to delete this change request?',
+      onConfirm: async () => {
+        setEmpConfirm(null);
+        try {
+          setIsProcessingChange(true);
+          await applicationService.updateApplicationStatus(appId, 'accepted', {
+            changeRequestStatus: 'deleted'
+          });
 
-    try {
-      setIsProcessingChange(true);
-      await applicationService.updateApplicationStatus(appId, 'accepted', {
-        changeRequestStatus: 'deleted'
-      });
+          setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
+          setSelectedChangeRequest(null);
 
-      // Remove from local list
-      setChangeRequests(prev => prev.filter(r => r.applicationId !== appId));
-      setSelectedChangeRequest(null);
-
-      alert(language === 'vi' ? 'Đã xóa yêu cầu thay đổi thành công' : 'Change request deleted successfully');
-    } catch (err) {
-      console.error('Error deleting change request:', err);
-      alert(language === 'vi' ? 'Lỗi khi xóa yêu cầu' : 'Error deleting request');
-    } finally {
-      setIsProcessingChange(false);
-    }
+          showEmpToast('success', language === 'vi' ? 'Đã xóa yêu cầu thay đổi thành công' : 'Change request deleted successfully');
+        } catch (err) {
+          console.error('Error deleting change request:', err);
+          showEmpToast('error', language === 'vi' ? 'Lỗi khi xóa yêu cầu' : 'Error deleting request');
+        } finally {
+          setIsProcessingChange(false);
+        }
+      }
+    });
   };
 
   // Load employers from DynamoDB via API
@@ -1510,7 +1514,7 @@ const EmployersManagement = () => {
       setShowSuccessModal(true);
     } catch (error) {
       console.error('❌ Error approving employer:', error);
-      alert(language === 'vi'
+      showEmpToast('error', language === 'vi'
         ? `Lỗi khi duyệt nhà tuyển dụng: ${error.message}`
         : `Error approving employer: ${error.message}`
       );
@@ -1550,7 +1554,7 @@ const EmployersManagement = () => {
 
     } catch (error) {
       console.error('❌ Error updating quick job status:', error);
-      alert(language === 'vi' ? 'Không thể cập nhật trạng thái tuyển gấp' : 'Failed to update Urgent Job status');
+      showEmpToast('error', language === 'vi' ? 'Không thể cập nhật trạng thái tuyển gấp' : 'Failed to update Urgent Job status');
     }
   };
 
@@ -1580,7 +1584,7 @@ const EmployersManagement = () => {
         setSelectedVerification(prev => ({ ...prev, employer: { ...prev.employer, isVerified }, status: isVerified ? 'approved' : 'rejected' }));
       }
     } catch (err) {
-      alert(language === 'vi' ? `Lỗi: ${err.message}` : `Error: ${err.message}`);
+      showEmpToast('error', language === 'vi' ? `Lỗi: ${err.message}` : `Error: ${err.message}`);
     } finally {
       setIsProcessingVerification(false);
     }
@@ -2737,7 +2741,8 @@ const EmployersManagement = () => {
               {language === 'vi' ? 'Lý do:' : 'Reason:'}
             </div>
             <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B', whiteSpace: 'pre-wrap' }}>
-              {selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
+              {/* Bug 1 fix: field thực tế là reasonDetail, fallback về reason để tương thích bản cũ */}
+              {selectedChangeRequest.changeRequest?.reasonDetail || selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
             </div>
           </div>
 
@@ -3124,6 +3129,72 @@ const EmployersManagement = () => {
             </div>
           </ModalContent>
         </ModalOverlay>
+      )}
+
+      {/* ── Toast thông báo thay thế alert() ─────────────────────────────── */}
+      {empToast && (
+        <div style={{
+          position: 'fixed', top: '24px', right: '24px', zIndex: 9999,
+          padding: '14px 20px', borderRadius: '12px', maxWidth: '420px',
+          background: empToast.type === 'success'
+            ? 'linear-gradient(135deg, #10B981, #059669)'
+            : empToast.type === 'warning'
+              ? 'linear-gradient(135deg, #F59E0B, #D97706)'
+              : 'linear-gradient(135deg, #EF4444, #DC2626)',
+          color: 'white', fontWeight: '600', fontSize: '14px',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          animation: 'slideInRight 0.25s ease',
+        }}>
+          <style>{`@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}`}</style>
+          {empToast.type === 'success'
+            ? <CheckCircle size={18} style={{ flexShrink: 0 }} />
+            : empToast.type === 'warning'
+              ? <AlertCircle size={18} style={{ flexShrink: 0 }} />
+              : <XCircle size={18} style={{ flexShrink: 0 }} />
+          }
+          <span style={{ flex: 1 }}>{empToast.message}</span>
+          <button
+            onClick={() => setEmpToast(null)}
+            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.8, fontSize: '18px', lineHeight: 1, padding: '0 2px' }}
+          >×</button>
+        </div>
+      )}
+
+      {/* ── Confirm modal thay thế window.confirm() ───────────────────────── */}
+      {empConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setEmpConfirm(null)}>
+          <div style={{
+            background: 'white', borderRadius: '16px', padding: '28px 32px',
+            maxWidth: '420px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '24px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertCircle size={20} color="#D97706" />
+              </div>
+              <p style={{ fontSize: '15px', color: '#1E293B', fontWeight: '500', lineHeight: '1.6', margin: 0 }}>
+                {empConfirm.message}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEmpConfirm(null)}
+                style={{ padding: '10px 20px', borderRadius: '10px', border: '1.5px solid #E2E8F0', background: 'white', color: '#64748B', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}
+              >
+                {language === 'vi' ? 'Hủy' : 'Cancel'}
+              </button>
+              <button
+                onClick={empConfirm.onConfirm}
+                style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: '#EF4444', color: 'white', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}
+              >
+                {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );

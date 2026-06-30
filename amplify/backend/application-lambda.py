@@ -720,25 +720,49 @@ def get_all_applications(create_response):
 
 
 def list_change_requests(create_response):
-    """Admin: get all applications with status pending_change"""
+    """Admin: get ALL applications that have ever had a changeRequest.
+    Bug-4 fix: trả về tất cả trạng thái (pending_change, ĐÃ_BỊ_THAY_THẾ, accepted với changeRequestStatus)
+    thay vì chỉ lọc status='pending_change' — tránh mất audit trail sau khi xử lý.
+    """
     try:
-        print("🔍 Scanning for pending_change applications...")
-        response = applications_table.scan(
-            FilterExpression='#st = :status',
-            ExpressionAttributeNames={'#st': 'status'},
-            ExpressionAttributeValues={':status': 'pending_change'}
-        )
-        applications = response.get('Items', [])
+        print("🔍 Scanning for all change-request applications...")
 
-        # Handle DynamoDB pagination
-        while 'LastEvaluatedKey' in response:
-            response = applications_table.scan(
-                FilterExpression='#st = :status',
-                ExpressionAttributeNames={'#st': 'status'},
-                ExpressionAttributeValues={':status': 'pending_change'},
-                ExclusiveStartKey=response['LastEvaluatedKey']
+        # FIX Bug 4: Scan tất cả records có thuộc tính changeRequest HOẶC status pending_change
+        # HOẶC đã có changeRequestStatus (đã được xử lý) — giữ toàn bộ lịch sử
+        from boto3.dynamodb.conditions import Attr
+
+        # Pass 1: records đang chờ duyệt
+        r1 = applications_table.scan(
+            FilterExpression=Attr('status').eq('pending_change')
+        )
+        pending = r1.get('Items', [])
+        while 'LastEvaluatedKey' in r1:
+            r1 = applications_table.scan(
+                FilterExpression=Attr('status').eq('pending_change'),
+                ExclusiveStartKey=r1['LastEvaluatedKey']
             )
-            applications.extend(response.get('Items', []))
+            pending.extend(r1.get('Items', []))
+
+        # Pass 2: records đã xử lý — có changeRequestStatus (APPROVED / rejected / cancelled)
+        r2 = applications_table.scan(
+            FilterExpression=Attr('changeRequestStatus').exists()
+        )
+        processed = r2.get('Items', [])
+        while 'LastEvaluatedKey' in r2:
+            r2 = applications_table.scan(
+                FilterExpression=Attr('changeRequestStatus').exists(),
+                ExclusiveStartKey=r2['LastEvaluatedKey']
+            )
+            processed.extend(r2.get('Items', []))
+
+        # Merge, dedup by applicationId
+        seen = set()
+        applications = []
+        for app in pending + processed:
+            aid = app.get('applicationId')
+            if aid and aid not in seen:
+                seen.add(aid)
+                applications.append(app)
 
         # Enrich each request with job info (startTime, endTime, hourlyRate)
         for app in applications:
@@ -755,10 +779,10 @@ def list_change_requests(create_response):
                 except Exception as je:
                     print(f"⚠️ Could not enrich job info for app {app.get('applicationId')}: {je}")
 
-        # Sort by createdAt descending (newest first)
-        applications.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
+        # FIX Bug 2 (backend): Sort by updatedAt DESC (mới nhất lên đầu), áp dụng cho mọi trạng thái
+        applications.sort(key=lambda x: x.get('updatedAt', x.get('createdAt', '')), reverse=True)
 
-        print(f"✅ Found {len(applications)} pending change requests")
+        print(f"✅ Found {len(applications)} change-request applications (all statuses)")
         return create_response(200, {
             'success': True,
             'applications': applications,
@@ -906,12 +930,12 @@ def get_available_workers(job_id, create_response):
 
 
 def approve_change_request(event, application_id, create_response):
-    """Admin: approve a shift cancellation request (Yêu Cầu Huỷ Ca).
-    Flow:
-    1. Set application status = 'ĐÃ_HUỶ', changeRequestStatus = 'APPROVED'
-    2. Nếu jobId tồn tại trong quick_jobs_table, set job status = 'ĐÃ_HUỶ'
-    3. Thông báo worker: ca làm bị huỷ
-    4. Thông báo employer: yêu cầu huỷ ca đã được chấp nhận
+    """Admin: approve a shift cancellation / worker-change request.
+    Flow (KHÔNG xoá dữ liệu — chỉ đổi status để giữ lịch sử):
+    1. Application của worker cũ: status → 'ĐÃ_BỊ_THAY_THẾ', changeRequestStatus → 'APPROVED'
+       Giữ nguyên changeRequest data như là log đối chiếu.
+    2. Job gốc: status → 'ĐANG_TUYỂN' (mở lại để nhận ứng viên mới thay thế)
+    3. Request item (application này) KHÔNG bị xoá — đây là lịch sử audit.
     """
     try:
         # Lấy application hiện tại
@@ -927,7 +951,7 @@ def approve_change_request(event, application_id, create_response):
 
         now_iso = datetime.utcnow().isoformat() + 'Z'
 
-        # Lấy changeRequest data
+        # Lấy changeRequest data (giữ nguyên để làm audit log)
         change_req = current_item.get('changeRequest') or {}
         if isinstance(change_req, str):
             try:
@@ -942,10 +966,10 @@ def approve_change_request(event, application_id, create_response):
         job_title    = current_item.get('jobTitle', '')
         job_shift    = current_item.get('jobShift', '')
         job_workdate = current_item.get('jobWorkDate', '')
-        reason_type  = change_req.get('reasonType', '')
+        reason_type   = change_req.get('reasonType', '')
         reason_detail = change_req.get('reasonDetail') or change_req.get('reason', '')
 
-        # Lấy thêm thông tin job từ quick_jobs_table nếu cần
+        # Lấy thêm thông tin job từ quick_jobs_table và MỞ LẠI job để tuyển người mới
         if job_id:
             try:
                 qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
@@ -957,14 +981,14 @@ def approve_change_request(event, application_id, create_response):
                     if start_t and end_t:
                         job_shift = f"{start_t} - {end_t}"
                     job_workdate = job_workdate or qj.get('workDate', '')
-                    # Huỷ job
+                    # Mở lại job — KHÔNG huỷ, chỉ đổi về ĐANG_TUYỂN để nhận ứng viên mới
                     quick_jobs_table.update_item(
                         Key={'idJob': str(job_id)},
-                        UpdateExpression='SET #status = :cancelled, updatedAt = :now',
+                        UpdateExpression='SET #status = :open, updatedAt = :now REMOVE currentWorkerId',
                         ExpressionAttributeNames={'#status': 'status'},
-                        ExpressionAttributeValues={':cancelled': 'ĐÃ_HUỶ', ':now': now_iso}
+                        ExpressionAttributeValues={':open': 'ĐANG_TUYỂN', ':now': now_iso}
                     )
-                    print(f"✅ Job {job_id} status set to ĐÃ_HUỶ")
+                    print(f"✅ Job {job_id} status reopened to ĐANG_TUYỂN (ready for new applicant)")
             except Exception as je:
                 print(f"⚠️ Could not update job status: {je}")
 
@@ -977,28 +1001,28 @@ def approve_change_request(event, application_id, create_response):
             except Exception:
                 pass
 
-        # === Cập nhật application: đánh dấu đã huỷ ===
+        # === Cập nhật application: đánh dấu worker đã bị thay thế ===
+        # KHÔNG xoá item và KHÔNG xoá changeRequest — đây là lịch sử audit
         applications_table.update_item(
             Key={'applicationId': application_id},
             UpdateExpression=(
-                'SET #status = :cancelled, changeRequestStatus = :crs, '
-                'approvedAt = :now, updatedAt = :now '
-                'REMOVE changeRequest'
+                'SET #status = :replaced, changeRequestStatus = :crs, '
+                'replacedAt = :now, updatedAt = :now'
             ),
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
-                ':cancelled': 'ĐÃ_HUỶ',
-                ':crs':       'APPROVED',
-                ':now':       now_iso
+                ':replaced': 'ĐÃ_BỊ_THAY_THẾ',
+                ':crs':      'APPROVED',
+                ':now':      now_iso
             }
         )
-        print(f"✅ Shift cancelled for applicationId={application_id}, workerId={worker_id}")
+        print(f"✅ Worker replaced for applicationId={application_id}, workerId={worker_id}, job {job_id} reopened")
 
         return create_response(200, {
             'success':        True,
-            'message':        'Yêu cầu huỷ ca đã được chấp nhận',
+            'message':        'Yêu cầu thay đổi nhân viên đã được duyệt — job đã được mở lại để tuyển người mới',
             'applicationId':  application_id,
-            'approvedAt':     now_iso,
+            'replacedAt':     now_iso,
             'workerId':       worker_id,
             'employerId':     employer_id,
             'jobId':          job_id,
@@ -1030,10 +1054,11 @@ def reject_change_request(event, application_id, create_response):
 
         now_iso = datetime.utcnow().isoformat() + 'Z'
 
-        # Khôi phục worker cũ về accepted, xóa changeRequest
+        # Khôi phục worker cũ về accepted, GIỮ NGUYÊN changeRequest để làm audit log
+        # Bug 1 fix: KHÔNG xóa changeRequest field — lý do phải được giữ lại
         applications_table.update_item(
             Key={'applicationId': application_id},
-            UpdateExpression='SET #status = :status, changeRequestStatus = :crs, updatedAt = :now REMOVE changeRequest',
+            UpdateExpression='SET #status = :status, changeRequestStatus = :crs, updatedAt = :now',
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':status': 'accepted',

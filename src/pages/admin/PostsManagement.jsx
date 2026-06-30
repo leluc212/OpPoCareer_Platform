@@ -694,6 +694,8 @@ const PostsManagement = () => {
   const [processingCRId, setProcessingCRId] = useState(null);
   const [crToast, setCrToast] = useState(null); // { type: 'success'|'error', message }
   const [selectedCR, setSelectedCR] = useState(null); // modal chi tiết
+  // Bug 2 fix: filter theo trạng thái, mặc định chỉ hiện "Chờ duyệt"
+  const [crStatusFilter, setCrStatusFilter] = useState('pending');
 
   const showCRToast = (type, message) => {
     setCrToast({ type, message });
@@ -704,7 +706,12 @@ const PostsManagement = () => {
     try {
       setLoadingCR(true);
       const list = await applicationService.listChangeRequests();
-      setChangeRequests(Array.isArray(list) ? list : []);
+      // Bug 2 fix: sort theo updatedAt DESC (mới nhất lên đầu), áp dụng cho mọi trạng thái
+      setChangeRequests(Array.isArray(list) ? list.slice().sort((a, b) => {
+        const tA = a.updatedAt || a.createdAt || '';
+        const tB = b.updatedAt || b.createdAt || '';
+        return tB.localeCompare(tA); // mới nhất lên đầu
+      }) : []);
     } catch (err) {
       console.error('❌ Failed to load change requests:', err);
       setChangeRequests([]);
@@ -712,6 +719,39 @@ const PostsManagement = () => {
       setLoadingCR(false);
     }
   };
+
+  // Bug 2 fix: lọc changeRequests theo crStatusFilter
+  const filteredChangeRequests = useMemo(() => {
+    if (crStatusFilter === 'pending') {
+      return changeRequests.filter(cr => cr.status === 'pending_change');
+    }
+    if (crStatusFilter === 'approved') {
+      return changeRequests.filter(cr => {
+        const crs = String(cr.changeRequestStatus || '').toLowerCase();
+        return crs === 'approved' || cr.status === 'ĐÃ_BỊ_THAY_THẾ';
+      });
+    }
+    if (crStatusFilter === 'rejected') {
+      return changeRequests.filter(cr => {
+        const crs = String(cr.changeRequestStatus || '').toLowerCase();
+        return crs === 'rejected';
+      });
+    }
+    // 'all' — trả tất cả
+    return changeRequests;
+  }, [changeRequests, crStatusFilter]);
+
+  const crCounts = useMemo(() => ({
+    pending: changeRequests.filter(cr => cr.status === 'pending_change').length,
+    approved: changeRequests.filter(cr => {
+      const crs = String(cr.changeRequestStatus || '').toLowerCase();
+      return crs === 'approved' || cr.status === 'ĐÃ_BỊ_THAY_THẾ';
+    }).length,
+    rejected: changeRequests.filter(cr => {
+      const crs = String(cr.changeRequestStatus || '').toLowerCase();
+      return crs === 'rejected';
+    }).length,
+  }), [changeRequests]);
 
   useEffect(() => {
     if (activeTab === 'change_requests') {
@@ -785,7 +825,7 @@ const PostsManagement = () => {
         console.warn('⚠️ Notification error (non-critical):', notifErr);
       }
 
-      showCRToast('success', 'Đã duyệt yêu cầu thay đổi nhân viên');
+      showCRToast('success', 'Đã duyệt — ca làm việc đã được xử lý thành công, job mở lại để tuyển người mới');
       setSelectedCR(null);
       await loadChangeRequests();
     } catch (err) {
@@ -2013,11 +2053,12 @@ const PostsManagement = () => {
             <div style={{ marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                 <div>
+                  {/* Bug 4 fix: tiêu đề phản ánh đúng toàn bộ lịch sử */}
                   <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#1E293B', margin: '0 0 4px' }}>
-                    Yêu cầu đổi nhân viên đang chờ duyệt
+                    Yêu cầu thay đổi nhân viên ({changeRequests.length} tổng)
                   </h2>
                   <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
-                    Ca đang diễn ra — duyệt sẽ thực hiện ngay lập tức
+                    Toàn bộ lịch sử — kể cả đã duyệt và từ chối
                   </p>
                 </div>
                 <button
@@ -2037,33 +2078,81 @@ const PostsManagement = () => {
               </div>
             </div>
 
+            {/* Bug 2 fix: Status filter tabs — Chờ duyệt / Đã duyệt / Từ chối */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              {[
+                { key: 'pending', label: `Chờ duyệt (${crCounts.pending})`, color: '#F97316', bg: '#FFF7ED', border: '#FED7AA' },
+                { key: 'approved', label: `Đã duyệt (${crCounts.approved})`, color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
+                { key: 'rejected', label: `Từ chối (${crCounts.rejected})`, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
+                { key: 'all', label: `Tất cả (${changeRequests.length})`, color: '#6B7280', bg: '#F9FAFB', border: '#E5E7EB' },
+              ].map(({ key, label, color, bg, border }) => (
+                <button
+                  key={key}
+                  onClick={() => setCrStatusFilter(key)}
+                  style={{
+                    padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: '700',
+                    cursor: 'pointer', transition: 'all 0.15s',
+                    border: `1.5px solid ${crStatusFilter === key ? color : border}`,
+                    background: crStatusFilter === key ? bg : 'white',
+                    color: crStatusFilter === key ? color : '#64748B',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {loadingCR ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748B' }}>
                 <RefreshCw size={32} style={{ margin: '0 auto 12px', display: 'block', animation: 'spin 1s linear infinite', color: '#F97316' }} />
                 <p style={{ fontSize: '14px', fontWeight: '600' }}>Đang tải yêu cầu...</p>
               </div>
-            ) : changeRequests.length === 0 ? (
+            ) : filteredChangeRequests.length === 0 ? (
               <EmptyChangeRequests>
                 <div className="icon">✅</div>
-                <h3>Không có yêu cầu nào đang chờ</h3>
+                <h3>{crStatusFilter === 'pending' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu nào'}</h3>
                 <p>Tất cả yêu cầu đổi nhân viên đã được xử lý</p>
               </EmptyChangeRequests>
             ) : (
               <ChangeRequestGrid>
-                {changeRequests.map(cr => {
+                {/* Bug 2 fix: dùng filteredChangeRequests đã sort theo updatedAt DESC */}
+                {filteredChangeRequests.map(cr => {
                   const changeReq = cr.changeRequest || {};
                   const isProcessing = processingCRId === cr.applicationId;
                   const startIso = cr.acceptedAt || cr.appliedAt || cr.createdAt;
                   const workedTime = calcWorkedTime(startIso);
                   const startDisplay = fmtTime(startIso);
+                  // Bug 4 fix: xác định trạng thái hiển thị đúng
+                  const crStatus = String(cr.changeRequestStatus || '').toLowerCase();
+                  const isPending = cr.status === 'pending_change';
+                  const isApproved = crStatus === 'approved' || cr.status === 'ĐÃ_BỊ_THAY_THẾ';
+                  const isRejected = crStatus === 'rejected';
 
                   return (
-                    <ChangeRequestCard key={cr.applicationId}>
+                    <ChangeRequestCard key={cr.applicationId} style={
+                      isApproved ? { borderColor: '#A7F3D0', boxShadow: '0 2px 8px rgba(16,185,129,0.08)' } :
+                      isRejected ? { borderColor: '#FECACA', boxShadow: '0 2px 8px rgba(239,68,68,0.08)' } : {}
+                    }>
                       <CRHeader>
-                        <CRBadge>
-                          <RefreshCw size={10} />
-                          Chờ duyệt
-                        </CRBadge>
+                        {/* Bug 4 fix: hiển thị badge đúng trạng thái */}
+                        {isPending && (
+                          <CRBadge>
+                            <RefreshCw size={10} />
+                            Chờ duyệt
+                          </CRBadge>
+                        )}
+                        {isApproved && (
+                          <CRBadge style={{ background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0' }}>
+                            <CheckCircle size={10} />
+                            Đã duyệt
+                          </CRBadge>
+                        )}
+                        {isRejected && (
+                          <CRBadge style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}>
+                            <X size={10} />
+                            Từ chối
+                          </CRBadge>
+                        )}
                         <span style={{ fontSize: '11px', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Clock size={11} />
                           {changeReq.requestedAt || fmtTime(cr.updatedAt)}
@@ -2116,9 +2205,14 @@ const PostsManagement = () => {
                       </CRMeta>
 
                       {/* Lý do */}
-                      {changeReq.reason && (
+                      {(changeReq.reasonDetail || changeReq.reasonType || changeReq.reason) && (
                         <CRReason>
-                          "{changeReq.reason}"
+                          {changeReq.reasonType && (
+                            <div style={{ fontWeight: '700', marginBottom: '4px', fontSize: '12px', color: '#9A3412', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                              {changeReq.reasonType}
+                            </div>
+                          )}
+                          "{changeReq.reasonDetail || changeReq.reason}"
                         </CRReason>
                       )}
 
@@ -2136,6 +2230,8 @@ const PostsManagement = () => {
                         </span>
                       </div>
 
+                      {/* Bug 4 fix: chỉ hiện nút Duyệt/Từ chối cho records đang chờ */}
+                      {isPending && (
                       <CRActions>
                         <CRButton
                           $variant="approve"
@@ -2161,6 +2257,18 @@ const PostsManagement = () => {
                           Từ chối
                         </CRButton>
                       </CRActions>
+                      )}
+                      {/* Hiện thông tin xử lý cho records đã xong */}
+                      {(isApproved || isRejected) && (
+                        <div style={{ padding: '10px 12px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '600',
+                          background: isApproved ? '#ECFDF5' : '#FEF2F2',
+                          color: isApproved ? '#065F46' : '#991B1B',
+                          display: 'flex', alignItems: 'center', gap: '6px'
+                        }}>
+                          {isApproved ? <CheckCircle size={13} /> : <X size={13} />}
+                          {isApproved ? 'Đã được duyệt' : 'Đã từ chối'} — {cr.replacedAt || cr.updatedAt ? new Date(cr.replacedAt || cr.updatedAt).toLocaleString('vi-VN') : '--'}
+                        </div>
+                      )}
                     </ChangeRequestCard>
                   );
                 })}

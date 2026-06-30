@@ -1091,8 +1091,13 @@ const Navbar = ({ showSearch = true }) => {
 
         const { default: applicationService } = await import('../services/applicationService');
         const apps = await applicationService.getMyCandidateApplications();
-        // Filter applications where status is 'accepted' or 'completed_pending_candidate' (exclude 'completed')
-        const validChats = (apps || []).filter(app => app.status === 'accepted' || app.status === 'completed_pending_candidate');
+        // Filter applications where status is 'accepted', 'completed_pending_candidate', hoặc 'ĐÃ_BỊ_THAY_THẾ'
+        // Giữ 'ĐÃ_BỊ_THAY_THẾ' để candidate thấy lịch sử chat nhưng không chat tiếp được
+        const validChats = (apps || []).filter(app =>
+          app.status === 'accepted' ||
+          app.status === 'completed_pending_candidate' ||
+          app.status === 'ĐÃ_BỊ_THAY_THẾ'
+        );
 
         // Filter out locally deleted chats
         const deletedChatIds = JSON.parse(localStorage.getItem('deleted_chats') || '[]');
@@ -1410,7 +1415,7 @@ const Navbar = ({ showSearch = true }) => {
   }, [chatMessages, activeChatApp]);
 
   const handleSendChatMessage = () => {
-    if (!chatInput.trim() || !activeChatApp || activeChatApp.status === 'completed') return;
+    if (!chatInput.trim() || !activeChatApp || activeChatApp.status === 'completed' || activeChatApp.status === 'ĐÃ_BỊ_THAY_THẾ') return;
 
     const newMessage = {
       id: Date.now(),
@@ -2013,7 +2018,7 @@ const Navbar = ({ showSearch = true }) => {
             ))}
             <div ref={messagesEndRef} />
           </FloatingChatMessages>
-          {activeChatApp.status === 'completed' ? (
+          {activeChatApp.status === 'completed' || activeChatApp.status === 'ĐÃ_BỊ_THAY_THẾ' ? (
             <div style={{
               padding: '14px 16px',
               textAlign: 'center',
@@ -2027,7 +2032,10 @@ const Navbar = ({ showSearch = true }) => {
               justifyContent: 'center',
               gap: '6px'
             }}>
-              🔒 {language === 'vi' ? 'Cuộc trò chuyện đã khóa (Công việc hoàn thành)' : 'Chat locked (Job completed)'}
+              🔒 {activeChatApp.status === 'ĐÃ_BỊ_THAY_THẾ'
+                ? (language === 'vi' ? 'Cuộc trò chuyện đã kết thúc do ca làm đã thay đổi.' : 'Conversation ended because the shift has been changed.')
+                : (language === 'vi' ? 'Cuộc trò chuyện đã khóa (Công việc hoàn thành)' : 'Chat locked (Job completed)')
+              }
             </div>
           ) : (
             <FloatingChatInputRow>

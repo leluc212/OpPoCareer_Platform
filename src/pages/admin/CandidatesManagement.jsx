@@ -669,6 +669,13 @@ const StatusBadge = styled.span`
 const CandidatesManagement = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
+
+  // Bug 3 fix: toast state thay thế alert() — dùng pattern giống các trang admin khác
+  const [adminToast, setAdminToast] = useState(null); // { type: 'success'|'error', message }
+  const showAdminToast = (type, message) => {
+    setAdminToast({ type, message });
+    setTimeout(() => setAdminToast(null), 3500);
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [timeFilter, setTimeFilter] = useState('month'); // month, quarter, year
@@ -764,7 +771,7 @@ const CandidatesManagement = () => {
       setVerifications(prev => prev.map(v =>
         v.id === candidateId ? { ...v, verificationStatus: 'SUBMITTED' } : v
       ));
-      alert(language === 'vi' ? 'Lỗi khi duyệt' : 'Error approving');
+      showAdminToast('error', language === 'vi' ? 'Lỗi khi duyệt' : 'Error approving');
     }
   };
 
@@ -791,7 +798,7 @@ const CandidatesManagement = () => {
       setVerifications(prev => prev.map(v =>
         v.id === candidateId ? { ...v, verificationStatus: 'APPROVED' } : v
       ));
-      alert(language === 'vi' ? 'Lỗi khi hủy kích hoạt' : 'Error deactivating');
+      showAdminToast('error', language === 'vi' ? 'Lỗi khi hủy kích hoạt' : 'Error deactivating');
     }
   };
 
@@ -813,7 +820,7 @@ const CandidatesManagement = () => {
     } catch (e) {
       // Rollback nếu lỗi - load lại từ server
       loadVerifications();
-      alert(language === 'vi' ? 'Lỗi khi từ chối' : 'Error rejecting');
+      showAdminToast('error', language === 'vi' ? 'Lỗi khi từ chối' : 'Error rejecting');
     }
   };
   // ───────────────────────────────────────────────────────────────────────────
@@ -848,7 +855,7 @@ const CandidatesManagement = () => {
       }
     } catch (e) {
       setDeletionRequests(prev => [...prev, candidate]);
-      alert(language === 'vi' ? 'Lỗi khi duyệt xóa tài khoản' : 'Error approving deletion request');
+      showAdminToast('error', language === 'vi' ? 'Lỗi khi duyệt xóa tài khoản' : 'Error approving deletion request');
     }
   };
 
@@ -869,7 +876,7 @@ const CandidatesManagement = () => {
       }
     } catch (e) {
       setDeletionRequests(prev => [...prev, candidate]);
-      alert(language === 'vi' ? 'Lỗi khi từ chối yêu cầu xóa' : 'Error rejecting deletion request');
+      showAdminToast('error', language === 'vi' ? 'Lỗi khi từ chối yêu cầu xóa' : 'Error rejecting deletion request');
     }
   };
   // ─────────────────────────────────────────────────────────────────────────
@@ -1841,6 +1848,27 @@ const CandidatesManagement = () => {
         </PaginationContainer>
         )}
       </PageContainer>
+
+      {/* Bug 3 fix: Toast thông báo thay thế alert() — hiển thị góc trên phải */}
+      {adminToast && (
+        <div style={{
+          position: 'fixed', top: '24px', right: '24px', zIndex: 9999,
+          padding: '14px 20px', borderRadius: '12px', maxWidth: '380px',
+          background: adminToast.type === 'success'
+            ? 'linear-gradient(135deg, #10B981, #059669)'
+            : 'linear-gradient(135deg, #EF4444, #DC2626)',
+          color: 'white', fontWeight: '700', fontSize: '14px',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          animation: 'slideIn 0.3s ease',
+        }}>
+          {adminToast.type === 'success'
+            ? <CheckCircle size={18} />
+            : <AlertCircle size={18} />
+          }
+          {adminToast.message}
+        </div>
+      )}
     </DashboardLayout>
   );
 };

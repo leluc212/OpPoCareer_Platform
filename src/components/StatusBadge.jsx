@@ -111,6 +111,27 @@ const BadgeWrapper = styled.span`
     color: ${props.theme.colors.textLight};
     border: 2px solid ${props.theme.colors.border};
   `}
+
+  /* Bug 6 fix: trạng thái từ change request flow */
+  ${props => props.$status === 'replaced' && `
+    background: #F5F3FF;
+    color: #7C3AED;
+    border: 2px solid #C4B5FD;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.12);
+  `}
+
+  ${props => props.$status === 'cancelled' && `
+    background: #F9FAFB;
+    color: #6B7280;
+    border: 2px solid #D1D5DB;
+  `}
+
+  ${props => props.$status === 'pending_change' && `
+    background: #FFF7ED;
+    color: #C2410C;
+    border: 2px solid #FED7AA;
+    box-shadow: 0 2px 8px rgba(249,115,22,0.12);
+  `}
 `;
 
 const StatusDot = styled.span`
@@ -143,7 +164,11 @@ const StatusBadge = ({ status, showDot = true, children, size = 'md' }) => {
       'urgent': 'Tuyển gấp',
       'recruiting': 'Đang tuyển dụng',
       'displayed': 'Hiển thị',
-      'expired': 'Hết hạn'
+      'expired': 'Hết hạn',
+      // Bug 6 fix: trạng thái từ change request flow
+      'replaced': 'Đã thay thế',
+      'cancelled': 'Đã hủy',
+      'pending_change': 'Chờ thay đổi',
     },
     en: {
       'pending': 'Pending',
@@ -158,7 +183,11 @@ const StatusBadge = ({ status, showDot = true, children, size = 'md' }) => {
       'urgent': 'Urgent',
       'recruiting': 'Recruiting',
       'displayed': 'Displayed',
-      'expired': 'Expired'
+      'expired': 'Expired',
+      // Bug 6 fix
+      'replaced': 'Replaced',
+      'cancelled': 'Cancelled',
+      'pending_change': 'Pending Change',
     }
   };
   

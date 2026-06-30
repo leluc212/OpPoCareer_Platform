@@ -1303,6 +1303,8 @@ const CandidateDashboard = () => {
   const [realRecommendedJobs, setRealRecommendedJobs] = useState([]);
   const [allActiveJobs, setAllActiveJobs] = useState([]);
   const [currentJob, setCurrentJob] = useState(null);
+  // Bug 6 fix: track recently-replaced notifications để hiện banner cho candidate
+  const [replacedNotice, setReplacedNotice] = useState(null); // { jobTitle, replacedAt }
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isApplicationsExpanded, setIsApplicationsExpanded] = useState(false);
   const [successfulMatchesCount, setSuccessfulMatchesCount] = useState(0);
@@ -1542,6 +1544,27 @@ const CandidateDashboard = () => {
         setCurrentJob(null);
       }
 
+      // Bug 6 fix: detect recently-replaced applications để hiện banner thông báo cho candidate
+      // Chỉ hiện nếu chưa dismiss (dùng sessionStorage để avoid spam mỗi poll)
+      const dismissedKey = 'dismissed_replaced_notices';
+      const dismissed = JSON.parse(sessionStorage.getItem(dismissedKey) || '[]');
+      const recentlyReplaced = apps.find(app =>
+        (app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') &&
+        !dismissed.includes(app.applicationId)
+      );
+      if (recentlyReplaced) {
+        const replacedJob = finalAllJobs.find(j =>
+          (j.idJob || j.id || j.jobID) === recentlyReplaced.jobId
+        );
+        setReplacedNotice({
+          applicationId: recentlyReplaced.applicationId,
+          jobTitle: replacedJob?.title || recentlyReplaced.jobTitle || 'Ca làm',
+          replacedAt: recentlyReplaced.replacedAt || recentlyReplaced.updatedAt,
+        });
+      } else {
+        setReplacedNotice(null);
+      }
+
       // Calculate successful matches count for the current month
       const nowObj = new Date();
       const currentYear = nowObj.getFullYear();
@@ -1642,11 +1665,19 @@ const CandidateDashboard = () => {
 
   // Helper: Map status to UI format
   const mapStatus = (status) => {
+    // Bug 6 fix: thêm các status từ change request flow để hiển thị đúng
     const statusMap = {
       'pending': 'unseen',
       'reviewed': 'seen',
       'accepted': 'approved',
-      'rejected': 'rejected'
+      'rejected': 'rejected',
+      // Trạng thái sau khi bị thay thế — hiển thị riêng, không gây nhầm lẫn với "đang duyệt"
+      'ĐÃ_BỊ_THAY_THẾ': 'replaced',
+      'change_approved': 'replaced',
+      'ĐÃ_HUỶ': 'cancelled',
+      'completed': 'completed',
+      'completed_pending_candidate': 'completed',
+      'pending_change': 'pending_change',
     };
     return statusMap[status] || 'unseen';
   };
@@ -2008,6 +2039,45 @@ const CandidateDashboard = () => {
               <Briefcase />
               <h2>{language === 'vi' ? 'Công Việc Hiện Tại' : 'Current Job Details'}</h2>
             </CurrentJobHeader>
+
+            {/* Bug 6 fix: banner thông báo ca làm đã bị thay đổi bởi employer */}
+            {replacedNotice && (
+              <div style={{
+                background: '#FEF3C7', border: '1.5px solid #FDE68A', borderRadius: '12px',
+                padding: '14px 16px', marginBottom: '16px',
+                display: 'flex', alignItems: 'flex-start', gap: '10px',
+              }}>
+                <span style={{ fontSize: '20px', flexShrink: 0 }}>⚠️</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: '700', fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Ca làm của bạn đã bị kết thúc sớm' : 'Your shift has ended early'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#78350F', lineHeight: '1.5' }}>
+                    {language === 'vi'
+                      ? `Nhà tuyển dụng đã gửi yêu cầu thay đổi nhân viên cho ca "${replacedNotice.jobTitle}" và đã được admin duyệt. Ca làm đã kết thúc. Tiền công đã được tính đến thời điểm kết thúc.`
+                      : `The employer submitted a worker change request for "${replacedNotice.jobTitle}" which was approved by admin. Your shift has ended. Wages have been calculated up to the end time.`
+                    }
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    // Dismiss: lưu vào sessionStorage để không hiện lại trong cùng phiên
+                    const dismissedKey = 'dismissed_replaced_notices';
+                    const dismissed = JSON.parse(sessionStorage.getItem(dismissedKey) || '[]');
+                    sessionStorage.setItem(dismissedKey, JSON.stringify([...dismissed, replacedNotice.applicationId]));
+                    setReplacedNotice(null);
+                  }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#92400E', flexShrink: 0, fontSize: '18px', lineHeight: 1,
+                    padding: '0 4px',
+                  }}
+                  aria-label="Đóng thông báo"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             {currentJob ? (
               <CurrentJobCard
                 whileHover={{ scale: 1.01 }}

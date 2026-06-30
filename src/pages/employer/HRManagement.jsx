@@ -2895,6 +2895,8 @@ const HRManagement = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [requestSending, setRequestSending] = useState(false);
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  // Việc 1: modal xác nhận hủy yêu cầu đổi nhân sự — thay thế window.confirm()
+  const [cancelCRConfirmId, setCancelCRConfirmId] = useState(null);
   const [viewedChangeRequest, setViewedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
 
@@ -3536,7 +3538,7 @@ const HRManagement = () => {
       .filter(app =>
         app.status === 'accepted' ||
         app.status === 'completed_pending_candidate' ||
-        app.status === 'ĐÃ_BỊ_THAY_THẾ'  // Giữ trong danh sách để lock chat thay vì biến mất đột ngột
+        app.status === 'ĐÃ_BỊ_THAY_THẾ'  // Chat bị khóa sau khi worker bị thay thế — lịch sử vẫn giữ, chỉ khoá gửi tin mới (xem Việc 2 / Bug 5-6 follow-up)
       )
       .map(app => {
         let unread = 0;
@@ -4020,6 +4022,7 @@ const HRManagement = () => {
   };
 
   const handleSendMessage = () => {
+    // Chat bị khóa sau khi worker bị thay thế — xem Việc 2 / Bug 5-6 follow-up
     if (!messageInput.trim() || !activeChatId || activeChat?.isCompleted || activeChat?.isReplaced) return;
 
     const newMessage = {
@@ -4159,7 +4162,13 @@ const HRManagement = () => {
       return;
     }
 
-    if (!window.confirm(language === 'vi' ? 'Bạn có chắc chắn muốn hủy yêu cầu này?' : 'Are you sure you want to cancel this request?')) return;
+    // Việc 1: dùng ConfirmModal thay vì window.confirm() — đồng bộ với design system
+    setCancelCRConfirmId(appId);
+  };
+
+  // Thực thi hủy sau khi user xác nhận trong modal
+  const executeCancelChangeRequest = async (appId) => {
+    setCancelCRConfirmId(null);
     console.log('User confirmed cancellation for appId:', appId);
 
     const hasRealApplication = realApplications.some(app => String(app.applicationId) === String(appId));
@@ -7252,6 +7261,21 @@ const HRManagement = () => {
       </PageContainer>
 
       {/* ── Wallet Terms Modal đã được chuyển thành inline terms trong trang intro ── */}
+
+      {/* Việc 1: Modal xác nhận hủy yêu cầu đổi nhân sự — thay thế window.confirm() */}
+      <ConfirmModal
+        isOpen={!!cancelCRConfirmId}
+        title={language === 'vi' ? 'Hủy yêu cầu đổi nhân sự' : 'Cancel Change Request'}
+        message={language === 'vi'
+          ? 'Bạn có chắc chắn muốn hủy yêu cầu thay đổi nhân sự này? Yêu cầu sẽ bị hủy và nhân viên sẽ tiếp tục ca làm việc hiện tại.'
+          : 'Are you sure you want to cancel this personnel change request? The request will be cancelled and the worker will continue their current shift.'}
+        confirmText={language === 'vi' ? 'Hủy yêu cầu' : 'Cancel Request'}
+        cancelText={language === 'vi' ? 'Giữ lại' : 'Keep'}
+        onConfirm={() => executeCancelChangeRequest(cancelCRConfirmId)}
+        onCancel={() => setCancelCRConfirmId(null)}
+        type="warning"
+        isLoading={isProcessingChange}
+      />
     </DashboardLayout>
   );
 };

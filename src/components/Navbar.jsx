@@ -1092,7 +1092,8 @@ const Navbar = ({ showSearch = true }) => {
         const { default: applicationService } = await import('../services/applicationService');
         const apps = await applicationService.getMyCandidateApplications();
         // Filter applications where status is 'accepted', 'completed_pending_candidate', hoặc 'ĐÃ_BỊ_THAY_THẾ'
-        // Giữ 'ĐÃ_BỊ_THAY_THẾ' để candidate thấy lịch sử chat nhưng không chat tiếp được
+        // Chat bị khóa sau khi worker bị thay thế — lịch sử vẫn giữ để tra cứu, chỉ khoá gửi tin mới từ cả 2 phía
+        // (xem Việc 2 / Bug 5-6 follow-up: candidate bị swap không được chat tiếp với employer của job đó)
         const validChats = (apps || []).filter(app =>
           app.status === 'accepted' ||
           app.status === 'completed_pending_candidate' ||
@@ -1415,6 +1416,7 @@ const Navbar = ({ showSearch = true }) => {
   }, [chatMessages, activeChatApp]);
 
   const handleSendChatMessage = () => {
+    // Chat bị khóa sau khi worker bị thay thế — xem Việc 2 / Bug 5-6 follow-up
     if (!chatInput.trim() || !activeChatApp || activeChatApp.status === 'completed' || activeChatApp.status === 'ĐÃ_BỊ_THAY_THẾ') return;
 
     const newMessage = {

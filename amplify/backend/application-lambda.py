@@ -723,6 +723,17 @@ def list_change_requests(create_response):
     """Admin: get ALL applications that have ever had a changeRequest.
     Bug-4 fix: trả về tất cả trạng thái (pending_change, ĐÃ_BỊ_THAY_THẾ, accepted với changeRequestStatus)
     thay vì chỉ lọc status='pending_change' — tránh mất audit trail sau khi xử lý.
+
+    TODO (Việc 3 — không sửa trong lần này):
+      Hàm này dùng DynamoDB scan (Pass 1 & Pass 2) không có giới hạn số records.
+      Dù đã có vòng pagination (LastEvaluatedKey), khi bảng lớn (>10k–100k items) mỗi
+      scan sẽ đọc toàn bộ bảng và có thể gây:
+        - Lambda timeout (max 15 phút, thực tế API Gateway giới hạn 29s)
+        - Chi phí đọc DynamoDB tăng đột biến (consumed RCUs per scan)
+      Giải pháp đề xuất: tạo GSI (Global Secondary Index) trên các field
+      'status' và 'changeRequestStatus', sau đó dùng query() thay cho scan()
+      kết hợp Limit + ExclusiveStartKey để có pagination thực sự. Cần đánh giá
+      lại data model trước khi implement.
     """
     try:
         print("🔍 Scanning for all change-request applications...")

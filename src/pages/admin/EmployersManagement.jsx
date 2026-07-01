@@ -2747,8 +2747,16 @@ const EmployersManagement = () => {
               )}
             </div>
 
-            <ModalButton onClick={() => setShowGrantSuccessModal(false)}>
-              {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+            <ModalButton onClick={() => {
+              setShowGrantSuccessModal(false);
+              const isTopSpotlight = grantedPackageDetails.packageName?.toLowerCase()?.includes('top spotlight');
+              if (isTopSpotlight) {
+                navigate(`/admin/banners?type=top-spotlight&employer=${encodeURIComponent(grantedPackageDetails.companyName)}`);
+              }
+            }}>
+              {grantedPackageDetails.packageName?.toLowerCase()?.includes('top spotlight')
+                ? (language === 'vi' ? 'Đi tới Quản lý Banner' : 'Go to Banner Management')
+                : (language === 'vi' ? 'Xác nhận' : 'Confirm')}
             </ModalButton>
           </ModalContent>
         </ModalOverlay>
@@ -3184,8 +3192,16 @@ const EmployersManagement = () => {
               </div>
             </div>
 
-            <ModalButton onClick={() => setShowPurchaseSuccessModal(false)}>
-              {language === 'vi' ? 'Hoàn tất' : 'Done'}
+            <ModalButton onClick={() => {
+              setShowPurchaseSuccessModal(false);
+              const isTopSpotlight = approvedPurchaseInfo.package?.toLowerCase()?.includes('top spotlight');
+              if (isTopSpotlight) {
+                navigate(`/admin/banners?type=top-spotlight&employer=${encodeURIComponent(approvedPurchaseInfo.employer)}`);
+              }
+            }}>
+              {approvedPurchaseInfo.package?.toLowerCase()?.includes('top spotlight')
+                ? (language === 'vi' ? 'Đi tới Quản lý Banner' : 'Go to Banner Management')
+                : (language === 'vi' ? 'Hoàn tất' : 'Done')}
             </ModalButton>
           </ModalContent>
         </ModalOverlay>

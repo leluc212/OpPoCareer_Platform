@@ -1484,6 +1484,16 @@ const JobsGrid = styled.div`
   }
 `;
 
+const shine = keyframes`
+  0% { left: -100%; }
+  100% { left: 200%; }
+`;
+
+const pulseSpotlight = keyframes`
+  0%, 100% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.4), 0 10px 40px rgba(0,0,0,0.15); }
+  50% { box-shadow: 0 0 30px rgba(220, 38, 38, 0.75), 0 10px 40px rgba(0,0,0,0.25); }
+`;
+
 const BoostBannerWrap = styled(motion.div)`
   position: relative;
   margin-bottom: 24px;
@@ -1493,6 +1503,28 @@ const BoostBannerWrap = styled(motion.div)`
   cursor: pointer;
   height: 320px;
   background: #1a1a1a;
+  border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
+  animation: ${props => props.$isTopSpotlight ? `${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
+  transition: all 0.4s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.35) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-25deg);
+    animation: ${props => props.$isTopSpotlight ? `${shine} 3.5s infinite ease-in-out` : 'none'};
+    pointer-events: none;
+    z-index: 1;
+  }
 
   img {
     width: 100%;
@@ -3561,7 +3593,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     const location = candidateProfile?.location || '';
     getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
-        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl })));
+        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl, isTopSpotlight: !!b.isTopSpotlight })));
       }
     }).catch(() => {/* fallback to default banners */ });
   }, [candidateProfile?.location]);
@@ -5282,8 +5314,22 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 if (link) window.open(link, '_blank', 'noopener,noreferrer');
               }}
               style={{ cursor: banners[currentBannerIndex]?.linkUrl ? 'pointer' : 'default' }}
+              $isTopSpotlight={banners[currentBannerIndex]?.isTopSpotlight}
             >
-              <BoostTag>🔥Hot deal</BoostTag>
+              {banners[currentBannerIndex]?.isTopSpotlight ? (
+                <BoostTag style={{
+                  background: 'linear-gradient(135deg, #DC2626 0%, #F59E0B 100%)',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  padding: '5px 14px',
+                  letterSpacing: '0.5px'
+                }}>
+                  <Sparkles size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
+                  {language === 'vi' ? 'TOP SPOTLIGHT' : 'TOP SPOTLIGHT'}
+                </BoostTag>
+              ) : (
+                <BoostTag>🔥Hot deal</BoostTag>
+              )}
               <motion.img
                 key={currentBannerIndex}
                 initial={{ opacity: 0.8, scale: 1.05 }}

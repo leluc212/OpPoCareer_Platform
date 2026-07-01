@@ -243,12 +243,17 @@ export const toggleBannerActive = async (bannerId, currentBanners) => {
   const target = currentBanners.find(b => b.bannerId === bannerId);
   if (!target) throw new Error('Banner not found');
 
-  const activeBanners = currentBanners.filter(b => b.isActive && b.bannerId !== bannerId);
+  const isTopSpotlight = !!target.isTopSpotlight;
+  const activeSameType = currentBanners.filter(
+    b => b.isActive && !!b.isTopSpotlight === isTopSpotlight && b.bannerId !== bannerId
+  );
 
-  if (!target.isActive && activeBanners.length >= MAX_ACTIVE_BANNERS) {
+  if (!target.isActive && activeSameType.length >= MAX_ACTIVE_BANNERS) {
     return {
       success: false,
-      message: `Đã đạt giới hạn ${MAX_ACTIVE_BANNERS} banner đang chạy. Hãy tắt một banner trước.`
+      message: isTopSpotlight
+        ? `Đã đạt giới hạn ${MAX_ACTIVE_BANNERS} banner Top Spotlight đang chạy. Hãy tắt một banner trước.`
+        : `Đã đạt giới hạn ${MAX_ACTIVE_BANNERS} banner tiêu chuẩn đang chạy. Hãy tắt một banner trước.`
     };
   }
 
@@ -262,11 +267,11 @@ export const toggleBannerActive = async (bannerId, currentBanners) => {
  * Get only the active banners (for use on the public website).
  * Optionally filters by candidate location (region targeting).
  * @param {string} [candidateLocation] - Candidate's location string (e.g. "Quận 1, TP.HCM")
- * Returns max 5 banners sorted by order/createdAt.
+ * Returns banners sorted by type (Top Spotlight first) and order/createdAt.
  */
 export const getActiveBanners = async (candidateLocation = '') => {
   const all = await getAllBanners();
-  return all
+  const activeAndFiltered = all
     .filter(b => b.isActive)
     .filter(b => {
       // Check expiration
@@ -280,9 +285,19 @@ export const getActiveBanners = async (candidateLocation = '') => {
       // Check if any target region matches the candidate's location string
       const loc = candidateLocation.toLowerCase();
       return b.targetRegions.some(region => loc.includes(region.toLowerCase()));
-    })
+    });
+
+  const spotlightBanners = activeAndFiltered
+    .filter(b => !!b.isTopSpotlight)
     .sort((a, b) => (a.order || 0) - (b.order || 0))
     .slice(0, MAX_ACTIVE_BANNERS);
+
+  const standardBanners = activeAndFiltered
+    .filter(b => !b.isTopSpotlight)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .slice(0, MAX_ACTIVE_BANNERS);
+
+  return [...spotlightBanners, ...standardBanners];
 };
 
 export default {

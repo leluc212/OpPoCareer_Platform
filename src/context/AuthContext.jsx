@@ -29,6 +29,22 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     console.log('🚪 Logout called');
+    
+    // Tự động tắt trạng thái tìm việc của candidate khi đăng xuất
+    if (user?.role === 'candidate' && user?.userId) {
+      try {
+        const isAvailableStr = localStorage.getItem('candidate_job_search_is_available');
+        const isAvailable = isAvailableStr ? JSON.parse(isAvailableStr) : false;
+        if (isAvailable) {
+          const { default: candidateProfileService } = await import('../services/candidateProfileService');
+          await candidateProfileService.updateProfile({ isActive: false }).catch(() => null);
+          localStorage.setItem('candidate_job_search_is_available', JSON.stringify(false));
+        }
+      } catch (e) {
+        console.log('Error turning off job search status during logout:', e);
+      }
+    }
+
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('user');
@@ -486,6 +502,21 @@ export const AuthProvider = ({ children }) => {
       unsubscribeHub();
     };
   }, []);
+
+  // Auto deactivate candidate availability status on new tab/browser session
+  useEffect(() => {
+    if (user?.role === 'candidate' && user?.userId) {
+      const isNewSession = !sessionStorage.getItem('session_initialized');
+      if (isNewSession) {
+        sessionStorage.setItem('session_initialized', 'true');
+        console.log('🔄 [AuthContext] New session detected for candidate. Deactivating job search status...');
+        import('../services/candidateProfileService').then(({ default: candidateProfileService }) => {
+          candidateProfileService.updateProfile({ isActive: false }).catch(() => null);
+          localStorage.setItem('candidate_job_search_is_available', JSON.stringify(false));
+        }).catch(() => null);
+      }
+    }
+  }, [user?.role, user?.userId]);
 
   return (
     <AuthContext.Provider value={{

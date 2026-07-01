@@ -553,10 +553,17 @@ def update_application_status(event, application_id, user_id, create_response):
         print(f"DEBUG: values: {expr_attr_values}")
 
         # DynamoDB requires SET and REMOVE as separate clauses in the same expression.
+        fields_to_remove = []
         if remove_change_request_status:
-            update_expr = update_expr + ' REMOVE changeRequest, changeRequestStatus'
+            fields_to_remove.extend(['changeRequest', 'changeRequestStatus'])
         elif remove_change_request:
-            update_expr = update_expr + ' REMOVE changeRequest'
+            fields_to_remove.append('changeRequest')
+
+        if new_status in ('completed', 'completed_pending_candidate', 'ĐÃ_BỊ_THAY_THẾ', 'change_approved') and 'chatMessages' not in body:
+            fields_to_remove.append('chatMessages')
+
+        if fields_to_remove:
+            update_expr += ' REMOVE ' + ', '.join(fields_to_remove)
 
         applications_table.update_item(
             Key={'applicationId': application_id},
@@ -1079,7 +1086,7 @@ def approve_change_request(event, application_id, create_response):
             Key={'applicationId': application_id},
             UpdateExpression=(
                 'SET #status = :replaced, changeRequestStatus = :crs, '
-                'replacedAt = :now, updatedAt = :now'
+                'replacedAt = :now, updatedAt = :now REMOVE chatMessages'
             ),
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={

@@ -1166,13 +1166,20 @@ const Navbar = ({ showSearch = true }) => {
 
         const { default: applicationService } = await import('../services/applicationService');
         const apps = await applicationService.getMyCandidateApplications();
-        // Filter applications where status is 'accepted', 'completed_pending_candidate', hoặc 'ĐÃ_BỊ_THAY_THẾ'
-        // Chat bị khóa sau khi worker bị thay thế — lịch sử vẫn giữ để tra cứu, chỉ khoá gửi tin mới từ cả 2 phía
-        // (xem Việc 2 / Bug 5-6 follow-up: candidate bị swap không được chat tiếp với employer của job đó)
+        
+        // Clean up completed/replaced chats from LocalStorage and close active window
+        (apps || []).forEach(app => {
+          if (app.status === 'completed' || app.status === 'completed_pending_candidate' || app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') {
+            localStorage.removeItem(`chat_${app.applicationId}`);
+            localStorage.removeItem(`chat_read_${app.applicationId}`);
+            localStorage.removeItem(`chat_read_employer_${app.applicationId}`);
+            setActiveChatApp(prev => prev && prev.applicationId === app.applicationId ? null : prev);
+          }
+        });
+
+        // Filter applications where status is 'accepted'
         const validChats = (apps || []).filter(app =>
-          app.status === 'accepted' ||
-          app.status === 'completed_pending_candidate' ||
-          app.status === 'ĐÃ_BỊ_THAY_THẾ'
+          app.status === 'accepted'
         );
 
         // Filter out locally deleted chats
@@ -1344,13 +1351,13 @@ const Navbar = ({ showSearch = true }) => {
         for (const job of jobs) {
           const apps = await applicationService.getJobApplications(job.idJob || job.id).catch(() => []);
           apps.forEach(app => {
-            if (app.status === 'completed') {
+            if (app.status === 'completed' || app.status === 'completed_pending_candidate' || app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') {
               localStorage.removeItem(`chat_${app.applicationId}`);
               localStorage.removeItem(`chat_read_${app.applicationId}`);
               localStorage.removeItem(`chat_read_employer_${app.applicationId}`);
             }
 
-            if (app.status === 'accepted' || app.status === 'completed_pending_candidate') {
+            if (app.status === 'accepted') {
               allChats.push({
                 ...app,
                 jobTitle: job.title || app.jobTitle
@@ -1455,6 +1462,10 @@ const Navbar = ({ showSearch = true }) => {
         if (!apps) return;
         const fresh = apps.find(a => a.applicationId === activeChatApp.applicationId);
         if (!fresh) return;
+        if (fresh.status !== 'accepted') {
+          setActiveChatApp(null);
+          return;
+        }
         const msgs = fresh.chatMessages;
         if (msgs && Array.isArray(msgs)) {
           setChatMessages(prev => {

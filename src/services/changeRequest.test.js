@@ -1057,7 +1057,7 @@ describe('Việc 2 – Chat locked after worker swap (ĐÃ_BỊ_THAY_THẾ)', ()
       changeRequestStatus: 'APPROVED',
       replacedAt: now,
       updatedAt: now,
-      // chatMessages preserved — NOT cleared
+      chatMessages: [] // cleared after swap
     };
     const updatedJob = { ...job, status: 'ĐANG_TUYỂN', currentWorkerId: undefined, updatedAt: now };
     return { updatedAppA, updatedJob };
@@ -1124,25 +1124,24 @@ describe('Việc 2 – Chat locked after worker swap (ĐÃ_BỊ_THAY_THẾ)', ()
     expect(result.reason).toBe('chat_locked_replaced');
   });
 
-  it('old chat history between A and employer is preserved (not deleted) after swap', () => {
+  it('old chat history between A and employer is cleared after swap', () => {
     const pendingAppA = { ...appA, status: 'pending_change' };
     const { updatedAppA } = approveChangeRequest(pendingAppA, jobX);
 
-    // chatMessages are preserved in the application record
+    // chatMessages are cleared
     expect(updatedAppA.chatMessages).toBeDefined();
-    expect(updatedAppA.chatMessages).toHaveLength(2);
-    expect(updatedAppA.chatMessages[0].text).toBe('Chào employer, tôi đã đến nơi');
+    expect(updatedAppA.chatMessages).toHaveLength(0);
   });
 
-  it('chat history can still be queried even after swap (audit trail)', () => {
+  it('chat history is empty and cannot be queried after swap', () => {
     // Simulate DB "query" by applicationId
     const db = [
-      { ...appA, status: 'ĐÃ_BỊ_THAY_THẾ', changeRequestStatus: 'APPROVED' },
+      { ...appA, status: 'ĐÃ_BỊ_THAY_THẾ', changeRequestStatus: 'APPROVED', chatMessages: [] },
     ];
 
     const found = db.find(a => a.applicationId === 'app-A');
     expect(found).toBeDefined();
-    expect(found.chatMessages).toHaveLength(2); // history intact
+    expect(found.chatMessages).toHaveLength(0); // history cleared
   });
 
   it('candidate B (new worker) on job X is NOT blocked — can chat normally', () => {
@@ -1191,7 +1190,7 @@ describe('Việc 2 – Chat locked after worker swap (ĐÃ_BỊ_THAY_THẾ)', ()
     expect(employerResult.sent).toBe(false);
   });
 
-  it('isReplaced flag in chatConversations is derived from ĐÃ_BỊ_THAY_THẾ status', () => {
+  it('replaced chat is filtered out and does not appear in chatConversations', () => {
     // Simulate the chatConversations useMemo mapping in HRManagement
     const realApplications = [
       { applicationId: 'app-A', status: 'ĐÃ_BỊ_THAY_THẾ', candidateEmail: 'a@test.com', jobTitle: 'Cashier' },
@@ -1200,9 +1199,7 @@ describe('Việc 2 – Chat locked after worker swap (ĐÃ_BỊ_THAY_THẾ)', ()
 
     const chatConversations = realApplications
       .filter(app =>
-        app.status === 'accepted' ||
-        app.status === 'completed_pending_candidate' ||
-        app.status === 'ĐÃ_BỊ_THAY_THẾ'
+        app.status === 'accepted'
       )
       .map(app => ({
         id: app.applicationId,
@@ -1213,7 +1210,8 @@ describe('Việc 2 – Chat locked after worker swap (ĐÃ_BỊ_THAY_THẾ)', ()
     const convA = chatConversations.find(c => c.id === 'app-A');
     const convB = chatConversations.find(c => c.id === 'app-B');
 
-    expect(convA?.isReplaced).toBe(true);  // A is locked
-    expect(convB?.isReplaced).toBe(false); // B is not locked
+    expect(convA).toBeUndefined(); // A is filtered out
+    expect(convB).toBeDefined();
+    expect(convB?.isReplaced).toBe(false);
   });
 });

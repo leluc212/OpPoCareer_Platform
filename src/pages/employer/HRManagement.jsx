@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -3529,9 +3529,7 @@ const HRManagement = () => {
 
     return realApplications
       .filter(app =>
-        app.status === 'accepted' ||
-        app.status === 'completed_pending_candidate' ||
-        app.status === 'ĐÃ_BỊ_THAY_THẾ'  // Chat bị khóa sau khi worker bị thay thế — lịch sử vẫn giữ, chỉ khoá gửi tin mới (xem Việc 2 / Bug 5-6 follow-up)
+        app.status === 'accepted'
       )
       .map(app => {
         let unread = 0;
@@ -3611,10 +3609,13 @@ const HRManagement = () => {
   useEffect(() => {
     if (!realApplications || !Array.isArray(realApplications)) return;
     realApplications.forEach(app => {
-      if (app.status === 'completed') {
+      if (app.status === 'completed' || app.status === 'completed_pending_candidate' || app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') {
         localStorage.removeItem(`chat_${app.applicationId}`);
         localStorage.removeItem(`chat_read_employer_${app.applicationId}`);
         localStorage.removeItem(`chat_read_${app.applicationId}`);
+        if (activeChatId === app.applicationId) {
+          setActiveChatId(null);
+        }
       } else if (app.chatMessages && Array.isArray(app.chatMessages) && app.chatMessages.length > 0) {
         const savedMessagesStr = localStorage.getItem(`chat_${app.applicationId}`);
         const dbStr = JSON.stringify(app.chatMessages);

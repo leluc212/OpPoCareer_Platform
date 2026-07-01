@@ -56,7 +56,15 @@ const HeroSection = styled(motion.div)`
   padding: 32px 40px;
   margin-bottom: 24px;
   position: relative;
+`;
+
+const HeroBackground = styled.div`
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
   
   &::before {
     content: '';
@@ -117,6 +125,7 @@ const SearchInput = styled.div`
   padding: 10px 16px;
   border-radius: ${props => props.theme.borderRadius.lg};
   background: ${props => props.theme.colors.bgDark};
+  position: relative;
   
   svg {
     width: 20px;
@@ -135,6 +144,56 @@ const SearchInput = styled.div`
     &::placeholder {
       color: ${props => props.theme.colors.textLight};
     }
+  }
+`;
+
+const SuggestionDropdown = styled.div`
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: ${props => props.theme.colors.bgLight || 'white'};
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: ${props => props.theme.borderRadius.lg};
+  box-shadow: ${props => props.theme.shadows?.lg || '0 10px 25px rgba(0,0,0,0.1)'};
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px 0;
+`;
+
+const SuggestionItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14.5px;
+  color: ${props => props.theme.colors.text};
+  transition: all 0.2s ease;
+  background: ${props => props.$isHotSearch ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.08), rgba(30, 64, 175, 0.02))' : 'transparent'};
+  border-left: 3px solid ${props => props.$isHotSearch ? '#1e40af' : 'transparent'};
+  
+  &:hover {
+    background: ${props => props.$isHotSearch ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.12), rgba(30, 64, 175, 0.04))' : props.theme.colors.bgDark};
+  }
+  
+  .label-text {
+    font-weight: ${props => props.$isHotSearch ? '600' : 'normal'};
+    color: ${props => props.$isHotSearch ? '#1e40af' : 'inherit'};
+  }
+  
+  .hot-badge {
+    background: rgba(30, 64, 175, 0.12);
+    color: #1e40af;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 `;
 
@@ -1425,6 +1484,16 @@ const JobsGrid = styled.div`
   }
 `;
 
+const shine = keyframes`
+  0% { left: -100%; }
+  100% { left: 200%; }
+`;
+
+const pulseSpotlight = keyframes`
+  0%, 100% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.4), 0 10px 40px rgba(0,0,0,0.15); }
+  50% { box-shadow: 0 0 30px rgba(220, 38, 38, 0.75), 0 10px 40px rgba(0,0,0,0.25); }
+`;
+
 const BoostBannerWrap = styled(motion.div)`
   position: relative;
   margin-bottom: 24px;
@@ -1434,11 +1503,33 @@ const BoostBannerWrap = styled(motion.div)`
   cursor: pointer;
   height: 320px;
   background: #1a1a1a;
+  border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
+  animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
+  transition: all 0.4s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.35) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-25deg);
+    animation: ${props => props.$isTopSpotlight ? css`${shine} 3.5s infinite ease-in-out` : 'none'};
+    pointer-events: none;
+    z-index: 1;
+  }
 
   img {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
     display: block;
     transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -1704,6 +1795,19 @@ const JobActions = styled.div`
   gap: 8px;
 `;
 
+const pulseBlink = keyframes`
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(30, 64, 175, 0.6), 0 0 12px rgba(59, 130, 246, 0.5);
+  }
+`;
+
 const ActionButton = styled(motion.button)`
   padding: 8px 14px;
   background: ${props => props.$primary
@@ -1731,6 +1835,10 @@ const ActionButton = styled(motion.button)`
     ? `${props.theme.colors.primary}40`
     : 'rgba(0,0,0,0.08)'};
   }
+
+  ${props => props.$isHotSearch && css`
+    animation: ${pulseBlink} 2s infinite ease-in-out;
+  `}
 `;
 
 const SaveButton = styled(motion.button)`
@@ -2216,6 +2324,9 @@ const JobListing = () => {
   // ─────────────────────────────────────────────────────────────────────────
   const [savedJobs, setSavedJobs] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchInputRef = useRef(null);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [jobCategory, setJobCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -3354,6 +3465,47 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     loadQuickJobs();
   }, [language]);
 
+  // Load subscriptions to identify employers with active Hot Search package
+  useEffect(() => {
+    const loadHotSearchSubscriptions = async () => {
+      try {
+        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+        if (!API_ENDPOINT) return;
+        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        if (response.ok) {
+          const data = await response.json();
+          // Filter active and approved Hot Search packages
+          const activeHotSearchEmployerIds = new Set(
+            data
+              .filter(sub => 
+                sub.packageName === 'Hot Search' && 
+                sub.status === 'active' && 
+                sub.approvalStatus === 'approved'
+              )
+              .map(sub => sub.employerId)
+          );
+          setHotSearchEmployerIds(activeHotSearchEmployerIds);
+          console.log('✅ Active Hot Search Employer IDs:', Array.from(activeHotSearchEmployerIds));
+        }
+      } catch (err) {
+        console.error('Error loading hot search subscriptions:', err);
+      }
+    };
+
+    loadHotSearchSubscriptions();
+  }, []);
+
+  // Click outside search input suggestion box handler
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
   // Set up polling for quick jobs every 15 seconds when on shift tab
   useEffect(() => {
     let intervalId;
@@ -3441,7 +3593,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     const location = candidateProfile?.location || '';
     getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
-        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl })));
+        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl, isTopSpotlight: !!b.isTopSpotlight })));
       }
     }).catch(() => {/* fallback to default banners */ });
   }, [candidateProfile?.location]);
@@ -4590,6 +4742,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
     // Sorting
     result = [...result].sort((a, b) => {
+      const aHotSearch = hotSearchEmployerIds.has(a.employerId);
+      const bHotSearch = hotSearchEmployerIds.has(b.employerId);
+      if (aHotSearch && !bHotSearch) return -1;
+      if (!aHotSearch && bHotSearch) return 1;
+
       const aBoost = a.quickBoost || a.isQuickBoosted;
       const bBoost = b.quickBoost || b.isQuickBoosted;
       if (aBoost && !bBoost) return -1;
@@ -4614,7 +4771,57 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     return result;
   }, [jobCategory, searchKeyword, selectedLocation, selectedWorkTimes, selectedPostTimes,
     selectedSalaryRanges, selectedCompanies,
-    quickFilter, savedJobs, sortBy, userLocation, showNearbyJobs, nearbyJobs, allJobs, showSavedJobsOnly]);
+    quickFilter, savedJobs, sortBy, userLocation, showNearbyJobs, nearbyJobs, allJobs, showSavedJobsOnly, hotSearchEmployerIds]);
+
+  // Compute search suggestions
+  const suggestions = useMemo(() => {
+    if (!searchKeyword.trim()) return [];
+    
+    const kw = searchKeyword.toLowerCase().trim();
+    const matches = [];
+    const seenLabels = new Set();
+    
+    allJobs.forEach(job => {
+      const isHot = hotSearchEmployerIds.has(job.employerId);
+      
+      // Check company name
+      const companyName = job.company || '';
+      if (companyName.toLowerCase().includes(kw)) {
+        const label = companyName;
+        const key = `company-${label}`;
+        if (!seenLabels.has(key)) {
+          seenLabels.add(key);
+          matches.push({
+            label: label,
+            type: 'company',
+            isHotSearch: isHot
+          });
+        }
+      }
+      
+      // Check job title
+      const jobTitle = job.title || '';
+      if (jobTitle.toLowerCase().includes(kw)) {
+        const label = jobTitle;
+        const key = `title-${label}`;
+        if (!seenLabels.has(key)) {
+          seenLabels.add(key);
+          matches.push({
+            label: label,
+            type: 'title',
+            isHotSearch: isHot
+          });
+        }
+      }
+    });
+    
+    // Sort suggestions: Hot Search suggestions first!
+    return matches.sort((a, b) => {
+      if (a.isHotSearch && !b.isHotSearch) return -1;
+      if (!a.isHotSearch && b.isHotSearch) return 1;
+      return a.label.localeCompare(b.label);
+    }).slice(0, 8);
+  }, [searchKeyword, allJobs, hotSearchEmployerIds]);
 
   const categoryJobs = allJobs.filter(job => job.category === jobCategory);
 
@@ -4643,6 +4850,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
+          <HeroBackground />
           <HeroContent>
             <HeroTitle>
               {showSavedJobsOnly
@@ -4666,19 +4874,48 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             </HeroSubtitle>
 
             <SearchContainer>
-              <SearchInput>
+              <SearchInput ref={searchInputRef}>
                 <Search />
                 <input
                   type="text"
                   placeholder={language === 'vi' ? 'Tìm theo vị trí, công ty, kỹ năng...' : 'Search by position, company, skills...'}
                   value={searchKeyword}
-                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  onChange={(e) => {
+                    setSearchKeyword(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
+                      setShowSuggestions(false);
                       scrollToResults();
                     }
                   }}
                 />
+                {showSuggestions && suggestions.length > 0 && (
+                  <SuggestionDropdown>
+                    {suggestions.map((s, idx) => (
+                      <SuggestionItem
+                        key={idx}
+                        $isHotSearch={s.isHotSearch}
+                        onClick={() => {
+                          setSearchKeyword(s.label);
+                          setShowSuggestions(false);
+                          scrollToResults();
+                        }}
+                      >
+                        {s.type === 'company' ? <Building2 size={16} /> : <Briefcase size={16} />}
+                        <span className="label-text">{s.label}</span>
+                        {s.isHotSearch && (
+                          <span className="hot-badge">
+                            <Sparkles size={10} style={{ color: '#1e40af', width: 10, height: 10 }} />
+                            Hot
+                          </span>
+                        )}
+                      </SuggestionItem>
+                    ))}
+                  </SuggestionDropdown>
+                )}
               </SearchInput>
 
               <SearchInput $narrow>
@@ -5077,8 +5314,22 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 if (link) window.open(link, '_blank', 'noopener,noreferrer');
               }}
               style={{ cursor: banners[currentBannerIndex]?.linkUrl ? 'pointer' : 'default' }}
+              $isTopSpotlight={banners[currentBannerIndex]?.isTopSpotlight}
             >
-              <BoostTag>🔥Hot deal</BoostTag>
+              {banners[currentBannerIndex]?.isTopSpotlight ? (
+                <BoostTag style={{
+                  background: 'linear-gradient(135deg, #DC2626 0%, #F59E0B 100%)',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  padding: '5px 14px',
+                  letterSpacing: '0.5px'
+                }}>
+                  <Sparkles size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
+                  {language === 'vi' ? 'TOP SPOTLIGHT' : 'TOP SPOTLIGHT'}
+                </BoostTag>
+              ) : (
+                <BoostTag>🔥Hot deal</BoostTag>
+              )}
               <motion.img
                 key={currentBannerIndex}
                 initial={{ opacity: 0.8, scale: 1.05 }}
@@ -5086,7 +5337,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 transition={{ duration: 0.6 }}
                 src={banners[currentBannerIndex].src}
                 alt={banners[currentBannerIndex].alt}
-                style={{ width: '100%', height: 'auto', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
               <BannerDots>
                 {banners.map((_, idx) => (
@@ -5116,6 +5367,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     showDistance={jobCategory === 'shift' && showNearbyJobs}
                     language={language}
                     isHighlighted={highlightedJobId === job.id}
+                    isHotSearch={hotSearchEmployerIds.has(job.employerId)}
                   />
                 ))
               ) : isLoadingDynamoJobs ? (
@@ -6684,7 +6936,7 @@ if (typeof document !== 'undefined') {
 }
 
 // Job Card Component
-const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language, isHighlighted }) => {
+const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language, isHighlighted, isHotSearch }) => {
   const getCompanyInitial = (company) => {
     return company.charAt(0).toUpperCase();
   };
@@ -6798,6 +7050,7 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
         <JobActions>
           <ActionButton
             $primary
+            $isHotSearch={isHotSearch}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={(e) => {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -14,6 +15,7 @@ import {
   CheckCircle,
   AlertCircle,
   Star,
+  Sparkles,
   Link as LinkIcon,
   ToggleLeft,
   ToggleRight,
@@ -147,14 +149,46 @@ const BannerGrid = styled.div`
 const BannerCard = styled.div`
   background: ${p => p.theme.colors.bgLight};
   border-radius: 14px;
-  border: 2px solid ${p => p.$active ? '#10b981' : p.theme.colors.border};
+  border: 2px solid ${p => p.$active ? (p.$isTopSpotlight ? '#dc2626' : '#10b981') : p.theme.colors.border};
   overflow: hidden;
   transition: all 0.25s;
   position: relative;
+  box-shadow: ${p => p.$isTopSpotlight && p.$active ? '0 0 15px rgba(220, 38, 38, 0.25)' : 'none'};
 
   &:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    box-shadow: ${p => p.$isTopSpotlight && p.$active 
+      ? '0 0 20px rgba(220, 38, 38, 0.4), 0 8px 24px rgba(0,0,0,0.1)' 
+      : '0 8px 24px rgba(0,0,0,0.1)'};
+  }
+`;
+
+const TabsContainer = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid ${props => props.theme.colors.border};
+`;
+
+const Tab = styled.button`
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  color: ${props => props.$active ? props.theme.colors.primary : props.theme.colors.textLight};
+  background: ${props => props.$active ? props.theme.colors.bgLight : 'transparent'};
+  border: none;
+  border-bottom: 3px solid ${props => props.$active ? props.theme.colors.primary : 'transparent'};
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  
+  &:hover {
+    color: ${props => props.theme.colors.primary};
+    background: ${props => props.theme.colors.bgLight};
   }
 `;
 
@@ -671,8 +705,35 @@ const BannersManagement = () => {
   const [saving, setSaving]       = useState(false);
   const [dragging, setDragging]   = useState(false);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState('standard');
+
   const fileInputRef = useRef(null);
   const toastTimer   = useRef(null);
+
+  // Parse query parameters to prefill banner data
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const typeParam = params.get('type');
+    const employerParam = params.get('employer');
+    
+    if (typeParam === 'top-spotlight') {
+      setActiveTab('top-spotlight');
+      if (employerParam) {
+        setEditTarget(null);
+        setTitle(`[Top Spotlight] ${decodeURIComponent(employerParam)}`);
+        setLinkUrl('');
+        setDisplayTime('');
+        setTargetRegions([]);
+        setImageFile(null);
+        setImagePreview('');
+        setShowModal(true);
+        // Clear query parameters so reloading or navigating away doesn't re-trigger it
+        navigate('/admin/banners', { replace: true });
+      }
+    }
+  }, [location, navigate]);
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -682,8 +743,9 @@ const BannersManagement = () => {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const activeBanners   = banners.filter(b => b.isActive);
-  const inactiveBanners = banners.filter(b => !b.isActive);
+  const displayedBanners = banners.filter(b => activeTab === 'top-spotlight' ? !!b.isTopSpotlight : !b.isTopSpotlight);
+  const activeBanners   = displayedBanners.filter(b => b.isActive);
+  const inactiveBanners = displayedBanners.filter(b => !b.isActive);
   const isAtCap         = activeBanners.length >= MAX_ACTIVE_BANNERS;
 
   // ── load data ─────────────────────────────────────────────────────────────
@@ -746,8 +808,8 @@ const BannersManagement = () => {
       showToast(vi ? 'Chỉ chấp nhận JPG, PNG, WebP, GIF' : 'Only JPG, PNG, WebP, GIF accepted', 'error');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast(vi ? 'File không được vượt quá 10MB' : 'File must be under 10MB', 'error');
+    if (file.size > 20 * 1024 * 1024) {
+      showToast(vi ? 'File không được vượt quá 20MB' : 'File must be under 20MB', 'error');
       return;
     }
     setImageFile(file);
@@ -799,7 +861,8 @@ const BannersManagement = () => {
         targetRegions,
         order: editTarget?.order || banners.length + 1,
         displayTime: displayTime || null,
-        expiredAt: expiredAt || null
+        expiredAt: expiredAt || null,
+        isTopSpotlight: editTarget ? !!editTarget.isTopSpotlight : activeTab === 'top-spotlight'
       };
 
       if (editTarget) {
@@ -879,6 +942,18 @@ const BannersManagement = () => {
           </p>
         </PageHeader>
 
+        {/* ── Tabs ── */}
+        <TabsContainer>
+          <Tab $active={activeTab === 'standard'} onClick={() => setActiveTab('standard')}>
+            <ImageIcon size={16} />
+            {vi ? 'Banner Tiêu Chuẩn' : 'Standard Banners'}
+          </Tab>
+          <Tab $active={activeTab === 'top-spotlight'} onClick={() => setActiveTab('top-spotlight')}>
+            <Sparkles size={16} style={{ color: activeTab === 'top-spotlight' ? '#dc2626' : 'inherit' }} />
+            {vi ? 'Banner Top Spotlight' : 'Top Spotlight Banners'}
+          </Tab>
+        </TabsContainer>
+
         {/* ── Info bar ── */}
         <InfoBar>
           <Info />
@@ -906,7 +981,9 @@ const BannersManagement = () => {
             </AddButton>
             <AddButton onClick={openAddModal}>
               <Plus size={18} />
-              {vi ? 'Thêm Banner' : 'Add Banner'}
+              {activeTab === 'top-spotlight' 
+                ? (vi ? 'Thêm Banner Spotlight' : 'Add Spotlight Banner')
+                : (vi ? 'Thêm Banner' : 'Add Banner')}
             </AddButton>
           </div>
         </TopBar>
@@ -924,11 +1001,15 @@ const BannersManagement = () => {
               </SkeletonCard>
             ))}
           </BannerGrid>
-        ) : banners.length === 0 ? (
+        ) : displayedBanners.length === 0 ? (
           <EmptyState>
             <ImageIcon />
             <h3>{vi ? 'Chưa có banner nào' : 'No banners yet'}</h3>
-            <p>{vi ? 'Nhấn "Thêm Banner" để tải ảnh lên và bắt đầu quản lý.' : 'Click "Add Banner" to upload images and get started.'}</p>
+            <p>
+              {activeTab === 'top-spotlight'
+                ? (vi ? 'Nhấn "Thêm Banner Spotlight" để tải ảnh lên và bắt đầu quản lý.' : 'Click "Add Spotlight Banner" to upload images and get started.')
+                : (vi ? 'Nhấn "Thêm Banner" để tải ảnh lên và bắt đầu quản lý.' : 'Click "Add Banner" to upload images and get started.')}
+            </p>
           </EmptyState>
         ) : (
           <>
@@ -1033,7 +1114,7 @@ const BannersManagement = () => {
                       <div className="main-text">
                         {vi ? 'Kéo thả hoặc click để chọn ảnh' : 'Drag & drop or click to select'}
                       </div>
-                      <div className="hint">JPG, PNG, WebP, GIF · Tối đa 10MB</div>
+                      <div className="hint">JPG, PNG, WebP, GIF · Tối đa 20MB</div>
                     </DropZone>
                   )}
                   <input
@@ -1178,7 +1259,7 @@ const BannersManagement = () => {
 // ─── Banner Card Item (extracted for clarity) ─────────────────────────────────
 
 const BannerCardItem = ({ banner, onToggle, onEdit, onDelete, fmtDate, isAtCap, vi }) => (
-  <BannerCard $active={banner.isActive}>
+  <BannerCard $active={banner.isActive} $isTopSpotlight={banner.isTopSpotlight}>
     <BannerImageWrap>
       {banner.imageUrl
         ? <img src={banner.imageUrl} alt={banner.title} onError={e => { e.target.style.display = 'none'; }} />
@@ -1191,6 +1272,28 @@ const BannerCardItem = ({ banner, onToggle, onEdit, onDelete, fmtDate, isAtCap, 
 
       {banner.isActive && (
         <ActiveBadge><CheckCircle /> {vi ? 'Đang chạy' : 'Live'}</ActiveBadge>
+      )}
+
+      {banner.isTopSpotlight && (
+        <div style={{
+          position: 'absolute',
+          top: banner.isActive ? '40px' : '10px',
+          left: '10px',
+          background: 'linear-gradient(135deg, #dc2626, #f59e0b)',
+          color: 'white',
+          fontSize: '10px',
+          fontWeight: 800,
+          padding: '3px 8px',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '3px',
+          boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)',
+          zIndex: 1,
+          textTransform: 'uppercase'
+        }}>
+          <Sparkles size={10} /> Spotlight
+        </div>
       )}
 
       <BannerActions>
@@ -1214,8 +1317,6 @@ const BannerCardItem = ({ banner, onToggle, onEdit, onDelete, fmtDate, isAtCap, 
           </span>
         </BannerMeta>
       )}
-
-
 
       <BannerFooter>
         <ToggleButton

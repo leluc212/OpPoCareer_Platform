@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import styled, { keyframes } from 'styled-components';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -29,8 +29,15 @@ const Hero = styled.div`
   padding: 48px 48px 40px;
   background: linear-gradient(135deg, #1a62ff 0%, #002e9d 100%);
   position: relative;
-  overflow: hidden;
   text-align: center;
+`;
+
+const HeroBackground = styled.div`
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
   &::after {
     content: '';
     position: absolute;
@@ -66,6 +73,7 @@ const SearchBox = styled.div`
   background: #fff;
   border-radius: 12px;
   padding: 12px 16px;
+  position: relative;
   input {
     flex: 1;
     border: none;
@@ -76,6 +84,57 @@ const SearchBox = styled.div`
     &::placeholder { color: #94a3b8; }
   }
   svg { color: #94a3b8; flex-shrink: 0; }
+`;
+
+const SuggestionDropdown = styled.div`
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px 0;
+  text-align: left;
+`;
+
+const SuggestionItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #1e293b;
+  transition: all 0.2s ease;
+  background: ${props => props.$isHotSearch ? 'linear-gradient(135deg, rgba(26, 98, 255, 0.06), rgba(26, 98, 255, 0.01))' : 'transparent'};
+  border-left: 3px solid ${props => props.$isHotSearch ? '#1a62ff' : 'transparent'};
+  
+  &:hover {
+    background: ${props => props.$isHotSearch ? 'linear-gradient(135deg, rgba(26, 98, 255, 0.1), rgba(26, 98, 255, 0.02))' : '#f8fafc'};
+  }
+  
+  .label-text {
+    font-weight: ${props => props.$isHotSearch ? '600' : 'normal'};
+    color: ${props => props.$isHotSearch ? '#1a62ff' : 'inherit'};
+  }
+  
+  .hot-badge {
+    background: rgba(26, 98, 255, 0.1);
+    color: #1a62ff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
 `;
 
 const SearchBtn = styled.button`
@@ -341,6 +400,17 @@ const PostDate = styled.div`
   color: ${p => p.$isDark ? '#64748b' : '#94a3b8'};
 `;
 
+const pulseBlink = keyframes`
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.97);
+  }
+`;
+
 const ApplyBtn = styled.div`
   display: flex;
   align-items: center;
@@ -348,6 +418,10 @@ const ApplyBtn = styled.div`
   font-size: 0.82rem;
   font-weight: 600;
   color: #1a62ff;
+
+  ${props => props.$isHotSearch && css`
+    animation: ${pulseBlink} 1.5s infinite ease-in-out;
+  `}
 `;
 
 /* ─── Modal ─── */
@@ -565,6 +639,9 @@ const PublicJobListing = () => {
   const [keyword, setKeyword] = useState(initKeyword);
   const [loc, setLoc] = useState(initLocation);
   const [jobs, setJobs] = useState([]);
+  const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchInputRef = useRef(null);
   const [employerLogos, setEmployerLogos] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -659,6 +736,47 @@ const PublicJobListing = () => {
     }).finally(() => setLoading(false));
   }, []);
 
+  // Load subscriptions to identify employers with active Hot Search package
+  useEffect(() => {
+    const loadHotSearchSubscriptions = async () => {
+      try {
+        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+        if (!API_ENDPOINT) return;
+        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        if (response.ok) {
+          const data = await response.json();
+          // Filter active and approved Hot Search packages
+          const activeHotSearchEmployerIds = new Set(
+            data
+              .filter(sub => 
+                sub.packageName === 'Hot Search' && 
+                sub.status === 'active' && 
+                sub.approvalStatus === 'approved'
+              )
+              .map(sub => sub.employerId)
+          );
+          setHotSearchEmployerIds(activeHotSearchEmployerIds);
+          console.log('✅ Active Hot Search Employer IDs:', Array.from(activeHotSearchEmployerIds));
+        }
+      } catch (err) {
+        console.error('Error loading hot search subscriptions:', err);
+      }
+    };
+
+    loadHotSearchSubscriptions();
+  }, []);
+
+  // Click outside search input suggestion box handler
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
   // ── Helper: parse salary to a numeric value (thousands VND) ──
   const getSalaryValue = (jobOrSalary) => {
     const job = typeof jobOrSalary === 'object' && jobOrSalary !== null ? jobOrSalary : null;
@@ -734,6 +852,56 @@ const PublicJobListing = () => {
 
   };
 
+  // Compute search suggestions
+  const suggestions = useMemo(() => {
+    if (!keyword.trim()) return [];
+    
+    const kw = keyword.toLowerCase().trim();
+    const matches = [];
+    const seenLabels = new Set();
+    
+    jobs.forEach(job => {
+      const isHot = hotSearchEmployerIds.has(job.employerId);
+      
+      // Check company name
+      const companyName = job.company || '';
+      if (companyName.toLowerCase().includes(kw)) {
+        const label = companyName;
+        const key = `company-${label}`;
+        if (!seenLabels.has(key)) {
+          seenLabels.add(key);
+          matches.push({
+            label: label,
+            type: 'company',
+            isHotSearch: isHot
+          });
+        }
+      }
+      
+      // Check job title
+      const jobTitle = job.title || '';
+      if (jobTitle.toLowerCase().includes(kw)) {
+        const label = jobTitle;
+        const key = `title-${label}`;
+        if (!seenLabels.has(key)) {
+          seenLabels.add(key);
+          matches.push({
+            label: label,
+            type: 'title',
+            isHotSearch: isHot
+          });
+        }
+      }
+    });
+    
+    // Sort suggestions: Hot Search suggestions first!
+    return matches.sort((a, b) => {
+      if (a.isHotSearch && !b.isHotSearch) return -1;
+      if (!a.isHotSearch && b.isHotSearch) return 1;
+      return a.label.localeCompare(b.label);
+    }).slice(0, 8);
+  }, [keyword, jobs, hotSearchEmployerIds]);
+
   const filtered = useMemo(() => {
     const kw = keyword.toLowerCase();
     const lc = loc.toLowerCase();
@@ -754,15 +922,20 @@ const PublicJobListing = () => {
       result = result.filter(j => savedJobIds.includes(j.idJob || j.jobID));
     }
     
-    // Sort quickBoost to the top first, then by date!
+    // Sort Hot Search first, then quickBoost, then by date!
     return [...result].sort((a, b) => {
+      const aHotSearch = hotSearchEmployerIds.has(a.employerId);
+      const bHotSearch = hotSearchEmployerIds.has(b.employerId);
+      if (aHotSearch && !bHotSearch) return -1;
+      if (!aHotSearch && bHotSearch) return 1;
+
       const aBoost = !!a.quickBoost;
       const bBoost = !!b.quickBoost;
       if (aBoost && !bBoost) return -1;
       if (!aBoost && bBoost) return 1;
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
-  }, [jobs, keyword, loc, selectedSalaryRanges, selectedWorkTimes, selectedPostTimes, activeTab, savedJobIds]);
+  }, [jobs, keyword, loc, selectedSalaryRanges, selectedWorkTimes, selectedPostTimes, activeTab, savedJobIds, hotSearchEmployerIds]);
 
   const handleSearch = () => {
     // just re-filter, state already updated
@@ -781,18 +954,52 @@ const PublicJobListing = () => {
   return (
     <PageWrapper>
       <Hero>
+        <HeroBackground />
         <HeroTitle>
           {language === 'vi' ? 'Tìm Việc Làm Phù Hợp' : 'Find Your Perfect Job'}
         </HeroTitle>
         <SearchRow>
-          <SearchBox>
+          <SearchBox ref={searchInputRef}>
             <Search size={18} />
             <input
               placeholder={language === 'vi' ? 'Vị trí, công ty...' : 'Job title, company...'}
               value={keyword}
-              onChange={e => setKeyword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              onChange={e => {
+                setKeyword(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  setShowSuggestions(false);
+                  handleSearch();
+                }
+              }}
             />
+            {showSuggestions && suggestions.length > 0 && (
+              <SuggestionDropdown>
+                {suggestions.map((s, idx) => (
+                  <SuggestionItem
+                    key={idx}
+                    $isHotSearch={s.isHotSearch}
+                    onClick={() => {
+                      setKeyword(s.label);
+                      setShowSuggestions(false);
+                      handleSearch();
+                    }}
+                  >
+                    {s.type === 'company' ? <Building2 size={16} /> : <Briefcase size={16} />}
+                    <span className="label-text">{s.label}</span>
+                    {s.isHotSearch && (
+                      <span className="hot-badge">
+                        <Sparkles size={10} style={{ color: '#1a62ff', width: 10, height: 10 }} />
+                        Hot
+                      </span>
+                    )}
+                  </SuggestionItem>
+                ))}
+              </SuggestionDropdown>
+            )}
           </SearchBox>
           <SearchBox style={{ flex: '0 0 200px' }}>
             <MapPin size={18} />
@@ -1038,7 +1245,7 @@ const PublicJobListing = () => {
                       <Bookmark />
                     </SaveBtn>
                     <PostDate $isDark={isDarkMode}>{formatDate(job.createdAt)}</PostDate>
-                    <ApplyBtn>
+                    <ApplyBtn $isHotSearch={hotSearchEmployerIds.has(job.employerId)}>
                       {language === 'vi' ? 'Xem & Ứng tuyển' : 'View & Apply'}
                       <ChevronRight size={14} />
                     </ApplyBtn>

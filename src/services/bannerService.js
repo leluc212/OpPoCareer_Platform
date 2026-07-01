@@ -89,11 +89,17 @@ export const getAllBanners = async () => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const banners = data.banners || data.data || data || [];
-    saveToStorage(banners); // keep local copy in sync
-    return banners;
+    const cleanBanners = banners.filter(
+      b => b.imageUrl && !b.imageUrl.startsWith('blob:') && !b.imageUrl.includes('localhost')
+    );
+    saveToStorage(cleanBanners); // keep local copy in sync
+    return cleanBanners;
   } catch (err) {
     console.warn('⚠️ [bannerService] API unavailable, using localStorage fallback:', err.message);
-    return loadFromStorage();
+    const local = loadFromStorage();
+    return local.filter(
+      b => b.imageUrl && !b.imageUrl.startsWith('blob:') && !b.imageUrl.includes('localhost')
+    );
   }
 };
 
@@ -107,43 +113,51 @@ export const uploadBannerImage = async (file) => {
   if (!allowedTypes.includes(file.type)) {
     throw new Error('Chỉ chấp nhận file JPG, PNG, WebP, GIF');
   }
-  const maxSize = 10 * 1024 * 1024; // 10 MB
+  const maxSize = 20 * 1024 * 1024; // 20 MB
   if (file.size > maxSize) {
-    throw new Error('File không được vượt quá 10MB');
+    throw new Error('File không được vượt quá 20MB');
   }
 
-  try {
-    const base64Content = await fileToBase64(file);
-    const safeFileName = `banner_${Date.now()}_${sanitizeFilename(file.name)}`;
+  const safeFileName = `banner_${Date.now()}_${sanitizeFilename(file.name)}`;
 
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/banners/upload`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        fileName: safeFileName,
-        fileContent: base64Content.split(',')[1],
-        fileType: file.type,
-        folder: 'banner'
-      }),
-      mode: 'cors'
-    });
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/banners/upload`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      fileName: safeFileName,
+      fileType: file.type,
+      folder: 'banner'
+    }),
+    mode: 'cors'
+  });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Upload failed: HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    return data.imageUrl || `${S3_BASE_URL}/banner/${safeFileName}`;
-  } catch (err) {
-    if (err.message.startsWith('Chỉ chấp nhận') || err.message.startsWith('File không')) {
-      throw err;
-    }
-    console.warn('⚠️ [bannerService] Upload API unavailable, using object URL:', err.message);
-    // Return a local preview URL so the UI works without a deployed backend
-    return URL.createObjectURL(file);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to request upload URL: HTTP ${res.status}`);
   }
+
+  const data = await res.json();
+  const { presignedUrl, imageUrl } = data;
+
+  if (!presignedUrl) {
+    throw new Error('Không nhận được Presigned URL từ backend');
+  }
+
+  // Direct upload to S3 via PUT request using the presigned URL
+  const uploadRes = await fetch(presignedUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type
+    },
+    body: file
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`S3 upload failed: HTTP ${uploadRes.status}`);
+  }
+
+  return imageUrl || `${S3_BASE_URL}/banner/${safeFileName}`;
 };
 
 /**
@@ -243,12 +257,17 @@ export const toggleBannerActive = async (bannerId, currentBanners) => {
   const target = currentBanners.find(b => b.bannerId === bannerId);
   if (!target) throw new Error('Banner not found');
 
-  const activeBanners = currentBanners.filter(b => b.isActive && b.bannerId !== bannerId);
+  const isTopSpotlight = !!target.isTopSpotlight;
+  const activeSameType = currentBanners.filter(
+    b => b.isActive && !!b.isTopSpotlight === isTopSpotlight && b.bannerId !== bannerId
+  );
 
-  if (!target.isActive && activeBanners.length >= MAX_ACTIVE_BANNERS) {
+  if (!target.isActive && activeSameType.length >= MAX_ACTIVE_BANNERS) {
     return {
       success: false,
-      message: `Đã đạt giới hạn ${MAX_ACTIVE_BANNERS} banner đang chạy. Hãy tắt một banner trước.`
+      message: isTopSpotlight
+        ? `Đã đạt giới hạn ${MAX_ACTIVE_BANNERS} banner Top Spotlight đang chạy. Hãy tắt một banner trước.`
+        : `Đã đạt giới hạn ${MAX_ACTIVE_BANNERS} banner tiêu chuẩn đang chạy. Hãy tắt một banner trước.`
     };
   }
 
@@ -262,11 +281,11 @@ export const toggleBannerActive = async (bannerId, currentBanners) => {
  * Get only the active banners (for use on the public website).
  * Optionally filters by candidate location (region targeting).
  * @param {string} [candidateLocation] - Candidate's location string (e.g. "Quận 1, TP.HCM")
- * Returns max 5 banners sorted by order/createdAt.
+ * Returns banners sorted by type (Top Spotlight first) and order/createdAt.
  */
 export const getActiveBanners = async (candidateLocation = '') => {
   const all = await getAllBanners();
-  return all
+  const activeAndFiltered = all
     .filter(b => b.isActive)
     .filter(b => {
       // Check expiration
@@ -280,9 +299,19 @@ export const getActiveBanners = async (candidateLocation = '') => {
       // Check if any target region matches the candidate's location string
       const loc = candidateLocation.toLowerCase();
       return b.targetRegions.some(region => loc.includes(region.toLowerCase()));
-    })
+    });
+
+  const spotlightBanners = activeAndFiltered
+    .filter(b => !!b.isTopSpotlight)
     .sort((a, b) => (a.order || 0) - (b.order || 0))
     .slice(0, MAX_ACTIVE_BANNERS);
+
+  const standardBanners = activeAndFiltered
+    .filter(b => !b.isTopSpotlight)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .slice(0, MAX_ACTIVE_BANNERS);
+
+  return [...spotlightBanners, ...standardBanners];
 };
 
 export default {

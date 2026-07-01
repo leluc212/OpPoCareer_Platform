@@ -12,7 +12,7 @@ Write-Host "`n[1/2] Creating Lambda package..." -ForegroundColor Yellow
 if (Test-Path "application-lambda.zip") { 
     Remove-Item "application-lambda.zip" -Force
 }
-Compress-Archive -Path "application-lambda.py", "email_service.py" -DestinationPath "application-lambda.zip" -Force
+Compress-Archive -Path "application-lambda.py", "email_service.py", "job_recommender.py" -DestinationPath "application-lambda.zip" -Force
 Write-Host "Package created" -ForegroundColor Green
 
 Write-Host "`n[2/2] Updating Lambda function code..." -ForegroundColor Yellow

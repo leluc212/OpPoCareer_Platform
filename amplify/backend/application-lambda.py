@@ -264,10 +264,6 @@ def submit_application(event, candidate_id, candidate_email, create_response):
             'jobType': job_type,
             'candidateId': candidate_id,
             'candidateEmail': candidate_email,
-            # paymentRecipientId: mặc định = candidateId khi tạo lần đầu.
-            # Khi worker bị thay thế và employer xác nhận worker mới,
-            # field này được cập nhật thành workerId mới để đảm bảo trả tiền đúng người.
-            'paymentRecipientId': candidate_id,
             'employerId': employer_id,
             'employerEmail': employer_email,
             'employerName': job.get('employerName') if job else employer_name,
@@ -474,41 +470,6 @@ def update_application_status(event, application_id, user_id, create_response):
         if not current_item:
             return create_response(404, {'error': 'Application not found'})
 
-        # ── Kiểm tra thời gian cho phép gửi yêu cầu thay đổi (time-gate) ────
-        # Rule: chỉ cho phép trong vòng 1 giờ ĐẦU kể từ giờ bắt đầu ca làm.
-        # Nếu ca chưa bắt đầu → vẫn cho phép (không bị giới hạn bởi rule này).
-        if new_status == 'pending_change':
-            job_id = current_item.get('jobId', '')
-            if job_id:
-                try:
-                    job_item = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
-                    work_date  = job_item.get('workDate', '')   # YYYY-MM-DD
-                    start_time = job_item.get('startTime', '')  # HH:MM
-                    if work_date and start_time:
-                        # Ghép thành datetime UTC+7 (Asia/Ho_Chi_Minh)
-                        # Server Lambda chạy UTC — convert sang UTC để so sánh nhất quán
-                        from datetime import timezone, timedelta
-                        vn_tz = timezone(timedelta(hours=7))
-                        shift_start_vn = datetime.strptime(
-                            f'{work_date} {start_time}', '%Y-%m-%d %H:%M'
-                        ).replace(tzinfo=vn_tz)
-                        deadline_vn = shift_start_vn + timedelta(hours=1)
-                        now_vn = datetime.now(tz=vn_tz)
-
-                        if now_vn > deadline_vn:
-                            print(f"⛔ Change request rejected: now={now_vn.isoformat()} > deadline={deadline_vn.isoformat()}")
-                            return create_response(400, {
-                                'error': 'Đã quá thời gian cho phép thay đổi nhân viên',
-                                'message': 'Chỉ được gửi yêu cầu thay đổi trong vòng 1 giờ đầu tính từ giờ bắt đầu ca làm.',
-                                'deadline': deadline_vn.strftime('%H:%M %d/%m/%Y'),
-                                'errorCode': 'CHANGE_REQUEST_DEADLINE_EXCEEDED'
-                            })
-                        print(f"✅ Change request time-gate passed: deadline={deadline_vn.isoformat()}")
-                except Exception as tge:
-                    # Lỗi khi lấy job info → fail-open (không chặn employer)
-                    print(f"⚠️ Could not validate change request time-gate: {tge}")
-        # ─────────────────────────────────────────────────────────────────────
-
         previous_status = current_item.get('status')
         status_changed = previous_status != new_status
         
@@ -529,8 +490,6 @@ def update_application_status(event, application_id, user_id, create_response):
             'candidateConfirmedAt',
             'chatMessages',
             'acceptedAt',
-            # paymentRecipientId: cho phép employer cập nhật khi xác nhận worker thay thế
-            'paymentRecipientId',
             'aiScreeningScore',
             'aiScreeningResult',
             'aiScreeningReason',
@@ -638,12 +597,7 @@ def update_application_status(event, application_id, user_id, create_response):
                 candidate_id_to_credit = app_item.get('candidateId')
                 job_id_to_credit = app_item.get('jobId')
 
-                # Việc 1 — Trả tiền đúng người: đọc paymentRecipientId trước,
-                # fallback về candidateId nếu field chưa tồn tại (backward compat).
-                payment_recipient_id = app_item.get('paymentRecipientId') or candidate_id_to_credit
-                print(f"💰 Payment recipient: paymentRecipientId={payment_recipient_id} (candidateId={candidate_id_to_credit})")
-
-                if payment_recipient_id and job_id_to_credit:
+                if candidate_id_to_credit and job_id_to_credit:
                     # Fetch job to get salary — try both standard and quick jobs tables
                     job_salary = Decimal('0')
                     try:
@@ -669,9 +623,9 @@ def update_application_status(event, application_id, user_id, create_response):
                     if candidate_income > 0:
                         candidate_table = dynamodb.Table('CandidateProfiles')
                         try:
-                            # Atomic increment — đọc paymentRecipientId để tránh trả nhầm cho worker cũ
+                            # Atomic increment — safe against concurrent calls
                             candidate_table.update_item(
-                                Key={'userId': payment_recipient_id},
+                                Key={'userId': candidate_id_to_credit},
                                 UpdateExpression='SET walletBalance = if_not_exists(walletBalance, :zero) + :income, updatedAt = :ts',
                                 ExpressionAttributeValues={
                                     ':income': candidate_income,
@@ -679,7 +633,7 @@ def update_application_status(event, application_id, user_id, create_response):
                                     ':ts': now_iso
                                 }
                             )
-                            print(f"✅ Credited {candidate_income} VND to paymentRecipient {payment_recipient_id}")
+                            print(f"✅ Credited {candidate_income} VND to candidate {candidate_id_to_credit}")
                         except Exception as we:
                             print(f"⚠️ Could not update candidate walletBalance: {we}")
                     else:
@@ -770,9 +724,6 @@ def list_change_requests(create_response):
     Bug-4 fix: trả về tất cả trạng thái (pending_change, ĐÃ_BỊ_THAY_THẾ, accepted với changeRequestStatus)
     thay vì chỉ lọc status='pending_change' — tránh mất audit trail sau khi xử lý.
 
-    Name-enrichment: dùng BatchGetItem để lấy employerName (companyName) từ EmployerProfiles
-    và workerName (fullName hoặc username) từ CandidateProfiles — tránh hiển thị UUID thô.
-
     TODO (Việc 3 — không sửa trong lần này):
       Hàm này dùng DynamoDB scan (Pass 1 & Pass 2) không có giới hạn số records.
       Dù đã có vòng pagination (LastEvaluatedKey), khi bảng lớn (>10k–100k items) mỗi
@@ -838,97 +789,6 @@ def list_change_requests(create_response):
                         app['_jobLocation'] = qj.get('location', '')
                 except Exception as je:
                     print(f"⚠️ Could not enrich job info for app {app.get('applicationId')}: {je}")
-
-        # ── Enrich employer & worker names ────────────────────────────────────
-        # Thu thập unique IDs cần lookup (bỏ qua rỗng / None)
-        employer_ids = list({app['employerId'] for app in applications if app.get('employerId')})
-        worker_ids   = list({app['candidateId'] for app in applications if app.get('candidateId')})
-
-        employer_name_map = {}  # employerId → companyName
-        worker_name_map   = {}  # candidateId → display name
-
-        # BatchGetItem tối đa 100 keys/lần — chia batch nếu cần
-        def batch_get_names(table_name, ids, key_field):
-            """Trả về dict {id: item} cho danh sách ids từ table_name.
-            Dùng ExpressionAttributeNames cho tất cả field để tránh lỗi reserved words
-            (username, name, status... đều là reserved trong DynamoDB).
-            """
-            result = {}
-            if not ids:
-                return result
-            for i in range(0, len(ids), 100):
-                chunk = ids[i:i + 100]
-                keys = [{key_field: uid} for uid in chunk]
-                try:
-                    resp = dynamodb.batch_get_item(
-                        RequestItems={
-                            table_name: {
-                                'Keys': keys,
-                                # Dùng alias cho mọi field để tránh reserved word errors
-                                'ProjectionExpression': '#pk, #cn, #fn, #un',
-                                'ExpressionAttributeNames': {
-                                    '#pk': key_field,
-                                    '#cn': 'companyName',
-                                    '#fn': 'fullName',
-                                    '#un': 'username'
-                                }
-                            }
-                        }
-                    )
-                    for item in resp.get('Responses', {}).get(table_name, []):
-                        result[item[key_field]] = item
-                    # Retry unprocessed keys (throttle) — đơn giản: bỏ qua (sẽ fallback về '(Không xác định)')
-                    if resp.get('UnprocessedKeys', {}).get(table_name):
-                        print(f"⚠️ BatchGetItem: {len(resp['UnprocessedKeys'][table_name]['Keys'])} unprocessed keys for {table_name}")
-                except Exception as be:
-                    print(f"⚠️ BatchGetItem failed for {table_name}: {be}")
-            return result
-
-        employer_items = batch_get_names('EmployerProfiles', employer_ids, 'userId')
-        worker_items   = batch_get_names('CandidateProfiles', worker_ids,   'userId')
-
-        print(f"[DEBUG] employer_ids to lookup: {employer_ids}")
-        print(f"[DEBUG] worker_ids (candidateId) to lookup: {worker_ids}")
-        print(f"[DEBUG] employer_items returned: {list(employer_items.keys())}")
-        print(f"[DEBUG] worker_items returned: {list(worker_items.keys())}")
-
-        for eid, item in employer_items.items():
-            employer_name_map[eid] = item.get('companyName') or item.get('name') or '(Không xác định)'
-
-        for wid, item in worker_items.items():
-            # Ưu tiên: fullName → username → '(Không xác định)'
-            name = item.get('fullName') or item.get('username') or ''
-            worker_name_map[wid] = name.strip() if name.strip() else '(Không xác định)'
-
-        print(f"[DEBUG] employer_name_map: {employer_name_map}")
-        print(f"[DEBUG] worker_name_map: {worker_name_map}")
-
-        # Gắn tên vào từng application — giữ nguyên ID gốc để logic Duyệt/Từ chối không bị ảnh hưởng
-        # Ưu tiên: dữ liệu đã lưu sẵn trong record → BatchGetItem → fallback
-        for app in applications:
-            eid = app.get('employerId', '')
-            wid = app.get('candidateId', '')  # LUÔN dùng candidateId gốc — KHÔNG dùng paymentRecipientId
-
-            print(f"[DEBUG] app {app.get('applicationId')}: employerId={eid!r}, candidateId={wid!r}, paymentRecipientId={app.get('paymentRecipientId')!r}")
-            print(f"[DEBUG]   -> stored employerName={app.get('employerName')!r}, companyName={app.get('companyName')!r}")
-            print(f"[DEBUG]   -> stored candidateName={app.get('candidateName')!r}")
-
-            app['employerName'] = (
-                app.get('employerName')                         # ưu tiên: đã lưu sẵn khi tạo application
-                or app.get('companyName')                       # fallback field thứ 2
-                or employer_name_map.get(eid, '')               # BatchGetItem từ EmployerProfiles
-                or ('(Không xác định)' if eid else '')
-            )
-            app['workerName'] = (
-                app.get('candidateName')                        # ưu tiên nếu đã có sẵn
-                or worker_name_map.get(wid, '')                 # BatchGetItem từ CandidateProfiles dùng candidateId
-                or ('(Không xác định)' if wid else '')
-            )
-
-            print(f"[DEBUG]   -> resolved employerName={app['employerName']!r}, workerName={app['workerName']!r}")
-
-        print(f"✅ Enriched {len(employer_name_map)} employer names, {len(worker_name_map)} worker names")
-        # ─────────────────────────────────────────────────────────────────────
 
         # FIX Bug 2 (backend): Sort by updatedAt DESC (mới nhất lên đầu), áp dụng cho mọi trạng thái
         applications.sort(key=lambda x: x.get('updatedAt', x.get('createdAt', '')), reverse=True)
@@ -1154,57 +1014,34 @@ def approve_change_request(event, application_id, create_response):
 
         # === Cập nhật application: đánh dấu worker đã bị thay thế ===
         # KHÔNG xoá item và KHÔNG xoá changeRequest — đây là lịch sử audit
-        # finalAmount = 0 và paymentStatus = 'KHÔNG_NHẬN_TIỀN': worker bị thay thế không nhận tiền
         applications_table.update_item(
             Key={'applicationId': application_id},
             UpdateExpression=(
                 'SET #status = :replaced, changeRequestStatus = :crs, '
-                'replacedAt = :now, updatedAt = :now, '
-                'finalAmount = :zero, paymentStatus = :no_pay'
+                'replacedAt = :now, updatedAt = :now'
             ),
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':replaced': 'ĐÃ_BỊ_THAY_THẾ',
                 ':crs':      'APPROVED',
-                ':now':      now_iso,
-                ':zero':     0,
-                ':no_pay':   'KHÔNG_NHẬN_TIỀN'
+                ':now':      now_iso
             }
         )
-        print(f"✅ Worker replaced for applicationId={application_id}, workerId={worker_id}, job {job_id} reopened — finalAmount=0, paymentStatus=KHÔNG_NHẬN_TIỀN")
+        print(f"✅ Worker replaced for applicationId={application_id}, workerId={worker_id}, job {job_id} reopened")
 
-        # === Việc 2a: Khoá kênh chat worker cũ — thêm system message ===
-        # Giữ lịch sử chat, chỉ thêm tin nhắn hệ thống thông báo kết thúc
-        try:
-            app_with_chat = applications_table.get_item(
-                Key={'applicationId': application_id},
-                ConsistentRead=True
-            ).get('Item', {})
-            existing_chat = app_with_chat.get('chatMessages') or []
-            if not isinstance(existing_chat, list):
-                existing_chat = []
-
-            # Thêm system message thông báo chat đã khoá
-            lock_message = {
-                'id': int(datetime.utcnow().timestamp() * 1000),
-                'sender': 'system',
-                'text': 'Cuộc trò chuyện đã kết thúc do ca làm đã được chuyển cho nhân viên khác.',
-                'time': datetime.utcnow().strftime('%H:%M'),
-                'isSystem': True
-            }
-            updated_chat = existing_chat + [lock_message]
-
-            applications_table.update_item(
-                Key={'applicationId': application_id},
-                UpdateExpression='SET chatMessages = :msgs, updatedAt = :now',
-                ExpressionAttributeValues={
-                    ':msgs': updated_chat,
-                    ':now':  now_iso
-                }
-            )
-            print(f"✅ Chat locked with system message for applicationId={application_id}")
-        except Exception as chat_err:
-            print(f"⚠️ Could not add chat lock message (non-fatal): {chat_err}")
+        # AI Recommender for urgent worker replacement
+        recommendations = {
+            'priority1': [],
+            'priority2': [],
+            'priority3': [],
+            'emailsSent': 0
+        }
+        if qj and qj.get('latitude') is not None and qj.get('longitude') is not None:
+            try:
+                from job_recommender import find_and_recommend_urgent_workers
+                recommendations = find_and_recommend_urgent_workers(qj)
+            except Exception as rec_err:
+                print(f"⚠️ Urgent recommender failed: {rec_err}")
 
         return create_response(200, {
             'success':        True,
@@ -1221,8 +1058,7 @@ def approve_change_request(event, application_id, create_response):
             'workDateDisplay': workdate_display,
             'reasonType':     reason_type,
             'reasonDetail':   reason_detail,
-            'finalAmount':    0,
-            'paymentStatus':  'KHÔNG_NHẬN_TIỀN'
+            'recommendations': recommendations
         })
     except Exception as e:
         print(f"❌ Error approving change request: {str(e)}")

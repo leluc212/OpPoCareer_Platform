@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, Star, UserPlus, History, Building2, Tag as TagIcon, Package, Zap, XCircle, MessageSquare, Send, Trash2, Home } from 'lucide-react';
+import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, Star, UserPlus, History, Building2, Tag as TagIcon, Package, Zap, XCircle, MessageSquare, Send, Trash2, Home, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import candidateProfileService from '../services/candidateProfileService';
@@ -9,6 +9,7 @@ import employerProfileService from '../services/employerProfileService';
 import jobPostService from '../services/jobPostService';
 import { getNotifications, markAsRead, markAllAsRead, createChatMessageNotification } from '../services/notificationService';
 import RelativeTime from './RelativeTime';
+import UrgentJobAlertModal from './UrgentJobAlertModal';
 import { s3Images } from '../utils/s3Images';
 import { getIdToken } from '../services/authHeaders';
 
@@ -127,16 +128,18 @@ const SearchSuggestionItem = styled.div`
   font-size: 14px;
   color: ${props => props.theme.colors.text};
   transition: background 0.15s;
+  background: ${props => props.$isHotSearch ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.08), rgba(30, 64, 175, 0.02))' : 'transparent'};
+  border-left: 3px solid ${props => props.$isHotSearch ? '#1e40af' : 'transparent'};
 
   &:hover {
-    background: ${props => props.theme.colors.bgDark};
-    color: ${props => props.theme.colors.primary};
+    background: ${props => props.$isHotSearch ? 'linear-gradient(135deg, rgba(30, 64, 175, 0.12), rgba(30, 64, 175, 0.04))' : props.theme.colors.bgDark};
+    color: ${props => props.$isHotSearch ? '#1e40af' : props.theme.colors.primary};
   }
 
   svg {
     width: 16px;
     height: 16px;
-    color: ${props => props.theme.colors.textLight};
+    color: ${props => props.$isHotSearch ? '#1e40af' : props.theme.colors.textLight};
     flex-shrink: 0;
   }
 
@@ -144,6 +147,19 @@ const SearchSuggestionItem = styled.div`
     font-size: 11px;
     color: ${props => props.theme.colors.textLight};
     margin-left: auto;
+  }
+
+  .hot-badge {
+    background: rgba(30, 64, 175, 0.12);
+    color: #1e40af;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
   }
 `;
 
@@ -841,6 +857,7 @@ const Navbar = ({ showSearch = true }) => {
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [searchHistory, setSearchHistory] = useState(() => JSON.parse(localStorage.getItem('jobSearchHistory') || '[]'));
   const [allJobTitles, setAllJobTitles] = useState([]);
+  const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
   const searchBarRef = useRef(null);
   const [companyLogo, setCompanyLogo] = useState(() => localStorage.getItem('companyLogo') || s3Images.system.katinatlogo);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -870,12 +887,46 @@ const Navbar = ({ showSearch = true }) => {
       const companies = [];
       const seen = new Set();
       jobs.forEach(j => {
-        if (j.title && !seen.has(j.title)) { titles.push({ label: j.title, type: 'job' }); seen.add(j.title); }
-        if (j.employerName && !seen.has(j.employerName)) { companies.push({ label: j.employerName, type: 'company' }); seen.add(j.employerName); }
+        if (j.title && !seen.has(j.title)) {
+          titles.push({ label: j.title, type: 'job', employerId: j.employerId });
+          seen.add(j.title);
+        }
+        if (j.company && !seen.has(j.company)) {
+          companies.push({ label: j.company, type: 'company', employerId: j.employerId });
+          seen.add(j.company);
+        }
       });
       setAllJobTitles([...titles, ...companies]);
     }).catch(() => { });
   }, [user]);
+
+  // Load subscriptions to identify employers with active Hot Search package
+  useEffect(() => {
+    const loadHotSearchSubscriptions = async () => {
+      try {
+        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+        if (!API_ENDPOINT) return;
+        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        if (response.ok) {
+          const data = await response.json();
+          const activeHotSearchEmployerIds = new Set(
+            data
+              .filter(sub => 
+                sub.packageName === 'Hot Search' && 
+                sub.status === 'active' && 
+                sub.approvalStatus === 'approved'
+              )
+              .map(sub => sub.employerId)
+          );
+          setHotSearchEmployerIds(activeHotSearchEmployerIds);
+        }
+      } catch (err) {
+        console.error('Error loading hot search subscriptions:', err);
+      }
+    };
+
+    loadHotSearchSubscriptions();
+  }, []);
 
   // Generate suggestions when query changes
   useEffect(() => {
@@ -886,9 +937,22 @@ const Navbar = ({ showSearch = true }) => {
       return;
     }
     const q = searchQuery.toLowerCase();
-    const matched = allJobTitles.filter(s => s.label.toLowerCase().includes(q)).slice(0, 7);
-    setSearchSuggestions(matched);
-  }, [searchQuery, allJobTitles]);
+    const matched = allJobTitles
+      .filter(s => s.label.toLowerCase().includes(q))
+      .map(s => ({
+        ...s,
+        isHotSearch: hotSearchEmployerIds.has(s.employerId)
+      }));
+
+    // Sort suggestions: Hot Search first!
+    const sortedMatched = matched.sort((a, b) => {
+      if (a.isHotSearch && !b.isHotSearch) return -1;
+      if (!a.isHotSearch && b.isHotSearch) return 1;
+      return a.label.localeCompare(b.label);
+    }).slice(0, 7);
+
+    setSearchSuggestions(sortedMatched);
+  }, [searchQuery, allJobTitles, hotSearchEmployerIds]);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -904,6 +968,17 @@ const Navbar = ({ showSearch = true }) => {
   // Get notifications from service
   const [realNotifications, setRealNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Urgent Job Alerts State
+  const [closedAlertIds, setClosedAlertIds] = useState(new Set());
+
+  const activeUrgentAlert = useMemo(() => {
+    if (user?.role !== 'candidate') return null;
+    return realNotifications.find(
+      n => n.type === 'urgent_job_alert' && !n.read && !n.deleted && !closedAlertIds.has(n.notificationId)
+    );
+  }, [realNotifications, user, closedAlertIds]);
+
   const [acknowledgedChatCountBell, setAcknowledgedChatCountBell] = useState(0);
   const [acknowledgedChatCountMessage, setAcknowledgedChatCountMessage] = useState(0);
 
@@ -1618,6 +1693,7 @@ const Navbar = ({ showSearch = true }) => {
                   {searchSuggestions.map((s, i) => (
                     <SearchSuggestionItem
                       key={i}
+                      $isHotSearch={s.isHotSearch}
                       onMouseDown={() => {
                         setSearchQuery(s.label);
                         setShowSearchSuggestions(false);
@@ -1629,7 +1705,14 @@ const Navbar = ({ showSearch = true }) => {
                     >
                       {s.type === 'history' ? <History /> : s.type === 'company' ? <Building2 /> : <Search />}
                       <span>{s.label}</span>
-                      {s.type === 'company' && <span className="sub">{language === 'vi' ? 'Công ty' : 'Company'}</span>}
+                      {s.isHotSearch ? (
+                        <span className="hot-badge">
+                          <Sparkles size={10} style={{ color: '#1e40af', width: 10, height: 10 }} />
+                          Hot
+                        </span>
+                      ) : (
+                        s.type === 'company' && <span className="sub">{language === 'vi' ? 'Công ty' : 'Company'}</span>
+                      )}
                     </SearchSuggestionItem>
                   ))}
                 </SearchSuggestionDropdown>
@@ -2102,6 +2185,28 @@ const Navbar = ({ showSearch = true }) => {
             </ConfirmButtonGroup>
           </ConfirmModal>
         </ModalBackdrop>
+      )}
+      
+      {activeUrgentAlert && (
+        <UrgentJobAlertModal
+          isOpen={!!activeUrgentAlert}
+          onClose={() => {
+            setClosedAlertIds(prev => {
+              const next = new Set(prev);
+              next.add(activeUrgentAlert.notificationId);
+              return next;
+            });
+          }}
+          notification={activeUrgentAlert}
+          onApplied={(notifId) => {
+            setClosedAlertIds(prev => {
+              const next = new Set(prev);
+              next.add(notifId);
+              return next;
+            });
+            setRealNotifications(prev => prev.map(n => n.notificationId === notifId ? { ...n, read: true } : n));
+          }}
+        />
       )}
     </>
   );

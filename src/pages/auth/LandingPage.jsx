@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { motion, useInView } from 'framer-motion';
@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { s3Images } from '../../utils/s3Images';
 import { imgUrl } from '../../utils/assetUrl';
+import jobPostService from '../../services/jobPostService';
 
 const LandingContainer = styled.div`
   min-height: 80vh;
@@ -1085,7 +1086,6 @@ const SearchContainer = styled(motion.div)`
   display: flex;
   gap: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
   
   &:hover {
     box-shadow: ${props => props.$isDark
@@ -1129,6 +1129,61 @@ const SearchContainer = styled(motion.div)`
       padding: 12px 20px;
       font-size: 14px;
     }
+  }
+`;
+
+const SuggestionDropdown = styled.div`
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: ${props => props.$isDark ? '#0f172a' : 'white'};
+  border: 1px solid ${props => props.$isDark ? '#334155' : '#e2e8f0'};
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px 0;
+  text-align: left;
+`;
+
+const SuggestionItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14.5px;
+  color: ${props => props.$isDark ? '#f1f5f9' : '#1e293b'};
+  transition: all 0.2s ease;
+  background: ${props => props.$isHotSearch 
+    ? (props.$isDark ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(14, 165, 233, 0.02))' : 'linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(14, 165, 233, 0.02))') 
+    : 'transparent'};
+  border-left: 3px solid ${props => props.$isHotSearch ? '#0ea5e9' : 'transparent'};
+  
+  &:hover {
+    background: ${props => props.$isHotSearch 
+      ? (props.$isDark ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(14, 165, 233, 0.04))' : 'linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(14, 165, 233, 0.04))') 
+      : (props.$isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9')};
+  }
+  
+  .label-text {
+    font-weight: ${props => props.$isHotSearch ? '600' : 'normal'};
+    color: ${props => props.$isHotSearch ? '#0ea5e9' : 'inherit'};
+  }
+  
+  .hot-badge {
+    background: rgba(14, 165, 233, 0.15);
+    color: #0ea5e9;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
   }
 `;
 
@@ -2913,6 +2968,10 @@ const LandingPage = ({ children }) => {
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [location, setLocation] = useState('');
+  const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
+  const [allJobTitles, setAllJobTitles] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchInputRef = useRef(null);
   const [titleText, setTitleText] = useState('');
   const [subtitleText, setSubtitleText] = useState('');
   const [showCursor, setShowCursor] = useState(true);
@@ -2946,6 +3005,87 @@ const LandingPage = ({ children }) => {
   const scrollToDownload = () => {
     downloadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // Load subscriptions to identify employers with active Hot Search package
+  useEffect(() => {
+    const loadHotSearchSubscriptions = async () => {
+      try {
+        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+        if (!API_ENDPOINT) return;
+        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        if (response.ok) {
+          const data = await response.json();
+          const activeHotSearchEmployerIds = new Set(
+            data
+              .filter(sub => 
+                sub.packageName === 'Hot Search' && 
+                sub.status === 'active' && 
+                sub.approvalStatus === 'approved'
+              )
+              .map(sub => sub.employerId)
+          );
+          setHotSearchEmployerIds(activeHotSearchEmployerIds);
+        }
+      } catch (err) {
+        console.error('Error loading hot search subscriptions:', err);
+      }
+    };
+
+    loadHotSearchSubscriptions();
+  }, []);
+
+  // Load all jobs for search suggestions on landing page
+  useEffect(() => {
+    jobPostService.getAllActiveJobs().then(jobs => {
+      const titles = [];
+      const companies = [];
+      const seen = new Set();
+      jobs.forEach(j => {
+        if (j.title && !seen.has(j.title)) {
+          titles.push({ label: j.title, type: 'job', employerId: j.employerId });
+          seen.add(j.title);
+        }
+        if (j.company && !seen.has(j.company)) {
+          companies.push({ label: j.company, type: 'company', employerId: j.employerId });
+          seen.add(j.company);
+        }
+      });
+      setAllJobTitles([...titles, ...companies]);
+    }).catch((err) => {
+      console.error('Error loading active jobs for suggestions:', err);
+    });
+  }, []);
+
+  // Click outside search input suggestion box handler
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Compute search suggestions for landing page search input
+  const suggestions = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    
+    const q = searchTerm.toLowerCase().trim();
+    const matched = allJobTitles
+      .filter(s => s.label.toLowerCase().includes(q))
+      .map(s => ({
+        ...s,
+        isHotSearch: hotSearchEmployerIds.has(s.employerId)
+      }));
+    
+    // Sort suggestions: Hot Search first!
+    return matched.sort((a, b) => {
+      if (a.isHotSearch && !b.isHotSearch) return -1;
+      if (!a.isHotSearch && b.isHotSearch) return 1;
+      return a.label.localeCompare(b.label);
+    }).slice(0, 8);
+  }, [searchTerm, allJobTitles, hotSearchEmployerIds]);
 
   // Auto start downloading after app shows
   useEffect(() => {
@@ -3517,15 +3657,49 @@ const LandingPage = ({ children }) => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
               >
-                <SearchInput $isDark={isDarkMode} $wide>
+                <SearchInput ref={searchInputRef} $isDark={isDarkMode} $wide>
                   <Search />
                   <input
                     type="text"
                     placeholder={language === 'vi' ? 'Vị trí công việc hoặc công ty' : 'Job title or company'}
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate('/jobs', { state: { searchKeyword: searchTerm, searchLocation: location } })}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setShowSuggestions(false);
+                        navigate('/jobs', { state: { searchKeyword: searchTerm, searchLocation: location } });
+                      }
+                    }}
                   />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <SuggestionDropdown $isDark={isDarkMode}>
+                      {suggestions.map((s, idx) => (
+                        <SuggestionItem
+                          key={idx}
+                          $isDark={isDarkMode}
+                          $isHotSearch={s.isHotSearch}
+                          onClick={() => {
+                            setSearchTerm(s.label);
+                            setShowSuggestions(false);
+                            navigate('/jobs', { state: { searchKeyword: s.label, searchLocation: location } });
+                          }}
+                        >
+                          {s.type === 'company' ? <Building2 size={16} /> : <Briefcase size={16} />}
+                          <span className="label-text">{s.label}</span>
+                          {s.isHotSearch && (
+                            <span className="hot-badge">
+                              <Sparkles size={10} style={{ color: '#0ea5e9', width: 10, height: 10 }} />
+                              Hot
+                            </span>
+                          )}
+                        </SuggestionItem>
+                      ))}
+                    </SuggestionDropdown>
+                  )}
                 </SearchInput>
 
                 <SearchInput $isDark={isDarkMode}>

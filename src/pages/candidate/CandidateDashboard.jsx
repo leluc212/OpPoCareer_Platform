@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import StatsCard from '../../components/StatsCard';
@@ -277,6 +277,16 @@ const ContentGrid = styled.div`
   }
 `;
 
+const shine = keyframes`
+  0% { left: -100%; }
+  100% { left: 200%; }
+`;
+
+const pulseSpotlight = keyframes`
+  0%, 100% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.4), 0 10px 40px rgba(0,0,0,0.15); }
+  50% { box-shadow: 0 0 30px rgba(220, 38, 38, 0.75), 0 10px 40px rgba(0,0,0,0.25); }
+`;
+
 const BoostBannerWrap = styled(motion.div)`
   position: relative;
   margin-bottom: 24px;
@@ -285,10 +295,34 @@ const BoostBannerWrap = styled(motion.div)`
   box-shadow: 0 10px 40px rgba(0,0,0,0.15);
   cursor: pointer;
   background: #f3f4f6;
+  border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
+  animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
+  transition: all 0.4s ease;
+  aspect-ratio: 16/5;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.35) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-25deg);
+    animation: ${props => props.$isTopSpotlight ? css`${shine} 3.5s infinite ease-in-out` : 'none'};
+    pointer-events: none;
+    z-index: 1;
+  }
 
   img {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
     display: block;
     transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -1320,9 +1354,9 @@ const CandidateDashboard = () => {
     const location = candidateProfile?.location || '';
     getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
-        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl })));
+        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl, isTopSpotlight: !!b.isTopSpotlight })));
       }
-    }).catch(() => {/* fallback to default banners */});
+    }).catch(() => {/* fallback to default banners */ });
   }, [candidateProfile?.location]);
 
   useEffect(() => {
@@ -2043,19 +2077,19 @@ const CandidateDashboard = () => {
             {/* Bug 6 fix: banner thông báo ca làm đã bị thay đổi bởi employer */}
             {replacedNotice && (
               <div style={{
-                background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: '12px',
+                background: '#FEF3C7', border: '1.5px solid #FDE68A', borderRadius: '12px',
                 padding: '14px 16px', marginBottom: '16px',
                 display: 'flex', alignItems: 'flex-start', gap: '10px',
               }}>
-                <span style={{ fontSize: '20px', flexShrink: 0 }}>🚫</span>
+                <span style={{ fontSize: '20px', flexShrink: 0 }}>⚠️</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '700', fontSize: '14px', color: '#DC2626', marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Ca làm của bạn đã bị huỷ' : 'Your shift has been cancelled'}
+                  <div style={{ fontWeight: '700', fontSize: '14px', color: '#92400E', marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Ca làm của bạn đã bị kết thúc sớm' : 'Your shift has ended early'}
                   </div>
-                  <div style={{ fontSize: '13px', color: '#7F1D1D', lineHeight: '1.5' }}>
+                  <div style={{ fontSize: '13px', color: '#78350F', lineHeight: '1.5' }}>
                     {language === 'vi'
-                      ? `Yêu cầu thay đổi nhân viên cho ca "${replacedNotice.jobTitle}" đã được admin duyệt. Ca làm đã bị huỷ. Ca này sẽ không được tính tiền công.`
-                      : `The staff change request for "${replacedNotice.jobTitle}" was approved by admin. Your shift has been cancelled. This shift will not be compensated.`
+                      ? `Nhà tuyển dụng đã gửi yêu cầu thay đổi nhân viên cho ca "${replacedNotice.jobTitle}" và đã được admin duyệt.`
+                      : `The employer submitted a worker change request for "${replacedNotice.jobTitle}" which was approved by admin.`
                     }
                   </div>
                 </div>
@@ -2069,7 +2103,7 @@ const CandidateDashboard = () => {
                   }}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#DC2626', flexShrink: 0, fontSize: '18px', lineHeight: 1,
+                    color: '#92400E', flexShrink: 0, fontSize: '18px', lineHeight: 1,
                     padding: '0 4px',
                   }}
                   aria-label="Đóng thông báo"
@@ -2415,9 +2449,23 @@ const CandidateDashboard = () => {
                   if (link) window.open(link, '_blank', 'noopener,noreferrer');
                 }}
                 style={{ cursor: banners[currentBannerIndex]?.linkUrl ? 'pointer' : 'default' }}
+                $isTopSpotlight={banners[currentBannerIndex]?.isTopSpotlight}
               >
-                <BoostTag>{language === 'vi' ? '🔥Đề xuất' : '🔥Featured'}</BoostTag>
-                <div style={{ position: 'relative', width: '100%', lineHeight: 0 }}>
+                {banners[currentBannerIndex]?.isTopSpotlight ? (
+                  <BoostTag style={{
+                    background: 'linear-gradient(135deg, #DC2626 0%, #F59E0B 100%)',
+                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    padding: '5px 14px',
+                    letterSpacing: '0.5px'
+                  }}>
+                    <Sparkles size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
+                    {language === 'vi' ? 'TOP SPOTLIGHT' : 'TOP SPOTLIGHT'}
+                  </BoostTag>
+                ) : (
+                  <BoostTag>{language === 'vi' ? '🔥Đề xuất' : '🔥Featured'}</BoostTag>
+                )}
+                <div style={{ position: 'relative', width: '100%', height: '100%', lineHeight: 0 }}>
                   <AnimatePresence mode="sync">
                     <motion.img
                       key={currentBannerIndex}
@@ -2432,21 +2480,12 @@ const CandidateDashboard = () => {
                       alt={banners[currentBannerIndex].alt}
                       style={{
                         width: '100%',
-                        height: 'auto',
-                        display: 'block',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block'
                       }}
                     />
                   </AnimatePresence>
-                  {/* Placeholder để giữ chiều cao container */}
-                  <img
-                    src={banners[currentBannerIndex].src}
-                    alt=""
-                    style={{ width: '100%', height: 'auto', display: 'block', visibility: 'hidden' }}
-                    aria-hidden="true"
-                  />
                 </div>
                 <BannerDots>
                   {banners.map((_, idx) => (

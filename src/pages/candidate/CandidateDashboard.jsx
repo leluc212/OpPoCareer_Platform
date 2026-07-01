@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
 import StatsCard from '../../components/StatsCard';
@@ -296,8 +296,9 @@ const BoostBannerWrap = styled(motion.div)`
   cursor: pointer;
   background: #f3f4f6;
   border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
-  animation: ${props => props.$isTopSpotlight ? `${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
+  animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
   transition: all 0.4s ease;
+  aspect-ratio: 16/5;
 
   &::after {
     content: '';
@@ -313,14 +314,15 @@ const BoostBannerWrap = styled(motion.div)`
       rgba(255, 255, 255, 0) 100%
     );
     transform: skewX(-25deg);
-    animation: ${props => props.$isTopSpotlight ? `${shine} 3.5s infinite ease-in-out` : 'none'};
+    animation: ${props => props.$isTopSpotlight ? css`${shine} 3.5s infinite ease-in-out` : 'none'};
     pointer-events: none;
     z-index: 1;
   }
 
   img {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
     display: block;
     transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -2463,7 +2465,7 @@ const CandidateDashboard = () => {
                 ) : (
                   <BoostTag>{language === 'vi' ? '🔥Đề xuất' : '🔥Featured'}</BoostTag>
                 )}
-                <div style={{ position: 'relative', width: '100%', lineHeight: 0 }}>
+                <div style={{ position: 'relative', width: '100%', height: '100%', lineHeight: 0 }}>
                   <AnimatePresence mode="sync">
                     <motion.img
                       key={currentBannerIndex}
@@ -2478,21 +2480,12 @@ const CandidateDashboard = () => {
                       alt={banners[currentBannerIndex].alt}
                       style={{
                         width: '100%',
-                        height: 'auto',
-                        display: 'block',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block'
                       }}
                     />
                   </AnimatePresence>
-                  {/* Placeholder để giữ chiều cao container */}
-                  <img
-                    src={banners[currentBannerIndex].src}
-                    alt=""
-                    style={{ width: '100%', height: 'auto', display: 'block', visibility: 'hidden' }}
-                    aria-hidden="true"
-                  />
                 </div>
                 <BannerDots>
                   {banners.map((_, idx) => (

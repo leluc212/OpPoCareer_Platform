@@ -85,9 +85,14 @@ def create_banner(body):
             'isActive':  body.get('isActive', False),
             'order':     int(body.get('order', 0)),
             'targetRegions': body.get('targetRegions', []),  # [] = all regions
+            'isTopSpotlight': body.get('isTopSpotlight', False),
+            'displayTime': body.get('displayTime'),
+            'expiredAt': body.get('expiredAt'),
             'createdAt': now_iso(),
             'updatedAt': now_iso(),
         }
+        # Remove None values to avoid DB pollution and legacy boto3 issues
+        item = {k: v for k, v in item.items() if v is not None}
         table.put_item(Item=item)
         return ok({'banner': item}, 201)
     except Exception as e:
@@ -108,8 +113,14 @@ def update_banner(banner_id, body):
         # targetRegions can be an empty list (meaning all regions), so check key existence
         if 'targetRegions' in body:
             updates['targetRegions'] = body['targetRegions']
-        # Remove None values
-        updates = {k: v for k, v in updates.items() if v is not None}
+
+        # Check explicit fields to allow setting them to None/null
+        for field in ['isTopSpotlight', 'displayTime', 'expiredAt']:
+            if field in body:
+                updates[field] = body[field]
+
+        # Remove None values except for explicit fields that can be set to None/null
+        updates = {k: v for k, v in updates.items() if v is not None or k in ['displayTime', 'expiredAt']}
 
         expr_parts = [f'#k_{k} = :v_{k}' for k in updates]
         expr_names = {f'#k_{k}': k for k in updates}

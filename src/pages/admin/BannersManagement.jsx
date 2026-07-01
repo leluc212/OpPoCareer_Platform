@@ -1001,11 +1001,15 @@ const BannersManagement = () => {
               </SkeletonCard>
             ))}
           </BannerGrid>
-        ) : banners.length === 0 ? (
+        ) : displayedBanners.length === 0 ? (
           <EmptyState>
             <ImageIcon />
             <h3>{vi ? 'Chưa có banner nào' : 'No banners yet'}</h3>
-            <p>{vi ? 'Nhấn "Thêm Banner" để tải ảnh lên và bắt đầu quản lý.' : 'Click "Add Banner" to upload images and get started.'}</p>
+            <p>
+              {activeTab === 'top-spotlight'
+                ? (vi ? 'Nhấn "Thêm Banner Spotlight" để tải ảnh lên và bắt đầu quản lý.' : 'Click "Add Spotlight Banner" to upload images and get started.')
+                : (vi ? 'Nhấn "Thêm Banner" để tải ảnh lên và bắt đầu quản lý.' : 'Click "Add Banner" to upload images and get started.')}
+            </p>
           </EmptyState>
         ) : (
           <>

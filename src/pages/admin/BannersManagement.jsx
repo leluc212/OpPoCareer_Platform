@@ -808,8 +808,8 @@ const BannersManagement = () => {
       showToast(vi ? 'Chỉ chấp nhận JPG, PNG, WebP, GIF' : 'Only JPG, PNG, WebP, GIF accepted', 'error');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showToast(vi ? 'File không được vượt quá 10MB' : 'File must be under 10MB', 'error');
+    if (file.size > 20 * 1024 * 1024) {
+      showToast(vi ? 'File không được vượt quá 20MB' : 'File must be under 20MB', 'error');
       return;
     }
     setImageFile(file);
@@ -1114,7 +1114,7 @@ const BannersManagement = () => {
                       <div className="main-text">
                         {vi ? 'Kéo thả hoặc click để chọn ảnh' : 'Drag & drop or click to select'}
                       </div>
-                      <div className="hint">JPG, PNG, WebP, GIF · Tối đa 10MB</div>
+                      <div className="hint">JPG, PNG, WebP, GIF · Tối đa 20MB</div>
                     </DropZone>
                   )}
                   <input

@@ -89,11 +89,17 @@ export const getAllBanners = async () => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const banners = data.banners || data.data || data || [];
-    saveToStorage(banners); // keep local copy in sync
-    return banners;
+    const cleanBanners = banners.filter(
+      b => b.imageUrl && !b.imageUrl.startsWith('blob:') && !b.imageUrl.includes('localhost')
+    );
+    saveToStorage(cleanBanners); // keep local copy in sync
+    return cleanBanners;
   } catch (err) {
     console.warn('⚠️ [bannerService] API unavailable, using localStorage fallback:', err.message);
-    return loadFromStorage();
+    const local = loadFromStorage();
+    return local.filter(
+      b => b.imageUrl && !b.imageUrl.startsWith('blob:') && !b.imageUrl.includes('localhost')
+    );
   }
 };
 
@@ -107,43 +113,51 @@ export const uploadBannerImage = async (file) => {
   if (!allowedTypes.includes(file.type)) {
     throw new Error('Chỉ chấp nhận file JPG, PNG, WebP, GIF');
   }
-  const maxSize = 10 * 1024 * 1024; // 10 MB
+  const maxSize = 20 * 1024 * 1024; // 20 MB
   if (file.size > maxSize) {
-    throw new Error('File không được vượt quá 10MB');
+    throw new Error('File không được vượt quá 20MB');
   }
 
-  try {
-    const base64Content = await fileToBase64(file);
-    const safeFileName = `banner_${Date.now()}_${sanitizeFilename(file.name)}`;
+  const safeFileName = `banner_${Date.now()}_${sanitizeFilename(file.name)}`;
 
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/banners/upload`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        fileName: safeFileName,
-        fileContent: base64Content.split(',')[1],
-        fileType: file.type,
-        folder: 'banner'
-      }),
-      mode: 'cors'
-    });
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/banners/upload`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      fileName: safeFileName,
+      fileType: file.type,
+      folder: 'banner'
+    }),
+    mode: 'cors'
+  });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Upload failed: HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    return data.imageUrl || `${S3_BASE_URL}/banner/${safeFileName}`;
-  } catch (err) {
-    if (err.message.startsWith('Chỉ chấp nhận') || err.message.startsWith('File không')) {
-      throw err;
-    }
-    console.warn('⚠️ [bannerService] Upload API unavailable, using object URL:', err.message);
-    // Return a local preview URL so the UI works without a deployed backend
-    return URL.createObjectURL(file);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to request upload URL: HTTP ${res.status}`);
   }
+
+  const data = await res.json();
+  const { presignedUrl, imageUrl } = data;
+
+  if (!presignedUrl) {
+    throw new Error('Không nhận được Presigned URL từ backend');
+  }
+
+  // Direct upload to S3 via PUT request using the presigned URL
+  const uploadRes = await fetch(presignedUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type
+    },
+    body: file
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`S3 upload failed: HTTP ${uploadRes.status}`);
+  }
+
+  return imageUrl || `${S3_BASE_URL}/banner/${safeFileName}`;
 };
 
 /**

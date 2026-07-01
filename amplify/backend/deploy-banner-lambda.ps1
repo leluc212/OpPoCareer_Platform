@@ -83,6 +83,7 @@ Write-Host "`n⚡ Step 4: Deploying Lambda '$FunctionName'..." -ForegroundColor 
 
 $lambdaExists = aws lambda get-function --function-name $FunctionName --region $Region 2>&1
 if ($LASTEXITCODE -ne 0) {
+    $EnvVars = 'Variables={BANNERS_TABLE=' + $TableName + ',S3_BUCKET=' + $S3Bucket + ',S3_REGION=' + $Region + ',MAX_ACTIVE_BANNERS=5}'
     aws lambda create-function `
         --function-name $FunctionName `
         --runtime python3.12 `
@@ -91,7 +92,7 @@ if ($LASTEXITCODE -ne 0) {
         --zip-file "fileb://$ZipFile" `
         --timeout 30 `
         --memory-size 256 `
-        --environment "Variables={BANNERS_TABLE=$TableName,S3_BUCKET=$S3Bucket,S3_REGION=$Region,MAX_ACTIVE_BANNERS=5}" `
+        --environment $EnvVars `
         --region $Region | Out-Null
     Write-Host "  ✅ Lambda created." -ForegroundColor Green
 } else {
@@ -102,11 +103,12 @@ if ($LASTEXITCODE -ne 0) {
 
     Start-Sleep -Seconds 5
 
+    $EnvVars = 'Variables={BANNERS_TABLE=' + $TableName + ',S3_BUCKET=' + $S3Bucket + ',S3_REGION=' + $Region + ',MAX_ACTIVE_BANNERS=5}'
     aws lambda update-function-configuration `
         --function-name $FunctionName `
         --timeout 30 `
         --memory-size 256 `
-        --environment "Variables={BANNERS_TABLE=$TableName,S3_BUCKET=$S3Bucket,S3_REGION=$Region,MAX_ACTIVE_BANNERS=5}" `
+        --environment $EnvVars `
         --region $Region | Out-Null
     Write-Host "  ✅ Lambda updated." -ForegroundColor Green
 }

@@ -148,31 +148,45 @@ def delete_banner(banner_id):
 
 def upload_image(body):
     """
-    Accepts { fileName, fileContent (base64), fileType, folder }
-    Uploads to S3 and returns the public URL.
+    Accepts { fileName, fileType, folder, fileContent (optional) }
+    If fileContent is provided (base64), uploads synchronously.
+    Otherwise, returns an S3 presigned URL for direct upload.
     """
     try:
         file_name    = body.get('fileName', f"banner_{uuid.uuid4().hex}.jpg")
-        file_content = body.get('fileContent', '')
         file_type    = body.get('fileType', 'image/jpeg')
         folder       = body.get('folder', 'banner')
+        file_content = body.get('fileContent', '')
 
-        if not file_content:
-            return err('fileContent is required')
-
-        image_bytes = base64.b64decode(file_content)
         s3_key = f"{folder.strip('/')}/{file_name}"
-
-        # BucketOwnerEnforced mode — ACLs are disabled, public access via bucket policy
-        s3.put_object(
-            Bucket=S3_BUCKET,
-            Key=s3_key,
-            Body=image_bytes,
-            ContentType=file_type
-        )
-
         image_url = f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com/{s3_key}"
-        return ok({'imageUrl': image_url, 's3Key': s3_key})
+
+        if file_content:
+            # Traditional upload (synchronous base64 decode)
+            image_bytes = base64.b64decode(file_content)
+            s3.put_object(
+                Bucket=S3_BUCKET,
+                Key=s3_key,
+                Body=image_bytes,
+                ContentType=file_type
+            )
+            return ok({'imageUrl': image_url, 's3Key': s3_key})
+        else:
+            # Generate S3 Presigned URL for direct upload from the browser
+            presigned_url = s3.generate_presigned_url(
+                ClientMethod='put_object',
+                Params={
+                    'Bucket': S3_BUCKET,
+                    'Key': s3_key,
+                    'ContentType': file_type
+                },
+                ExpiresIn=3600
+            )
+            return ok({
+                'presignedUrl': presigned_url,
+                'imageUrl': image_url,
+                's3Key': s3_key
+            })
     except Exception as e:
         return err(str(e), 500)
 

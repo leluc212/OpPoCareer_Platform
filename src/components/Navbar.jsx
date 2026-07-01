@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, Star, UserPlus, History, Building2, Tag as TagIcon, Package, Zap, XCircle, MessageSquare, Send, Trash2, Home, Sparkles } from 'lucide-react';
@@ -9,6 +9,7 @@ import employerProfileService from '../services/employerProfileService';
 import jobPostService from '../services/jobPostService';
 import { getNotifications, markAsRead, markAllAsRead, createChatMessageNotification } from '../services/notificationService';
 import RelativeTime from './RelativeTime';
+import UrgentJobAlertModal from './UrgentJobAlertModal';
 import { s3Images } from '../utils/s3Images';
 import { getIdToken } from '../services/authHeaders';
 
@@ -967,6 +968,17 @@ const Navbar = ({ showSearch = true }) => {
   // Get notifications from service
   const [realNotifications, setRealNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Urgent Job Alerts State
+  const [closedAlertIds, setClosedAlertIds] = useState(new Set());
+
+  const activeUrgentAlert = useMemo(() => {
+    if (user?.role !== 'candidate') return null;
+    return realNotifications.find(
+      n => n.type === 'urgent_job_alert' && !n.read && !n.deleted && !closedAlertIds.has(n.notificationId)
+    );
+  }, [realNotifications, user, closedAlertIds]);
+
   const [acknowledgedChatCountBell, setAcknowledgedChatCountBell] = useState(0);
   const [acknowledgedChatCountMessage, setAcknowledgedChatCountMessage] = useState(0);
 
@@ -2148,6 +2160,28 @@ const Navbar = ({ showSearch = true }) => {
             </ConfirmButtonGroup>
           </ConfirmModal>
         </ModalBackdrop>
+      )}
+      
+      {activeUrgentAlert && (
+        <UrgentJobAlertModal
+          isOpen={!!activeUrgentAlert}
+          onClose={() => {
+            setClosedAlertIds(prev => {
+              const next = new Set(prev);
+              next.add(activeUrgentAlert.notificationId);
+              return next;
+            });
+          }}
+          notification={activeUrgentAlert}
+          onApplied={(notifId) => {
+            setClosedAlertIds(prev => {
+              const next = new Set(prev);
+              next.add(notifId);
+              return next;
+            });
+            setRealNotifications(prev => prev.map(n => n.notificationId === notifId ? { ...n, read: true } : n));
+          }}
+        />
       )}
     </>
   );

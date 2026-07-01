@@ -673,3 +673,82 @@ def send_employer_interview_completed_email(application):
     
     html_content = wrap_layout(subject, content)
     return send_noreply_email(employer_email, subject, html_content)
+
+
+def send_urgent_replacement_email(to_email, name, job):
+    """
+    Sends an email to the Candidate notifying them about an urgent job replacement opportunity.
+    """
+    job_id = job.get('jobID') or job.get('idJob', '---')
+    job_title = job.get('title', 'Ca làm việc')
+    company = job.get('companyName') or job.get('employerName') or job.get('company') or 'Nhà tuyển dụng'
+    
+    # Salary
+    hourly_rate = job.get('hourlyRate')
+    total_salary = job.get('totalSalary')
+    total_hours = job.get('totalHours')
+    try:
+        if total_salary:
+            income = int(float(total_salary) * 0.85)
+            salary_str = f"{income:,} VNĐ / {total_hours} giờ"
+        elif hourly_rate:
+            income_rate = int(float(hourly_rate) * 0.85)
+            salary_str = f"{income_rate:,} VNĐ/giờ"
+        else:
+            salary_str = "Thỏa thuận"
+    except Exception:
+        salary_str = "Thỏa thuận"
+
+    location = job.get('location', 'Chưa cập nhật')
+    
+    # Work Time
+    work_date = job.get('workDate', '')
+    start_time = job.get('startTime', '')
+    end_time = job.get('endTime', '')
+    if work_date and start_time and end_time:
+        work_time_str = f"{start_time} - {end_time} ngày {work_date}"
+    else:
+        work_time_str = "Theo thỏa thuận"
+
+    subject = f"[Ốp Pờ] [CẦN NGƯỜI GẤP] Cơ hội làm việc ngay: {job_title} tại {company}"
+    
+    app_url = "https://oppocareer.com"
+    job_link = f"{app_url}/candidate/jobs?selectedJobId={job_id}&tab=shift"
+    
+    content = f"""
+    <div style="margin-bottom: 15px; text-align: center;">
+        <span style="background-color: #ef4444; color: #ffffff; padding: 6px 12px; border-radius: 6px; font-weight: 800; font-size: 13px; font-family: 'Segoe UI', Arial, sans-serif; display: inline-block; letter-spacing: 0.5px; text-transform: uppercase;">
+            CẦN NGƯỜI LÀM GẤP
+        </span>
+    </div>
+    <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 20px; font-size: 20px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Chào {name},</h2>
+    <p style="color: #334155; font-size: 15px; line-height: 1.6; margin-bottom: 24px; font-family: 'Segoe UI', Arial, sans-serif;">
+        Chúng tôi có một ca làm việc khẩn cấp tại khu vực của bạn đang cần người gấp trên hệ thống <strong>Ốp Pờ</strong>. Vui lòng xem thông tin chi tiết dưới đây và đăng ký ngay nếu phù hợp:
+    </p>
+    <div style="border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px; background-color: #ffffff; margin-bottom: 35px; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);">
+        <h2 style="color: #1d4ed8; margin-top: 0; margin-bottom: 8px; font-size: 18px; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">
+            {job_title}
+        </h2>
+        <p style="color: #475569; font-weight: 600; font-size: 15px; margin-top: 0; margin-bottom: 18px; font-family: 'Segoe UI', Arial, sans-serif;">
+            {company}
+        </p>
+        <div style="border-top: 1px solid #f1f5f9; padding-top: 18px; color: #334155; font-size: 14px; line-height: 1.6; font-family: 'Segoe UI', Arial, sans-serif;">
+            <p style="margin: 6px 0; color: #475569;"><strong>Mức lương (nhận sau ca):</strong> <span style="color: #dc2626; font-weight: 700; font-size: 15px;">{salary_str}</span></p>
+            <p style="margin: 6px 0; color: #475569;"><strong>Địa điểm làm việc:</strong> {location}</p>
+            <p style="margin: 6px 0; color: #475569;"><strong>Thời gian làm việc:</strong> {work_time_str}</p>
+        </div>
+    </div>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+            <td align="center">
+                <a href="{job_link}" target="_blank" style="display: inline-block; background-color: #ef4444; color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 15px 38px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.3); font-family: 'Segoe UI', Arial, sans-serif;">
+                    Xem Ca Làm & Đăng Ký Ngay
+                </a>
+            </td>
+        </tr>
+    </table>
+    """
+    
+    html_content = wrap_layout(subject, content)
+    return send_noreply_email(to_email, subject, html_content)
+

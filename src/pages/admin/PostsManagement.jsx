@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import Modal from '../../components/Modal';
+import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
 import { useLanguage } from '../../context/LanguageContext';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
@@ -697,6 +698,11 @@ const PostsManagement = () => {
   // Bug 2 fix: filter theo trạng thái, mặc định chỉ hiện "Chờ duyệt"
   const [crStatusFilter, setCrStatusFilter] = useState('pending');
 
+  // AI Urgent recommendations
+  const [showRecsModal, setShowRecsModal] = useState(false);
+  const [activeRecommendations, setActiveRecommendations] = useState(null);
+  const [recJobTitle, setRecJobTitle] = useState('');
+
   const showCRToast = (type, message) => {
     setCrToast({ type, message });
     setTimeout(() => setCrToast(null), 3500);
@@ -828,6 +834,12 @@ const PostsManagement = () => {
       showCRToast('success', 'Đã duyệt — ca làm việc đã được xử lý thành công, job mở lại để tuyển người mới');
       setSelectedCR(null);
       await loadChangeRequests();
+
+      if (result.recommendations) {
+        setActiveRecommendations(result.recommendations);
+        setRecJobTitle(result.jobTitle || cr.jobTitle || 'Ca làm');
+        setShowRecsModal(true);
+      }
     } catch (err) {
       console.error('❌ Approve CR failed:', err);
       showCRToast('error', err.message || 'Lỗi khi duyệt yêu cầu');
@@ -2276,6 +2288,14 @@ const PostsManagement = () => {
             )}
           </>
         )}
+
+        {/* Urgent recommendations modal */}
+        <UrgentRecommendationsModal
+          isOpen={showRecsModal}
+          onClose={() => setShowRecsModal(false)}
+          recommendations={activeRecommendations}
+          jobTitle={recJobTitle}
+        />
 
         {/* Toast thông báo cho change request actions */}
         {crToast && (

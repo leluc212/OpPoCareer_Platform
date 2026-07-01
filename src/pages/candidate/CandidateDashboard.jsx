@@ -1356,7 +1356,7 @@ const CandidateDashboard = () => {
       if (activeBanners && activeBanners.length > 0) {
         setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl, isTopSpotlight: !!b.isTopSpotlight })));
       }
-    }).catch(() => {/* fallback to default banners */});
+    }).catch(() => {/* fallback to default banners */ });
   }, [candidateProfile?.location]);
 
   useEffect(() => {
@@ -2088,8 +2088,8 @@ const CandidateDashboard = () => {
                   </div>
                   <div style={{ fontSize: '13px', color: '#78350F', lineHeight: '1.5' }}>
                     {language === 'vi'
-                      ? `Nhà tuyển dụng đã gửi yêu cầu thay đổi nhân viên cho ca "${replacedNotice.jobTitle}" và đã được admin duyệt. Ca làm đã kết thúc. Tiền công đã được tính đến thời điểm kết thúc.`
-                      : `The employer submitted a worker change request for "${replacedNotice.jobTitle}" which was approved by admin. Your shift has ended. Wages have been calculated up to the end time.`
+                      ? `Nhà tuyển dụng đã gửi yêu cầu thay đổi nhân viên cho ca "${replacedNotice.jobTitle}" và đã được admin duyệt.`
+                      : `The employer submitted a worker change request for "${replacedNotice.jobTitle}" which was approved by admin.`
                     }
                   </div>
                 </div>

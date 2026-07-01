@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import { useLanguage } from '../../context/LanguageContext';
+import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -1177,6 +1178,11 @@ const EmployersManagement = () => {
   const [selectedChangeRequest, setSelectedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
 
+  // AI Urgent recommendations
+  const [showRecsModal, setShowRecsModal] = useState(false);
+  const [activeRecommendations, setActiveRecommendations] = useState(null);
+  const [recJobTitle, setRecJobTitle] = useState('');
+
   // Toast state — thay thế toàn bộ alert() / confirm() trong trang này
   const [empToast, setEmpToast] = useState(null); // { type: 'success'|'error'|'warning', message }
   const [empConfirm, setEmpConfirm] = useState(null); // { message, onConfirm }
@@ -1375,6 +1381,12 @@ const EmployersManagement = () => {
       }
 
       showEmpToast('success', language === 'vi' ? 'Đã duyệt — ca làm việc đã được huỷ thành công' : 'Approved — shift has been successfully cancelled');
+      
+      if (result.recommendations) {
+        setActiveRecommendations(result.recommendations);
+        setRecJobTitle(result.jobTitle || (reqItem && reqItem.jobTitle) || 'Ca làm');
+        setShowRecsModal(true);
+      }
     } catch (err) {
       console.error('Error approving change request:', err);
       const msg = err.message || '';
@@ -3322,6 +3334,14 @@ const EmployersManagement = () => {
           </div>
         </div>
       )}
+
+      {/* AI Urgent recommendations modal */}
+      <UrgentRecommendationsModal
+        isOpen={showRecsModal}
+        onClose={() => setShowRecsModal(false)}
+        recommendations={activeRecommendations}
+        jobTitle={recJobTitle}
+      />
     </DashboardLayout>
   );
 };

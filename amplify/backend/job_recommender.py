@@ -921,7 +921,6 @@ def is_job_already_recommended(candidate, job_id):
     if isinstance(rec_jobs, list):
         return job_id in rec_jobs
     return False
-
 def mark_job_as_recommended(candidate_id, job_id):
     try:
         candidate_table.update_item(
@@ -937,3 +936,203 @@ def mark_job_as_recommended(candidate_id, job_id):
     except Exception as e:
         safe_print(f"[Recommender] Failed to mark job as recommended in CandidateProfiles: {e}")
         return False
+
+
+def find_and_recommend_urgent_workers(job_item):
+    """
+    Finds and recommends candidates for an urgent job replacement opportunity.
+    Groups candidates into 3 Priorities based on distance & suitability.
+    Dispatches in-app notifications and email alerts.
+    """
+    try:
+        import uuid
+        from datetime import datetime, timezone
+        from email_service import send_urgent_replacement_email
+
+        job_id = job_item.get('jobID') or job_item.get('idJob')
+        job_title = job_item.get('title', 'Ca làm việc')
+        job_lat = job_item.get('latitude')
+        job_lng = job_item.get('longitude')
+        
+        if job_lat is None or job_lng is None:
+            safe_print(f"[UrgentRecommender] Job {job_id} has no coordinates. Cannot recommend by distance.")
+            return {
+                'priority1': [],
+                'priority2': [],
+                'priority3': [],
+                'emailsSent': 0
+            }
+            
+        job_lat = float(job_lat)
+        job_lng = float(job_lng)
+        
+        # 1. Scan CandidateProfiles table to get active candidates
+        candidates = []
+        response = candidate_table.scan()
+        candidates.extend(response.get('Items', []))
+        while 'LastEvaluatedKey' in response:
+            response = candidate_table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            candidates.extend(response.get('Items', []))
+            
+        active_candidates = []
+        for cand in candidates:
+            # Must have isActive == True or 'true'
+            is_active = cand.get('isActive')
+            if not is_active or str(is_active).lower() == 'false':
+                continue
+            email = cand.get('email')
+            if not email or '@' not in email:
+                continue
+            active_candidates.append(cand)
+            
+        safe_print(f"[UrgentRecommender] Total active candidates scanned: {len(active_candidates)}")
+        
+        priority1_list = []
+        priority2_list = []
+        priority3_list = []
+        
+        for cand in active_candidates:
+            cand_lat = cand.get('latitude')
+            cand_lng = cand.get('longitude')
+            
+            if cand_lat is None or cand_lng is None:
+                continue
+                
+            dist = get_distance_km(cand_lat, cand_lng, job_lat, job_lng)
+            if dist is None or dist > 10.0:
+                continue
+                
+            # Check suitability (checks skills/title matches)
+            suitable, reasons = is_match(cand, job_item, is_quick_job=True)
+            
+            cand_info = {
+                'candidateId': cand.get('userId'),
+                'fullName': cand.get('fullName') or cand.get('email', '').split('@')[0] or 'Worker',
+                'email': cand.get('email', ''),
+                'phone': cand.get('phone', ''),
+                'location': cand.get('location', ''),
+                'distance': round(dist, 2),
+                'suitable': suitable,
+                'reasons': reasons
+            }
+            
+            if dist <= 3.0:
+                if suitable:
+                    priority1_list.append(cand_info)
+                else:
+                    priority2_list.append(cand_info)
+            elif dist <= 5.0:
+                priority2_list.append(cand_info)
+            else: # dist <= 10.0
+                priority3_list.append(cand_info)
+                
+        # Sort each priority list by distance
+        priority1_list.sort(key=lambda x: x['distance'])
+        priority2_list.sort(key=lambda x: x['distance'])
+        priority3_list.sort(key=lambda x: x['distance'])
+        
+        # 2. Save in-app notifications to Notifications table for all matching candidates
+        notifications_table = dynamodb.Table('Notifications')
+        
+        # Compute salary & work time strings
+        hourly_rate = job_item.get('hourlyRate')
+        total_salary = job_item.get('totalSalary')
+        total_hours = job_item.get('totalHours')
+        try:
+            if total_salary:
+                income = int(float(total_salary) * 0.85)
+                salary_str = f"{income:,} VNĐ / {total_hours} giờ"
+            elif hourly_rate:
+                income_rate = int(float(hourly_rate) * 0.85)
+                salary_str = f"{income_rate:,} VNĐ/giờ"
+            else:
+                salary_str = "Thỏa thuận"
+        except Exception:
+            salary_str = "Thỏa thuận"
+
+        location = job_item.get('location', 'Chưa cập nhật')
+        work_date = job_item.get('workDate', '')
+        start_time = job_item.get('startTime', '')
+        end_time = job_item.get('endTime', '')
+        if work_date and start_time and end_time:
+            work_time_str = f"{start_time} - {end_time} ngày {work_date}"
+        else:
+            work_time_str = "Theo thỏa thuận"
+
+        employer_id = job_item.get('employerId') or job_item.get('employerEmail') or 'system'
+        company = job_item.get('companyName') or job_item.get('employerName') or job_item.get('company') or 'Nhà tuyển dụng'
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
+        all_notified_candidates = priority1_list + priority2_list + priority3_list
+        for cand_info in all_notified_candidates:
+            try:
+                notif_id = f"NOTIF-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{str(uuid.uuid4())[:8]}"
+                notification = {
+                    'notificationId': notif_id,
+                    'type': 'urgent_job_alert',
+                    'title': f"[Ốp Pờ] [CẦN NGƯỜI GẤP] Ca làm việc khẩn cấp: {job_title}",
+                    'titleEn': f"[Ốp Pờ] [URGENT WORK] Emergency shift: {job_title}",
+                    'message': f"Ca làm việc tại {company} đang tuyển người làm gấp. Xem chi tiết và đăng ký ngay!",
+                    'messageEn': f"Emergency shift at {company} needs workers urgently. View details and apply now!",
+                    'recipientId': cand_info['candidateId'],
+                    'recipientRole': 'candidate',
+                    'senderId': employer_id,
+                    'senderName': company,
+                    'data': {
+                        'jobId': job_id,
+                        'jobTitle': job_title,
+                        'companyName': company,
+                        'location': location,
+                        'salary': salary_str,
+                        'workTime': work_time_str,
+                        'employerId': employer_id
+                    },
+                    'read': False,
+                    'deleted': False,
+                    'createdAt': now_iso,
+                    'updatedAt': now_iso,
+                    'icon': 'zap',
+                    'color': '#ef4444',
+                    'actionUrl': f"/candidate/jobs?selectedJobId={job_id}&tab=shift",
+                    'actionText': 'Ứng tuyển ngay',
+                    'actionTextEn': 'Apply now'
+                }
+                notifications_table.put_item(Item=notification)
+                safe_print(f"[UrgentRecommender] Saved in-app notification {notif_id} for candidate {cand_info['candidateId']}")
+            except Exception as notif_err:
+                safe_print(f"[UrgentRecommender] Failed to save in-app notification for candidate {cand_info['candidateId']}: {notif_err}")
+
+        # 3. Send email notifications
+        emails_sent = 0
+        for cand_info in all_notified_candidates:
+            try:
+                success = send_urgent_replacement_email(
+                    to_email=cand_info['email'],
+                    name=cand_info['fullName'],
+                    job=job_item
+                )
+                if success:
+                    emails_sent += 1
+            except Exception as mail_err:
+                safe_print(f"[UrgentRecommender] Failed to send email to {cand_info['email']}: {mail_err}")
+                
+        safe_print(f"[UrgentRecommender] Completed. P1: {len(priority1_list)}, P2: {len(priority2_list)}, P3: {len(priority3_list)}. Emails sent: {emails_sent}")
+        
+        return {
+            'priority1': priority1_list,
+            'priority2': priority2_list,
+            'priority3': priority3_list,
+            'emailsSent': emails_sent
+        }
+        
+    except Exception as e:
+        safe_print(f"[UrgentRecommender] Error during execution: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'priority1': [],
+            'priority2': [],
+            'priority3': [],
+            'emailsSent': 0
+        }
+

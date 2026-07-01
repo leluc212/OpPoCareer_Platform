@@ -6,6 +6,7 @@ import StatsCard from '../../components/StatsCard';
 
 import { useLanguage } from '../../context/LanguageContext';
 import { s3Images } from '../../utils/s3Images';
+import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
 
 import { Users, Briefcase, Building2, DollarSign, CheckSquare, XSquare, Shield, Calendar, ArrowRight, Zap, TrendingUp, Star, Sparkles, Eye, Rocket, FileText, ChevronDown, AlertCircle, RefreshCw, X, Wifi, WifiOff } from 'lucide-react';
 
@@ -1121,6 +1122,11 @@ const AdminDashboard = () => {
   const [rejectModal, setRejectModal] = useState(null); // { applicationId, candidateName }
   const [rejectNotes, setRejectNotes] = useState('');
 
+  // AI Urgent recommendations
+  const [showRecsModal, setShowRecsModal] = useState(false);
+  const [activeRecommendations, setActiveRecommendations] = useState(null);
+  const [recJobTitle, setRecJobTitle] = useState('');
+
   // WebSocket state
   const [wsStatus, setWsStatus] = useState('disconnected'); // 'connected' | 'connecting' | 'disconnected'
   const wsRef = useRef(null);
@@ -1610,6 +1616,12 @@ const AdminDashboard = () => {
                                 applicationId: req.applicationId
                               })
                             ]);
+                            
+                            if (result.recommendations) {
+                              setActiveRecommendations(result.recommendations);
+                              setRecJobTitle(result.jobTitle || req.jobTitle || 'Ca làm');
+                              setShowRecsModal(true);
+                            }
                           } catch (e) {
                             alert(language === 'vi' ? `Lỗi: ${e.message}` : `Error: ${e.message}`);
                           } finally {
@@ -2541,6 +2553,14 @@ const AdminDashboard = () => {
             </div>
           </div>
         )}
+
+        {/* AI Urgent recommendations modal */}
+        <UrgentRecommendationsModal
+          isOpen={showRecsModal}
+          onClose={() => setShowRecsModal(false)}
+          recommendations={activeRecommendations}
+          jobTitle={recJobTitle}
+        />
 
       </DashboardContainer>
     </DashboardLayout>

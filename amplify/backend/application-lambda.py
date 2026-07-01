@@ -1029,6 +1029,20 @@ def approve_change_request(event, application_id, create_response):
         )
         print(f"✅ Worker replaced for applicationId={application_id}, workerId={worker_id}, job {job_id} reopened")
 
+        # AI Recommender for urgent worker replacement
+        recommendations = {
+            'priority1': [],
+            'priority2': [],
+            'priority3': [],
+            'emailsSent': 0
+        }
+        if qj and qj.get('latitude') is not None and qj.get('longitude') is not None:
+            try:
+                from job_recommender import find_and_recommend_urgent_workers
+                recommendations = find_and_recommend_urgent_workers(qj)
+            except Exception as rec_err:
+                print(f"⚠️ Urgent recommender failed: {rec_err}")
+
         return create_response(200, {
             'success':        True,
             'message':        'Yêu cầu thay đổi nhân viên đã được duyệt — job đã được mở lại để tuyển người mới',
@@ -1043,7 +1057,8 @@ def approve_change_request(event, application_id, create_response):
             'jobWorkDate':    job_workdate,
             'workDateDisplay': workdate_display,
             'reasonType':     reason_type,
-            'reasonDetail':   reason_detail
+            'reasonDetail':   reason_detail,
+            'recommendations': recommendations
         })
     except Exception as e:
         print(f"❌ Error approving change request: {str(e)}")

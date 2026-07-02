@@ -1719,6 +1719,12 @@ const EmployersManagement = () => {
         (filters.includes('active') && employer.isActive);
 
       return matchesTab && matchesSearch && matchesFilters;
+    })
+    // Mới nhất lên đầu theo createdAt
+    .sort((a, b) => {
+      const ta = a.createdAt || '';
+      const tb = b.createdAt || '';
+      return tb.localeCompare(ta);
     });
   }, [employers, searchTerm, filters, activeTab]);
 

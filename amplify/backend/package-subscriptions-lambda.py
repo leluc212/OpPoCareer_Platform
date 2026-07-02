@@ -712,6 +712,41 @@ def create_subscription(body_str, headers):
                         'message': f'Missing required field: {field}'
                     })
                 }
+
+        # ── Verify employer account before allowing subscription ───────────
+        employer_id = body.get('employerId')
+        if employer_id:
+            try:
+                emp_item = employer_profile_table.get_item(Key={'userId': employer_id}).get('Item', {})
+                is_verified = emp_item.get('isVerified', False)
+                verification_status = emp_item.get('verificationStatus', '')
+                payment_method_input = body.get('paymentMethod', 'contact')
+
+                # admin_granted bypasses verification check
+                if payment_method_input != 'admin_granted':
+                    if not is_verified:
+                        if verification_status == 'pending':
+                            return {
+                                'statusCode': 403,
+                                'headers': headers,
+                                'body': json.dumps({
+                                    'success': False,
+                                    'message': 'Hồ sơ của bạn đang chờ admin xác minh. Vui lòng chờ duyệt trước khi sử dụng gói dịch vụ.'
+                                })
+                            }
+                        else:
+                            return {
+                                'statusCode': 403,
+                                'headers': headers,
+                                'body': json.dumps({
+                                    'success': False,
+                                    'message': 'Tài khoản chưa được xác thực. Vui lòng hoàn tất xác thực trước khi mở gói dịch vụ.'
+                                })
+                            }
+            except Exception as verify_err:
+                print(f"Warning: could not verify employer status: {verify_err}")
+                # Fail open only if DynamoDB lookup itself errors
+        # ──────────────────────────────────────────────────────────────────
         
         # Generate subscription ID
         subscription_id = generate_subscription_id()

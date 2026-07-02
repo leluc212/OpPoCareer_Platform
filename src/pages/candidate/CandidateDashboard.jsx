@@ -1335,6 +1335,10 @@ const CandidateDashboard = () => {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [realApplications, setRealApplications] = useState([]);
   const [realRecommendedJobs, setRealRecommendedJobs] = useState([]);
+  const recommendedJobsRef = useRef([]);
+  useEffect(() => {
+    recommendedJobsRef.current = realRecommendedJobs;
+  }, [realRecommendedJobs]);
   const [allActiveJobs, setAllActiveJobs] = useState([]);
   const [currentJob, setCurrentJob] = useState(null);
   // Bug 6 fix: track recently-replaced notifications để hiện banner cho candidate
@@ -1424,42 +1428,124 @@ const CandidateDashboard = () => {
 
       let recommended = [];
       if (isKycVerified) {
-        try {
-          const aiRecommendations = await cvAiService.recommendJobsForCandidate({ language }).catch(() => []);
+        const shouldFetchAI = showLoading || recommendedJobsRef.current.length === 0;
+        if (shouldFetchAI) {
+          try {
+            const aiRecommendations = await cvAiService.recommendJobsForCandidate({ language }).catch(() => []);
 
-          if (aiRecommendations && aiRecommendations.length > 0) {
-            aiRecommendations.forEach(rec => {
-              const matchedJob = allJobs.find(job => (job.idJob || job.jobID || job.id) === rec.jobId);
-              if (matchedJob) {
-                const isQuick = matchedJob.jobType === 'quick' || !!(matchedJob.jobID && !matchedJob.idJob) || !!matchedJob.totalSalary;
-                const totalSalary = Number(matchedJob.totalSalary || 0);
-                const hourlyRate = Number(matchedJob.hourlyRate || 0);
-                const totalHours = Number(matchedJob.totalHours || 0);
-                const candidateIncome = Math.round(totalSalary * 0.85);
-                const jobSalary = isQuick
-                  ? (candidateIncome > 0
-                    ? `${candidateIncome.toLocaleString('vi-VN')} VNĐ/${totalHours}h`
-                    : `${Math.round(hourlyRate * 0.85).toLocaleString('vi-VN')} VNĐ/giờ`)
-                  : formatSalary(matchedJob.salary || matchedJob.totalSalary, matchedJob.salaryUnit);
+            if (aiRecommendations && aiRecommendations.length > 0) {
+              aiRecommendations.forEach(rec => {
+                const matchedJob = allJobs.find(job => (job.idJob || job.jobID || job.id) === rec.jobId);
+                if (matchedJob) {
+                  const isQuick = matchedJob.jobType === 'quick' || !!(matchedJob.jobID && !matchedJob.idJob) || !!matchedJob.totalSalary;
+                  const totalSalary = Number(matchedJob.totalSalary || 0);
+                  const hourlyRate = Number(matchedJob.hourlyRate || 0);
+                  const totalHours = Number(matchedJob.totalHours || 0);
+                  const candidateIncome = Math.round(totalSalary * 0.85);
+                  const jobSalary = isQuick
+                    ? (candidateIncome > 0
+                      ? `${candidateIncome.toLocaleString('vi-VN')} VNĐ/${totalHours}h`
+                      : `${Math.round(hourlyRate * 0.85).toLocaleString('vi-VN')} VNĐ/giờ`)
+                    : formatSalary(matchedJob.salary || matchedJob.totalSalary, matchedJob.salaryUnit);
 
-                recommended.push({
-                  id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
-                  title: matchedJob.title || 'Untitled',
-                  company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
-                  location: matchedJob.location || '',
-                  type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
-                  salary: jobSalary,
-                  postedAt: formatRelativeTime(matchedJob.createdAt),
-                  tags: typeof matchedJob.tags === 'string' ? matchedJob.tags.split(',').map(t => t.trim()) : (matchedJob.tags || []),
-                  isQuick,
-                  matchScore: rec.matchScore,
-                  matchReason: rec.matchReason
-                });
-              }
-            });
+                  recommended.push({
+                    id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
+                    title: matchedJob.title || 'Untitled',
+                    company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
+                    location: matchedJob.location || '',
+                    type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
+                    salary: jobSalary,
+                    postedAt: formatRelativeTime(matchedJob.createdAt),
+                    tags: typeof matchedJob.tags === 'string' ? matchedJob.tags.split(',').map(t => t.trim()) : (matchedJob.tags || []),
+                    isQuick,
+                    matchScore: rec.matchScore,
+                    matchReason: rec.matchReason
+                  });
+                }
+              });
+            }
+          } catch (aiErr) {
+            // AI recommendations unavailable - continue without them
           }
-        } catch (aiErr) {
-          // AI recommendations unavailable - continue without them
+        } else {
+          // Keep existing recommendations for background refresh
+          recommended = [...recommendedJobsRef.current];
+        }
+
+        // Fallback: rule-based matching if AI recommendations failed or returned nothing
+        if (recommended.length === 0 && allJobs.length > 0) {
+          const candLocation = (profile?.location || '').toLowerCase().trim();
+          const candTitle = (profile?.title || '').toLowerCase().trim();
+          const candSkills = Array.isArray(profile?.skills)
+            ? profile.skills.map(s => s.toLowerCase().trim())
+            : [];
+
+          const fallbackJobs = allJobs.map(job => {
+            let score = 0;
+            const jobTitle = (job.title || '').toLowerCase();
+            const jobLoc = (job.location || '').toLowerCase();
+            const jobTags = typeof job.tags === 'string'
+              ? job.tags.split(',').map(t => t.toLowerCase().trim())
+              : (job.tags || []).map(t => String(t).toLowerCase().trim());
+
+            // 1. Location match
+            if (candLocation && jobLoc && (jobLoc.includes(candLocation) || candLocation.includes(jobLoc))) {
+              score += 50;
+            }
+
+            // 2. Title keyword match
+            if (candTitle && jobTitle) {
+              const titleWords = candTitle.split(/\s+/).filter(w => w.length > 2);
+              titleWords.forEach(word => {
+                if (jobTitle.includes(word)) {
+                  score += 15;
+                }
+              });
+            }
+
+            // 3. Skills match
+            if (candSkills.length > 0 && jobTags.length > 0) {
+              const commonTags = candSkills.filter(tag => jobTags.includes(tag));
+              score += commonTags.length * 10;
+            }
+
+            return { job, score };
+          });
+
+          // Sort by score descending, then by date descending
+          fallbackJobs.sort((a, b) => {
+            if (b.score !== a.score) {
+              return b.score - a.score;
+            }
+            return new Date(b.job.createdAt || 0) - new Date(a.job.createdAt || 0);
+          });
+
+          const topFallback = fallbackJobs.slice(0, 5).map(item => item.job);
+
+          topFallback.forEach(matchedJob => {
+            const isQuick = matchedJob.jobType === 'quick' || !!(matchedJob.jobID && !matchedJob.idJob) || !!matchedJob.totalSalary;
+            const totalSalary = Number(matchedJob.totalSalary || 0);
+            const hourlyRate = Number(matchedJob.hourlyRate || 0);
+            const totalHours = Number(matchedJob.totalHours || 0);
+            const candidateIncome = Math.round(totalSalary * 0.85);
+            const jobSalary = isQuick
+              ? (candidateIncome > 0
+                ? `${candidateIncome.toLocaleString('vi-VN')} VNĐ/${totalHours}h`
+                : `${Math.round(hourlyRate * 0.85).toLocaleString('vi-VN')} VNĐ/giờ`)
+              : formatSalary(matchedJob.salary || matchedJob.totalSalary, matchedJob.salaryUnit);
+
+            recommended.push({
+              id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
+              title: matchedJob.title || 'Untitled',
+              company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
+              location: matchedJob.location || '',
+              type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
+              salary: jobSalary,
+              postedAt: formatRelativeTime(matchedJob.createdAt),
+              tags: typeof matchedJob.tags === 'string' ? matchedJob.tags.split(',').map(t => t.trim()) : (matchedJob.tags || []),
+              isQuick
+            });
+          });
         }
       }
 

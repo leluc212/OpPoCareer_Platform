@@ -2019,6 +2019,7 @@ def lambda_handler(event, context):
                 "current_question_index": 1,
                 "max_questions": len(turns),
                 "messages": [
+                    {"role": "user", "parts": [{"text": "Xin chào, tôi đã sẵn sàng. Hãy bắt đầu buổi phỏng vấn."}]},
                     {"role": "model", "parts": [{"text": first_question}]}
                 ],
                 "turns": turns,

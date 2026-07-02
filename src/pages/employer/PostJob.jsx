@@ -12,6 +12,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import cvAiService from '../../services/cvAiService';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
+import { createJobPendingApprovalNotification } from '../../services/notificationService';
 
 // Days of week options for work-hour slots. `key` is the stable token persisted
 // into the workHours string; vi/en are the display labels.
@@ -1037,6 +1038,18 @@ const PostJob = () => {
 
         if (response.ok) {
           console.log('✅ Job post created successfully with ID:', result.data.idJob);
+          try {
+            await createJobPendingApprovalNotification({
+              employerId,
+              companyName: employerName,
+              jobTitle: cleanFormData.title,
+              jobId: result.data.idJob || jobId,
+              isQuickJob: false
+            });
+            console.log('✅ Sent pending approval notification to admin');
+          } catch (notifErr) {
+            console.warn('⚠️ Failed to send notification to admin:', notifErr);
+          }
         } else {
           throw new Error('API request failed: ' + response.status);
         }

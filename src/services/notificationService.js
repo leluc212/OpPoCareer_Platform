@@ -1085,6 +1085,30 @@ export const createWithdrawalRequestNotification = async ({ employerId, companyN
 };
 
 /**
+ * Notify admin when an employer submits a new job post pending approval
+ */
+export const createJobPendingApprovalNotification = async ({ employerId, companyName, jobTitle, jobId, isQuickJob }) => {
+  const notification = {
+    type: 'job_pending_approval',
+    title: isQuickJob ? 'Yêu cầu duyệt tin tuyển gấp mới' : 'Yêu cầu duyệt tin tuyển dụng mới',
+    titleEn: isQuickJob ? 'New Urgent Job pending approval' : 'New Job post pending approval',
+    message: `Nhà tuyển dụng "${companyName || employerId}" đã đăng tin mới: "${jobTitle}". Vui lòng kiểm tra và phê duyệt.`,
+    messageEn: `Employer "${companyName || employerId}" has posted a new job: "${jobTitle}". Please review and approve.`,
+    recipientId: 'admin',
+    recipientRole: 'admin',
+    senderId: employerId,
+    senderName: companyName || employerId,
+    data: { employerId, companyName, jobTitle, jobId, isQuickJob: !!isQuickJob },
+    icon: 'briefcase',
+    color: '#2563eb',
+    actionUrl: isQuickJob ? '/admin/employers' : '/admin/posts',
+    actionText: 'Xem tin tuyển dụng',
+    actionTextEn: 'View Job Post'
+  };
+  return await saveNotification(notification);
+};
+
+/**
  * Notify employer when their withdrawal request is approved
  */
 export const createWithdrawalApprovedNotification = async ({ employerId, amount, bankName, accountNumber }) => {
@@ -1484,6 +1508,7 @@ export default {
   createCandidateCvRejectedNotification,
   createJobApprovedNotification,
   createJobRejectedNotification,
+  createJobPendingApprovalNotification,
   createChatMessageNotification,
   createQuickJobActivationRequestNotification,
   createQuickJobActivationApprovedNotification,

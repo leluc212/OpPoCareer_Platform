@@ -859,7 +859,7 @@ const Navbar = ({ showSearch = true }) => {
   const [allJobTitles, setAllJobTitles] = useState([]);
   const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
   const searchBarRef = useRef(null);
-  const [companyLogo, setCompanyLogo] = useState(() => localStorage.getItem('companyLogo') || s3Images.system.katinatlogo);
+  const [companyLogo, setCompanyLogo] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationTab, setNotificationTab] = useState('all');
   const [candidateProfile, setCandidateProfile] = useState(null);
@@ -1082,12 +1082,18 @@ const Navbar = ({ showSearch = true }) => {
   const filteredNotifications = notifications;
 
   useEffect(() => {
-    const handleLogoChange = () => {
-      setCompanyLogo(localStorage.getItem('companyLogo') || s3Images.system.katinatlogo);
+    const handleLogoChange = async () => {
+      if (user?.role === 'employer') {
+        try {
+          const profile = await employerProfileService.getMyProfile();
+          setEmployerProfile(profile);
+          setCompanyLogo(profile?.companyLogo || '');
+        } catch (_) {}
+      }
     };
     window.addEventListener('logoChanged', handleLogoChange);
     return () => window.removeEventListener('logoChanged', handleLogoChange);
-  }, []);
+  }, [user]);
 
   // Fetch candidate profile if user is a candidate
   useEffect(() => {
@@ -2050,10 +2056,10 @@ const Navbar = ({ showSearch = true }) => {
           <UserMenu onClick={handleProfileClick}>
             <Avatar>
               {user?.role === 'employer' ? (
-                employerProfile?.companyLogo ? (
-                  <img src={employerProfile.companyLogo} alt="Company Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                (employerProfile?.companyLogo || companyLogo) ? (
+                  <img src={employerProfile?.companyLogo || companyLogo} alt="Company Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
-                  <img src={companyLogo} alt="Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  (employerProfile?.companyName?.charAt(0) || 'C').toUpperCase()
                 )
               ) : user?.role === 'candidate' && candidateProfile?.profileImage ? (
                 <img src={candidateProfile.profileImage} alt="Profile" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />

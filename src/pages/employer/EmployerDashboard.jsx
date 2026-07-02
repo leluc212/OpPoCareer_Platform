@@ -80,7 +80,7 @@ const DashboardContainer = styled.div`
 `;
 
 const WelcomeBanner = styled(motion.div)`
-  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6)), url('${imgUrl('images/katinatQ8.jpg')}');
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 40%, #2563eb 70%, #1d4ed8 100%);
   background-size: cover;
   background-position: center;
   border-radius: ${props => props.theme.borderRadius.xl};
@@ -849,7 +849,12 @@ const EmployerDashboard = () => {
     if (employerProfile?.companyLogo) {
       return employerProfile.companyLogo;
     }
-    return imgUrl('images/katinatlogo.jpg');
+    return null; // no logo yet - show placeholder
+  };
+
+  // Get company banner from profile or null (no fallback to Katinat)
+  const getCompanyBanner = () => {
+    return employerProfile?.companyBanner || null;
   };
 
   return (
@@ -865,6 +870,11 @@ const EmployerDashboard = () => {
       <DashboardContainer>
         {/* Welcome Banner */}
         <WelcomeBanner
+          $bgUrl={getCompanyBanner()}
+          style={getCompanyBanner()
+            ? { background: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url('${getCompanyBanner()}') center/cover` }
+            : { background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 40%, #2563eb 70%, #1d4ed8 100%)' }
+          }
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -893,7 +903,35 @@ const EmployerDashboard = () => {
             </QuickActions>
           </WelcomeContent>
           <IllustrationContainer>
-            <img src={getCompanyLogo()} alt={getCompanyName()} />
+            {getCompanyLogo() ? (
+              <img src={getCompanyLogo()} alt={getCompanyName()} />
+            ) : (
+              <div style={{
+                width: '160px',
+                height: '160px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%)',
+                border: '4px solid rgba(255,255,255,0.4)',
+                backdropFilter: 'blur(8px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                animation: `${float._tag || 'float'} 4s ease-in-out infinite`,
+                flexShrink: 0
+              }}>
+                <span style={{
+                  fontSize: '64px',
+                  fontWeight: '800',
+                  color: 'white',
+                  textShadow: '0 2px 12px rgba(0,0,0,0.3)',
+                  lineHeight: 1,
+                  userSelect: 'none'
+                }}>
+                  {(employerProfile?.companyName || getCompanyName() || 'C').charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
           </IllustrationContainer>
         </WelcomeBanner>
 

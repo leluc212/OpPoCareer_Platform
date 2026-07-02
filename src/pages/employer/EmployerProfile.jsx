@@ -763,6 +763,9 @@ const EmployerProfile = () => {
   
   const [originalFormData, setOriginalFormData] = useState({});
   const [companyLogo, setCompanyLogo] = useState('');
+  const [companyBanner, setCompanyBanner] = useState('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [companyVideo, setCompanyVideo] = useState('');
   const [companyImages, setCompanyImages] = useState([]);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -834,6 +837,7 @@ const EmployerProfile = () => {
           setFormData(profileData);
           setOriginalFormData(profileData);
           setCompanyLogo(profile.companyLogo || '');
+          setCompanyBanner(profile.companyBanner || '');
           setCompanyVideo(profile.companyVideo || '');
           setCompanyImages(profile.companyImages || []);
           
@@ -901,7 +905,7 @@ const EmployerProfile = () => {
     const loadVerificationDocs = async () => {
       if (verificationDocuments.length > 0) return;
       try {
-        const verif = await employerProfileService.getVerificationStatus(user.username);
+        const verif = await employerProfileService.getVerificationStatus(user.userId);
         if (!verif) return;
 
         const parsed = verif.verificationData || verif;
@@ -971,7 +975,7 @@ const EmployerProfile = () => {
       }
     };
     loadVerificationDocs();
-  }, [user?.username]); // Only depend on user.username to prevent infinite loops
+  }, [user?.userId]); // Only depend on user.userId (Cognito sub) to prevent infinite loops
 
   // Load stats from real data
   useEffect(() => {
@@ -1038,6 +1042,7 @@ const EmployerProfile = () => {
       const profileData = {
         ...formData,
         companyLogo,
+        companyBanner,
         companyVideo,
         companyImages
       };
@@ -1230,37 +1235,107 @@ const EmployerProfile = () => {
     );
   };
   
-  // Handle logo upload
-  const handleLogoUpload = (event) => {
+  // Handle logo upload - upload to S3 and save URL
+  const handleLogoUpload = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error(language === 'vi' ? 'Kích thước file không được vượt quá 5MB' : 'File size must not exceed 5MB');
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const logoData = e.target.result;
-        setCompanyLogo(logoData);
-        // Save to localStorage immediately for offline access
-        localStorage.setItem('companyLogo', logoData);
-        console.log('✅ Company logo saved to localStorage');
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Reset input so same file can be selected again
+    event.target.value = '';
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(language === 'vi' ? 'Kích thước file không được vượt quá 5MB' : 'File size must not exceed 5MB');
+      return;
+    }
+
+    try {
+      setIsUploadingLogo(true);
+
+      // Show preview immediately before upload
+      const previewUrl = URL.createObjectURL(file);
+      setCompanyLogo(previewUrl);
+
+      const session = await import('aws-amplify/auth').then(m => m.fetchAuthSession());
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) throw new Error('Not authenticated');
+
+      // Read file as base64 for upload
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const url = await employerProfileService.uploadCompanyImage(userId, 'companyLogo', {
+        name: file.name,
+        data: base64,
+        type: file.type
+      });
+
+      // Replace preview with final S3 URL
+      URL.revokeObjectURL(previewUrl);
+      setCompanyLogo(url);
+      window.dispatchEvent(new Event('logoChanged'));
+      toast.success(language === 'vi' ? 'Logo đã được tải lên thành công!' : 'Logo uploaded successfully!');
+    } catch (err) {
+      console.error('Logo upload failed:', err);
+      // Revert preview on failure
+      setCompanyLogo('');
+      toast.error(language === 'vi' ? 'Tải logo lên thất bại. Vui lòng thử lại.' : 'Logo upload failed. Please try again.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  // Handle banner upload - upload to S3 and save URL
+  const handleBannerUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(language === 'vi' ? 'Kích thước banner không được vượt quá 10MB' : 'Banner size must not exceed 10MB');
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+      const session = await import('aws-amplify/auth').then(m => m.fetchAuthSession());
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) throw new Error('Not authenticated');
+
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const url = await employerProfileService.uploadCompanyImage(userId, 'companyBanner', {
+        name: file.name,
+        data: base64,
+        type: file.type
+      });
+
+      setCompanyBanner(url);
+      toast.success(language === 'vi' ? 'Ảnh bìa đã được tải lên thành công!' : 'Banner uploaded successfully!');
+    } catch (err) {
+      console.error('Banner upload failed:', err);
+      toast.error(language === 'vi' ? 'Tải ảnh bìa lên thất bại. Vui lòng thử lại.' : 'Banner upload failed. Please try again.');
+    } finally {
+      setIsUploadingBanner(false);
     }
   };
   
   // Handle delete logo
   const handleDeleteLogo = () => {
     setCompanyLogo('');
-    // Remove from localStorage
-    localStorage.removeItem('companyLogo');
-    console.log('✅ Company logo removed from localStorage');
+    window.dispatchEvent(new Event('logoChanged'));
+    console.log('✅ Company logo removed');
   };
 
-  // Handle company images upload
-  const handleCompanyImagesUpload = (e) => {
+  // Handle company images upload - upload to S3
+  const handleCompanyImagesUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
@@ -1270,18 +1345,34 @@ const EmployerProfile = () => {
       return;
     }
 
-    const filesToProcess = files.slice(0, remaining);
-    filesToProcess.forEach(file => {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error(language === 'vi' ? `File "${file.name}" vượt quá 5MB` : `File "${file.name}" exceeds 5MB`);
-        return;
+    try {
+      const session = await import('aws-amplify/auth').then(m => m.fetchAuthSession());
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) throw new Error('Not authenticated');
+
+      const filesToProcess = files.slice(0, remaining);
+      for (const file of filesToProcess) {
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error(language === 'vi' ? `File "${file.name}" vượt quá 5MB` : `File "${file.name}" exceeds 5MB`);
+          continue;
+        }
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = ev => resolve(ev.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const url = await employerProfileService.uploadCompanyImage(userId, 'companyImage', {
+          name: file.name,
+          data: base64,
+          type: file.type
+        });
+        setCompanyImages(prev => [...prev, { id: Date.now() + Math.random(), url, name: file.name }]);
       }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setCompanyImages(prev => [...prev, { id: Date.now() + Math.random(), data: ev.target.result, name: file.name }]);
-      };
-      reader.readAsDataURL(file);
-    });
+    } catch (err) {
+      console.error('Company image upload failed:', err);
+      toast.error(language === 'vi' ? 'Tải ảnh lên thất bại. Vui lòng thử lại.' : 'Image upload failed. Please try again.');
+    }
   };
 
   // Handle delete company image
@@ -1462,12 +1553,14 @@ const EmployerProfile = () => {
             transition={{ duration: 0.4 }}
           >
             <CompanyLogoCard>
-              <LogoUploadArea>
-                {companyLogo ? (
-                  <img src={companyLogo} alt="Company Logo" />
-                ) : (
-                  <Building2 size={64} color="white" />
-                )}
+              <div style={{ position: 'relative', width: '160px', margin: '0 auto 20px' }}>
+                <LogoUploadArea style={{ margin: 0 }}>
+                  {companyLogo ? (
+                    <img src={companyLogo} alt="Company Logo" />
+                  ) : (
+                    <Building2 size={64} color="white" />
+                  )}
+                </LogoUploadArea>
                 {companyLogo && isEditing && (
                   <DeleteLogoButton
                     whileHover={{ scale: 1.1 }}
@@ -1482,13 +1575,60 @@ const EmployerProfile = () => {
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <Camera />
-                    <input type="file" accept="image/*" onChange={handleLogoUpload} />
+                    {isUploadingLogo ? <span style={{ fontSize: '11px', color: '#1e40af' }}>...</span> : <Camera />}
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} />
                   </UploadButton>
                 )}
-              </LogoUploadArea>
+              </div>
               <CompanyName>{formData.companyName || (language === 'vi' ? 'Chưa cập nhật tên công ty' : 'Company name not set')}</CompanyName>
               <CompanyType>{formData.industry || (language === 'vi' ? 'Chưa cập nhật lĩnh vực' : 'Industry not set')}</CompanyType>
+
+              {/* Banner upload */}
+              <div style={{ marginTop: '20px', textAlign: 'left' }}>
+                <p style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '10px' }}>
+                  {language === 'vi' ? 'Ảnh bìa trang chủ' : 'Dashboard Banner'}
+                </p>
+                <div style={{
+                  width: '100%', height: '90px', borderRadius: '12px',
+                  background: companyBanner ? `url(${companyBanner}) center/cover` : '#EFF6FF',
+                  border: '1.5px dashed #BFDBFE',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  position: 'relative', overflow: 'hidden'
+                }}>
+                  {!companyBanner && (
+                    <span style={{ fontSize: '12px', color: '#93C5FD' }}>
+                      {language === 'vi' ? 'Chưa có ảnh bìa' : 'No banner yet'}
+                    </span>
+                  )}
+                  {isEditing && (
+                    <label style={{
+                      position: 'absolute', bottom: '6px', right: '6px',
+                      background: 'rgba(255,255,255,0.9)', border: '1px solid #BFDBFE',
+                      borderRadius: '8px', padding: '4px 10px', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: '600', color: '#1e40af',
+                      display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                      {isUploadingBanner ? (language === 'vi' ? 'Đang tải...' : 'Uploading...') : <><Upload size={12} />{language === 'vi' ? 'Tải ảnh' : 'Upload'}</>}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleBannerUpload} disabled={isUploadingBanner} />
+                    </label>
+                  )}
+                  {companyBanner && isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => setCompanyBanner('')}
+                      style={{
+                        position: 'absolute', top: '6px', right: '6px',
+                        background: 'rgba(239,68,68,0.85)', border: 'none',
+                        borderRadius: '50%', width: '24px', height: '24px',
+                        cursor: 'pointer', color: 'white', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', padding: 0
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </CompanyLogoCard>
             <StatsCard>
               <StatGrid>
@@ -1898,9 +2038,9 @@ const EmployerProfile = () => {
                       {companyImages.map(img => (
                         <div key={img.id} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #E8EFFF', aspectRatio: '4/3' }}>
                           <img
-                            src={img.data}
+                            src={img.url || img.data}
                             alt={img.name}
-                            onClick={() => setLightboxImage(img.data)}
+                            onClick={() => setLightboxImage(img.url || img.data)}
                             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }}
                           />
                           {isEditing && (

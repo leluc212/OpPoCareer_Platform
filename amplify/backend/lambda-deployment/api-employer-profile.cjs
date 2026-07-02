@@ -111,6 +111,7 @@ const sendVerificationEmail = async (employerEmail, cognitoEmail, companyName) =
 };
 const VERIFICATION_BUCKET = 'opporeview-cv-storage';
 const VERIFICATION_PREFIX = 'employer-verification';
+const COMPANY_IMAGES_PREFIX = 'employer-images';
 
 /**
  * Extract userId from JWT token
@@ -341,10 +342,41 @@ exports.handler = async (event) => {
         };
       } catch (error) {
         if (error.message.includes('No profile exists')) {
-          return { statusCode: 404, headers: corsHeaders, body: JSON.stringify({ success: false, data: null }) };
+          // Return 200 with null data — no profile yet is a normal state for new users
+          return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: null }) };
         }
         throw error;
       }
+    }
+
+    // POST /profile/{userId}/image-upload-url - Get presigned S3 upload URL for logo/banner/images
+    if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/image-upload-url')) {
+      if (userId !== pathUserId) {
+        return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'Access denied' }) };
+      }
+      const body = JSON.parse(event.body || '{}');
+      const { fileName, fileType, field } = body;
+      if (!fileName || !fileType || !field) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'fileName, fileType, field required' }) };
+      }
+      const allowedFields = ['companyLogo', 'companyBanner', 'companyImage'];
+      if (!allowedFields.includes(field)) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'Invalid field. Must be companyLogo, companyBanner, or companyImage' }) };
+      }
+      const ext = fileName.split('.').pop() || 'bin';
+      const s3Key = `${COMPANY_IMAGES_PREFIX}/${pathUserId}/${field}-${Date.now()}.${ext}`;
+      const command = new PutObjectCommand({
+        Bucket: VERIFICATION_BUCKET,
+        Key: s3Key,
+        ContentType: fileType
+      });
+      const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+      const fileUrl = `https://${VERIFICATION_BUCKET}.s3.ap-southeast-1.amazonaws.com/${s3Key}`;
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: true, data: { uploadUrl, fileUrl, s3Key } })
+      };
     }
 
     // POST /profile/{userId}/verification/upload-url - Get presigned S3 upload URL

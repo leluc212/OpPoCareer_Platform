@@ -307,6 +307,45 @@ class EmployerProfileService {
   }
 
   /**
+   * Upload a company image (logo, banner, gallery) to S3 via presigned URL.
+   * @param {string} userId
+   * @param {'companyLogo'|'companyBanner'|'companyImage'} field
+   * @param {{ name:string, data:string, type:string }} fileObj - data is base64 string (with or without data: prefix)
+   * @returns {string} - public S3 URL
+   */
+  async uploadCompanyImage(userId, field, fileObj) {
+    // 1. Get presigned URL from Lambda
+    const presignRes = await this.makeRequest(`/profile/${userId}/image-upload-url`, {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: fileObj.name,
+        fileType: fileObj.type,
+        field
+      })
+    });
+    if (!presignRes.success) throw new Error(`Failed to get upload URL for ${field}`);
+    const { uploadUrl, fileUrl } = presignRes.data;
+
+    // 2. Decode base64 → Blob
+    const base64 = fileObj.data.includes(',') ? fileObj.data.split(',')[1] : fileObj.data;
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const blob = new Blob([bytes], { type: fileObj.type });
+
+    // 3. PUT directly to S3
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': fileObj.type }
+    });
+    if (!uploadRes.ok) throw new Error(`S3 upload failed for ${field}: ${uploadRes.status}`);
+
+    console.log(`✅ Uploaded ${field} → ${fileUrl}`);
+    return fileUrl;
+  }
+
+  /**
    * Upload a verification file to S3 via presigned URL.
    * @param {string} userId
    * @param {string} field  - e.g. 'businessLicense', 'idFrontImage'

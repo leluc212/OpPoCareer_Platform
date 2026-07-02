@@ -222,6 +222,44 @@ const Toggle = styled.label`
   }
 `;
 
+// Coming soon overlay
+const ComingSoonWrapper = styled.div`
+  position: relative;
+`;
+
+const ComingSoonOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+`;
+
+const ComingSoonBadge = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #F59E0B, #F97316);
+  color: white;
+  padding: 14px 28px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.4);
+  letter-spacing: 0.3px;
+
+  .badge-icon {
+    font-size: 26px;
+    line-height: 1;
+  }
+`;
+
 // Policy buttons
 const PolicyButtons = styled.div`
   display: flex;
@@ -431,6 +469,7 @@ const EmployerSettings = () => {
           </SettingCard>
 
           {/* ── Notifications ── */}
+          <ComingSoonWrapper>
           <SettingCard
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -470,14 +509,21 @@ const EmployerSettings = () => {
                   <input
                     type="checkbox"
                     checked={notifications[item.key]}
-                    onChange={() => handleNotificationToggle(item.key)}
-                    disabled={isLoading}
+                    onChange={() => {}}
+                    disabled
                   />
                   <span />
                 </Toggle>
               </SettingRow>
             ))}
           </SettingCard>
+          <ComingSoonOverlay>
+            <ComingSoonBadge>
+              <span className="badge-icon">🚧</span>
+              {language === 'vi' ? 'Tính năng đang phát triển' : 'Coming soon'}
+            </ComingSoonBadge>
+          </ComingSoonOverlay>
+          </ComingSoonWrapper>
 
           {/* ── Policy & Terms ── */}
           <SettingCard

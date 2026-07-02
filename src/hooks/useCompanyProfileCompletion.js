@@ -55,30 +55,7 @@ export const useCompanyProfileCompletion = () => {
 
       try {
         setIsLoading(true);
-        
-        let profile = null;
-        
-        // Try to load from API first
-        try {
-          profile = await employerProfileService.getMyProfile();
-        } catch (apiError) {
-          console.log('API failed, trying localStorage fallback:', apiError.message);
-          
-          // Fallback to localStorage
-          const savedData = localStorage.getItem('employerProfile');
-          const savedLogo = localStorage.getItem('companyLogo');
-          
-          if (savedData) {
-            try {
-              profile = JSON.parse(savedData);
-              if (savedLogo) {
-                profile.companyLogo = savedLogo;
-              }
-            } catch (parseError) {
-              console.error('Error parsing localStorage data:', parseError);
-            }
-          }
-        }
+        const profile = await employerProfileService.getMyProfile().catch(() => null);
 
         if (profile) {
           const completion = calculateProfileCompletion(profile);
@@ -86,7 +63,6 @@ export const useCompanyProfileCompletion = () => {
           setIsProfileComplete(checkProfileComplete(completion));
           setProfileData(profile);
         } else {
-          // No profile found - new user
           setProfileCompletion(0);
           setIsProfileComplete(false);
           setProfileData(null);
@@ -109,26 +85,7 @@ export const useCompanyProfileCompletion = () => {
     if (!user) return;
 
     try {
-      let profile = null;
-      
-      try {
-        profile = await employerProfileService.getMyProfile();
-      } catch (apiError) {
-        const savedData = localStorage.getItem('employerProfile');
-        const savedLogo = localStorage.getItem('companyLogo');
-        
-        if (savedData) {
-          try {
-            profile = JSON.parse(savedData);
-            if (savedLogo) {
-              profile.companyLogo = savedLogo;
-            }
-          } catch (parseError) {
-            console.error('Error parsing localStorage data:', parseError);
-          }
-        }
-      }
-
+      const profile = await employerProfileService.getMyProfile().catch(() => null);
       if (profile) {
         const completion = calculateProfileCompletion(profile);
         setProfileCompletion(completion);

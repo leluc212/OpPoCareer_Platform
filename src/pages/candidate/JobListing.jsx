@@ -1504,7 +1504,7 @@ const BoostBannerWrap = styled(motion.div)`
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0,0,0,0.15);
   cursor: pointer;
-  height: 320px;
+  aspect-ratio: 16/5;
   background: #1a1a1a;
   border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
   animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
@@ -5407,12 +5407,12 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               )}
               <motion.img
                 key={currentBannerIndex}
-                initial={{ opacity: 0.8, scale: 1.05 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0.8 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: 0.6 }}
                 src={banners[currentBannerIndex].src}
                 alt={banners[currentBannerIndex].alt}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
               />
               <BannerDots>
                 {banners.map((_, idx) => (

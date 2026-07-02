@@ -1552,16 +1552,31 @@ const AdminDashboard = () => {
                 </span>
               )}
             </h2>
-            <button
-              onClick={fetchChangeRequests}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', background: '#F8FAFC', border: '1.5px solid #E2E8F0',
-                borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#475569'
-              }}
-            >
-              <RefreshCw size={14} />{language === 'vi' ? 'Làm mới' : 'Refresh'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {changeRequests.length > 5 && (
+                <button
+                  onClick={() => navigate('/admin/employers', { state: { activeTab: 'change_requests' } })}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', background: '#FFF7ED', border: '1.5px solid #FED7AA',
+                    borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#F97316'
+                  }}
+                >
+                  {language === 'vi' ? `Xem thêm (${changeRequests.length - 5})` : `View more (${changeRequests.length - 5})`}
+                  <ArrowRight size={14} />
+                </button>
+              )}
+              <button
+                onClick={fetchChangeRequests}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 14px', background: '#F8FAFC', border: '1.5px solid #E2E8F0',
+                  borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#475569'
+                }}
+              >
+                <RefreshCw size={14} />{language === 'vi' ? 'Làm mới' : 'Refresh'}
+              </button>
+            </div>
           </SectionHeader>
 
           {crLoading ? (
@@ -1580,11 +1595,19 @@ const AdminDashboard = () => {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {changeRequests.map(req => {
+              {[...changeRequests]
+                .sort((a, b) => {
+                  const aTime = new Date(a.changeRequest?.requestedAt || a.updatedAt || 0).getTime();
+                  const bTime = new Date(b.changeRequest?.requestedAt || b.updatedAt || 0).getTime();
+                  return bTime - aTime;
+                })
+                .slice(0, 5)
+                .map(req => {
                 const cr = req.changeRequest || {};
                 const isNew = newCardIds.has(req.applicationId);
                 const crStatus = String(req.changeRequestStatus || '').toLowerCase();
-                const isPending = crStatus !== 'approved' && crStatus !== 'rejected';
+                const appStatus = String(req.status || '');
+                const isPending = crStatus !== 'approved' && crStatus !== 'rejected' && appStatus !== 'ĐÃ_BỊ_THAY_THẾ';
                 const isApproved = crStatus === 'approved';
                 const isRejected = crStatus === 'rejected';
                 const borderColor = isApproved ? '#BBF7D0' : isRejected ? '#FECACA' : (isNew ? '#FED7AA' : '#FFEDD5');

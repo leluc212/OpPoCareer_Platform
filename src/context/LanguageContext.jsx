@@ -2,7 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { translations } from '../locales/translations';
 import { translationService } from '../services/translationService';
 
-const LanguageContext = createContext();
+const LANG_CONTEXT_KEY = '__OpPoLanguageContext__';
+if (!window[LANG_CONTEXT_KEY]) {
+  window[LANG_CONTEXT_KEY] = createContext();
+}
+const LanguageContext = window[LANG_CONTEXT_KEY];
 
 export const useLanguage = () => {
   const context = useContext(LanguageContext);

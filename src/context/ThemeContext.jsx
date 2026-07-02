@@ -1,6 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 
-const ThemeContext = createContext();
+const THEME_CONTEXT_KEY = '__OpPoThemeContext__';
+if (!window[THEME_CONTEXT_KEY]) {
+  window[THEME_CONTEXT_KEY] = createContext();
+}
+const ThemeContext = window[THEME_CONTEXT_KEY];
 
 export const ThemeProvider = ({ children }) => {
   const [isDarkMode, setIsDarkMode] = useState(() => {

@@ -2,7 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getCurrentUser, fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 
-const AuthContext = createContext();
+// Keep the context object stable across HMR reloads by storing it on the window.
+// Without this, Vite hot-reloading AuthContext creates a new context object while
+// App.jsx still holds a reference to the old one, causing "must be used within AuthProvider".
+const AUTH_CONTEXT_KEY = '__OpPoAuthContext__';
+if (!window[AUTH_CONTEXT_KEY]) {
+  window[AUTH_CONTEXT_KEY] = createContext();
+}
+const AuthContext = window[AUTH_CONTEXT_KEY];
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -70,9 +77,8 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       try {
         console.log('🔍 [AuthContext] Starting authentication check...');
-        const hasToken = !!(
-          localStorage.getItem('OPPO_ID_TOKEN') ||
-          Object.keys(localStorage).some(key => key.startsWith('CognitoIdentityServiceProvider.') && key.endsWith('.idToken'))
+        const hasToken = !!Object.keys(localStorage).some(
+          key => key.startsWith('CognitoIdentityServiceProvider.') && key.endsWith('.idToken')
         );
         
         // Try to get current Cognito user
@@ -99,15 +105,6 @@ export const AuthProvider = ({ children }) => {
         
         if (currentUser && session.tokens) {
           // User is authenticated with Cognito
-          // Sync fresh idToken vào OPPO_ID_TOKEN để authHeaders.js fallback không dùng token cũ expired
-          try {
-            const freshIdToken = session.tokens.idToken;
-            if (freshIdToken) {
-              const freshStr = (typeof freshIdToken === 'string' ? freshIdToken : freshIdToken.toString())
-                .trim().replace(/[\r\n\t]/g, '');
-              localStorage.setItem('OPPO_ID_TOKEN', freshStr);
-            }
-          } catch (_) {}
           const userIdFromToken = session.tokens.idToken.payload.sub; // Always get userId from token
           const emailFromToken = session.tokens.idToken.payload.email;
           const savedUser = localStorage.getItem('user');
@@ -396,11 +393,8 @@ export const AuthProvider = ({ children }) => {
         }
 
         console.log('✅ [AuthContext] PKCE login succeeded, user:', userData.email, 'role:', userData.role);
-        // Persist basic user and tokens for UI
+        // Persist user data for UI
         localStorage.setItem('user', JSON.stringify(userData));
-        localStorage.setItem('OPPO_ID_TOKEN', tokens.id_token || '');
-        localStorage.setItem('OPPO_ACCESS_TOKEN', tokens.access_token || '');
-        localStorage.setItem('OPPO_REFRESH_TOKEN', tokens.refresh_token || '');
 
         // Also write tokens into Amplify-compatible storage keys so fetchAuthSession() works
         try {

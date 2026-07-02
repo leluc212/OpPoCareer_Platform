@@ -1049,6 +1049,7 @@ def approve_change_request(event, application_id, create_response):
         reason_detail = change_req.get('reasonDetail') or change_req.get('reason', '')
 
         # Lấy thêm thông tin job từ quick_jobs_table và MỞ LẠI job để tuyển người mới
+        qj = {}
         if job_id:
             try:
                 qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})

@@ -623,6 +623,11 @@ const Subscription = () => {
   const [showDurationModal, setShowDurationModal] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = React.useState(false);
   const [showInsufficientBalanceModal, setShowInsufficientBalanceModal] = React.useState(false);
+  const [lastPaymentMethod, setLastPaymentMethod] = React.useState('contact'); // 'wallet' | 'contact'
+  // 'loading' | 'verified' | 'pending' | 'not_submitted'
+  const [verificationState, setVerificationState] = React.useState('loading');
+  const [showNotVerifiedModal, setShowNotVerifiedModal] = React.useState(false);
+  const [showPendingVerificationModal, setShowPendingVerificationModal] = React.useState(false);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -641,7 +646,30 @@ const Subscription = () => {
       }
     };
 
+    const loadVerificationStatus = async () => {
+      try {
+        const profile = await employerProfileService.getMyProfile();
+        if (isMounted) {
+          if (profile?.isVerified === true) {
+            setVerificationState('verified');
+          } else if (profile?.verificationStatus === 'pending') {
+            // Đã nộp hồ sơ, đang chờ admin xét duyệt
+            setVerificationState('pending');
+          } else {
+            // Chưa từng nộp hồ sơ xác thực
+            setVerificationState('not_submitted');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading employer profile for verification check:', error);
+        if (isMounted) {
+          setVerificationState('not_submitted');
+        }
+      }
+    };
+
     loadPackageCatalog();
+    loadVerificationStatus();
 
     return () => {
       isMounted = false;
@@ -674,12 +702,28 @@ const Subscription = () => {
   ), [packageCatalog, vi]);
 
   const handleSelectPackage = (plan, priceOption) => {
+    if (verificationState !== 'verified') {
+      if (verificationState === 'pending') {
+        setShowPendingVerificationModal(true);
+      } else {
+        setShowNotVerifiedModal(true);
+      }
+      return;
+    }
     setSelectedPackage(plan);
     setSelectedDuration(priceOption);
     setShowDurationModal(true);
   };
 
   const handleClickPackageButton = (plan) => {
+    if (verificationState !== 'verified') {
+      if (verificationState === 'pending') {
+        setShowPendingVerificationModal(true);
+      } else {
+        setShowNotVerifiedModal(true);
+      }
+      return;
+    }
     setSelectedPackage(plan);
     if (plan.prices && plan.prices.length > 0) {
       setSelectedDuration(plan.prices[0]);
@@ -725,6 +769,27 @@ const Subscription = () => {
       companyName = employerProfile.companyName || 'Unknown Company';
     }
 
+    // Kiểm tra số dư ví — nếu đủ tiền thì thanh toán ngay (active tức thì), nếu không thì gửi yêu cầu liên hệ
+    let paymentMethod = 'contact';
+    try {
+      const walletInfo = await getWallet(employerId);
+      const balance = Number(walletInfo?.walletBalance ?? 0);
+      console.log(`💰 Wallet balance: ${balance}, package price: ${packagePrice}`);
+      if (balance >= packagePrice) {
+        paymentMethod = 'wallet';
+        console.log('✅ Sufficient balance — sử dụng wallet payment (active ngay)');
+      } else {
+        // Số dư không đủ — hiện modal nạp tiền thay vì gửi yêu cầu liên hệ
+        setShowDurationModal(false);
+        setShowInsufficientBalanceModal(true);
+        return;
+      }
+    } catch (walletErr) {
+      // Không lấy được ví → fallback về contact để không chặn flow
+      console.warn('⚠️ Không lấy được thông tin ví, fallback về contact request:', walletErr);
+      paymentMethod = 'contact';
+    }
+
     try {
       const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
       const purchaseData = {
@@ -732,7 +797,7 @@ const Subscription = () => {
         companyName: companyName,
         packageName: selectedPackage.packageName,
         duration: selectedDuration.duration,
-        paymentMethod: 'contact'
+        paymentMethod: paymentMethod
       };
 
       console.log('📤 Sending request to subscription API:', purchaseData);
@@ -752,22 +817,27 @@ const Subscription = () => {
       }
 
       const result = await response.json();
-      console.log('✅ Subscription request created:', result);
+      console.log(`✅ Subscription ${paymentMethod === 'wallet' ? 'purchased (active ngay)' : 'request created'}:`, result);
       const apiSubscriptionId = result.data?.subscriptionId;
 
-      // Create notification for admin
-      try {
-        const notificationData = {
-          subscriptionId: apiSubscriptionId,
-          employerId: employerId,
-          companyName: companyName,
-          packageName: selectedPackage.packageName,
-          duration: selectedDuration.duration,
-          price: packagePrice
-        };
-        await createPackagePurchaseRequestNotification(notificationData);
-      } catch (notifError) {
-        console.error('❌ Failed to create notification for admin:', notifError);
+      // Lưu lại phương thức thanh toán để success modal hiển thị đúng nội dung
+      setLastPaymentMethod(paymentMethod);
+
+      // Chỉ tạo notification cho admin nếu là contact request (cần duyệt thủ công)
+      if (paymentMethod === 'contact') {
+        try {
+          const notificationData = {
+            subscriptionId: apiSubscriptionId,
+            employerId: employerId,
+            companyName: companyName,
+            packageName: selectedPackage.packageName,
+            duration: selectedDuration.duration,
+            price: packagePrice
+          };
+          await createPackagePurchaseRequestNotification(notificationData);
+        } catch (notifError) {
+          console.error('❌ Failed to create notification for admin:', notifError);
+        }
       }
 
       // Show success modal
@@ -917,6 +987,43 @@ const Subscription = () => {
             </PageTitleText>
           </PageHeader>
 
+          {/* Verification Banner */}
+          {verificationState === 'not_submitted' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: '#FFF7ED', border: '1.5px solid #FED7AA',
+              borderRadius: '12px', padding: '12px 16px', marginBottom: '14px'
+            }}>
+              <span style={{ fontSize: '18px' }}>⚠️</span>
+              <span style={{ fontSize: '13.5px', color: '#92400E', fontWeight: 500, flex: 1 }}>
+                Tài khoản của bạn chưa được xác thực.{' '}
+                <button
+                  onClick={() => navigate('/employer/profile')}
+                  style={{
+                    background: 'none', border: 'none', color: '#d97706',
+                    fontWeight: 700, cursor: 'pointer', textDecoration: 'underline',
+                    fontSize: '13.5px', padding: 0
+                  }}
+                >
+                  Xác thực ngay
+                </button>
+                {' '}để sử dụng các gói dịch vụ đẩy tin.
+              </span>
+            </div>
+          )}
+          {verificationState === 'pending' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: '#FFFBEB', border: '1.5px solid #FDE68A',
+              borderRadius: '12px', padding: '12px 16px', marginBottom: '14px'
+            }}>
+              <span style={{ fontSize: '18px' }}>⏳</span>
+              <span style={{ fontSize: '13.5px', color: '#92400E', fontWeight: 500 }}>
+                Hồ sơ của bạn đang chờ admin xác minh. Bạn sẽ có thể sử dụng gói dịch vụ ngay sau khi được duyệt.
+              </span>
+            </div>
+          )}
+
           {/* Pricing grid */}
           <PricingGrid>
             {plans.map((plan, i) => buildCard(plan, i))}
@@ -1043,12 +1150,18 @@ const Subscription = () => {
                 <CheckCircle size={60} />
               </SuccessIcon>
               <SuccessTitle>
-                {vi ? 'Gửi yêu cầu thành công!' : 'Request Sent Successfully!'}
+                {vi
+                  ? (lastPaymentMethod === 'wallet' ? 'Thanh toán thành công!' : 'Gửi yêu cầu thành công!')
+                  : (lastPaymentMethod === 'wallet' ? 'Payment Successful!' : 'Request Sent Successfully!')}
               </SuccessTitle>
               <SuccessMessage>
-                {vi
-                  ? 'Yêu cầu mở gói dịch vụ đã được gửi thành công. Chúng tôi sẽ liên hệ bạn sớm nhất để hỗ trợ kích hoạt.'
-                  : 'Your service package activation request has been sent successfully. We will contact you shortly to activate it.'}
+                {lastPaymentMethod === 'wallet'
+                  ? (vi
+                      ? 'Gói dịch vụ đã được kích hoạt thành công! Tin tuyển dụng của bạn sẽ xuất hiện trong Banner Động ngay lập tức.'
+                      : 'Your service package has been activated successfully! Your job post will appear in the Dynamic Banner immediately.')
+                  : (vi
+                      ? 'Yêu cầu mở gói dịch vụ đã được gửi thành công. Chúng tôi sẽ liên hệ bạn sớm nhất để hỗ trợ kích hoạt.'
+                      : 'Your service package activation request has been sent successfully. We will contact you shortly to activate it.')}
               </SuccessMessage>
               <SuccessButton onClick={() => setShowSuccessModal(false)}>
                 {vi ? 'Đóng' : 'Close'}
@@ -1090,6 +1203,85 @@ const Subscription = () => {
                   navigate('/employer/wallet');
                 }}>
                   {vi ? 'Nạp tiền ngay' : 'Top Up Now'}
+                </ConfirmButton>
+              </ModalFooter>
+            </InsufficientBalanceModalContent>
+          </ModalOverlay>
+        )}
+        {/* Not Verified Modal — Chưa nộp hồ sơ */}
+        {showNotVerifiedModal && (
+          <ModalOverlay onClick={() => setShowNotVerifiedModal(false)}>
+            <InsufficientBalanceModalContent
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', duration: 0.5 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ErrorIcon
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', boxShadow: '0 10px 30px rgba(245,158,11,0.3)' }}
+              >
+                <Shield size={50} />
+              </ErrorIcon>
+              <ErrorTitle>Tài khoản chưa được xác thực</ErrorTitle>
+              <ErrorMessage>
+                Bạn cần xác thực tài khoản nhà tuyển dụng trước khi có thể sử dụng các gói dịch vụ đẩy tin. Vui lòng hoàn tất xác thực để tiếp tục.
+              </ErrorMessage>
+              <ModalFooter style={{ justifyContent: 'center', borderTop: 'none', paddingTop: 0 }}>
+                <CancelButton onClick={() => setShowNotVerifiedModal(false)}>
+                  Để sau
+                </CancelButton>
+                <ConfirmButton
+                  style={{ background: '#d97706' }}
+                  onClick={() => {
+                    setShowNotVerifiedModal(false);
+                    navigate('/employer/profile');
+                  }}
+                >
+                  Xác thực ngay
+                </ConfirmButton>
+              </ModalFooter>
+            </InsufficientBalanceModalContent>
+          </ModalOverlay>
+        )}
+
+        {/* Pending Verification Modal — Đã nộp hồ sơ, đang chờ duyệt */}
+        {showPendingVerificationModal && (
+          <ModalOverlay onClick={() => setShowPendingVerificationModal(false)}>
+            <InsufficientBalanceModalContent
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', duration: 0.5 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ErrorIcon
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', boxShadow: '0 10px 30px rgba(245,158,11,0.3)' }}
+              >
+                <Clock size={50} />
+              </ErrorIcon>
+              <ErrorTitle>Hồ sơ đang chờ xác minh</ErrorTitle>
+              <ErrorMessage>
+                Hồ sơ xác thực doanh nghiệp của bạn đã được gửi và đang trong quá trình xét duyệt. Đội ngũ quản trị viên sẽ xem xét và phản hồi trong thời gian sớm nhất. Bạn có thể sử dụng các gói dịch vụ ngay sau khi hồ sơ được duyệt.
+              </ErrorMessage>
+              <ModalFooter style={{ justifyContent: 'center', borderTop: 'none', paddingTop: 0 }}>
+                <CancelButton
+                  onClick={() => {
+                    setShowPendingVerificationModal(false);
+                    navigate('/employer/profile');
+                  }}
+                >
+                  Xem lại hồ sơ đã gửi
+                </CancelButton>
+                <ConfirmButton
+                  style={{ background: '#d97706' }}
+                  onClick={() => setShowPendingVerificationModal(false)}
+                >
+                  Đã hiểu
                 </ConfirmButton>
               </ModalFooter>
             </InsufficientBalanceModalContent>

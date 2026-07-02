@@ -5221,11 +5221,9 @@ const HRManagement = () => {
                               {staff.status === 'active' && (
                                 <>
                                   {/* Dòng thông tin deadline yêu cầu thay đổi */}
-                                  {staff.changeDeadline && !staff.changeRequest && (
-                                    <div style={{ fontSize: '11px', color: staff.changeAllowed ? '#D97706' : '#94A3B8', fontWeight: 500, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      {staff.changeAllowed
-                                        ? <>⏱ Có thể yêu cầu thay đổi đến {staff.changeDeadline.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</>
-                                        : <>🔒 Đã hết thời gian yêu cầu thay đổi</>}
+                                  {staff.changeDeadline && !staff.changeRequest && !staff.changeAllowed && (
+                                    <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      Bạn không thể yêu cầu thay đổi được nữa
                                     </div>
                                   )}
                                   <StaffButton

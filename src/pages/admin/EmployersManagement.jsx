@@ -4,7 +4,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import { useLanguage } from '../../context/LanguageContext';
 import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Building2,
   CheckCircle,
@@ -718,11 +718,19 @@ const isUUID = (str) => {
 const EmployersManagement = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState('verifications');
   const [mainTab, setMainTab] = useState('verification');
+
+  // Nếu được navigate từ AdminDashboard với state.activeTab, tự động chuyển tab
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+  }, [location.state?.activeTab]);
 
   useEffect(() => {
     if (['pending', 'approved', 'verifications'].includes(activeTab)) {
@@ -2459,22 +2467,31 @@ const EmployersManagement = () => {
                               >
                                 <Eye size={16} />
                               </IconButton>
-                              {(!req.changeRequestStatus || req.changeRequestStatus === 'pending') && (
-                                <>
-                                  <ApproveButton
-                                    title={language === 'vi' ? 'Duyệt' : 'Approve'}
-                                    onClick={() => handleApproveChange(req.applicationId)}
-                                  >
-                                    <CheckCircle size={16} />
-                                  </ApproveButton>
-                                  <RejectButton
-                                    title={language === 'vi' ? 'Từ chối' : 'Reject'}
-                                    onClick={() => handleRejectChange(req.applicationId)}
-                                  >
-                                    <XCircle size={16} />
-                                  </RejectButton>
-                                </>
-                              )}
+                              {(() => {
+                                const crStatus = String(req.changeRequestStatus || '').toLowerCase();
+                                const appStatus = String(req.status || '');
+                                const isAlreadyProcessed =
+                                  crStatus === 'approved' ||
+                                  crStatus === 'rejected' ||
+                                  appStatus === 'ĐÃ_BỊ_THAY_THẾ';
+                                if (isAlreadyProcessed) return null;
+                                return (
+                                  <>
+                                    <ApproveButton
+                                      title={language === 'vi' ? 'Duyệt' : 'Approve'}
+                                      onClick={() => handleApproveChange(req.applicationId)}
+                                    >
+                                      <CheckCircle size={16} />
+                                    </ApproveButton>
+                                    <RejectButton
+                                      title={language === 'vi' ? 'Từ chối' : 'Reject'}
+                                      onClick={() => handleRejectChange(req.applicationId)}
+                                    >
+                                      <XCircle size={16} />
+                                    </RejectButton>
+                                  </>
+                                );
+                              })()}
                               <DeleteButton
                                 title={language === 'vi' ? 'Xóa' : 'Delete'}
                                 onClick={() => handleDeleteChangeRequest(req.applicationId)}

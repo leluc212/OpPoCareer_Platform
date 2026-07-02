@@ -412,6 +412,43 @@ const DangerZone = styled(Card)`
   background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(220, 38, 38, 0.05) 100%);
 `;
 
+const ComingSoonWrapper = styled.div`
+  position: relative;
+`;
+
+const ComingSoonOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  border-radius: ${props => props.theme.borderRadius.xl};
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+`;
+
+const ComingSoonBadge = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #F59E0B, #F97316);
+  color: white;
+  padding: 14px 28px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.4);
+  letter-spacing: 0.3px;
+  
+  .badge-icon {
+    font-size: 26px;
+    line-height: 1;
+  }
+`;
+
 const QuickStats = styled.div`
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -741,170 +778,192 @@ function CandidateSettings() {
               </Card>
 
               {/* Notifications */}
-              <Card
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-              >
-                <div className="card-header">
-                  <h2><Bell />{t.settings.notifications}</h2>
-                </div>
-
-                <SettingItem
-                  $color="#10B981"
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ duration: 0.2 }}
+              <ComingSoonWrapper>
+                <Card
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.3 }}
                 >
-                  <div className="setting-left">
-                    <div className="icon-wrapper">
-                      <Mail />
-                    </div>
-                    <div className="setting-info">
-                      <h3>{t.settings.emailNotifications}</h3>
-                      <p>{t.settings.emailNotificationsDesc}</p>
-                    </div>
+                  <div className="card-header">
+                    <h2><Bell />{t.settings.notifications}</h2>
                   </div>
-                  <Toggle>
-                    <input
-                      type="checkbox"
-                      checked={notifications.email}
-                      onChange={() => handleNotificationToggle('email')}
-                    />
-                    <span></span>
-                  </Toggle>
-                </SettingItem>
 
-                <SettingItem
-                  $color="#1e40af"
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="setting-left">
-                    <div className="icon-wrapper">
-                      <Bell />
+                  <SettingItem
+                    $color="#10B981"
+                    whileHover={{ scale: 1.01 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="setting-left">
+                      <div className="icon-wrapper">
+                        <Mail />
+                      </div>
+                      <div className="setting-info">
+                        <h3>{t.settings.emailNotifications}</h3>
+                        <p>{t.settings.emailNotificationsDesc}</p>
+                      </div>
                     </div>
-                    <div className="setting-info">
-                      <h3>{t.settings.applicationUpdates}</h3>
-                      <p>{t.settings.applicationUpdatesDesc}</p>
-                    </div>
-                  </div>
-                  <Toggle>
-                    <input
-                      type="checkbox"
-                      checked={notifications.profile}
-                      onChange={() => handleNotificationToggle('profile')}
-                    />
-                    <span></span>
-                  </Toggle>
-                </SettingItem>
+                    <Toggle>
+                      <input
+                        type="checkbox"
+                        checked={notifications.email}
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <span></span>
+                    </Toggle>
+                  </SettingItem>
 
-                <SettingItem
-                  $color="#F59E0B"
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="setting-left">
-                    <div className="icon-wrapper">
-                      <MessageSquare />
+                  <SettingItem
+                    $color="#1e40af"
+                    whileHover={{ scale: 1.01 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="setting-left">
+                      <div className="icon-wrapper">
+                        <Bell />
+                      </div>
+                      <div className="setting-info">
+                        <h3>{t.settings.applicationUpdates}</h3>
+                        <p>{t.settings.applicationUpdatesDesc}</p>
+                      </div>
                     </div>
-                    <div className="setting-info">
-                      <h3>{t.settings.newMatches}</h3>
-                      <p>{t.settings.newMatchesDesc}</p>
+                    <Toggle>
+                      <input
+                        type="checkbox"
+                        checked={notifications.profile}
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <span></span>
+                    </Toggle>
+                  </SettingItem>
+
+                  <SettingItem
+                    $color="#F59E0B"
+                    whileHover={{ scale: 1.01 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="setting-left">
+                      <div className="icon-wrapper">
+                        <MessageSquare />
+                      </div>
+                      <div className="setting-info">
+                        <h3>{t.settings.newMatches}</h3>
+                        <p>{t.settings.newMatchesDesc}</p>
+                      </div>
                     </div>
-                  </div>
-                  <Toggle>
-                    <input
-                      type="checkbox"
-                      checked={notifications.suggestions}
-                      onChange={() => handleNotificationToggle('suggestions')}
-                    />
-                    <span></span>
-                  </Toggle>
-                </SettingItem>
-              </Card>
+                    <Toggle>
+                      <input
+                        type="checkbox"
+                        checked={notifications.suggestions}
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <span></span>
+                    </Toggle>
+                  </SettingItem>
+                </Card>
+                <ComingSoonOverlay>
+                  <ComingSoonBadge>
+                    <span className="badge-icon">🚧</span>
+                    Tính năng đang phát triển
+                  </ComingSoonBadge>
+                </ComingSoonOverlay>
+              </ComingSoonWrapper>
 
               {/* Privacy */}
-              <Card
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-              >
-                <div className="card-header">
-                  <h2><Shield />{t.settings.privacy}</h2>
-                </div>
-
-                <SettingItem
-                  $color="#10B981"
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ duration: 0.2 }}
+              <ComingSoonWrapper>
+                <Card
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.4 }}
                 >
-                  <div className="setting-left">
-                    <div className="icon-wrapper">
-                      {privacy.showProfile ? <Eye /> : <EyeOff />}
-                    </div>
-                    <div className="setting-info">
-                      <h3>{t.settings.profileVisibility}</h3>
-                      <p>{t.settings.profileVisibilityDesc}</p>
-                    </div>
+                  <div className="card-header">
+                    <h2><Shield />{t.settings.privacy}</h2>
                   </div>
-                  <Toggle>
-                    <input
-                      type="checkbox"
-                      checked={privacy.showProfile}
-                      onChange={() => handlePrivacyToggle('showProfile')}
-                    />
-                    <span></span>
-                  </Toggle>
-                </SettingItem>
 
-                <SettingItem
-                  $color="#1e40af"
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="setting-left">
-                    <div className="icon-wrapper">
-                      <Mail />
+                  <SettingItem
+                    $color="#10B981"
+                    whileHover={{ scale: 1.01 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="setting-left">
+                      <div className="icon-wrapper">
+                        {privacy.showProfile ? <Eye /> : <EyeOff />}
+                      </div>
+                      <div className="setting-info">
+                        <h3>{t.settings.profileVisibility}</h3>
+                        <p>{t.settings.profileVisibilityDesc}</p>
+                      </div>
                     </div>
-                    <div className="setting-info">
-                      <h3>{t.settings.showEmail}</h3>
-                      <p>{t.settings.showEmailDesc}</p>
-                    </div>
-                  </div>
-                  <Toggle>
-                    <input
-                      type="checkbox"
-                      checked={privacy.showEmail}
-                      onChange={() => handlePrivacyToggle('showEmail')}
-                    />
-                    <span></span>
-                  </Toggle>
-                </SettingItem>
+                    <Toggle>
+                      <input
+                        type="checkbox"
+                        checked={privacy.showProfile}
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <span></span>
+                    </Toggle>
+                  </SettingItem>
 
-                <SettingItem
-                  $color="#F59E0B"
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="setting-left">
-                    <div className="icon-wrapper">
-                      <Phone />
+                  <SettingItem
+                    $color="#1e40af"
+                    whileHover={{ scale: 1.01 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="setting-left">
+                      <div className="icon-wrapper">
+                        <Mail />
+                      </div>
+                      <div className="setting-info">
+                        <h3>{t.settings.showEmail}</h3>
+                        <p>{t.settings.showEmailDesc}</p>
+                      </div>
                     </div>
-                    <div className="setting-info">
-                      <h3>{t.settings.showPhone}</h3>
-                      <p>{t.settings.showPhoneDesc}</p>
+                    <Toggle>
+                      <input
+                        type="checkbox"
+                        checked={privacy.showEmail}
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <span></span>
+                    </Toggle>
+                  </SettingItem>
+
+                  <SettingItem
+                    $color="#F59E0B"
+                    whileHover={{ scale: 1.01 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="setting-left">
+                      <div className="icon-wrapper">
+                        <Phone />
+                      </div>
+                      <div className="setting-info">
+                        <h3>{t.settings.showPhone}</h3>
+                        <p>{t.settings.showPhoneDesc}</p>
+                      </div>
                     </div>
-                  </div>
-                  <Toggle>
-                    <input
-                      type="checkbox"
-                      checked={privacy.showPhone}
-                      onChange={() => handlePrivacyToggle('showPhone')}
-                    />
-                    <span></span>
-                  </Toggle>
-                </SettingItem>
-              </Card>
+                    <Toggle>
+                      <input
+                        type="checkbox"
+                        checked={privacy.showPhone}
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <span></span>
+                    </Toggle>
+                  </SettingItem>
+                </Card>
+                <ComingSoonOverlay>
+                  <ComingSoonBadge>
+                    <span className="badge-icon">🚧</span>
+                    Tính năng đang phát triển
+                  </ComingSoonBadge>
+                </ComingSoonOverlay>
+              </ComingSoonWrapper>
 
               {/* Policies */}
               <Card

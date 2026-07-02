@@ -21,6 +21,9 @@ import quickJobService from '../../services/quickJobService';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { s3Images } from '../../utils/s3Images';
 import { getActiveBanners } from '../../services/bannerService';
+import { getTopSpotlightEmployerIds, filterTopSpotlightJobs } from '../../services/topSpotlightService';
+import TopSpotlightBanner from '../../components/TopSpotlightBanner';
+import TopSpotlightJobCard from '../../components/TopSpotlightJobCard';
 import { getAuthHeaders } from '../../services/authHeaders';
 import { requestInterviewMedia } from '../../services/interviewMediaService';
 import * as applicationService from '../../services/applicationService';
@@ -2325,6 +2328,8 @@ const JobListing = () => {
   const [savedJobs, setSavedJobs] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
+  const [topSpotlightEmployerIds, setTopSpotlightEmployerIds] = useState(new Set());
+  const [topSpotlightJobs, setTopSpotlightJobs] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchInputRef = useRef(null);
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -2343,17 +2348,26 @@ const JobListing = () => {
   const [isLoadingDynamoJobs, setIsLoadingDynamoJobs] = useState(true);
   const [isReloading, setIsReloading] = useState(false);
   const [employerLogos, setEmployerLogos] = useState({});
+  // employerProfiles: { [userId]: { companyLogo, companyName } }
+  const [employerProfiles, setEmployerProfiles] = useState({});
 
   useEffect(() => {
     let cancelled = false;
     adminEmployerService.getAllEmployers()
       .then(employers => {
         if (cancelled) return;
-        const logos = employers.reduce((acc, emp) => {
-          if (emp.userId && emp.companyLogo) acc[emp.userId] = emp.companyLogo;
-          return acc;
-        }, {});
+        const logos = {};
+        const profiles = {};
+        employers.forEach(emp => {
+          if (!emp.userId) return;
+          if (emp.companyLogo) logos[emp.userId] = emp.companyLogo;
+          profiles[emp.userId] = {
+            companyLogo: emp.companyLogo || null,
+            companyName: emp.companyName || emp.businessName || null,
+          };
+        });
         setEmployerLogos(logos);
+        setEmployerProfiles(profiles);
       })
       .catch(err => console.error('Error fetching employer logos:', err));
     return () => { cancelled = true; };
@@ -3316,7 +3330,12 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               idJob: job.idJob,
               employerId: job.employerId,
               title: String(job.title || 'Untitled Job'),
-              company: String(job.employerName || job.employerEmail || (language === 'vi' ? 'Công ty' : 'Company')),
+              company: String(
+                employerProfiles[job.employerId]?.companyName ||
+                job.employerName ||
+                job.employerEmail ||
+                (language === 'vi' ? 'Công ty' : 'Company')
+              ),
               location: String(job.location || ''),
               lat: lat, // Add coordinates for location-based filtering
               lng: lng,
@@ -3336,7 +3355,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               workHours: String(job.workHours || ''),
               workDays: String(job.workDays || ''),
               status: String(job.status || 'active'),
-              companyLogo: employerLogos[job.employerId] || null,
+              companyLogo: employerProfiles[job.employerId]?.companyLogo || employerLogos[job.employerId] || null,
               isAiScreeningEnabled: !!job.isAiScreeningEnabled,
               customQuestions: job.customQuestions || [],
               isFromDynamoDB: true, // Flag to identify DynamoDB jobs
@@ -3359,13 +3378,32 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     }
   };
 
-  // Whenever employerLogos updates, we must also update the logo on jobs
+  // Whenever employerProfiles updates, patch both logo and companyName on all jobs
   useEffect(() => {
-    if (Object.keys(employerLogos).length > 0) {
-      setDynamoDBJobs(prev => prev.map(job => ({ ...job, companyLogo: employerLogos[job.employerId] || job.companyLogo })));
-      setQuickJobs(prev => prev.map(job => ({ ...job, companyLogo: employerLogos[job.employerId] || job.companyLogo })));
+    if (Object.keys(employerProfiles).length === 0) return;
+    const patchJob = job => {
+      const profile = employerProfiles[job.employerId];
+      if (!profile) return job;
+      return {
+        ...job,
+        companyLogo: profile.companyLogo || job.companyLogo,
+        company: profile.companyName || job.company,
+      };
+    };
+    setDynamoDBJobs(prev => prev.map(patchJob));
+    setQuickJobs(prev => prev.map(patchJob));
+  }, [employerProfiles]);
+
+  // Sync topSpotlightJobs whenever DynamoDB jobs or employer IDs change
+  useEffect(() => {
+    if (topSpotlightEmployerIds.size === 0) {
+      setTopSpotlightJobs([]);
+      return;
     }
-  }, [employerLogos]);
+    const filtered = filterTopSpotlightJobs(dynamoDBJobs, topSpotlightEmployerIds);
+    setTopSpotlightJobs(filtered);
+    console.log('✅ Top Spotlight Jobs:', filtered.length);
+  }, [dynamoDBJobs, topSpotlightEmployerIds]);
 
   // Load quick jobs from PostQuickJob table
   const loadQuickJobs = async () => {
@@ -3414,7 +3452,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               idJob: jobId,
               employerId: job.employerId,
               title: String(job.title || 'Untitled Job'),
-              company: String(job.companyName || (language === 'vi' ? 'Công ty' : 'Company')),
+              company: String(
+                employerProfiles[job.employerId]?.companyName ||
+                job.companyName ||
+                (language === 'vi' ? 'Công ty' : 'Company')
+              ),
               location: String(job.location || ''),
               lat: lat, // Add coordinates for location-based filtering
               lng: lng,
@@ -3437,7 +3479,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               totalHours: totalHours,
               workHours: job.workHours || (job.startTime && job.endTime ? `${job.startTime} - ${job.endTime}` : ''),
               workDate: job.workDate || '',
-              companyLogo: employerLogos[job.employerId] || null,
+              companyLogo: employerProfiles[job.employerId]?.companyLogo || employerLogos[job.employerId] || null,
               status: String(job.status || 'active'),
               isQuickJob: true, // Flag to identify quick jobs
               urgent: true, // Mark as urgent to show red badge
@@ -3465,34 +3507,57 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     loadQuickJobs();
   }, [language]);
 
-  // Load subscriptions to identify employers with active Hot Search package
+  // Load subscriptions to identify employers with active Hot Search / Top Spotlight packages
   useEffect(() => {
-    const loadHotSearchSubscriptions = async () => {
+    const loadSubscriptions = async () => {
       try {
         const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
         if (!API_ENDPOINT) return;
         const response = await fetch(`${API_ENDPOINT}/subscriptions`);
-        if (response.ok) {
-          const data = await response.json();
-          // Filter active and approved Hot Search packages
-          const activeHotSearchEmployerIds = new Set(
-            data
-              .filter(sub => 
-                sub.packageName === 'Hot Search' && 
-                sub.status === 'active' && 
-                sub.approvalStatus === 'approved'
-              )
-              .map(sub => sub.employerId)
-          );
-          setHotSearchEmployerIds(activeHotSearchEmployerIds);
-          console.log('✅ Active Hot Search Employer IDs:', Array.from(activeHotSearchEmployerIds));
-        }
+        if (!response.ok) return;
+        const data = await response.json();
+        const now = Date.now();
+
+        // Hot Search
+        const activeHotSearchEmployerIds = new Set(
+          data
+            .filter(sub =>
+              sub.packageName === 'Hot Search' &&
+              sub.status === 'active' &&
+              sub.approvalStatus === 'approved'
+            )
+            .map(sub => sub.employerId)
+        );
+        setHotSearchEmployerIds(activeHotSearchEmployerIds);
+        console.log('✅ Active Hot Search Employer IDs:', Array.from(activeHotSearchEmployerIds));
+
+        // Top Spotlight — sắp xếp theo purchaseDateTime mới nhất lên trước
+        const activeTopSpotlightEmployerIds = new Set(
+          data
+            .filter(sub =>
+              sub.packageName === 'Top Spotlight' &&
+              sub.status === 'active' &&
+              sub.approvalStatus === 'approved' &&
+              (!sub.expiryDateTime || new Date(sub.expiryDateTime).getTime() > now)
+            )
+            .sort((a, b) => {
+              const ta = a.purchaseDateTime ? new Date(a.purchaseDateTime).getTime() : 0;
+              const tb = b.purchaseDateTime ? new Date(b.purchaseDateTime).getTime() : 0;
+              return tb - ta;
+            })
+            .map(sub => sub.employerId)
+        );
+        setTopSpotlightEmployerIds(activeTopSpotlightEmployerIds);
+        console.log('✅ Active Top Spotlight Employer IDs:', Array.from(activeTopSpotlightEmployerIds));
       } catch (err) {
-        console.error('Error loading hot search subscriptions:', err);
+        console.error('Error loading subscriptions:', err);
       }
     };
 
-    loadHotSearchSubscriptions();
+    loadSubscriptions();
+    // Polling mỗi 60 giây để tự động nhận diện gói mới mua mà không cần refresh trang
+    const pollInterval = setInterval(loadSubscriptions, 60_000);
+    return () => clearInterval(pollInterval);
   }, []);
 
   // Click outside search input suggestion box handler
@@ -5303,7 +5368,17 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               </ViewControls>
             </ContentHeader>
 
-            {/* Banner Carousel */}
+            {/* ── Vị trí 1: Top Spotlight Banner Carousel ── */}
+            {topSpotlightJobs.length > 0 && (
+              <TopSpotlightBanner
+                jobs={topSpotlightJobs}
+                onJobClick={handleJobClick}
+                language={language}
+              />
+            )}
+
+            {/* Banner Carousel (ảnh admin upload — chỉ hiện khi không có Top Spotlight) */}
+            {topSpotlightJobs.length === 0 && (
             <BoostBannerWrap
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
@@ -5352,24 +5427,55 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 ))}
               </BannerDots>
             </BoostBannerWrap>
+            )}
 
             <JobsGrid>
               {filteredJobs.length > 0 ? (
-                filteredJobs.map((job, index) => (
-                  <JobCardComponent
-                    key={job.id}
-                    job={job}
-                    saved={savedJobs.includes(job.idJob || job.id) || savedJobs.includes(job.id)}
-                    onSave={handleSaveJob}
-                    onClick={handleJobClick}
-                    onApply={handleApplyJob}
-                    delay={index * 0.05}
-                    showDistance={jobCategory === 'shift' && showNearbyJobs}
-                    language={language}
-                    isHighlighted={highlightedJobId === job.id}
-                    isHotSearch={hotSearchEmployerIds.has(job.employerId)}
-                  />
-                ))
+                (() => {
+                  // ── Vị trí 2: Chèn TopSpotlightJobCard xen kẽ mỗi 4 job thường ──
+                  const INSERT_EVERY = 4; // chèn sau mỗi 4 job
+                  const items = [];
+                  let spotlightIndex = 0;
+
+                  filteredJobs.forEach((job, index) => {
+                    items.push(
+                      <JobCardComponent
+                        key={job.id}
+                        job={job}
+                        saved={savedJobs.includes(job.idJob || job.id) || savedJobs.includes(job.id)}
+                        onSave={handleSaveJob}
+                        onClick={handleJobClick}
+                        onApply={handleApplyJob}
+                        delay={index * 0.05}
+                        showDistance={jobCategory === 'shift' && showNearbyJobs}
+                        language={language}
+                        isHighlighted={highlightedJobId === job.id}
+                        isHotSearch={hotSearchEmployerIds.has(job.employerId)}
+                      />
+                    );
+
+                    // Chèn TopSpotlightJobCard sau mỗi INSERT_EVERY job thường
+                    const isInsertPoint = (index + 1) % INSERT_EVERY === 0;
+                    if (
+                      isInsertPoint &&
+                      topSpotlightJobs.length > 0 &&
+                      spotlightIndex < topSpotlightJobs.length
+                    ) {
+                      const spotlightJob = topSpotlightJobs[spotlightIndex % topSpotlightJobs.length];
+                      spotlightIndex++;
+                      items.push(
+                        <TopSpotlightJobCard
+                          key={`ts-inline-${spotlightJob.id}-${spotlightIndex}`}
+                          job={spotlightJob}
+                          onClick={handleJobClick}
+                          language={language}
+                        />
+                      );
+                    }
+                  });
+
+                  return items;
+                })()
               ) : isLoadingDynamoJobs ? (
                 <div style={{ textAlign: 'center', padding: '80px 20px', gridColumn: '1 / -1', color: '#6b7280' }}>
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>

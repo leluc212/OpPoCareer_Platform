@@ -16,6 +16,7 @@ import { getWallet, createWalletTransaction } from '../../services/packageCatalo
 import cvAiService from '../../services/cvAiService';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
+import { createJobPendingApprovalNotification } from '../../services/notificationService';
 
 
 // Keyframe animations
@@ -1498,6 +1499,20 @@ const PostQuickJob = () => {
       const savedJob = await quickJobService.createQuickJob(jobData);
 
       console.log('✅ Quick job saved:', savedJob);
+
+      // Notify admin about new quick job posting
+      try {
+        await createJobPendingApprovalNotification({
+          employerId,
+          companyName: companyName,
+          jobTitle: jobData.title,
+          jobId: savedJob.idJob || savedJob.id || 'QJOB',
+          isQuickJob: true
+        });
+        console.log('✅ Sent pending approval notification to admin for quick job');
+      } catch (notifErr) {
+        console.warn('⚠️ Failed to send notification to admin:', notifErr);
+      }
 
       // Clear draft
       localStorage.removeItem('quickJobDraft');

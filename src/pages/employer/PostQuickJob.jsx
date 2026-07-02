@@ -1460,12 +1460,6 @@ const PostQuickJob = () => {
         }
       } catch (error) {
         console.warn('⚠️ Could not get company name from profile:', error);
-        // Try localStorage as fallback
-        const cachedProfile = localStorage.getItem('employerProfile');
-        if (cachedProfile) {
-          const parsed = JSON.parse(cachedProfile);
-          companyName = parsed.companyName || parsed.businessName || 'Unknown Company';
-        }
       }
 
       // Prepare job data for DynamoDB

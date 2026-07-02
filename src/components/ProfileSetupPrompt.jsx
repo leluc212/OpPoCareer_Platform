@@ -303,7 +303,7 @@ const getConfig = (language) => ({
  *   profileName: string (Tên hoặc tên công ty)
  *   profilePhone: string (Số điện thoại)
  */
-const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone }) => {
+const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone, isVerified }) => {
   const [show, setShow] = useState(false);
   const navigate = useNavigate();
   const { language } = useLanguage();
@@ -311,6 +311,12 @@ const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone }) => {
 
   useEffect(() => {
     if (!userId || !cfg) return;
+
+    // Đã xác thực hồ sơ => không bao giờ hiện modal
+    if (isVerified) {
+      setShow(false);
+      return;
+    }
 
     const nameStr = profileName || '';
     const phoneStr = profilePhone || '';
@@ -331,7 +337,7 @@ const ProfileSetupPrompt = ({ role, userId, profileName, profilePhone }) => {
       const t = setTimeout(() => setShow(true), 200);
       return () => clearTimeout(t);
     }
-  }, [userId, role, profileName, profilePhone, cfg]);
+  }, [userId, role, profileName, profilePhone, isVerified, cfg]);
 
   const dismiss = () => {
     // Chỉ lưu vào sessionStorage thay vì localStorage

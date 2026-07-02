@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import Toast from '../../components/Toast';
 import AddressInput from '../../components/AddressInput';
 import { useToast } from '../../hooks/useToast';
-import { Input, TextArea, Button, Label, FormGroup } from '../../components/FormElements';
+import { Input, TextArea, Button, Label, FormGroup, Select } from '../../components/FormElements';
 import { 
   Building2, 
   Mail, 
@@ -409,9 +409,11 @@ const InputWrapper = styled.div`
     width: 20px;
     height: 20px;
     color: #1e40af;
-    opacity: 0.7;
+    opacity: 1;
+    stroke-width: 2.5px;
     pointer-events: none;
     transition: all 0.2s ease;
+    z-index: 1;
   }
   
   input, textarea {
@@ -424,6 +426,26 @@ const InputWrapper = styled.div`
     &:focus {
       border-color: #3B82F6;
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+  }
+
+  select {
+    padding-left: 46px !important;
+    border-radius: 12px;
+    border: 1.5px solid #E8EFFF;
+    background: #ffffff;
+    transition: all 0.2s ease;
+
+    &:focus {
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    &:disabled {
+      background: #F8FAFC;
+      color: #64748B;
+      cursor: not-allowed;
+      border-color: #E2E8F0;
     }
   }
   
@@ -1865,14 +1887,35 @@ const EmployerProfile = () => {
                   <Label htmlFor="industry">{language === 'vi' ? 'Lĩnh vực' : 'Industry'}</Label>
                   <InputWrapper>
                     <FileText className="input-icon" />
-                    <Input
+                    <Select
                       id="industry"
                       name="industry"
                       value={formData.industry}
                       onChange={handleChange}
-                      placeholder={language === 'vi' ? 'Ví dụ: F&B, Công nghệ, Bán lẻ' : 'e.g., F&B, Technology, Retail'}
                       disabled={!isEditing}
-                    />
+                      style={{ paddingLeft: '46px' }}
+                    >
+                      <option value="">{language === 'vi' ? '-- Chọn lĩnh vực --' : '-- Select industry --'}</option>
+                      {[
+                        { vi: 'F&B / Ẩm thực', en: 'F&B / Food & Beverage' },
+                        { vi: 'Bán lẻ / Thương mại', en: 'Retail / Commerce' },
+                        { vi: 'Công nghệ thông tin', en: 'Information Technology' },
+                        { vi: 'Xây dựng / Bất động sản', en: 'Construction / Real Estate' },
+                        { vi: 'Sản xuất / Công nghiệp', en: 'Manufacturing / Industry' },
+                        { vi: 'Giáo dục / Đào tạo', en: 'Education / Training' },
+                        { vi: 'Y tế / Dược phẩm', en: 'Healthcare / Pharmaceutical' },
+                        { vi: 'Tài chính / Ngân hàng', en: 'Finance / Banking' },
+                        { vi: 'Logistics / Vận tải', en: 'Logistics / Transport' },
+                        { vi: 'Marketing / Quảng cáo', en: 'Marketing / Advertising' },
+                        { vi: 'Du lịch / Khách sạn', en: 'Tourism / Hospitality' },
+                        { vi: 'Nông nghiệp', en: 'Agriculture' },
+                        { vi: 'Dịch vụ khác', en: 'Other Services' },
+                      ].map((opt) => (
+                        <option key={opt.vi} value={language === 'vi' ? opt.vi : opt.en}>
+                          {language === 'vi' ? opt.vi : opt.en}
+                        </option>
+                      ))}
+                    </Select>
                   </InputWrapper>
                 </FormGroup>
 
@@ -1880,14 +1923,19 @@ const EmployerProfile = () => {
                   <Label htmlFor="companySize">{language === 'vi' ? 'Quy mô' : 'Company size'}</Label>
                   <InputWrapper>
                     <Users className="input-icon" />
-                    <Input
+                    <Select
                       id="companySize"
                       name="companySize"
                       value={formData.companySize}
                       onChange={handleChange}
-                      placeholder={language === 'vi' ? 'Ví dụ: 1-10, 11-50, 51-200 nhân viên' : 'e.g., 1-10, 11-50, 51-200 employees'}
                       disabled={!isEditing}
-                    />
+                    >
+                      <option value="">{language === 'vi' ? '-- Chọn quy mô --' : '-- Select size --'}</option>
+                      <option value="1-50">{language === 'vi' ? '1 - 50 nhân viên' : '1 - 50 employees'}</option>
+                      <option value="50-100">{language === 'vi' ? '50 - 100 nhân viên' : '50 - 100 employees'}</option>
+                      <option value="100-499">{language === 'vi' ? '100 - 499 nhân viên' : '100 - 499 employees'}</option>
+                      <option value="500+">{language === 'vi' ? '500+ nhân viên' : '500+ employees'}</option>
+                    </Select>
                   </InputWrapper>
                 </FormGroup>
                 
@@ -1906,7 +1954,7 @@ const EmployerProfile = () => {
                   </InputWrapper>
                 </FormGroup>
               </FormRow>
-              <FormRow $columns="1fr 1fr">
+              <FormRow $columns="1fr">
                 <FormGroup>
                   <Label htmlFor="taxCode">{language === 'vi' ? 'Mã số thuế' : 'Tax Code'}</Label>
                   <InputWrapper>
@@ -1931,29 +1979,6 @@ const EmployerProfile = () => {
                   )}
                 </FormGroup>
 
-                <FormGroup>
-                  <Label htmlFor="businessLicense">{language === 'vi' ? 'Số giấy phép kinh doanh' : 'Business License Number'}</Label>
-                  <InputWrapper>
-                    <FileText className="input-icon" />
-                    <Input
-                      id="businessLicense"
-                      name="businessLicense"
-                      value={formData.businessLicense}
-                      onChange={handleChange}
-                      placeholder={language === 'vi' ? 'Số giấy phép kinh doanh' : 'Business license number'}
-                      disabled={!isEditing || isLockedFields.businessLicense}
-                      style={{
-                        backgroundColor: isLockedFields.businessLicense ? '#F3F4F6' : undefined,
-                        cursor: isLockedFields.businessLicense ? 'not-allowed' : undefined
-                      }}
-                    />
-                  </InputWrapper>
-                  {isLockedFields.businessLicense && (
-                    <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                      {language === 'vi' ? 'Số giấy phép đã được khóa sau lần đầu thiết lập' : 'Business license is locked after first setup'}
-                    </p>
-                  )}
-                </FormGroup>
               </FormRow>
 
               <FormRow $columns="1fr">

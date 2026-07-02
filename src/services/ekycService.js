@@ -13,7 +13,7 @@ const API_BASE =
 
 // ─── Auth header ──────────────────────────────────────────────────────────────
 const getAuthHeaders = async () => {
-  // Thử Amplify fetchAuthSession trước
+  // 1. Thử Amplify fetchAuthSession trước
   try {
     const session = await fetchAuthSession();
     const idToken = session?.tokens?.idToken;
@@ -30,12 +30,32 @@ const getAuthHeaders = async () => {
     // ignore, fallback below
   }
 
-  // Fallback: đọc thẳng từ localStorage (PKCE flow lưu ở đây)
+  // 2. Fallback: quét toàn bộ localStorage tìm idToken của Cognito
   try {
-    const CLIENT_ID = '2mv7qt4gpmq03dmlm0or9724n8';
-    const lastUser = localStorage.getItem(`CognitoIdentityServiceProvider.${CLIENT_ID}.LastAuthUser`);
-    if (lastUser) {
-      const idToken = localStorage.getItem(`CognitoIdentityServiceProvider.${CLIENT_ID}.${lastUser}.idToken`);
+    // Tìm tất cả keys có dạng CognitoIdentityServiceProvider.*.*.idToken
+    const idTokenKey = Object.keys(localStorage).find(
+      k => k.includes('CognitoIdentityServiceProvider') && k.endsWith('.idToken')
+    );
+    if (idTokenKey) {
+      const idToken = localStorage.getItem(idTokenKey);
+      if (idToken) {
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback: tìm trong sessionStorage
+  try {
+    const idTokenKey = Object.keys(sessionStorage).find(
+      k => k.includes('CognitoIdentityServiceProvider') && k.endsWith('.idToken')
+    );
+    if (idTokenKey) {
+      const idToken = sessionStorage.getItem(idTokenKey);
       if (idToken) {
         return {
           'Content-Type': 'application/json',

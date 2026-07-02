@@ -8,8 +8,11 @@ import { Edit, Trash2, Users, Clock, TrendingUp, Eye, BarChart3, Plus, Calendar,
 import { Button } from '../../components/FormElements';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import DynamicTranslate from '../../components/DynamicTranslate';
 import jobPostService from '../../services/jobPostService';
+import employerProfileService from '../../services/employerProfileService';
+import ProfileSetupPrompt from '../../components/ProfileSetupPrompt';
 
 const fadeIn = keyframes`
   from {
@@ -415,12 +418,25 @@ const StatusBadgeWrapper = styled.div`
 
 const JobManagement = () => {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState([]);
 
   const [jobs, setJobs] = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+
+  // Employer profile for ProfileSetupPrompt
+  const [employerProfile, setEmployerProfile] = useState(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    employerProfileService.getMyProfile()
+      .then(p => setEmployerProfile(p))
+      .catch(() => setEmployerProfile(null))
+      .finally(() => setIsLoadingProfile(false));
+  }, [user]);
 
   // Refresh jobs when component mounts
   useEffect(() => {
@@ -534,6 +550,20 @@ const JobManagement = () => {
 
   return (
     <DashboardLayout role="employer" key={language}>
+      {!isLoadingProfile && (
+        <ProfileSetupPrompt
+          role="employer"
+          userId={user?.email}
+          profileName={employerProfile?.companyName || ''}
+          profilePhone={employerProfile?.phone || ''}
+          isVerified={
+            employerProfile?.isVerified === true ||
+            employerProfile?.isVerified === 'true' ||
+            employerProfile?.verificationStatus === 'approved' ||
+            employerProfile?.verificationStatus === 'APPROVED'
+          }
+        />
+      )}
       <JobManagementContainer
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

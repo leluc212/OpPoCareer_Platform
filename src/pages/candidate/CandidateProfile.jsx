@@ -1099,10 +1099,7 @@ const CandidateProfile = () => {
   const [originalFormData, setOriginalFormData] = useState(defaultFormData);
 
   // Track if CCCD, DOB, and EMAIL are locked
-  const [isLockedFields, setIsLockedFields] = useState(() => {
-    const saved = localStorage.getItem('lockedProfileFields');
-    return saved ? JSON.parse(saved) : { cccd: false, dateOfBirth: false, email: true }; // Email is always locked
-  });
+  const [isLockedFields, setIsLockedFields] = useState({ cccd: false, dateOfBirth: false, email: true });
 
   const loadWorkHistory = async () => {
     try {

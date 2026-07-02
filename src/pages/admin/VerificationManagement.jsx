@@ -328,23 +328,9 @@ const VerificationManagement = () => {
   const loadVerificationRequests = async () => {
     setIsLoading(true);
     try {
-      // TODO: Replace with actual API call
-      // For now, load from localStorage as demo
-      const mockRequests = [
-        {
-          id: '1',
-          userId: 'user-123',
-          companyName: 'Công ty TNHH ABC',
-          taxCode: '0123456789',
-          status: 'pending',
-          submittedAt: new Date().toISOString(),
-          verificationData: JSON.parse(localStorage.getItem('companyVerificationData') || '{}'),
-          employerProfile: JSON.parse(localStorage.getItem('employerProfile') || '{}')
-        }
-      ];
-      
-      setVerificationRequests(mockRequests);
-      setFilteredRequests(mockRequests);
+      // TODO: Replace with actual API call to load verification requests
+      setVerificationRequests([]);
+      setFilteredRequests([]);
     } catch (error) {
       console.error('Error loading verification requests:', error);
       toast.error(language === 'vi' ? 'Không thể tải danh sách xác thực' : 'Failed to load verification requests');

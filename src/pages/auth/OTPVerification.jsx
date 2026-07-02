@@ -6,6 +6,7 @@ import { Button } from '../../components/FormElements';
 import { CheckCircle, ArrowLeft, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { s3Images } from '../../utils/s3Images';
+import employerProfileService from '../../services/employerProfileService';
 
 /* ── Animations ── */
 const gradMove = keyframes`
@@ -362,6 +363,26 @@ const OTPVerification = () => {
     try {
       const { Auth } = await import('../../utils/amplifyClient');
       await Auth.confirmSignUp({ username: email, confirmationCode: code });
+
+      // After OTP confirmed, create employer profile with registration data
+      if (role === 'employer' && password) {
+        try {
+          // Sign in to get a valid session so the API call is authenticated
+          await Auth.signIn({ username: email, password });
+
+          const formData = location.state?.formData || {};
+          await employerProfileService.createProfile({
+            fullName:    formData.fullName    || '',
+            companyName: formData.companyName || '',
+            phone:       formData.phone       || '',
+          });
+          console.log('✅ Employer profile created after OTP verification');
+        } catch (profileErr) {
+          // Non-fatal — user can fill in profile later
+          console.warn('⚠️ Profile creation failed, user can set up later:', profileErr);
+        }
+      }
+
       setSuccessMsg('Xác thực thành công! Đang chuyển hướng...');
       setTimeout(() => navigate(role === 'employer' ? '/login?role=employer' : '/login?role=candidate'), 1500);
     } catch (err) {

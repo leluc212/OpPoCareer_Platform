@@ -18,6 +18,7 @@ import experienceService from '../../services/experienceService';
 import candidateProfileService from '../../services/candidateProfileService';
 import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification, createEmployerReviewNotification, createChangeRequestSubmittedNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
+import ProfileSetupPrompt from '../../components/ProfileSetupPrompt';
 
 // Helper: tính số giờ từ chuỗi shift "HH:MM - HH:MM"
 const calcShiftHours = (shift) => {
@@ -4827,6 +4828,20 @@ const HRManagement = () => {
 
   return (
     <DashboardLayout role="employer" key={language}>
+      {!loadingProfile && (
+        <ProfileSetupPrompt
+          role="employer"
+          userId={user?.email}
+          profileName={profile?.companyName || ''}
+          profilePhone={profile?.phone || ''}
+          isVerified={
+            profile?.isVerified === true ||
+            profile?.isVerified === 'true' ||
+            profile?.verificationStatus === 'approved' ||
+            profile?.verificationStatus === 'APPROVED'
+          }
+        />
+      )}
       <PageContainer
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

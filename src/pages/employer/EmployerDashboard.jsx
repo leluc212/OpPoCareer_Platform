@@ -6,12 +6,9 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { imgUrl } from '../../utils/assetUrl';
 import StatsCard from '../../components/StatsCard';
 import StatusBadge from '../../components/StatusBadge';
-import CompanyProfileSetupModal from '../../components/CompanyProfileSetupModal';
-import ProfileSetupPrompt from '../../components/ProfileSetupPrompt';
 
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { useCompanyProfileCompletion } from '../../hooks/useCompanyProfileCompletion';
 import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
@@ -447,11 +444,9 @@ const EmployerDashboard = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { isProfileComplete, isLoading: isLoadingProfileCompletion, profileCompletion, profileData } = useCompanyProfileCompletion();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [employerProfile, setEmployerProfile] = useState(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [showProfileSetupModal, setShowProfileSetupModal] = useState(false);
 
   // Load employer profile
   useEffect(() => {
@@ -464,15 +459,6 @@ const EmployerDashboard = () => {
         setEmployerProfile(profile);
       } catch (error) {
         console.error('Error loading employer profile:', error);
-        // Fallback to localStorage
-        const savedProfile = localStorage.getItem('employerProfile');
-        if (savedProfile) {
-          try {
-            setEmployerProfile(JSON.parse(savedProfile));
-          } catch (e) {
-            console.error('Error parsing saved profile:', e);
-          }
-        }
       } finally {
         setIsLoadingProfile(false);
       }
@@ -481,31 +467,8 @@ const EmployerDashboard = () => {
     loadProfile();
   }, [user]);
 
-  // Check if should show profile setup modal
-  useEffect(() => {
-    // Only show modal for authenticated users with incomplete profiles
-    // who have not been verified yet, and only if we're not loading
-    if (user && !isLoadingProfileCompletion && !isProfileComplete && !isLoadingProfile) {
-      const isVerified = 
-        employerProfile?.isVerified === true || 
-        employerProfile?.isVerified === 'true' || 
-        employerProfile?.verificationStatus === 'approved' || 
-        employerProfile?.verificationStatus === 'APPROVED' || 
-        profileData?.isVerified === true || 
-        profileData?.isVerified === 'true' || 
-        profileData?.verificationStatus === 'approved' || 
-        profileData?.verificationStatus === 'APPROVED';
-
-      if (!isVerified) {
-        // Add a small delay to ensure smooth page load
-        const timer = setTimeout(() => {
-          setShowProfileSetupModal(true);
-        }, 2000); // Show after 2 seconds for better UX
-        
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [user, isLoadingProfileCompletion, isProfileComplete, isLoadingProfile, employerProfile, profileData]);
+  // Profile setup modal is intentionally NOT shown on the dashboard.
+  // It will be shown on JobManagement and HRManagement pages instead.
 
   const [dashboardStats, setDashboardStats] = useState({
     totalJobs: 0,
@@ -871,14 +834,6 @@ const EmployerDashboard = () => {
 
   return (
     <DashboardLayout role="employer" key={language}>
-      {!isLoadingProfile && (
-        <ProfileSetupPrompt 
-          role="employer" 
-          userId={user?.email} 
-          profileName={employerProfile?.companyName || ''}
-          profilePhone={employerProfile?.phone || ''}
-        />
-      )}
       <DashboardContainer>
         {/* Welcome Banner */}
         <WelcomeBanner
@@ -1103,12 +1058,7 @@ const EmployerDashboard = () => {
           </Section>
         </ContentGrid>
 
-        {/* Company Profile Setup Modal */}
-        <CompanyProfileSetupModal
-          isOpen={showProfileSetupModal}
-          onClose={() => setShowProfileSetupModal(false)}
-          profileCompletion={profileCompletion}
-        />
+        {/* Company Profile Setup Modal removed from dashboard - shown on job pages instead */}
       </DashboardContainer>
 
       {/* Full Profile Modal */}

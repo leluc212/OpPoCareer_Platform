@@ -99,10 +99,34 @@ def strip_prefix(b64):
     return b64 or ''
 
 def extract_user_id(event):
+    """
+    Lấy user sub từ Cognito JWT đã được API Gateway verify.
+    Ưu tiên requestContext.authorizer (đã verify chữ ký) thay vì tự decode token.
+    Fallback: tự decode payload nếu không qua authorizer (local dev / direct call).
+    """
+    # 1. Ưu tiên: lấy từ requestContext.authorizer — API Gateway đã verify JWT signature
+    try:
+        req_ctx = event.get('requestContext') or {}
+        # HTTP API (v2 payload) → requestContext.authorizer.jwt.claims
+        jwt_claims = (req_ctx.get('authorizer') or {}).get('jwt', {}).get('claims') or {}
+        sub = jwt_claims.get('sub')
+        if sub:
+            return sub
+        # REST API (v1 payload) → requestContext.authorizer.claims
+        claims = (req_ctx.get('authorizer') or {}).get('claims') or {}
+        sub = claims.get('sub')
+        if sub:
+            return sub
+    except Exception:
+        pass
+
+    # 2. Fallback: tự decode JWT payload (chỉ dùng khi không qua Cognito authorizer)
+    # LƯU Ý: không verify signature — chỉ dùng để lấy userId, không dùng cho authorization
     try:
         auth = ((event.get('headers') or {}).get('authorization') or
                 (event.get('headers') or {}).get('Authorization') or '')
-        if not auth.startswith('Bearer '): return None
+        if not auth.startswith('Bearer '):
+            return None
         p = auth[7:].split('.')[1]
         p += '=' * (4 - len(p) % 4)
         return json.loads(base64.b64decode(p).decode()).get('sub')
@@ -646,6 +670,11 @@ def lambda_handler(event, context):
         return {'statusCode': 200, 'headers': get_cors_headers(), 'body': ''}
 
     user_id = extract_user_id(event)
+    print(f'user_id={user_id}')
+
+    # Nếu không có user_id và không phải OPTIONS → từ chối ngay
+    if not user_id:
+        return resp(401, {'success': False, 'errorMsg': 'Cần đăng nhập'})
 
     try:
         if method == 'POST' and path == '/ekyc/ocr':

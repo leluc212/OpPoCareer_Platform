@@ -1041,14 +1041,14 @@ const PostQuickJob = () => {
       longitude: '', // GPS longitude
       jobType: '', // Loại hình công việc
       hourlyRate: '', // Lương theo giờ
-      startTime: '', // Thời gian bắt đầu ca (slot đầu tiên — giữ để tương thích)
-      endTime: '', // Thời gian kết thúc ca (slot đầu tiên — giữ để tương thích)
+      startTime: '09:00', // Thời gian bắt đầu ca (slot đầu tiên — giữ để tương thích)
+      endTime: '18:00', // Thời gian kết thúc ca (slot đầu tiên — giữ để tương thích)
       workDate: '', // Ngày làm việc
       description: '',
       requirements: '', // Yêu cầu
       contactPhone: '',
       customFields: [],
-      workHoursList: [{ startTime: '', endTime: '' }] // Nhiều khung giờ làm việc
+      workHoursList: [{ startTime: '09:00', endTime: '18:00' }] // Nhiều khung giờ làm việc
     };
     // Load draft from localStorage on mount
     const savedDraft = localStorage.getItem('quickJobDraft');
@@ -1232,7 +1232,7 @@ const PostQuickJob = () => {
     setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => ({
       ...prev,
-      workHoursList: [...(prev.workHoursList || []), { startTime: '', endTime: '' }]
+      workHoursList: [...(prev.workHoursList || []), { startTime: '09:00', endTime: '18:00' }]
     }));
   };
 
@@ -1240,7 +1240,7 @@ const PostQuickJob = () => {
     setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => {
       const list = (prev.workHoursList || []).filter((_, i) => i !== index);
-      return { ...prev, workHoursList: list.length > 0 ? list : [{ startTime: '', endTime: '' }] };
+      return { ...prev, workHoursList: list.length > 0 ? list : [{ startTime: '09:00', endTime: '18:00' }] };
     });
   };
 

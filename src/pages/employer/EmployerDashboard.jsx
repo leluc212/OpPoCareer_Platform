@@ -484,16 +484,19 @@ const EmployerDashboard = () => {
   // Check if should show profile setup modal
   useEffect(() => {
     // Only show modal for authenticated users with incomplete profiles
-    // and only if we're not already loading profile data
-    if (user && !isLoadingProfileCompletion && !isProfileComplete) {
-      // Add a small delay to ensure smooth page load
-      const timer = setTimeout(() => {
-        setShowProfileSetupModal(true);
-      }, 2000); // Show after 2 seconds for better UX
-      
-      return () => clearTimeout(timer);
+    // who have not been verified yet, and only if we're not loading
+    if (user && !isLoadingProfileCompletion && !isProfileComplete && !isLoadingProfile) {
+      const isVerified = employerProfile?.isVerified === true;
+      if (!isVerified) {
+        // Add a small delay to ensure smooth page load
+        const timer = setTimeout(() => {
+          setShowProfileSetupModal(true);
+        }, 2000); // Show after 2 seconds for better UX
+        
+        return () => clearTimeout(timer);
+      }
     }
-  }, [user, isLoadingProfileCompletion, isProfileComplete]);
+  }, [user, isLoadingProfileCompletion, isProfileComplete, isLoadingProfile, employerProfile]);
 
   const [dashboardStats, setDashboardStats] = useState({
     totalJobs: 0,

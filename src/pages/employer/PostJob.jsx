@@ -599,7 +599,7 @@ const PostJob = () => {
   const editingJob = location.state?.job; // Get job data if editing
   const isEditing = !!editingJob;
 
-  const createWorkHourSlot = (isNew = true) => ({ startTime: '', endTime: '', days: [], isNew });
+  const createWorkHourSlot = (isNew = true) => ({ startTime: '09:00', endTime: '18:00', days: [], isNew });
   const parseWorkHours = (workHours) => {
     const normalized = String(workHours || '')
       .split(/\s*(?:\||\n)\s*/)

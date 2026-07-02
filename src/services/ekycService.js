@@ -13,18 +13,41 @@ const API_BASE =
 
 // ─── Auth header ──────────────────────────────────────────────────────────────
 const getAuthHeaders = async () => {
+  // Thử Amplify fetchAuthSession trước
   try {
-    const session  = await fetchAuthSession();
-    const idToken  = session?.tokens?.idToken;
-    if (!idToken) return { 'Content-Type': 'application/json' };
-    const tokenStr = (typeof idToken === 'string' ? idToken : idToken.toString()).trim();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${tokenStr}`,
-    };
+    const session = await fetchAuthSession();
+    const idToken = session?.tokens?.idToken;
+    if (idToken) {
+      const tokenStr = (typeof idToken === 'string' ? idToken : idToken.toString()).trim();
+      if (tokenStr) {
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tokenStr}`,
+        };
+      }
+    }
   } catch {
-    return { 'Content-Type': 'application/json' };
+    // ignore, fallback below
   }
+
+  // Fallback: đọc thẳng từ localStorage (PKCE flow lưu ở đây)
+  try {
+    const CLIENT_ID = '2mv7qt4gpmq03dmlm0or9724n8';
+    const lastUser = localStorage.getItem(`CognitoIdentityServiceProvider.${CLIENT_ID}.LastAuthUser`);
+    if (lastUser) {
+      const idToken = localStorage.getItem(`CognitoIdentityServiceProvider.${CLIENT_ID}.${lastUser}.idToken`);
+      if (idToken) {
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return { 'Content-Type': 'application/json' };
 };
 
 // ─── Image compression ────────────────────────────────────────────────────────

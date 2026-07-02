@@ -4430,7 +4430,7 @@ const LandingPage = ({ children }) => {
                   <Link to="/" className="logo-link">
                     <img src={s3Images.system.logo} alt="Ốp Pờ Logo" />
                   </Link>
-                  <p>{language === 'vi' ? 'Bạn vừa bị đuổi - Đã có Ốp Pờ lo' : 'Just got fired? Ốp Pờ has you covered'}</p>
+                  <p>{language === 'vi' ? 'ỐP đúng Job - Chọn đúng PỜ' : 'Just got fired? Ốp Pờ has you covered'}</p>
                   <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', border: '1px solid #10b981', padding: '4px 8px', borderRadius: '4px' }}>{language === 'vi' ? '✓ Được bảo vệ' : '✓ Protected'}</span>
                     <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#6366f1', border: '1px solid #6366f1', padding: '4px 8px', borderRadius: '4px' }}>Google For Startups</span>
@@ -4489,7 +4489,7 @@ const LandingPage = ({ children }) => {
               <CompanyDetails $isDark={isDarkMode}>
                 <h3>{language === 'vi' ? 'Công ty Cổ phần Ốp Pờ Việt Nam' : 'Ốp Pờ Vietnam JSC'}</h3>
 
-                <p><span>📍</span> {language === 'vi' ? 'Trụ sở chính: Đại học FPT, Khu Công nghệ cao, Quận 9, TP Thủ Đức, TP HCM' : 'Headquarters: FPT University, Hi-Tech Park, District 9, Thu Duc City, HCMC'}</p>
+                <p><span>📍</span> {language === 'vi' ? 'Trụ sở chính: Lô E2a, Đường D1, Khu Công nghệ cao, Quận 9, TP Thủ Đức, TP HCM' : 'Headquarters: FPT University, Hi-Tech Park, District 9, Thu Duc City, HCMC'}</p>
 
               </CompanyDetails>
 

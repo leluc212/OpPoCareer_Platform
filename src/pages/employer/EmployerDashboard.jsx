@@ -447,7 +447,7 @@ const EmployerDashboard = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { isProfileComplete, isLoading: isLoadingProfileCompletion, profileCompletion } = useCompanyProfileCompletion();
+  const { isProfileComplete, isLoading: isLoadingProfileCompletion, profileCompletion, profileData } = useCompanyProfileCompletion();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [employerProfile, setEmployerProfile] = useState(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -486,7 +486,16 @@ const EmployerDashboard = () => {
     // Only show modal for authenticated users with incomplete profiles
     // who have not been verified yet, and only if we're not loading
     if (user && !isLoadingProfileCompletion && !isProfileComplete && !isLoadingProfile) {
-      const isVerified = employerProfile?.isVerified === true;
+      const isVerified = 
+        employerProfile?.isVerified === true || 
+        employerProfile?.isVerified === 'true' || 
+        employerProfile?.verificationStatus === 'approved' || 
+        employerProfile?.verificationStatus === 'APPROVED' || 
+        profileData?.isVerified === true || 
+        profileData?.isVerified === 'true' || 
+        profileData?.verificationStatus === 'approved' || 
+        profileData?.verificationStatus === 'APPROVED';
+
       if (!isVerified) {
         // Add a small delay to ensure smooth page load
         const timer = setTimeout(() => {
@@ -496,7 +505,7 @@ const EmployerDashboard = () => {
         return () => clearTimeout(timer);
       }
     }
-  }, [user, isLoadingProfileCompletion, isProfileComplete, isLoadingProfile, employerProfile]);
+  }, [user, isLoadingProfileCompletion, isProfileComplete, isLoadingProfile, employerProfile, profileData]);
 
   const [dashboardStats, setDashboardStats] = useState({
     totalJobs: 0,

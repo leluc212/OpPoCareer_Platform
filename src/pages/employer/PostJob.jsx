@@ -599,7 +599,7 @@ const PostJob = () => {
   const editingJob = location.state?.job; // Get job data if editing
   const isEditing = !!editingJob;
 
-  const createWorkHourSlot = (isNew = true) => ({ startTime: '09:00', endTime: '18:00', days: [], isNew });
+  const createWorkHourSlot = (isNew = true) => ({ startTime: '', endTime: '', days: [], isNew });
   const parseWorkHours = (workHours) => {
     const normalized = String(workHours || '')
       .split(/\s*(?:\||\n)\s*/)
@@ -1294,6 +1294,9 @@ const PostJob = () => {
                                 onChange={(e) => handleWorkHourChange(index, 'startTime', e.target.value)}
                                 required
                               />
+                              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                                {language === 'vi' ? 'Gợi ý: 09:00 SA' : 'e.g. 09:00 AM'}
+                              </span>
                             </div>
                             <div>
                               <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Đến' : 'To'}</Label>
@@ -1303,6 +1306,9 @@ const PostJob = () => {
                                 onChange={(e) => handleWorkHourChange(index, 'endTime', e.target.value)}
                                 required
                               />
+                              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                                {language === 'vi' ? 'Gợi ý: 06:00 CH' : 'e.g. 06:00 PM'}
+                              </span>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <WorkHoursActionButton

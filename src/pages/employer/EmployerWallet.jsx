@@ -1191,12 +1191,12 @@ const EmployerWallet = () => {
             }));
             setTransactions(txs);
             setDepositSuccess(true);
-            setDepositRawAmount('');
             clearInterval(intervalId);
 
             setTimeout(() => {
               setShowDepositModal(false);
               setDepositSuccess(false);
+              setDepositRawAmount('');
               if (redirectBackUrl) {
                 navigate(redirectBackUrl, { replace: true });
               }

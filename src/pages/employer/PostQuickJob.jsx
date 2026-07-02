@@ -987,12 +987,12 @@ const PostQuickJob = () => {
           if (newBal > realBalance) {
             setRealBalance(newBal);
             setDepositSuccess(true);
-            setDepositRawAmount('');
             clearInterval(intervalId);
 
             setTimeout(() => {
               setShowDepositModal(false);
               setDepositSuccess(false);
+              setDepositRawAmount('');
             }, 2200);
           }
         } catch (err) {
@@ -1041,14 +1041,14 @@ const PostQuickJob = () => {
       longitude: '', // GPS longitude
       jobType: '', // Loại hình công việc
       hourlyRate: '', // Lương theo giờ
-      startTime: '09:00', // Thời gian bắt đầu ca (slot đầu tiên — giữ để tương thích)
-      endTime: '18:00', // Thời gian kết thúc ca (slot đầu tiên — giữ để tương thích)
+      startTime: '', // Thời gian bắt đầu ca (slot đầu tiên — giữ để tương thích)
+      endTime: '', // Thời gian kết thúc ca (slot đầu tiên — giữ để tương thích)
       workDate: '', // Ngày làm việc
       description: '',
       requirements: '', // Yêu cầu
       contactPhone: '',
       customFields: [],
-      workHoursList: [{ startTime: '09:00', endTime: '18:00' }] // Nhiều khung giờ làm việc
+      workHoursList: [{ startTime: '', endTime: '' }] // Nhiều khung giờ làm việc
     };
     // Load draft from localStorage on mount
     const savedDraft = localStorage.getItem('quickJobDraft');
@@ -1232,7 +1232,7 @@ const PostQuickJob = () => {
     setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => ({
       ...prev,
-      workHoursList: [...(prev.workHoursList || []), { startTime: '09:00', endTime: '18:00' }]
+      workHoursList: [...(prev.workHoursList || []), { startTime: '', endTime: '' }]
     }));
   };
 
@@ -1240,7 +1240,7 @@ const PostQuickJob = () => {
     setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
     setFormData(prev => {
       const list = (prev.workHoursList || []).filter((_, i) => i !== index);
-      return { ...prev, workHoursList: list.length > 0 ? list : [{ startTime: '09:00', endTime: '18:00' }] };
+      return { ...prev, workHoursList: list.length > 0 ? list : [{ startTime: '', endTime: '' }] };
     });
   };
 
@@ -1938,6 +1938,9 @@ const PostQuickJob = () => {
                             placeholder={t.startTimePlaceholder}
                             required
                           />
+                          <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                            {language === 'vi' ? 'Gợi ý: 09:00 SA' : 'e.g. 09:00 AM'}
+                          </span>
                         </div>
                         <div>
                           <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
@@ -1948,6 +1951,9 @@ const PostQuickJob = () => {
                             placeholder={t.endTimePlaceholder}
                             required
                           />
+                          <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                            {language === 'vi' ? 'Gợi ý: 06:00 CH' : 'e.g. 06:00 PM'}
+                          </span>
                         </div>
                         <div style={{ display: 'flex', gap: '6px', paddingBottom: '2px' }}>
                           <button

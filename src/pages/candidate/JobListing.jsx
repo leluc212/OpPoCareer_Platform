@@ -2404,12 +2404,19 @@ const JobListing = () => {
   const [interviewQuestionCount, setInterviewQuestionCount] = useState(0);
   const [interviewMediaByTurn, setInterviewMediaByTurn] = useState({});
 
+  const currentInterviewMedia = interviewMediaByTurn[interviewQuestionCount] || null;
+  const hasReadyInterviewVideo = currentInterviewMedia?.status === 'ready' && Boolean(currentInterviewMedia?.videoUrl);
+  const isPreparingInterviewMedia = ['loading', 'queued', 'processing'].includes(currentInterviewMedia?.status);
+
   // Voice Interaction states & refs
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [hasReplayedCurrent, setHasReplayedCurrent] = useState(false);
   const recognitionRef = useRef(null);
   const autoSendTimerRef = useRef(null);
   const isExitingFullscreenRef = useRef(false);
+  const shouldBeListeningRef = useRef(false);
+  const handleSendInterviewAnswerRef = useRef(null);
 
   const speakVietnamese = useCallback((text) => {
     if (!window.speechSynthesis) return;
@@ -2438,6 +2445,7 @@ const JobListing = () => {
   }, []);
 
   const stopListening = () => {
+    shouldBeListeningRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -2456,6 +2464,8 @@ const JobListing = () => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+
+    shouldBeListeningRef.current = true;
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -2484,11 +2494,23 @@ const JobListing = () => {
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
-      setIsListening(false);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        shouldBeListeningRef.current = false;
+        setIsListening(false);
+      }
     };
 
     recognition.onend = () => {
-      setIsListening(false);
+      if (shouldBeListeningRef.current) {
+        try {
+          recognition.start();
+        } catch (err) {
+          console.error('Recognition restart error:', err);
+          setIsListening(false);
+        }
+      } else {
+        setIsListening(false);
+      }
     };
 
     recognitionRef.current = recognition;
@@ -2570,6 +2592,7 @@ const JobListing = () => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+    shouldBeListeningRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -2695,6 +2718,7 @@ const JobListing = () => {
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+      shouldBeListeningRef.current = false;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
@@ -2703,6 +2727,63 @@ const JobListing = () => {
       if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
     }
   }, [showAiScreeningModal]);
+
+  // Reset replay status when question changes
+  useEffect(() => {
+    setHasReplayedCurrent(false);
+  }, [interviewQuestionCount]);
+
+  // Update ref for handleSendInterviewAnswer to avoid stale closure issues in useEffect timer
+  useEffect(() => {
+    handleSendInterviewAnswerRef.current = handleSendInterviewAnswer;
+  }, [handleSendInterviewAnswer]);
+
+  // Auto transition to next question after 5 seconds of silence (candidate not speaking)
+  useEffect(() => {
+    // Check if we are in the active interview and candidate's turn to speak
+    const isCandidateTurn =
+      showAiScreeningModal &&
+      aiScreeningStep === 'interview' &&
+      !interviewFinished &&
+      !interviewSending &&
+      !isSpeaking &&
+      !isPreparingInterviewMedia;
+
+    if (!isCandidateTurn) {
+      if (autoSendTimerRef.current) {
+        clearTimeout(autoSendTimerRef.current);
+        autoSendTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (autoSendTimerRef.current) {
+      clearTimeout(autoSendTimerRef.current);
+    }
+
+    autoSendTimerRef.current = setTimeout(() => {
+      console.log('⏰ 5 seconds of silence, auto-submitting answer...');
+      const textToSend = interviewInputText.trim() || (language === 'vi' ? '(Không trả lời)' : '(No answer)');
+      if (handleSendInterviewAnswerRef.current) {
+        handleSendInterviewAnswerRef.current(textToSend);
+      }
+    }, 5000);
+
+    return () => {
+      if (autoSendTimerRef.current) {
+        clearTimeout(autoSendTimerRef.current);
+      }
+    };
+  }, [
+    showAiScreeningModal,
+    aiScreeningStep,
+    interviewFinished,
+    interviewSending,
+    isSpeaking,
+    isPreparingInterviewMedia,
+    interviewInputText,
+    language
+  ]);
 
   const chatEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -3124,18 +3205,21 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   };
 
   const handleReplayAiQuestion = () => {
+    if (hasReplayedCurrent) return;
     const questionText = getLatestAiQuestion();
     if (questionText) {
+      setHasReplayedCurrent(true);
       speakVietnamese(questionText);
     }
   };
 
-  const handleSendInterviewAnswer = async (textOverride = '') => {
+  async function handleSendInterviewAnswer(textOverride = '') {
     const text = (typeof textOverride === 'string' && textOverride.trim())
       ? textOverride.trim()
       : interviewInputText.trim();
     if (!text || interviewSending || !interviewSessionId) return;
 
+    shouldBeListeningRef.current = false;
     if (isListening) {
       stopListening();
     }
@@ -3161,8 +3245,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
         if (interviewQuestionCount === 1) {
           const nextQuestion = isVi
-            ? "Cảm ơn bạn. Bạn có thể chia sẻ thêm về cách bạn giải quyết một tình huống khách hàng phàn nàn hoặc gặp khó khăn khi làm việc nhóm không?"
-            : "Thank you. Could you share how you handle a customer complaint or a difficult situation when working in a team?";
+            ? "Cảm ơn phần giới thiệu của bạn. Trước khi đi vào các câu hỏi chuyên sâu, bạn có thể chia sẻ một chút về nhiệm vụ hàng ngày bạn thích làm nhất ở công việc cũ không?"
+            : "Thank you for the introduction. Before we go deeper, could you share a bit about what daily task you enjoyed doing the most at your previous job?";
 
           setInterviewMessages(prev => [...prev, {
             text: nextQuestion,
@@ -3173,6 +3257,18 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           speakVietnamese(nextQuestion);
         } else if (interviewQuestionCount === 2) {
           const nextQuestion = isVi
+            ? "Cảm ơn câu trả lời của bạn. Bây giờ, bạn có thể chia sẻ thêm về cách bạn giải quyết một tình huống khách hàng phàn nàn hoặc gặp khó khăn khi làm việc nhóm không?"
+            : "Thank you for your answer. Now, could you share how you handle a customer complaint or a difficult situation when working in a team?";
+
+          setInterviewMessages(prev => [...prev, {
+            text: nextQuestion,
+            isMe: false,
+            time: nextTimeStr
+          }]);
+          setInterviewQuestionCount(3);
+          speakVietnamese(nextQuestion);
+        } else if (interviewQuestionCount === 3) {
+          const nextQuestion = isVi
             ? "Tuyệt vời. Cuối cùng, bạn có mong muốn gì về mức lương hoặc chế độ đãi ngộ, và bạn có thể bắt đầu đi làm từ khi nào?"
             : "Great. Lastly, what are your expectations regarding salary or benefits, and when would you be available to start?";
 
@@ -3181,7 +3277,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             isMe: false,
             time: nextTimeStr
           }]);
-          setInterviewQuestionCount(3);
+          setInterviewQuestionCount(4);
           speakVietnamese(nextQuestion);
         } else {
           setInterviewFinished(true);
@@ -3292,7 +3388,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     } finally {
       setInterviewSending(false);
     }
-  };
+  }
 
   // Load jobs from DynamoDB
   const loadDynamoDBJobs = async () => {
@@ -3982,9 +4078,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     return app ? app.status : null;
   };
 
-  const handleApplyJob = (job) => {
+  const handleApplyJob = (job, startInterviewDirectly = false) => {
     if (!job) return;
 
+    const shouldStartDirectly = startInterviewDirectly === true;
     const jobId = job.idJob || job.id;
     const isStandardJob = !job.isQuickJob && job.category !== 'shift';
 
@@ -4016,7 +4113,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               : 'You have already completed the AI interview for this job.'
           });
           return;
-        } else if (existingApp.status === 'approved') {
+        } else if (existingApp.status === 'approved' || existingApp.status === 'accepted') {
           // CV approved but no interview yet! Start AI interview directly
           setPendingApplication({
             jobId,
@@ -4065,6 +4162,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           setAiScreeningWeaknesses(weaknesses);
           setAiScreeningStep('screening');
           setShowAiScreeningModal(true);
+
+          if (shouldStartDirectly) {
+            setRulesAccepted(false); // Reset checkbox when opening rules
+            setMicPermissionGranted(false); // Reset mic permission
+            setMicPermissionError(''); // Reset mic error
+            setShowAiRulesModal(true);
+          }
           return;
         }
       }
@@ -4102,7 +4206,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
           // Trigger interview modal after brief delay so page is ready
           setTimeout(() => {
-            handleApplyJob(job);
+            handleApplyJob(job, true);
           }, 800);
         }
       }
@@ -4898,9 +5002,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     return 0;
   }, [isAvailable, showNearbyJobs, nearbyJobs]);
 
-  const currentInterviewMedia = interviewMediaByTurn[interviewQuestionCount] || null;
-  const hasReadyInterviewVideo = currentInterviewMedia?.status === 'ready' && Boolean(currentInterviewMedia?.videoUrl);
-  const isPreparingInterviewMedia = ['loading', 'queued', 'processing'].includes(currentInterviewMedia?.status);
+
 
   // ─── Verification gate: only blocks quick job apply (not the whole page) ─
   // verifStatus is used below when candidate tries to apply a quick job.
@@ -6414,25 +6516,27 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                         <button
                           type="button"
                           onClick={handleReplayAiQuestion}
-                          disabled={interviewSending}
+                          disabled={interviewSending || hasReplayedCurrent}
                           style={{
                             width: '56px',
                             height: '56px',
                             borderRadius: '50%',
-                            background: '#f8fafc',
+                            background: (interviewSending || hasReplayedCurrent) ? '#cbd5e1' : '#f8fafc',
                             border: '1.5px solid #e2e8f0',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#6d28d9',
-                            cursor: interviewSending ? 'not-allowed' : 'pointer',
-                            opacity: interviewSending ? 0.5 : 1,
+                            color: (interviewSending || hasReplayedCurrent) ? '#94a3b8' : '#6d28d9',
+                            cursor: (interviewSending || hasReplayedCurrent) ? 'not-allowed' : 'pointer',
+                            opacity: (interviewSending || hasReplayedCurrent) ? 0.5 : 1,
                             transition: 'all 0.2s',
                             boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
                           }}
-                          onMouseEnter={e => { if (!interviewSending) { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.borderColor = '#c4b5fd'; } }}
-                          onMouseLeave={e => { if (!interviewSending) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
-                          title={language === 'vi' ? 'Nghe lại câu hỏi của AI' : 'Replay AI question'}
+                          onMouseEnter={e => { if (!interviewSending && !hasReplayedCurrent) { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.borderColor = '#c4b5fd'; } }}
+                          onMouseLeave={e => { if (!interviewSending && !hasReplayedCurrent) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; } }}
+                          title={hasReplayedCurrent
+                            ? (language === 'vi' ? 'Bạn đã dùng lượt nghe lại cho câu hỏi này' : 'You have used the replay for this question')
+                            : (language === 'vi' ? 'Nghe lại câu hỏi của AI (chỉ được dùng 1 lần)' : 'Replay AI question (only once)')}
                         >
                           <Volume2 size={24} />
                         </button>

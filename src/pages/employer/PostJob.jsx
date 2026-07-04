@@ -38,6 +38,249 @@ const fadeIn = keyframes`
   }
 `;
 
+const shimmer = keyframes`
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+`;
+
+const pulseGlow = keyframes`
+  0% {
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2), 0 0 0 0px rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4), 0 0 0 8px rgba(99, 102, 241, 0);
+  }
+  100% {
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2), 0 0 0 0px rgba(99, 102, 241, 0);
+  }
+`;
+
+const float = keyframes`
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.1);
+  }
+`;
+
+const MethodSelectorContainer = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+`;
+
+const SelectorCard = styled.button`
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 28px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  
+  /* Accent borders based on selection and variant */
+  border: 2.5px solid ${props => props.$active 
+    ? (props.$variant === 'ai' ? '#8b5cf6' : '#2563eb') 
+    : '#e2e8f0'};
+    
+  box-shadow: ${props => props.$active 
+    ? (props.$variant === 'ai' ? '0 12px 28px -5px rgba(139, 92, 246, 0.18)' : '0 12px 28px -5px rgba(37, 99, 235, 0.18)')
+    : '0 4px 12px rgba(0, 0, 0, 0.03)'};
+
+  &:hover {
+    transform: translateY(-4px);
+    border-color: ${props => props.$variant === 'ai' ? '#8b5cf6' : '#2563eb'};
+    box-shadow: ${props => props.$variant === 'ai' 
+      ? '0 16px 36px -5px rgba(139, 92, 246, 0.25), 0 10px 16px -6px rgba(139, 92, 246, 0.25)' 
+      : '0 16px 36px -5px rgba(37, 99, 235, 0.25), 0 10px 16px -6px rgba(37, 99, 235, 0.25)'};
+    
+    .icon-wrapper {
+      transform: scale(1.08);
+      background: ${props => props.$variant === 'ai' ? '#8b5cf6' : '#2563eb'};
+      color: #ffffff;
+      
+      svg {
+        filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.4));
+      }
+    }
+  }
+
+  &:active {
+    transform: translateY(-1px);
+  }
+
+  .icon-wrapper {
+    width: 60px;
+    height: 60px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    background: ${props => props.$active 
+      ? (props.$variant === 'ai' ? '#8b5cf6' : '#2563eb')
+      : (props.$variant === 'ai' ? '#f5f3ff' : '#eff6ff')};
+      
+    color: ${props => props.$active 
+      ? '#ffffff'
+      : (props.$variant === 'ai' ? '#7c3aed' : '#2563eb')};
+
+    svg {
+      width: 26px;
+      height: 26px;
+    }
+  }
+
+  .card-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .card-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .card-subtitle {
+    font-size: 13.5px;
+    color: #64748b;
+    line-height: 1.45;
+    font-weight: 500;
+    margin: 0;
+  }
+
+  .badge {
+    background: ${props => props.$active ? 'rgba(255, 255, 255, 0.22)' : '#f5f3ff'};
+    color: ${props => props.$active ? '#ffffff' : '#7c3aed'};
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border: 1px solid ${props => props.$active ? 'rgba(255, 255, 255, 0.3)' : '#ddd6fe'};
+    display: inline-flex;
+    align-items: center;
+  }
+`;
+
+const InfoCardsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 28px;
+  animation: ${fadeIn} 0.6s ease-out;
+
+  @media (max-width: 968px) {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+`;
+
+const InfoCard = styled.div`
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.01);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+    border-color: #cbd5e1;
+  }
+
+  .card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    color: #475569;
+    
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 750;
+    color: #1e293b;
+    margin: 0;
+  }
+
+  .card-desc {
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+    font-weight: 500;
+    margin: 0;
+  }
+`;
+
+const GuidelinesHeader = styled.div`
+  margin-top: 48px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: ${fadeIn} 0.5s ease-out;
+
+  h2 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    letter-spacing: -0.2px;
+  }
+
+  p {
+    font-size: 13.5px;
+    color: #64748b;
+    margin: 0;
+  }
+`;
+
 const PostJobContainer = styled.div`
   max-width: 1200px;
   margin: 0 auto;
@@ -444,34 +687,89 @@ const SpinningLoader = styled(Loader2)`
 `;
 
 const AiButton = styled.button`
-  display: inline-flex;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-  color: white;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #2563eb 100%);
+  background-size: 200% 200%;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-weight: 750;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
-  margin-bottom: 12px;
-  
-  &:hover:not(:disabled) {
-    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.25);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: ${shimmer} 5s ease infinite, ${pulseGlow} 2.5s infinite;
+  margin-bottom: 14px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.35) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-25deg);
+    transition: all 0.75s;
   }
-  
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+    
+    &::before {
+      left: 150%;
+    }
+
+    .sparkle-icon {
+      animation: ${float} 1s ease infinite;
+    }
+  }
+
   &:active:not(:disabled) {
     transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
   }
-  
+
   &:disabled {
-    opacity: 0.6;
+    background: #e2e8f0;
+    color: #94a3b8;
+    border-color: #cbd5e1;
+    box-shadow: none;
     cursor: not-allowed;
+  }
+
+  .sparkle-icon {
+    color: #ffd700;
+    filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.8));
+    transition: transform 0.3s ease;
+  }
+
+  .cta-badge {
+    background: rgba(255, 255, 255, 0.22);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    display: inline-flex;
+    align-items: center;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 `;
 
@@ -640,6 +938,7 @@ const PostJob = () => {
   const [jdText, setJdText] = useState('');
   const [parsingJd, setParsingJd] = useState(false);
   const [fieldWarnings, setFieldWarnings] = useState([]);
+  const [showStandardForm, setShowStandardForm] = useState(isEditing);
 
 
   const [formData, setFormData] = useState({
@@ -771,6 +1070,7 @@ const PostJob = () => {
           : 'AI has successfully extracted and filled the form!');
 
         setShowJdParser(false);
+        setShowStandardForm(true);
       }
     } catch (error) {
       console.error('Error parsing JD:', error);
@@ -876,10 +1176,16 @@ const PostJob = () => {
       });
 
       if (result) {
+        // Merge responsibilities bullet points into description so they are visible and saved
+        const descText = result.description || '';
+        const respText = result.responsibilities || '';
+        const mergedDesc = descText && respText
+          ? `${descText}\n\n${respText}`
+          : (descText || respText || prev.description);
+
         setFormData(prev => ({
           ...prev,
-          description: result.description || prev.description,
-          responsibilities: result.responsibilities || prev.responsibilities,
+          description: mergedDesc,
           requirements: result.requirements || prev.requirements,
           benefits: result.benefits || prev.benefits
         }));
@@ -1098,34 +1404,67 @@ const PostJob = () => {
           </VerificationWarning>
         )}
 
-        {/* JD Auto-Fill Activator Banner / Button */}
+        {/* Method Selector Banners */}
         {!isEditing && (
-          <div style={{ marginBottom: '24px' }}>
-            {!showJdParser ? (
-              <Button
+          <div style={{ marginBottom: '28px' }}>
+            <MethodSelectorContainer>
+              <SelectorCard
                 type="button"
-                $variant="secondary"
-                onClick={() => setShowJdParser(true)}
-                style={{
-                  width: '100%',
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                  border: '1.5px solid #bfdbfe',
-                  color: '#1e40af',
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  padding: '16px',
-                  borderRadius: '12px'
+                $variant="ai"
+                $active={showJdParser}
+                onClick={() => {
+                  setShowJdParser(true);
                 }}
               >
-                <Sparkles size={18} />
-                {language === 'vi'
-                  ? 'Đăng bài nhanh chóng từ JD đã có sẵn'
-                  : 'Quickly post from available JD'}
-              </Button>
-            ) : (
+                <div className="icon-wrapper">
+                  <Sparkles />
+                </div>
+                <div className="card-content">
+                  <div className="card-header-row">
+                    <span className="card-title">
+                      {language === 'vi'
+                        ? 'Đăng nhanh từ JD'
+                        : 'Quick post from JD'}
+                    </span>
+                    <span className="badge">
+                      {language === 'vi' ? 'AI điền tự động' : 'AI Autofill'}
+                    </span>
+                  </div>
+                  <span className="card-subtitle">
+                    {language === 'vi'
+                      ? 'Tải lên PDF hoặc dán mô tả công việc, AI tự phân tích và điền form trong 3 giây'
+                      : 'Upload PDF or paste job details, AI parses and fills form fields in 3s'}
+                  </span>
+                </div>
+              </SelectorCard>
+
+              <SelectorCard
+                type="button"
+                $variant="manual"
+                $active={showStandardForm}
+                onClick={() => {
+                  setShowStandardForm(prev => !prev);
+                }}
+              >
+                <div className="icon-wrapper">
+                  <FileText />
+                </div>
+                <div className="card-content">
+                  <span className="card-title">
+                    {language === 'vi'
+                      ? 'Đăng bài thủ công (Điền tay)'
+                      : 'Manual Post (Hand-fill)'}
+                  </span>
+                  <span className="card-subtitle">
+                    {language === 'vi'
+                      ? 'Tự nhập tay chi tiết các trường thông tin (hỗ trợ tạo nhanh mô tả công việc bằng AI)'
+                      : 'Manually input all details (supports quick JD text generation with AI assistance)'}
+                  </span>
+                </div>
+              </SelectorCard>
+            </MethodSelectorContainer>
+
+            {showJdParser && (
               <JdUploadCard>
                 <button type="button" className="close-btn" onClick={() => setShowJdParser(false)}>
                   <X size={16} />
@@ -1210,8 +1549,69 @@ const PostJob = () => {
           </div>
         )}
 
-        <PageLayout>
-          {/* Main Form Content */}
+        {!showStandardForm && !showJdParser && !isEditing && (
+          <div style={{ marginBottom: '40px' }}>
+            <GuidelinesHeader>
+              <h2>
+                {language === 'vi'
+                  ? '💡 Hướng dẫn & Tính năng hỗ trợ tuyển dụng thông minh'
+                  : '💡 Guides & Smart Recruiting Support Features'}
+              </h2>
+              <p>
+                {language === 'vi'
+                  ? 'Khám phá các công cụ AI giúp tối ưu hóa quy trình tuyển dụng của bạn nhanh chóng'
+                  : 'Explore AI tools that help optimize your recruiting workflow quickly'}
+              </p>
+            </GuidelinesHeader>
+            <InfoCardsGrid>
+              <InfoCard>
+                <div className="card-icon" style={{ background: '#f5f3ff', color: '#7c3aed' }}>
+                  <Sparkles />
+                </div>
+                <h3 className="card-title">
+                  {language === 'vi' ? 'Trích xuất tự động qua AI' : 'AI Autofill Parsing'}
+                </h3>
+                <p className="card-desc">
+                  {language === 'vi'
+                    ? 'Tải lên tài liệu JD hiện có dưới dạng PDF hoặc dán văn bản mô tả. AI sẽ tự động đọc, trích xuất thông tin và điền đầy đủ vào biểu mẫu chỉ trong 3 giây.'
+                    : 'Upload your existing JD PDF or paste job description text. AI will parse, extract requirements and fill the fields automatically.'}
+                </p>
+              </InfoCard>
+
+              <InfoCard>
+                <div className="card-icon" style={{ background: '#eff6ff', color: '#2563eb' }}>
+                  <ClipboardList />
+                </div>
+                <h3 className="card-title">
+                  {language === 'vi' ? 'Tạo nhanh văn bản JD bằng AI' : 'AI Quick JD Generation'}
+                </h3>
+                <p className="card-desc">
+                  {language === 'vi'
+                    ? 'Khi điền biểu mẫu thủ công, bạn chỉ cần điền tiêu đề công việc, AI sẽ hỗ trợ bạn tự động tạo đầy đủ phần mô tả công việc, yêu cầu tuyển dụng và quyền lợi tương ứng.'
+                    : 'When manually filling out the form, simply write the job title. AI can suggest and write the description, requirements, and perks instantly.'}
+                </p>
+              </InfoCard>
+
+              <InfoCard>
+                <div className="card-icon" style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                  <CheckCircle2 />
+                </div>
+                <h3 className="card-title">
+                  {language === 'vi' ? 'Sàng lọc CV & Phỏng vấn ảo' : 'AI Screening & Chatbot'}
+                </h3>
+                <p className="card-desc">
+                  {language === 'vi'
+                    ? 'Kích hoạt lọc hồ sơ bằng AI để chấm điểm CV ứng viên, đồng thời tự động phỏng vấn trực tuyến qua chat với AI Interviewer ở vòng sàng lọc sơ tuyển.'
+                    : 'Enable AI screening to score CV candidates, and run automated chat interviews with the AI Interviewer simulator as a preliminary round.'}
+                </p>
+              </InfoCard>
+            </InfoCardsGrid>
+          </div>
+        )}
+
+        {showStandardForm && (
+          <PageLayout>
+            {/* Main Form Content */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <FormCard>
               <FormHeader>
@@ -1476,31 +1876,39 @@ const PostJob = () => {
                 </FormRow>
 
                 <FormGroup style={{ marginTop: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '8px' }}>
                     <SectionLabel style={{ marginBottom: 0 }}>
                       <span>{language === 'vi' ? 'Mô tả công việc *' : 'Job Description *'}</span>
                     </SectionLabel>
-                    {formData.title && (
-                      <AiButton
-                        type="button"
-                        onClick={handleGenerateJdWithAi}
-                        disabled={loadingAi}
-                        style={{ marginBottom: 0 }}
-                      >
-                        {loadingAi ? (
-                          <>
-                            <SpinningLoader size={14} />
-                            {language === 'vi' ? 'Đang tạo JD...' : 'Generating JD...'}
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} />
-                            {language === 'vi' ? 'Tạo nhanh JD với AI' : 'Quickly generate JD with AI'}
-                          </>
-                        )}
-                      </AiButton>
-                    )}
                   </div>
+                  {formData.title && (
+                    <AiButton
+                      type="button"
+                      onClick={handleGenerateJdWithAi}
+                      disabled={loadingAi}
+                    >
+                      {loadingAi ? (
+                        <>
+                          <SpinningLoader size={16} />
+                          <span>
+                            {language === 'vi' ? 'AI đang soạn thảo Mô tả, Yêu cầu & Quyền lợi...' : 'AI is drafting Job Description, Requirements & Benefits...'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="sparkle-icon" size={18} />
+                          <span>
+                            {language === 'vi'
+                              ? 'Bạn đã nhập Tiêu đề? Nhấp để AI viết hộ Mô tả, Yêu cầu & Quyền lợi ngay!'
+                              : 'Job Title filled? Click to let AI write Description, Requirements & Benefits instantly!'}
+                          </span>
+                          <span className="cta-badge">
+                            {language === 'vi' ? 'Miễn phí' : 'Free AI Draft'}
+                          </span>
+                        </>
+                      )}
+                    </AiButton>
+                  )}
                   <TextArea name="description" placeholder={language === 'vi' ? 'Mô tả vị trí công việc...' : 'Describe the position...'} value={formData.description} onChange={handleChange} required />
                   {fieldWarnings.includes('description') && (
                     <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
@@ -1685,6 +2093,7 @@ const PostJob = () => {
             </ChecklistItem>
           </SidebarCard>
         </PageLayout>
+        )}
       </PostJobContainer>
 
       {/* Verification Required Modal */}

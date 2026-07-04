@@ -80,30 +80,40 @@ const CountBadge = styled.div`
 `;
 
 const CreateButton = styled(motion.button)`
-  padding: 10px 18px;
-  border-radius: 10px;
-  background: #1e40af;
+  padding: 12px 28px;
+  border-radius: 9999px; /* Premium pill shape */
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
   color: white;
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 8px;
-  border: none;
+  border: 1px solid #1e40af;
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(30, 64, 175, 0.28);
-  transition: all 0.2s ease;
+  box-shadow: 
+    0 4px 14px rgba(37, 99, 235, 0.25), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
-  
+
   &:hover {
-    filter: brightness(1.08);
-    box-shadow: 0 6px 18px rgba(30, 64, 175, 0.38);
-    transform: translateY(-1px);
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    border-color: #2563eb;
+    box-shadow: 
+      0 6px 20px rgba(37, 99, 235, 0.35), 
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
   }
-  
+
+  &:active {
+    transform: translateY(0);
+  }
+
   svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.8; /* Bold modern stroke */
   }
 `;
 

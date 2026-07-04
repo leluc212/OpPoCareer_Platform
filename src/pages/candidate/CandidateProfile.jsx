@@ -1073,6 +1073,7 @@ const CandidateProfile = () => {
   const [cognitoEmail, setCognitoEmail] = useState('');
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [workHistory, setWorkHistory] = useState([]);
+  const [visibleWorkHistoryCount, setVisibleWorkHistoryCount] = useState(5);
   const [averageRating, setAverageRating] = useState(null);
   const [totalReviews, setTotalReviews] = useState(0);
   
@@ -2398,7 +2399,7 @@ const CandidateProfile = () => {
           
           {workHistory.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {workHistory.map((item) => (
+              {workHistory.slice(0, visibleWorkHistoryCount).map((item) => (
                 <div key={item.id} style={{ 
                   background: 'white', 
                   border: '1.5px solid #E2E8F0', 
@@ -2481,6 +2482,26 @@ const CandidateProfile = () => {
                   )}
                 </div>
               ))}
+              
+              {workHistory.length > visibleWorkHistoryCount && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px' }}>
+                  <Button 
+                    $variant="secondary" 
+                    onClick={() => setVisibleWorkHistoryCount(prev => prev + 5)}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      padding: '10px 24px',
+                      borderRadius: '12px',
+                      fontSize: '14px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {language === 'vi' ? 'Xem thêm' : 'See more'}
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>

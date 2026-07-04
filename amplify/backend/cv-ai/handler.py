@@ -936,13 +936,17 @@ def _suggest_jd_system_prompt(language):
     output_language = "Vietnamese" if language == "vi" else "English"
     return f"""
 You are an expert HR Specialist and Technical Writer. Return all prose in {output_language}.
-Given the job title and other basic details, generate a comprehensive and highly professional Job Description (JD) tailored for the role.
+Given the job title and other basic details, generate a comprehensive, highly realistic, practical, and up-to-date Job Description (JD) tailored for the role reflecting modern industry expectations.
 Provide details for:
-- Mô tả công việc (description): Clear overview of the role, daily work, context.
-- Trách nhiệm (responsibilities): Bulleted list of key tasks and responsibilities. Use newline character '\\n' between bullets, but do not use markdown characters like '*' or '-' in the bullet text itself.
-- Yêu cầu (requirements): Bulleted list of qualifications, experience level, skills required. Use newline character '\\n' between bullets.
-- Quyền lợi (benefits): Bulleted list of benefits, perks, salary context, working environment. Use newline character '\\n' between bullets.
-Ensure the tone is professional, attractive to candidates, and realistic for the given job title, location, type, and characteristics.
+- Mô tả công việc (description): A list of key overview points about the job. Each bullet/sentence MUST start with a dash "- " followed by a space. Do NOT write a long paragraph; it must be a list of bullet points (1-3 bullets).
+- Trách nhiệm (responsibilities): Bulleted list of key tasks and daily duties. Each bullet MUST start with a dash "- " followed by a space. Ensure each responsibility is distinct, realistic, and has zero redundancy. Do NOT repeat similar points.
+- Yêu cầu (requirements): Bulleted list of qualifications, experience level, physical/soft skills required. Each bullet MUST start with a dash "- " followed by a space. Do NOT repeat similar requirements.
+- Quyền lợi (benefits): Bulleted list of salary context, benefits, perks, working environment. Each bullet MUST start with a dash "- " followed by a space. Do NOT repeat similar perks.
+
+CRITICAL INSTRUCTIONS:
+1. FORMATTING: Every item in description, responsibilities, requirements, and benefits lists MUST be explicitly prefixed with a dash and a space (e.g., "- Task/Overview detail"). Use the newline character '\\n' between items.
+2. NO REPETITION: Every bullet point must be unique, cover a separate aspect of the job, and carry unique information. Do NOT repeat similar ideas or rephrase the same point.
+3. REALISTIC & PRACTICAL: Generate tasks and requirements that reflect real-world expectations for the role today (e.g. for service/F&B roles: customer service, food safety, clean-up, POS systems).
 Return the result strictly conforming to the requested JSON schema.
 """.strip()
 
@@ -994,7 +998,7 @@ Your job is to read and analyze the provided job description (JD) and populate a
 The fields to extract are:
 - title: Job title.
 - location: Working location.
-- description: General job description.
+- description: General job description (a brief role overview).
 - requirements: Job requirements.
 - benefits: Job benefits and perks.
 - salary: Numerical salary value (e.g. "30000" or "10000000") or a range. If not found, leave as empty string.
@@ -1008,12 +1012,14 @@ The fields to extract are:
 
 CRITICAL RULES:
 1. AUTOFILLED MISSING CONTENT:
-   - If the JD is missing 'description', 'requirements', or 'benefits', or if they are extremely short (less than 15 words), you MUST automatically generate a professional, appropriate content block for that missing section in {output_language} based on the job title.
-   - For example, if it's for a "Barista/Pha chế" and the requirements section is empty, generate typical barista requirements (e.g., pha chế thành thạo, làm việc nhóm, giao tiếp tốt).
+   - If the JD is missing 'description', 'requirements', or 'benefits', or if they are extremely short (less than 15 words), you MUST automatically generate a professional, appropriate, realistic content block for that missing section in {output_language} based on the job title.
+   - For example, if it's for a "Barista/Pha chế" and the requirements section is empty, generate typical realistic barista requirements.
 2. WARNING FOR UNPARSABLE FIELDS:
    - If any of the following fields are missing, empty, or cannot be determined from the JD: 'location', 'salary' (or 'hourlyRate'), 'workDays' (or 'workDate'), 'contactPhone', you MUST leave them as empty string or null, AND you MUST add the field name (e.g., "location", "salary", "workDays", "workHoursList", "contactPhone") to the 'warnings' array.
    - The 'warnings' array must contain the list of fields that the employer needs to fill manually.
-3. Use newline character '\\n' between items in description, requirements, benefits, but do not use markdown list symbols like '*' or '-' in the bullet text itself.
+3. FORMATTING & UNIQUE BULLETS: 
+   - Every item in the extracted or generated lists for requirements and benefits MUST start with a dash and a space (e.g. "- Detail text"). Use the newline character '\\n' between items.
+   - Do NOT repeat similar or identical points. Ensure all items are distinct, realistic, and up-to-date.
 4. Ensure the output strictly conforms to the requested JSON schema.
 """.strip()
 
@@ -1210,6 +1216,13 @@ def _get_turn_instruction(current_idx: int, turns: list[str]) -> str:
 [Nội dung câu hỏi bắt buộc cho lượt này]:
 ĐÂY LÀ YÊU CẦU BẮT BUỘC: Câu hỏi đào sâu của bạn ở bước (3) phải chính là câu hỏi sau đây từ Nhà tuyển dụng: "{q_text}". Hãy dẫn dắt thật tự nhiên và lịch sự.
 Lưu ý: Không được tự tiện thay đổi hoặc bỏ qua câu hỏi này.
+"""
+        elif question == "Simple Experience Question":
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+Ở bước (3), hãy chọn ngẫu nhiên và đặt MỘT câu hỏi đơn giản hoặc một tình huống phổ thông/dễ dàng liên quan đến kinh nghiệm làm việc cũ của ứng viên để tạo cảm giác thoải mái, tự nhiên (ví dụ: công việc/nhiệm vụ hàng ngày họ thích nhất tại nơi làm việc cũ là gì, hoặc một kỷ niệm vui/khách hàng dễ thương họ nhớ nhất, hoặc họ quen với ca làm việc nào trước đây). Hãy giữ câu hỏi nhẹ nhàng, thân thiện và mang tính khích lệ để họ sẵn sàng chia sẻ trước khi bước vào câu hỏi chuyên môn phức tạp hơn.
 """
         elif question == "Technical Question based on CV/JD":
             return f"""
@@ -1531,14 +1544,14 @@ Nhiệm vụ của bạn:
 Hãy đánh giá kết quả phỏng vấn một cách khách quan, nghiêm túc và chính xác theo các tiêu chí và khung điểm quy định dưới đây.
 
 HƯỚNG DẪN CHẤM ĐIỂM CHI TIẾT (0-100 điểm cho mỗi phần):
-1. **past_experience_score (Điểm đánh giá về kinh nghiệm làm việc ngành F&B):** Đánh giá dựa trên việc ứng viên đã từng làm các công việc F&B tương tự trong quá khứ hay chưa, có hiểu tính chất công việc không.
+1. **past_experience_score (Điểm đánh giá về kinh nghiệm làm việc ngành F&B):** Đánh giá dựa trên việc ứng viên đã từng làm các công việc F&B tương tự trong quá khứ hay chưa, có hiểu tính chất công việc không. CHÚ Ý: Hãy chấm điểm phần này một cách nhẹ nhàng, khích lệ và rộng rãi. Nếu ứng viên có bất kỳ kinh nghiệm F&B nào (kể cả bán thời gian, ngắn hạn, thời vụ, phụ việc hoặc thực tập) hoặc thể hiện thái độ cầu thị, sẵn sàng học hỏi và hiểu biết cơ bản về công việc, hãy ưu ái cho mức điểm từ 70-85 trở lên thay vì chấm quá khắt khe.
 2. **situation_handling_score (Điểm giải quyết và xử lý tình huống thực tế):** Đánh giá cách ứng viên ứng biến, xử lý các tình huống giả định hoặc sự cố (ví dụ: phục vụ chậm, khách phàn nàn, áp lực giờ cao điểm).
 3. **operations_score (Điểm quy trình vận hành và tác phong làm việc):** Đánh giá tính kỷ luật, giờ giấc ca kíp, quy tắc vệ sinh an toàn thực phẩm, thái độ dịch vụ.
 4. **custom_questions_score (Điểm trả lời các câu hỏi riêng từ Employer):** Đánh giá mức độ trả lời chính xác, đầy đủ các câu hỏi bắt buộc do Nhà tuyển dụng đề ra. (Nếu Employer không có câu hỏi riêng, cho điểm mặc định bằng điểm trung bình cộng của các phần khác).
 5. **total_score (Tổng điểm trung bình):** Tổng điểm trung bình phản ánh chính xác năng lực tổng thể của ứng viên.
 
 LƯU Ý QUAN TRỌNG VỀ ĐÁNH GIÁ ĐIỂM SỐ (BẮT BUỘC TUÂN THỦ):
-- Điểm số phỏng vấn phải phản ánh chính xác chất lượng câu trả lời của ứng viên. Không được cho điểm cao mang tính động viên hoặc mặc định.
+- Điểm số phỏng vấn phải phản ánh chính xác chất lượng câu trả lời của ứng viên. Không được cho điểm cao mang tính động viên hoặc mặc định (ngoại trừ phần past_experience_score hãy chấm nhẹ nhàng và khích lệ hơn).
 - **Khung điểm DƯỚI 40 (Chống chỉ định/Không đạt):** 
   Nếu ứng viên có thái độ thiếu nghiêm túc, cợt nhả, trả lời cộc lốc hoặc vô nghĩa (ví dụ: trả lời 'Không', 'Không biết', '...', hoặc câu trả lời chỉ có vài từ thiếu hợp tác), hoặc hoàn toàn không trả lời được các câu hỏi cơ bản và câu hỏi riêng của Nhà tuyển dụng. Hoặc nếu ứng viên sử dụng ngôn từ không chuẩn mực/thô tục/vô lễ, hay chia sẻ hành vi vi phạm đạo đức nghề nghiệp nghiêm trọng (như ăn cắp, lừa dối, phá hoại).
 - **Khung điểm từ 40 đến 69 (Trung bình / Cần cân nhắc thêm):**
@@ -1548,7 +1561,7 @@ LƯU Ý QUAN TRỌNG VỀ ĐÁNH GIÁ ĐIỂM SỐ (BẮT BUỘC TUÂN THỦ):
 
 Nhiệm vụ đánh giá chi tiết:
 1. Phân tích thái độ, tính chuyên nghiệp, sự hợp tác của ứng viên.
-2. Đánh giá kinh nghiệm, xử lý tình huống và vận hành F&B dựa trên câu hỏi chuyên môn/CV.
+2. Đánh giá kinh nghiệm (chấm nhẹ nhàng, khích lệ), xử lý tình huống và vận hành F&B dựa trên câu hỏi chuyên môn/CV.
 3. Kiểm tra xem ứng viên có trả lời và đáp ứng tốt các câu hỏi riêng bắt buộc từ Nhà tuyển dụng không.
 4. PHÁT HIỆN NGÔN TỪ KHÔNG CHUẨN MỰC & VI PHẠM ĐẠO ĐỨC: Kiểm tra kỹ xem ứng viên có sử dụng từ ngữ thô tục, vô lễ hoặc kể các hành vi vi phạm đạo đức nghề nghiệp F&B (ăn cắp tiền, phá hoại, lừa dối, gây hại cho khách/đồng nghiệp). Nếu có, bắt buộc chấm toàn bộ các điểm số thành phần và tổng kết (`total_score`) xuống DƯỚI 40 điểm (từ 0 đến 35 điểm), đặt `recommend_to_employer` là False, ghi rõ hành vi vi phạm đạo đức này trong `weaknesses` và giải thích lý do cụ thể trong `reason`.
 5. PHÁT HIỆN SỬ DỤNG AI ĐỂ TRẢ LỜI: Kiểm tra xem ứng viên có dấu hiệu sao chép câu trả lời từ AI/chatbot khác hay không (dấu hiệu: câu trả lời cực kỳ dài, cấu trúc gạch đầu dòng hoàn hảo, dùng từ ngữ chatbot học thuật, thiếu chi tiết cá nhân thực tế). Nếu phát hiện hoặc nghi ngờ mạnh mẽ hành vi này, bắt buộc hạ toàn bộ các điểm số xuống DƯỚI 50 điểm (từ 0 đến 45 điểm), đặt `recommend_to_employer` là False, ghi rõ nghi vấn sử dụng AI trong `weaknesses` và giải thích lý do cụ thể trong `reason`.
@@ -2002,7 +2015,7 @@ def lambda_handler(event, context):
                 job_title, job_description, cv_text, custom_questions
             )
             
-            turns = ["Greeting and Self-Introduction", "Technical Question based on CV/JD"]
+            turns = ["Greeting and Self-Introduction", "Simple Experience Question", "Technical Question based on CV/JD"]
             if custom_questions:
                 for q in custom_questions:
                     turns.append(f"Custom Question: {q}")

@@ -105,13 +105,24 @@ const translatePostedAt = (timeStr, language) => {
 };
 
 const CardWrapper = styled(motion.div)`
-  background: ${props => props.$quickBoosted ? 'rgba(16, 185, 129, 0.04)' : props.theme.colors.bgLight};
+  background: ${props => {
+    if (props.$quickBoosted || props.$urgent) return props.$urgent && !props.$quickBoosted ? 'rgba(239, 68, 68, 0.03)' : 'rgba(16, 185, 129, 0.04)';
+    return props.theme.colors.bgLight;
+  }};
   border-radius: ${props => props.theme.borderRadius.xl};
-  border: ${props => props.$quickBoosted ? '2px solid #10b981' : `2px solid ${props.theme.colors.border}`};
+  border: ${props => {
+    if (props.$quickBoosted) return '2px solid #10b981';
+    if (props.$urgent) return '2px solid #ef4444';
+    return `2px solid ${props.theme.colors.border}`;
+  }};
   padding: 32px;
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: ${props => props.$quickBoosted ? '0 8px 30px rgba(16, 185, 129, 0.15)' : (props.theme.shadows?.card || 'none')};
+  box-shadow: ${props => {
+    if (props.$quickBoosted) return '0 8px 30px rgba(16, 185, 129, 0.15)';
+    if (props.$urgent) return '0 8px 30px rgba(239, 68, 68, 0.12)';
+    return props.theme.shadows?.card || 'none';
+  }};
   position: relative;
   overflow: hidden;
   
@@ -122,8 +133,12 @@ const CardWrapper = styled(motion.div)`
     left: 0;
     right: 0;
     height: 5px;
-    background: ${props => props.$quickBoosted ? 'linear-gradient(90deg, #10b981, #059669)' : props.theme.colors.primary};
-    opacity: ${props => props.$quickBoosted ? 1 : 0};
+    background: ${props => {
+      if (props.$quickBoosted) return 'linear-gradient(90deg, #10b981, #059669)';
+      if (props.$urgent) return 'linear-gradient(90deg, #ef4444, #dc2626)';
+      return props.theme.colors.primary;
+    }};
+    opacity: ${props => (props.$quickBoosted || props.$urgent) ? 1 : 0};
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
@@ -150,9 +165,11 @@ const CardWrapper = styled(motion.div)`
     box-shadow: 
       ${props => props.$quickBoosted 
         ? '0 24px 60px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.3)'
-        : `0 24px 60px ${props.theme.colors.primary}25, 0 0 0 1px ${props.theme.colors.primary}30`
+        : props.$urgent
+          ? '0 24px 60px rgba(239, 68, 68, 0.2), 0 0 0 1px rgba(239, 68, 68, 0.25)'
+          : `0 24px 60px ${props.theme.colors.primary}25, 0 0 0 1px ${props.theme.colors.primary}30`
       };
-    border-color: ${props => props.$quickBoosted ? '#059669' : `${props.theme.colors.primary}40`};
+    border-color: ${props => props.$quickBoosted ? '#059669' : props.$urgent ? '#dc2626' : `${props.theme.colors.primary}40`};
     
     &::before {
       opacity: 1;
@@ -330,6 +347,7 @@ const JobCard = ({ job, onClick, onSave, saved = false }) => {
   return (
     <CardWrapper
       $quickBoosted={job.quickBoost}
+      $urgent={!job.quickBoost && (job.urgent || job.isQuickJob)}
       onClick={() => onClick && onClick(job.id)}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -354,7 +372,8 @@ const JobCard = ({ job, onClick, onSave, saved = false }) => {
             <JobTitle>{translateJobTitle(job.title, language)}</JobTitle>
             <CompanyName>{job.company}</CompanyName>
             <TagsContainer>
-              {job.quickBoost && (
+              {/* Job classification badge */}
+              {(job.isQuickJob || job.urgent || job.quickBoost) ? (
                 <Tag
                   style={{
                     background: '#ef444415',
@@ -365,6 +384,18 @@ const JobCard = ({ job, onClick, onSave, saved = false }) => {
                   whileTap={{ scale: 0.95 }}
                 >
                   {language === 'vi' ? 'Tuyển gấp' : 'Urgent'}
+                </Tag>
+              ) : (
+                <Tag
+                  style={{
+                    background: '#1e40af12',
+                    color: '#1e40af',
+                    borderColor: '#1e40af25'
+                  }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}
                 </Tag>
               )}
               {job.tags && job.tags.map((tag, index) => (

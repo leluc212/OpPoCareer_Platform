@@ -764,9 +764,6 @@ const Subscription = () => {
       }
     } catch (error) {
       console.error('Error getting employer profile:', error);
-      // Fallback to localStorage if API fails
-      const employerProfile = JSON.parse(localStorage.getItem('employerProfile') || '{}');
-      companyName = employerProfile.companyName || 'Unknown Company';
     }
 
     // Kiểm tra số dư ví — nếu đủ tiền thì thanh toán ngay (active tức thì), nếu không thì gửi yêu cầu liên hệ

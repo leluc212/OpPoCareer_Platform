@@ -28,7 +28,8 @@ import {
   Lock,
   Unlock,
   Star,
-  Package
+  Package,
+  Edit
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
 import applicationService from '../../services/applicationService';
@@ -37,7 +38,9 @@ import {
   createQuickJobActivationRejectedNotification,
   createQuickJobActivationDeactivatedNotification,
   createChangeRequestApprovedNotification,
-  createChangeRequestRejectedNotification
+  createChangeRequestRejectedNotification,
+  createProfileChangeApprovedNotification,
+  createProfileChangeRejectedNotification
 } from '../../services/notificationService';
 
 const PageContainer = styled.div``;
@@ -739,6 +742,8 @@ const EmployersManagement = () => {
       setMainTab('all_employers');
     } else if (activeTab === 'change_requests') {
       setMainTab('change_requests');
+    } else if (activeTab === 'profile_changes') {
+      setMainTab('profile_changes');
     } else if (['quick_jobs', 'grant_package'].includes(activeTab)) {
       setMainTab('features');
     }
@@ -1192,6 +1197,15 @@ const EmployersManagement = () => {
   const [selectedChangeRequest, setSelectedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
 
+  // Profile change requests state
+  const [profileChangeRequests, setProfileChangeRequests] = useState([]);
+  const [selectedProfileChange, setSelectedProfileChange] = useState(null);
+  const [isProcessingProfileChange, setIsProcessingProfileChange] = useState(false);
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
+  const [showRejectReasonModal, setShowRejectReasonModal] = useState(false);
+  const [rejectTargetUserId, setRejectTargetUserId] = useState(null);
+  const [rejectTargetCompanyName, setRejectTargetCompanyName] = useState('');
+
   // AI Urgent recommendations
   const [showRecsModal, setShowRecsModal] = useState(false);
   const [activeRecommendations, setActiveRecommendations] = useState(null);
@@ -1544,6 +1558,7 @@ const EmployersManagement = () => {
     loadEmployers();
     loadChangeRequests();
     loadPurchases();
+    loadProfileChangeRequests();
   }, []);
 
   // Reload data when tabs change
@@ -1551,7 +1566,101 @@ const EmployersManagement = () => {
     if (activeTab === 'change_requests') {
       loadChangeRequests();
     }
+    if (activeTab === 'profile_changes') {
+      loadProfileChangeRequests();
+    }
   }, [activeTab]);
+
+  // Load profile change requests (yêu cầu chỉnh sửa hồ sơ công ty)
+  const loadProfileChangeRequests = async () => {
+    try {
+      console.log('📥 Loading profile change requests...');
+      const requests = await adminEmployerService.getPendingProfileChanges();
+      setProfileChangeRequests(requests || []);
+      console.log(`✅ Loaded ${(requests || []).length} profile change requests`);
+    } catch (e) {
+      console.error('❌ Error loading profile change requests:', e);
+    }
+  };
+
+  // Approve profile change
+  const handleApproveProfileChange = async (employer) => {
+    if (!employer || !employer.userId) return;
+    setIsProcessingProfileChange(true);
+    try {
+      await adminEmployerService.approveProfileChanges(employer.userId);
+
+      // Notify employer
+      try {
+        await createProfileChangeApprovedNotification(
+          employer.userId,
+          employer.pendingProfileChanges?.changes?.companyName || employer.companyName || 'Nhà tuyển dụng'
+        );
+      } catch (notifErr) {
+        console.error('⚠️ Notification error (non-critical):', notifErr);
+      }
+
+      // Update local state
+      setProfileChangeRequests(prev => prev.map(r =>
+        r.userId === employer.userId
+          ? { ...r, pendingProfileChanges: { ...r.pendingProfileChanges, status: 'APPROVED' } }
+          : r
+      ));
+      setSelectedProfileChange(null);
+
+      showEmpToast('success', language === 'vi'
+        ? 'Đã duyệt yêu cầu chỉnh sửa hồ sơ thành công!'
+        : 'Profile change request approved successfully!');
+
+      await loadProfileChangeRequests();
+    } catch (e) {
+      console.error('❌ Error approving profile change:', e);
+      showEmpToast('error', language === 'vi' ? 'Lỗi khi duyệt yêu cầu' : 'Error approving request');
+    } finally {
+      setIsProcessingProfileChange(false);
+    }
+  };
+
+  // Reject profile change
+  const handleRejectProfileChange = async (employer, rejectionReason) => {
+    if (!employer || !employer.userId) return;
+    setIsProcessingProfileChange(true);
+    try {
+      await adminEmployerService.rejectProfileChanges(employer.userId, rejectionReason || '');
+
+      // Notify employer
+      try {
+        await createProfileChangeRejectedNotification(
+          employer.userId,
+          employer.pendingProfileChanges?.changes?.companyName || employer.companyName || 'Nhà tuyển dụng',
+          rejectionReason || ''
+        );
+      } catch (notifErr) {
+        console.error('⚠️ Notification error (non-critical):', notifErr);
+      }
+
+      // Update local state
+      setProfileChangeRequests(prev => prev.map(r =>
+        r.userId === employer.userId
+          ? { ...r, pendingProfileChanges: { ...r.pendingProfileChanges, status: 'REJECTED' } }
+          : r
+      ));
+      setSelectedProfileChange(null);
+      setShowRejectReasonModal(false);
+      setRejectReasonInput('');
+
+      showEmpToast('success', language === 'vi'
+        ? 'Đã từ chối yêu cầu chỉnh sửa hồ sơ.'
+        : 'Profile change request rejected.');
+
+      await loadProfileChangeRequests();
+    } catch (e) {
+      console.error('❌ Error rejecting profile change:', e);
+      showEmpToast('error', language === 'vi' ? 'Lỗi khi từ chối yêu cầu' : 'Error rejecting request');
+    } finally {
+      setIsProcessingProfileChange(false);
+    }
+  };
 
   // Refresh data
   const handleRefresh = async () => {
@@ -1559,7 +1668,8 @@ const EmployersManagement = () => {
     await Promise.all([
       loadEmployers(),
       loadChangeRequests(),
-      loadPurchases()
+      loadPurchases(),
+      loadProfileChangeRequests()
     ]);
     setRefreshing(false);
   };
@@ -1685,6 +1795,12 @@ const EmployersManagement = () => {
     return employers.filter(e => e.verificationStatus === 'pending' && !e.isVerified).length;
   }, [employers]);
 
+  const pendingProfileChangesCount = useMemo(() => {
+    return profileChangeRequests.filter(r =>
+      r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW'
+    ).length;
+  }, [profileChangeRequests]);
+
   const filteredEmployers = useMemo(() => {
     return employers.filter(employer => {
       // Filter by tab
@@ -1713,6 +1829,12 @@ const EmployersManagement = () => {
         (filters.includes('active') && employer.isActive);
 
       return matchesTab && matchesSearch && matchesFilters;
+    })
+    // Mới nhất lên đầu theo createdAt
+    .sort((a, b) => {
+      const ta = a.createdAt || '';
+      const tb = b.createdAt || '';
+      return tb.localeCompare(ta);
     });
   }, [employers, searchTerm, filters, activeTab]);
 
@@ -1863,6 +1985,17 @@ const EmployersManagement = () => {
                 <RefreshCw size={20} />
                 {language === 'vi' ? 'Yêu cầu thay đổi ứng viên' : 'Change Candidate Requests'}
                 {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
+              </MainTabButton>
+              <MainTabButton
+                $active={mainTab === 'profile_changes'}
+                onClick={() => {
+                  setMainTab('profile_changes');
+                  setActiveTab('profile_changes');
+                }}
+              >
+                <Edit size={20} />
+                {language === 'vi' ? 'Yêu cầu chỉnh sửa hồ sơ' : 'Profile Change Requests'}
+                {pendingProfileChangesCount > 0 && <TabBadge>{pendingProfileChangesCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'features'}
@@ -2537,6 +2670,123 @@ const EmployersManagement = () => {
                     )}
                   </tbody>
                 </Table>
+              ) : activeTab === 'profile_changes' ? (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>{language === 'vi' ? 'Công Ty' : 'Company'}</th>
+                      <th>{language === 'vi' ? 'Ngày Gửi' : 'Submitted At'}</th>
+                      <th>{language === 'vi' ? 'Thay đổi' : 'Changes'}</th>
+                      <th>{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
+                      <th>{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {profileChangeRequests
+                      .filter(r => r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW')
+                      .map((employer, index) => {
+                        const colorScheme = getColorScheme(index);
+                        const initials = getCompanyInitials(employer.companyName);
+                        const changes = employer.pendingProfileChanges?.changes || {};
+                        const submittedAt = employer.pendingProfileChanges?.submittedAt || '';
+                        const changedFieldsCount = Object.keys(changes).length;
+                        const hasNewLogo = !!changes.companyLogo;
+                        const hasNewBanner = !!changes.companyBanner;
+
+                        return (
+                          <tr key={employer.userId}>
+                            <td>
+                              <CompanyInfo>
+                                <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                  {employer.companyLogo ? (
+                                    <img src={employer.companyLogo} alt={employer.companyName} />
+                                  ) : (
+                                    initials
+                                  )}
+                                </CompanyLogo>
+                                <CompanyDetails>
+                                  <CompanyName>{employer.companyName || 'Không rõ'}</CompanyName>
+                                  <CompanyMeta>
+                                    <Mail size={12} />
+                                    {employer.email || 'N/A'}
+                                  </CompanyMeta>
+                                </CompanyDetails>
+                              </CompanyInfo>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '13px', color: '#64748B' }}>
+                                <Calendar size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                                {submittedAt ? new Date(submittedAt).toLocaleString('vi-VN') : 'N/A'}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {hasNewLogo && (
+                                  <span style={{ background: '#EFF6FF', color: '#1d4ed8', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                    Logo
+                                  </span>
+                                )}
+                                {hasNewBanner && (
+                                  <span style={{ background: '#F0FDF4', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                    Banner
+                                  </span>
+                                )}
+                                {changedFieldsCount - (hasNewLogo ? 1 : 0) - (hasNewBanner ? 1 : 0) > 0 && (
+                                  <span style={{ background: '#FFF7ED', color: '#c2410c', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                    +{changedFieldsCount - (hasNewLogo ? 1 : 0) - (hasNewBanner ? 1 : 0)} {language === 'vi' ? 'trường' : 'fields'}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <StatusBadge $status="pending">
+                                <Clock size={14} />
+                                {language === 'vi' ? 'Chờ Duyệt' : 'Pending Review'}
+                              </StatusBadge>
+                            </td>
+                            <td>
+                              <ActionButtons>
+                                <IconButton
+                                  onClick={() => setSelectedProfileChange(employer)}
+                                  title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                                  style={{ background: '#EFF6FF', color: '#1e40af' }}
+                                >
+                                  <Eye size={16} />
+                                </IconButton>
+                                <ApproveButton
+                                  onClick={() => handleApproveProfileChange(employer)}
+                                  disabled={isProcessingProfileChange}
+                                  title={language === 'vi' ? 'Duyệt' : 'Approve'}
+                                >
+                                  <CheckCircle size={16} />
+                                </ApproveButton>
+                                <RejectButton
+                                  onClick={() => {
+                                    setRejectTargetUserId(employer.userId);
+                                    setRejectTargetCompanyName(employer.companyName);
+                                    setShowRejectReasonModal(true);
+                                  }}
+                                  disabled={isProcessingProfileChange}
+                                  title={language === 'vi' ? 'Từ chối' : 'Reject'}
+                                >
+                                  <XCircle size={16} />
+                                </RejectButton>
+                              </ActionButtons>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {profileChangeRequests.filter(r => r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW').length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                          {language === 'vi'
+                            ? 'Không có yêu cầu chỉnh sửa hồ sơ nào đang chờ duyệt'
+                            : 'No pending profile change requests'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
               ) : activeTab === 'verifications' ? (
                 <Table>
                   <thead>
@@ -3075,6 +3325,194 @@ const EmployersManagement = () => {
           </button>
         </ModalContent>
       </ModalOverlay>
+      )}
+
+      {/* Profile Change Comparison Modal */}
+      {selectedProfileChange && (
+        <ModalOverlay onClick={() => setSelectedProfileChange(null)}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #BFDBFE', flexShrink: 0 }}>
+                <Edit style={{ color: '#2563EB' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                  {language === 'vi' ? 'Chi Tiết Yêu Cầu Chỉnh Sửa Hồ Sơ' : 'Profile Change Request Details'}
+                </ModalTitle>
+                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                  {selectedProfileChange.companyName} • {new Date(selectedProfileChange.pendingProfileChanges?.submittedAt || '').toLocaleString('vi-VN')}
+                </div>
+              </div>
+            </div>
+
+            {/* So sánh ảnh logo / banner nếu có */}
+            {(() => {
+              const changes = selectedProfileChange.pendingProfileChanges?.changes || {};
+              const imageFields = [
+                { key: 'companyLogo', label: 'Logo' },
+                { key: 'companyBanner', label: 'Banner' },
+              ];
+              const imageChanges = imageFields.filter(f => changes[f.key]);
+              if (imageChanges.length === 0) return null;
+              return (
+                <div style={{ marginBottom: '20px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  {imageChanges.map(({ key, label }) => (
+                    <div key={key} style={{ flex: 1, minWidth: '240px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#334155', marginBottom: '8px' }}>{label}</div>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px', fontWeight: 600 }}>{language === 'vi' ? 'Hiện tại' : 'Current'}</div>
+                          {selectedProfileChange[key] ? (
+                            <img src={selectedProfileChange[key]} alt={`current-${label}`} style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #FCA5A5' }} />
+                          ) : (
+                            <div style={{ height: '80px', background: '#FEE2E2', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#DC2626' }}>{language === 'vi' ? 'Chưa có' : 'None'}</div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', paddingTop: '28px', color: '#64748B', fontWeight: 700, fontSize: '18px' }}>→</div>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px', fontWeight: 600 }}>{language === 'vi' ? 'Mới' : 'New'}</div>
+                          <img src={changes[key]} alt={`new-${label}`} style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #86EFAC' }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* So sánh các trường text */}
+            {(() => {
+              const changes = selectedProfileChange.pendingProfileChanges?.changes || {};
+              const fieldLabels = {
+                companyName: language === 'vi' ? 'Tên công ty' : 'Company Name',
+                phone: language === 'vi' ? 'Số điện thoại' : 'Phone',
+                address: language === 'vi' ? 'Địa chỉ' : 'Address',
+                website: 'Website',
+                industry: language === 'vi' ? 'Ngành nghề' : 'Industry',
+                companySize: language === 'vi' ? 'Quy mô' : 'Company Size',
+                foundedYear: language === 'vi' ? 'Năm thành lập' : 'Founded Year',
+                taxCode: language === 'vi' ? 'Mã số thuế' : 'Tax Code',
+                businessLicense: language === 'vi' ? 'Giấy phép KD' : 'Business License',
+                description: language === 'vi' ? 'Mô tả' : 'Description',
+                companyVideo: 'Video',
+                companyImages: language === 'vi' ? 'Hình ảnh công ty' : 'Company Images',
+              };
+              const skipKeys = new Set(['companyLogo', 'companyBanner']);
+              const textChanges = Object.keys(changes)
+                .filter(k => !skipKeys.has(k))
+                .filter(k => JSON.stringify(selectedProfileChange[k]) !== JSON.stringify(changes[k]));
+
+              if (textChanges.length === 0) return null;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#334155', marginBottom: '4px' }}>
+                    {language === 'vi' ? 'Thay đổi thông tin' : 'Field Changes'}
+                  </div>
+                  {textChanges.map(key => {
+                    const oldVal = selectedProfileChange[key];
+                    const newVal = changes[key];
+                    const label = fieldLabels[key] || key;
+                    return (
+                      <div key={key} style={{ padding: '12px', background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                        <strong style={{ display: 'block', marginBottom: '6px', color: '#334155', fontSize: '13px' }}>{label}</strong>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1, padding: '8px', background: '#FEE2E2', borderRadius: '6px', fontSize: '13px', wordBreak: 'break-word' }}>
+                            <strong>{language === 'vi' ? 'Cũ: ' : 'Old: '}</strong>
+                            {oldVal != null ? String(Array.isArray(oldVal) ? oldVal.join(', ') : oldVal) : <em style={{ color: '#DC2626' }}>{language === 'vi' ? 'Trống' : 'Empty'}</em>}
+                          </div>
+                          <span style={{ color: '#64748B', paddingTop: '6px', fontWeight: 700 }}>→</span>
+                          <div style={{ flex: 1, padding: '8px', background: '#DCFCE7', borderRadius: '6px', fontSize: '13px', wordBreak: 'break-word' }}>
+                            <strong>{language === 'vi' ? 'Mới: ' : 'New: '}</strong>
+                            {newVal != null ? String(Array.isArray(newVal) ? newVal.join(', ') : newVal) : <em style={{ color: '#15803d' }}>{language === 'vi' ? 'Trống' : 'Empty'}</em>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '24px' }}>
+              <ModalButton
+                onClick={() => handleApproveProfileChange(selectedProfileChange)}
+                disabled={isProcessingProfileChange}
+                style={{ background: '#16A34A' }}
+              >
+                <CheckCircle size={15} style={{ marginRight: '6px' }} />
+                {isProcessingProfileChange ? '...' : (language === 'vi' ? 'Duyệt' : 'Approve')}
+              </ModalButton>
+              <ModalButton
+                onClick={() => {
+                  setRejectTargetUserId(selectedProfileChange.userId);
+                  setRejectTargetCompanyName(selectedProfileChange.companyName);
+                  setShowRejectReasonModal(true);
+                  setSelectedProfileChange(null);
+                }}
+                disabled={isProcessingProfileChange}
+                style={{ background: '#DC2626' }}
+              >
+                <XCircle size={15} style={{ marginRight: '6px' }} />
+                {language === 'vi' ? 'Từ chối' : 'Reject'}
+              </ModalButton>
+              <button
+                onClick={() => setSelectedProfileChange(null)}
+                style={{ padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {language === 'vi' ? 'Đóng' : 'Close'}
+              </button>
+            </div>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {/* Reject Profile Change Reason Modal */}
+      {showRejectReasonModal && (
+        <ModalOverlay onClick={() => { setShowRejectReasonModal(false); setRejectReasonInput(''); }}>
+          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FCA5A5', flexShrink: 0 }}>
+                <XCircle style={{ color: '#DC2626' }} size={20} />
+              </div>
+              <div>
+                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '18px' }}>
+                  {language === 'vi' ? 'Lý Do Từ Chối' : 'Rejection Reason'}
+                </ModalTitle>
+                <div style={{ fontSize: '12px', color: '#64748B' }}>{rejectTargetCompanyName}</div>
+              </div>
+            </div>
+            <p style={{ marginBottom: '12px', color: '#64748B', fontSize: '14px' }}>
+              {language === 'vi'
+                ? 'Vui lòng nhập lý do từ chối yêu cầu chỉnh sửa hồ sơ:'
+                : 'Please enter the reason for rejecting this profile change request:'}
+            </p>
+            <textarea
+              value={rejectReasonInput}
+              onChange={(e) => setRejectReasonInput(e.target.value)}
+              placeholder={language === 'vi' ? 'Nhập lý do từ chối...' : 'Enter rejection reason...'}
+              rows={4}
+              style={{ width: '100%', padding: '10px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '16px' }}>
+              <ModalButton
+                onClick={() => {
+                  const employer = profileChangeRequests.find(r => r.userId === rejectTargetUserId);
+                  if (employer) handleRejectProfileChange(employer, rejectReasonInput);
+                }}
+                disabled={isProcessingProfileChange || !rejectReasonInput.trim()}
+                style={{ background: '#DC2626' }}
+              >
+                {isProcessingProfileChange ? '...' : (language === 'vi' ? 'Từ Chối' : 'Reject')}
+              </ModalButton>
+              <button
+                onClick={() => { setShowRejectReasonModal(false); setRejectReasonInput(''); }}
+                style={{ padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {language === 'vi' ? 'Hủy' : 'Cancel'}
+              </button>
+            </div>
+          </ModalContent>
+        </ModalOverlay>
       )}
 
       {/* Verification Detail Modal */}

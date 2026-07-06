@@ -469,9 +469,9 @@ const ContactPage = () => {
               <Phone size={22} />
             </IconBox>
             <div>
-              <ContactLabel $isDark={isDarkMode}>{vi ? 'Hotline hệ thống' : 'System Hotline'}</ContactLabel>
+              <ContactLabel $isDark={isDarkMode}>{vi ? 'Hotline kĩ thuật' : 'Technical Hotline'}</ContactLabel>
               <ContactValue $isDark={isDarkMode}>0379 784 509</ContactValue>
-              <ContactNote $isDark={isDarkMode}>{vi ? 'Hỗ trợ 8:00 – 22:00' : 'Support 8:00 – 22:00'}</ContactNote>
+              <ContactNote $isDark={isDarkMode}>{vi ? 'Hỗ trợ 8:00 – 17:00' : 'Support 8:00 – 17:00'}</ContactNote>
             </div>
           </ContactCard>
 
@@ -482,7 +482,7 @@ const ContactPage = () => {
             <div>
               <ContactLabel $isDark={isDarkMode}>{vi ? 'Hỗ trợ khách hàng' : 'Customer Support'}</ContactLabel>
               <ContactValue $isDark={isDarkMode}>0563 518 922</ContactValue>
-              <ContactNote $isDark={isDarkMode}>{vi ? 'Hỗ trợ 8:00 – 22:00' : 'Support 8:00 – 22:00'}</ContactNote>
+              <ContactNote $isDark={isDarkMode}>{vi ? 'Hỗ trợ 8:00 – 17:00' : 'Support 8:00 – 17:00'}</ContactNote>
             </div>
           </ContactCard>
 

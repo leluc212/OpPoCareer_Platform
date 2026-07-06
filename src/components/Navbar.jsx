@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, Star, UserPlus, History, Building2, Tag as TagIcon, Package, Zap, XCircle, MessageSquare, Send, Trash2, Home, Sparkles } from 'lucide-react';
+import { Bell, Search, LogOut, User, Users, Briefcase, DollarSign, AlertCircle, Settings, Eye, CheckCircle, CheckCircle2, Star, UserPlus, History, Building2, Tag as TagIcon, Package, Zap, XCircle, MessageSquare, Send, Trash2, Home, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import candidateProfileService from '../services/candidateProfileService';
@@ -197,6 +197,8 @@ const IconButton = styled.button`
     width: 22px;
     height: 22px;
   }
+
+
 `;
 
 const Badge = styled.span`
@@ -1746,10 +1748,9 @@ const Navbar = ({ showSearch = true }) => {
                   const nextDropdownState = !showChatDropdown;
                   setShowChatDropdown(nextDropdownState);
                   if (nextDropdownState) {
-                    setAcknowledgedChatCountMessage(unreadChatCount); // Clear message badge only
+                    setAcknowledgedChatCountMessage(unreadChatCount);
                   }
                 }}
-                title={language === 'vi' ? 'Trò chuyện' : 'Chat'}
               >
                 <MessageSquare />
                 {(unreadChatCount - acknowledgedChatCountMessage) > 0 && <Badge>{unreadChatCount - acknowledgedChatCountMessage}</Badge>}
@@ -1913,93 +1914,89 @@ const Navbar = ({ showSearch = true }) => {
 
                       // Get icon based on notification type or icon name
                       let Icon = Bell;
+                      let iconColor = notification.color || '#1e40af';
                       const type = notification.type;
                       const iconName = notification.icon;
+                      const notifTitle = (language === 'vi' ? notification.title : notification.titleEn) || notification.title || '';
+                      const notifMessage = (language === 'vi' ? notification.message : notification.messageEn) || notification.message || '';
+                      const titleLower = notifTitle.toLowerCase();
+                      const messageLower = notifMessage.toLowerCase();
 
-                      if (type) {
+                      const isSuccess = titleLower.includes('thành công') || titleLower.includes('success')
+                        || titleLower.includes('chấp nhận') || titleLower.includes('accepted')
+                        || titleLower.includes('được duyệt') || titleLower.includes('approved');
+                      const isUrgent = titleLower.includes('tuyển gấp') || titleLower.includes('urgent')
+                        || messageLower.includes('tuyển gấp');
+                      const isRejectedOrCancelled = titleLower.includes('từ chối') || titleLower.includes('rejected')
+                        || titleLower.includes('bị hủy') || titleLower.includes('cancelled') || titleLower.includes('bị từ chối')
+                        || titleLower.includes('hủy ca') || titleLower.includes('chưa được thông qua') || titleLower.includes('chưa phù hợp');
+
+                      // Ưu tiên detect từ nội dung title
+                      if (isSuccess) {
+                        Icon = CheckCircle2;
+                        iconColor = '#10B981';
+                      } else if (isUrgent) {
+                        Icon = Zap;
+                        iconColor = '#ef4444';
+                      } else if (isRejectedOrCancelled) {
+                        Icon = AlertCircle;
+                        iconColor = '#ef4444';
+                      } else if (type) {
                         switch (type) {
                           case 'package_purchase_request':
-                            Icon = Package;
-                            break;
+                            Icon = Package; iconColor = '#8B5CF6'; break;
                           case 'package_approved':
-                            Icon = CheckCircle;
-                            break;
-                          case 'employers':
-                            Icon = Building2;
-                            break;
-                          case 'posts':
-                            Icon = AlertCircle;
-                            break;
-                          case 'payments':
-                          case 'candidate_withdrawal_request':
-                          case 'withdrawal_request':
-                            Icon = DollarSign;
-                            break;
-                          case 'urgent':
-                            Icon = AlertCircle;
-                            break;
                           case 'success':
                           case 'CV_ACCEPTED':
+                          case 'application_success':
+                          case 'cv_approved':
                           case 'withdrawal_approved':
                           case 'quick_job_activation_approved':
                           case 'job_approved':
-                            Icon = CheckCircle;
-                            break;
+                            Icon = CheckCircle2; iconColor = '#10B981'; break;
+                          case 'employers':
+                            Icon = Building2; iconColor = '#1e40af'; break;
+                          case 'application':
+                            Icon = Briefcase; iconColor = '#1e40af'; break;
+                          case 'payments':
+                          case 'candidate_withdrawal_request':
+                          case 'withdrawal_request':
+                            Icon = DollarSign; iconColor = '#8B5CF6'; break;
+                          case 'job_urgent':
+                          case 'urgent':
+                          case 'quick_job_activation_request':
+                          case 'worker_replaced_shift_cancelled':
+                            Icon = Bell; iconColor = '#ef4444'; break;
+                          case 'employer_review':
+                            Icon = Star; iconColor = '#F59E0B'; break;
                           case 'system':
+                          case 'posts':
                           case 'CV_REJECTED':
                           case 'withdrawal_rejected':
                           case 'quick_job_activation_rejected':
                           case 'quick_job_activation_deactivated':
                           case 'job_rejected':
-                            Icon = AlertCircle;
-                            break;
-                          case 'quick_job_activation_request':
-                            Icon = Zap;
-                            break;
+                            Icon = AlertCircle; iconColor = '#ef4444'; break;
                           case 'chat_message':
-                            Icon = MessageSquare;
-                            break;
+                            Icon = MessageSquare; iconColor = '#1e40af'; break;
                           default:
-                            Icon = Bell;
+                            Icon = Bell; iconColor = '#1e40af';
                         }
                       } else if (iconName && typeof iconName === 'string') {
                         switch (iconName.toLowerCase()) {
-                          case 'check-circle':
-                            Icon = CheckCircle;
-                            break;
-                          case 'alert-circle':
-                            Icon = AlertCircle;
-                            break;
-                          case 'bell':
-                            Icon = Bell;
-                            break;
-                          case 'dollar-sign':
-                            Icon = DollarSign;
-                            break;
-                          case 'briefcase':
-                            Icon = Briefcase;
-                            break;
-                          case 'message-square':
-                            Icon = MessageSquare;
-                            break;
-                          case 'package':
-                            Icon = Package;
-                            break;
-                          case 'zap':
-                            Icon = Zap;
-                            break;
-                          case 'x-circle':
-                            Icon = XCircle;
-                            break;
-                          case 'user-plus':
-                            Icon = UserPlus;
-                            break;
+                          case 'check-circle': Icon = CheckCircle2; iconColor = '#10B981'; break;
+                          case 'alert-circle': Icon = AlertCircle; iconColor = '#ef4444'; break;
+                          case 'bell': Icon = Bell; break;
+                          case 'dollar-sign': Icon = DollarSign; iconColor = '#8B5CF6'; break;
+                          case 'briefcase': Icon = Briefcase; break;
+                          case 'message-square': Icon = MessageSquare; break;
+                          case 'package': Icon = Package; iconColor = '#8B5CF6'; break;
+                          case 'zap': Icon = Zap; iconColor = '#ef4444'; break;
+                          case 'x-circle': Icon = XCircle; iconColor = '#ef4444'; break;
+                          case 'user-plus': Icon = UserPlus; break;
                           case 'building':
-                          case 'building2':
-                            Icon = Building2;
-                            break;
-                          default:
-                            Icon = Bell;
+                          case 'building2': Icon = Building2; break;
+                          default: Icon = Bell;
                         }
                       } else if (iconName && typeof iconName !== 'string') {
                         Icon = iconName;
@@ -2017,7 +2014,7 @@ const Navbar = ({ showSearch = true }) => {
                             handleNotificationItemClick();
                           }}
                         >
-                          <NotificationIcon $color={notification.color}>
+                          <NotificationIcon $color={iconColor}>
                             <Icon />
                           </NotificationIcon>
                           <NotificationContent>
@@ -2049,7 +2046,7 @@ const Navbar = ({ showSearch = true }) => {
             )}
           </div>
 
-          <IconButton onClick={handleSettingsClick} title={language === 'vi' ? 'Cài đặt' : 'Settings'}>
+          <IconButton onClick={handleSettingsClick}>
             <Settings />
           </IconButton>
 
@@ -2073,7 +2070,7 @@ const Navbar = ({ showSearch = true }) => {
             </UserInfo>
           </UserMenu>
 
-          <IconButton onClick={() => navigate('/')} title={language === 'vi' ? 'Trở về trang chủ' : 'Return to Home'}>
+          <IconButton onClick={() => navigate('/')}>
             <Home />
           </IconButton>
         </NavRight>

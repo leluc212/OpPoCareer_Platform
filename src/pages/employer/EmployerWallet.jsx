@@ -1067,14 +1067,6 @@ const EmployerWallet = () => {
         }
       } catch (err) {
         console.error('Error loading employer profile:', err);
-        const savedProfile = localStorage.getItem('employerProfile');
-        if (savedProfile) {
-          try {
-            const parsed = JSON.parse(savedProfile);
-            setCompanyName(parsed.companyName || 'N/A');
-            setCompanyLogo(parsed.companyLogo || '');
-          } catch (e) {}
-        }
       }
     };
     if (employerId) {

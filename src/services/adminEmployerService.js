@@ -1,37 +1,9 @@
 // Admin service for managing employer profiles
 // This service handles admin-specific operations like listing all employers and approving profiles
 
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { getIdToken } from './authHeaders.js';
 
 const API_BASE_URL = import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod';
-
-/**
- * Get authentication token from Amplify Cognito
- */
-const getAuthToken = async () => {
-  try {
-    const session = await fetchAuthSession();
-
-    if (!session || !session.tokens) {
-      console.warn('⚠️ No session or tokens available');
-      return null;
-    }
-
-    const idToken = session.tokens.idToken;
-    if (!idToken) {
-      console.warn('⚠️ No ID token in session');
-      return null;
-    }
-
-    let tokenString = typeof idToken === 'string' ? idToken : idToken.toString();
-    tokenString = tokenString.trim().replace(/[\r\n\t]/g, '');
-
-    return tokenString;
-  } catch (error) {
-    console.error('❌ Error getting auth token:', error);
-    return null;
-  }
-};
 
 /**
  * Admin Employer Service
@@ -48,18 +20,18 @@ class AdminEmployerService {
    */
   async makeRequest(endpoint, options = {}) {
     try {
-      const token = await getAuthToken();
+      // Dùng chung getIdToken() từ authHeaders.js — nguồn duy nhất, validate JWT 3-part
+      const token = await getIdToken();
 
       if (!token) {
         throw new Error('Authentication required - no valid token');
       }
 
-      const cleanToken = token.trim().replace(/[\r\n\t]/g, '');
-
       const headers = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cleanToken}`,
-        ...options.headers
+        ...options.headers,
+        // Authorization gán SAU options.headers để không bị overwrite
+        'Authorization': `Bearer ${token}`,
       };
 
       console.log(`📤 Admin request: ${options.method || 'GET'} ${API_BASE_URL}${endpoint}`);
@@ -189,6 +161,77 @@ class AdminEmployerService {
       throw new Error('Failed to update verification status');
     } catch (error) {
       console.error('❌ Error updating verification status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all pending profile change requests (Admin only)
+   */
+  async getPendingProfileChanges() {
+    try {
+      console.log('🔍 Fetching all pending profile change requests...');
+
+      const result = await this.makeRequest('/admin/employers/pending-changes');
+
+      if (result.success && result.data) {
+        console.log(`✅ Loaded ${result.data.length} pending profile change requests`);
+        return result.data;
+      }
+
+      return [];
+    } catch (error) {
+      console.error('❌ Error fetching pending profile changes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Approve pending profile changes (Admin only)
+   */
+  async approveProfileChanges(userId) {
+    try {
+      console.log(`✅ Approving profile changes for: ${userId}`);
+
+      const result = await this.makeRequest(`/admin/employers/${userId}/approve-changes`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+
+      if (result.success) {
+        console.log('✅ Profile changes approved successfully');
+        return result.data;
+      }
+
+      throw new Error(result.message || 'Failed to approve profile changes');
+    } catch (error) {
+      console.error('❌ Error approving profile changes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reject pending profile changes (Admin only)
+   */
+  async rejectProfileChanges(userId, rejectionReason = '') {
+    try {
+      console.log(`❌ Rejecting profile changes for: ${userId}`);
+
+      const result = await this.makeRequest(`/admin/employers/${userId}/reject-changes`, {
+        method: 'POST',
+        body: JSON.stringify({
+          rejectionReason
+        })
+      });
+
+      if (result.success) {
+        console.log('✅ Profile changes rejected successfully');
+        return result.data;
+      }
+
+      throw new Error(result.message || 'Failed to reject profile changes');
+    } catch (error) {
+      console.error('❌ Error rejecting profile changes:', error);
       throw error;
     }
   }

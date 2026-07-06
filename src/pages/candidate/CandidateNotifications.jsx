@@ -12,6 +12,7 @@ import {
   Bell,
   Briefcase,
   CheckCircle,
+  CheckCircle2,
   AlertCircle,
   Clock,
   X,
@@ -19,6 +20,8 @@ import {
   Inbox,
   Mail,
   Star,
+  Zap,
+  FileCheck,
   Trash2
 } from 'lucide-react';
 
@@ -514,32 +517,78 @@ function CandidateNotifications() {
 
   console.log('🔔🔔🔔 CandidateNotifications RENDER - user:', user?.userId, user?.role);
 
-  const getIconForType = (type) => {
+  const getIconForType = (type, title = '', message = '') => {
+    // Kiểm tra nội dung để override type sai từ backend
+    const titleLower = (title || '').toLowerCase();
+    const messageLower = (message || '').toLowerCase();
+    const isSuccess = titleLower.includes('thành công') || titleLower.includes('success') || titleLower.includes('chấp nhận') || titleLower.includes('accepted') || titleLower.includes('ứng tuyển thành công');
+    const isUrgent = titleLower.includes('tuyển gấp') || titleLower.includes('urgent') || messageLower.includes('tuyển gấp');
+
+    console.log('🎨 getIconForType:', { type, title: title?.substring(0,30), isSuccess, isUrgent });
+
     switch (type) {
       case 'success':
-        return CheckCircle;
+      case 'CV_ACCEPTED':
+      case 'application_success':
+        return CheckCircle2;
       case 'application':
+        if (isSuccess) return CheckCircle2;
+        if (isUrgent) return Zap;
         return Briefcase;
+      case 'job_urgent':
+      case 'urgent':
+        return Zap;
+      case 'worker_replaced_shift_cancelled':
+        return Bell;
       case 'employer_review':
         return Star;
+      case 'cv_review':
+      case 'cv_approved':
+        return FileCheck;
       case 'system':
+        // Override icon nếu nội dung là "thành công"
+        if (isSuccess) return CheckCircle2;
+        if (isUrgent) return Zap;
         return AlertCircle;
       default:
+        if (isSuccess) return CheckCircle2;
+        if (isUrgent) return Zap;
         return Bell;
     }
   };
 
-  const getColorForType = (type) => {
+  const getColorForType = (type, title = '', message = '') => {
+    const titleLower = (title || '').toLowerCase();
+    const messageLower = (message || '').toLowerCase();
+    const isSuccess = titleLower.includes('thành công') || titleLower.includes('success') || titleLower.includes('chấp nhận') || titleLower.includes('accepted') || titleLower.includes('ứng tuyển thành công');
+    const isUrgent = titleLower.includes('tuyển gấp') || titleLower.includes('urgent') || messageLower.includes('tuyển gấp');
+
+    console.log('🎨 getColorForType:', { type, title: title?.substring(0,30), isSuccess, color: isSuccess ? '#10B981' : 'other' });
+
     switch (type) {
       case 'success':
+      case 'CV_ACCEPTED':
+      case 'application_success':
+      case 'cv_approved':
         return '#10B981';
       case 'application':
+        if (isSuccess) return '#10B981';
+        if (isUrgent) return '#ef4444';
         return '#1e40af';
+      case 'job_urgent':
+      case 'urgent':
+        return '#ef4444';
+      case 'worker_replaced_shift_cancelled':
+        return '#EF4444';
       case 'employer_review':
         return '#F59E0B';
       case 'system':
-        return '#ef4444';
+        if (isSuccess) return '#10B981';
+        if (isUrgent) return '#ef4444';
+        return '#6B7280';
       default:
+        if (isSuccess) return '#10B981';
+        if (isUrgent) return '#ef4444';
         return '#1e40af';
     }
   };
@@ -578,19 +627,33 @@ function CandidateNotifications() {
       if (notifs && notifs.length > 0) {
         console.log('🔔 [CandidateNotifications] First notification:', JSON.stringify(notifs[0]).substring(0, 200));
       }
-      const mapped = (notifs || []).map(notif => ({
-        id: notif.notificationId,
-        type: notif.type || 'system',
-        icon: getIconForType(notif.type),
-        color: notif.color || getColorForType(notif.type),
-        // Robust data parsing during mapping
-        ...(notif.data ? (typeof notif.data === 'string' ? (() => { try { const d = JSON.parse(notif.data); return { data: d, isQuickJob: d.isQuickJob ?? true }; } catch { return { data: {}, isQuickJob: true }; } })() : { data: notif.data, isQuickJob: notif.data.isQuickJob ?? true }) : { data: {}, isQuickJob: true }),
-        title: language === 'vi' ? notif.title : (notif.titleEn || notif.title),
-        message: language === 'vi' ? notif.message : (notif.messageEn || notif.message),
-        createdAt: notif.createdAt,
-        unread: !notif.read,
-        actionUrl: notif.actionUrl
-      }));
+      const mapped = (notifs || []).map(notif => {
+        const title = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
+        const message = language === 'vi' ? notif.message : (notif.messageEn || notif.message);
+        let parsedData = {};
+        let isQuickJob = true;
+        if (notif.data) {
+          if (typeof notif.data === 'string') {
+            try { parsedData = JSON.parse(notif.data); isQuickJob = parsedData.isQuickJob ?? true; } catch { }
+          } else {
+            parsedData = notif.data;
+            isQuickJob = notif.data.isQuickJob ?? true;
+          }
+        }
+        return {
+          id: notif.notificationId,
+          type: notif.type || 'system',
+          icon: getIconForType(notif.type, title, message),
+          color: getColorForType(notif.type, title, message),
+          data: parsedData,
+          isQuickJob,
+          title,
+          message,
+          createdAt: notif.createdAt,
+          unread: !notif.read,
+          actionUrl: notif.actionUrl
+        };
+      });
 
       setNotifications(mapped);
     } catch (error) {
@@ -823,6 +886,38 @@ function CandidateNotifications() {
                   <h3>
                     {notif.title}
                     {notif.unread && <span className="unread-badge" />}
+                    {(notif.isQuickJob === false) && (
+                      <span style={{
+                        marginLeft: '6px',
+                        fontSize: '10px',
+                        fontWeight: '700',
+                        padding: '2px 7px',
+                        borderRadius: '9999px',
+                        background: 'rgba(30,64,175,0.1)',
+                        color: '#1e40af',
+                        border: '1px solid rgba(30,64,175,0.2)',
+                        verticalAlign: 'middle',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {language === 'vi' ? 'Tiêu Chuẩn' : 'Standard'}
+                      </span>
+                    )}
+                    {notif.isQuickJob === true && (
+                      <span style={{
+                        marginLeft: '6px',
+                        fontSize: '10px',
+                        fontWeight: '700',
+                        padding: '2px 7px',
+                        borderRadius: '9999px',
+                        background: 'rgba(30,64,175,0.1)',
+                        color: '#1e40af',
+                        border: '1px solid rgba(30,64,175,0.2)',
+                        verticalAlign: 'middle',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {language === 'vi' ? 'Tuyển Gấp' : 'Urgent'}
+                      </span>
+                    )}
                   </h3>
                   <p>{notif.message}</p>
                   <div className="notification-footer">

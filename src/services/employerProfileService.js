@@ -58,6 +58,10 @@ class EmployerProfileService {
       headers['Authorization'] = `Bearer ${cleanToken}`;
 
       console.log(`📤 Making ${options.method || 'GET'} request to ${API_BASE_URL}${endpoint}`);
+      console.log('[DEBUG makeRequest] URL:', `${API_BASE_URL}${endpoint}`);
+      console.log('[DEBUG makeRequest] Full headers object:', headers);
+      console.log('[DEBUG makeRequest] Authorization value:', headers['Authorization'] || headers['authorization']);
+      console.log('[DEBUG makeRequest] Có prefix Bearer không:', (headers['Authorization'] || '').startsWith('Bearer '));
       console.log('🔑 Authorization header length:', headers.Authorization.length);
       
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -268,6 +272,43 @@ class EmployerProfileService {
       throw new Error('Failed to update profile');
     } catch (error) {
       console.error('❌ Error updating employer profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Submit pending profile changes for admin review
+   * This does NOT update the main profile immediately
+   * @param {object} changes - All changed fields
+   */
+  async submitPendingChanges(changes) {
+    try {
+      const session = await fetchAuthSession();
+      
+      if (!session || !session.tokens) {
+        throw new Error('User not authenticated - no session');
+      }
+      
+      const idTokenPayload = session.tokens.idToken?.payload;
+      const userId = idTokenPayload?.sub;
+      
+      if (!userId) {
+        throw new Error('User not authenticated - no userId in token');
+      }
+
+      const result = await this.makeRequest(`/profile/${userId}/submit-changes`, {
+        method: 'PUT',
+        body: JSON.stringify({ changes })
+      });
+      
+      if (result.success) {
+        console.log('✅ Pending profile changes submitted for review');
+        return result.data;
+      }
+
+      throw new Error(result.message || 'Failed to submit profile changes');
+    } catch (error) {
+      console.error('❌ Error submitting pending profile changes:', error);
       throw error;
     }
   }

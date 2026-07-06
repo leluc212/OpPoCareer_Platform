@@ -99,10 +99,31 @@ def strip_prefix(b64):
     return b64 or ''
 
 def extract_user_id(event):
+    """
+    Lấy user sub từ Cognito JWT đã được API Gateway verify.
+    Ưu tiên requestContext.authorizer (đã verify chữ ký) thay vì tự decode token.
+    Fallback: tự decode payload nếu không qua authorizer (local dev / direct call).
+    """
+    # 1. Ưu tiên: lấy từ requestContext.authorizer — API Gateway đã verify JWT signature
+    try:
+        req_ctx = event.get('requestContext') or {}
+        jwt_claims = (req_ctx.get('authorizer') or {}).get('jwt', {}).get('claims') or {}
+        sub = jwt_claims.get('sub')
+        if sub:
+            return sub
+        claims = (req_ctx.get('authorizer') or {}).get('claims') or {}
+        sub = claims.get('sub')
+        if sub:
+            return sub
+    except Exception:
+        pass
+
+    # 2. Fallback: tự decode JWT payload (không verify signature)
     try:
         auth = ((event.get('headers') or {}).get('authorization') or
                 (event.get('headers') or {}).get('Authorization') or '')
-        if not auth.startswith('Bearer '): return None
+        if not auth.startswith('Bearer '):
+            return None
         p = auth[7:].split('.')[1]
         p += '=' * (4 - len(p) % 4)
         return json.loads(base64.b64decode(p).decode()).get('sub')

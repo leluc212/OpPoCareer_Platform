@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Bell, Package, CheckCircle, AlertCircle, DollarSign, Users, Briefcase, Zap, XCircle, Star } from 'lucide-react';
+import { Bell, Package, CheckCircle2, AlertCircle, DollarSign, Users, Briefcase, Zap, XCircle, Star, FileCheck } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { getNotifications, markAsRead, markAllAsRead } from '../services/notificationService';
@@ -310,40 +310,110 @@ const NotificationsSidebar = () => {
     }
   };
 
-  const getNotificationIcon = (type) => {
+  const getNotificationIcon = (notification) => {
+    const type = notification.type || '';
+    const title = (language === 'vi' ? notification.title : notification.titleEn) || notification.title || '';
+    const message = (language === 'vi' ? notification.message : notification.messageEn) || notification.message || '';
+    const titleLower = title.toLowerCase();
+    const messageLower = message.toLowerCase();
+
+    const isSuccess = titleLower.includes('thành công') || titleLower.includes('success')
+      || titleLower.includes('chấp nhận') || titleLower.includes('accepted')
+      || titleLower.includes('được duyệt') || titleLower.includes('approved');
+    const isUrgent = titleLower.includes('tuyển gấp') || titleLower.includes('urgent')
+      || messageLower.includes('tuyển gấp');
+
+    // Ưu tiên detect từ nội dung
+    if (isSuccess) return CheckCircle2;
+    if (isUrgent) return Zap;
+
     switch (type) {
       case 'package_purchase_request':
         return Package;
       case 'package_approved':
       case 'success':
       case 'CV_ACCEPTED':
+      case 'application_success':
       case 'withdrawal_approved':
       case 'quick_job_activation_approved':
       case 'job_approved':
-        return CheckCircle;
+      case 'cv_approved':
+        return CheckCircle2;
       case 'employers':
+      case 'application':
         return Briefcase;
-      case 'posts':
-        return AlertCircle;
       case 'payments':
       case 'candidate_withdrawal_request':
       case 'withdrawal_request':
         return DollarSign;
+      case 'job_urgent':
       case 'urgent':
-        return AlertCircle;
+      case 'quick_job_activation_request':
+        return Zap;
+      case 'employer_review':
+        return Star;
       case 'system':
+      case 'posts':
       case 'CV_REJECTED':
       case 'withdrawal_rejected':
       case 'quick_job_activation_rejected':
       case 'quick_job_activation_deactivated':
       case 'job_rejected':
         return AlertCircle;
-      case 'quick_job_activation_request':
-        return Zap;
-      case 'employer_review':
-        return Star;
       default:
         return Bell;
+    }
+  };
+
+  const getNotificationColor = (notification) => {
+    const type = notification.type || '';
+    const title = (language === 'vi' ? notification.title : notification.titleEn) || notification.title || '';
+    const message = (language === 'vi' ? notification.message : notification.messageEn) || notification.message || '';
+    const titleLower = title.toLowerCase();
+    const messageLower = message.toLowerCase();
+
+    const isSuccess = titleLower.includes('thành công') || titleLower.includes('success')
+      || titleLower.includes('chấp nhận') || titleLower.includes('accepted')
+      || titleLower.includes('được duyệt') || titleLower.includes('approved');
+    const isUrgent = titleLower.includes('tuyển gấp') || titleLower.includes('urgent')
+      || messageLower.includes('tuyển gấp');
+    const isRejected = titleLower.includes('từ chối') || titleLower.includes('rejected')
+      || titleLower.includes('bị hủy') || titleLower.includes('cancelled');
+
+    if (isSuccess) return '#10B981';
+    if (isUrgent) return '#ef4444';
+    if (isRejected) return '#ef4444';
+
+    switch (type) {
+      case 'package_approved':
+      case 'success':
+      case 'CV_ACCEPTED':
+      case 'application_success':
+      case 'withdrawal_approved':
+      case 'quick_job_activation_approved':
+      case 'job_approved':
+      case 'cv_approved':
+        return '#10B981';
+      case 'job_urgent':
+      case 'urgent':
+      case 'quick_job_activation_request':
+      case 'CV_REJECTED':
+      case 'withdrawal_rejected':
+      case 'quick_job_activation_rejected':
+      case 'quick_job_activation_deactivated':
+      case 'job_rejected':
+        return '#ef4444';
+      case 'employer_review':
+        return '#F59E0B';
+      case 'payments':
+      case 'candidate_withdrawal_request':
+      case 'withdrawal_request':
+        return '#8B5CF6';
+      case 'application':
+      case 'employers':
+        return '#1e40af';
+      default:
+        return '#1e40af';
     }
   };
 
@@ -409,7 +479,8 @@ const NotificationsSidebar = () => {
       ) : (
         <NotificationsList>
           {filteredNotifications.slice(0, 10).map(notification => {
-            const Icon = getNotificationIcon(notification.type);
+            const Icon = getNotificationIcon(notification);
+            const color = getNotificationColor(notification);
             const title = language === 'vi' ? notification.title : notification.titleEn;
             const message = language === 'vi' ? notification.message : notification.messageEn;
             
@@ -420,7 +491,7 @@ const NotificationsSidebar = () => {
                 onClick={() => handleNotificationClick(notification)}
               >
                 <NotificationHeader>
-                  <NotificationIcon $color={notification.color}>
+                  <NotificationIcon $color={color}>
                     <Icon />
                   </NotificationIcon>
                   <NotificationContent>

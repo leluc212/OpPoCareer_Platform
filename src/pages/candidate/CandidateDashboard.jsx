@@ -298,7 +298,7 @@ const BoostBannerWrap = styled(motion.div)`
   border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
   animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
   transition: all 0.4s ease;
-  aspect-ratio: 16/5;
+  aspect-ratio: 16/6;
 
   &::after {
     content: '';
@@ -364,22 +364,7 @@ const BannerDot = styled.button`
   `}
 `;
 
-const BoostTag = styled.div`
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: rgba(0,0,0,0.55);
-  backdrop-filter: blur(6px);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 5px 12px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  z-index: 2;
-`;
+
 
 const SidebarCol = styled.div`
   display: flex;
@@ -622,21 +607,20 @@ const ActivityContent = styled.div`
 `;
 
 const RecommendedJobCard = styled(motion.div)`
-  padding: 20px;
-  border: 2px solid ${props => props.theme.colors.border};
+  padding: 16px;
+  border: 1.5px solid ${props => props.theme.colors.border};
   border-radius: ${props => props.theme.borderRadius.lg};
-  margin-bottom: 16px;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   cursor: pointer;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
   
   &:hover {
     border-color: ${props => props.theme.colors.primary};
-    transform: translateY(-4px);
-    box-shadow: ${props => props.theme.shadows.lg};
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    transform: translateY(-3px);
   }
 `;
 
@@ -770,8 +754,10 @@ const KycPromptCard = styled.div`
 
 const JobHeader = styled.div`
   display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 10px;
+  min-height: 64px;
+  align-items: flex-start;
 `;
 
 const CompanyLogo = styled.div`
@@ -786,22 +772,39 @@ const CompanyLogo = styled.div`
   font-size: 20px;
   color: ${props => props.theme.colors.primary};
   flex-shrink: 0;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+  }
 `;
 
 const JobInfo = styled.div`
   flex: 1;
+  min-width: 0;
   
   h4 {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: ${props => props.theme.colors.text};
     margin-bottom: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.35;
   }
   
   p {
-    font-size: 14px;
+    font-size: 13px;
     color: ${props => props.theme.colors.textLight};
     font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `;
 
@@ -1338,6 +1341,7 @@ const CandidateDashboard = () => {
   const [candidateProfile, setCandidateProfile] = useState(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [realApplications, setRealApplications] = useState([]);
+  const [selectedAppDetail, setSelectedAppDetail] = useState(null); // for application detail modal
   const [realRecommendedJobs, setRealRecommendedJobs] = useState([]);
   const recommendedJobsRef = useRef([]);
   useEffect(() => {
@@ -1416,6 +1420,42 @@ const CandidateDashboard = () => {
       });
       setAllActiveJobs(allJobs);
 
+      // Fetch employer profiles to get companyLogo for job cards
+      const uniqueEmployerIds = [...new Set(allJobs.map(j => j.employerId).filter(Boolean))];
+      if (uniqueEmployerIds.length > 0) {
+        const API_BASE = import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod';
+        const { fetchAuthSession } = await import('aws-amplify/auth');
+        let token = null;
+        try {
+          const session = await fetchAuthSession();
+          const raw = session?.tokens?.idToken;
+          token = raw ? (typeof raw === 'string' ? raw : raw.toString()) : null;
+        } catch (_) {}
+
+        if (token) {
+          const profileResults = await Promise.all(
+            uniqueEmployerIds.map(id =>
+              fetch(`${API_BASE}/profile/${id}`, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+              }).then(r => r.ok ? r.json() : null).catch(() => null)
+            )
+          );
+          // Build employerId → companyLogo map
+          const logoMap = {};
+          profileResults.forEach(res => {
+            if (res?.success && res?.data?.userId && res?.data?.companyLogo) {
+              logoMap[res.data.userId] = res.data.companyLogo;
+            }
+          });
+          // Patch allJobs with companyLogo
+          allJobs.forEach(j => {
+            if (j.employerId && logoMap[j.employerId]) {
+              j.companyLogo = logoMap[j.employerId];
+            }
+          });
+        }
+      }
+
       // Fetch profile if not loaded to check KYC status
       let profile = candidateProfile;
       if (!profile) {
@@ -1456,12 +1496,16 @@ const CandidateDashboard = () => {
                     id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
                     title: matchedJob.title || 'Untitled',
                     company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
+                    companyLogo: matchedJob.companyLogo || null,
                     location: matchedJob.location || '',
                     type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
                     salary: jobSalary,
                     postedAt: formatRelativeTime(matchedJob.createdAt),
                     tags: typeof matchedJob.tags === 'string' ? matchedJob.tags.split(',').map(t => t.trim()) : (matchedJob.tags || []),
                     isQuick,
+                    workHours: matchedJob.workHours || (matchedJob.startTime && matchedJob.endTime ? `${matchedJob.startTime} - ${matchedJob.endTime}` : '') || '',
+                    workDays: matchedJob.workDays || '',
+                    workDate: matchedJob.workDate || '',
                     matchScore: rec.matchScore,
                     matchReason: rec.matchReason
                   });
@@ -1542,12 +1586,16 @@ const CandidateDashboard = () => {
               id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
               title: matchedJob.title || 'Untitled',
               company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
+              companyLogo: matchedJob.companyLogo || null,
               location: matchedJob.location || '',
               type: isQuick ? (language === 'vi' ? 'Việc làm ngắn hạn' : 'Quick Job') : (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
               salary: jobSalary,
               postedAt: formatRelativeTime(matchedJob.createdAt),
               tags: typeof matchedJob.tags === 'string' ? matchedJob.tags.split(',').map(t => t.trim()) : (matchedJob.tags || []),
-              isQuick
+              isQuick,
+              workHours: matchedJob.workHours || (matchedJob.startTime && matchedJob.endTime ? `${matchedJob.startTime} - ${matchedJob.endTime}` : '') || '',
+              workDays: matchedJob.workDays || '',
+              workDate: matchedJob.workDate || '',
             });
           });
         }
@@ -1595,7 +1643,45 @@ const CandidateDashboard = () => {
             appliedDate: formatRelativeTime(app.appliedAt || app.createdAt),
             status: mapStatus(app.status),
             urgent: job?.isUrgent || app.jobType === 'quick' || !!job?.jobID || false,
-            isValid: !!job // Flag if we found the actual job record
+            isValid: !!job, // Flag if we found the actual job record
+            // Extra detail fields
+            location: job?.location || job?.address || app.location || '---',
+            salary: (() => {
+              const isQuick = job?.jobType === 'quick' || !!job?.totalSalary;
+              if (isQuick) {
+                const totalSalary = Number(job?.totalSalary || 0);
+                const hourlyRate = Number(job?.hourlyRate || 0);
+                const totalHours = Number(job?.totalHours || 0);
+                const candidateIncome = Math.round(totalSalary * 0.85);
+                if (candidateIncome > 0) return `${candidateIncome.toLocaleString('vi-VN')} VNĐ/${totalHours}h`;
+                if (hourlyRate > 0) return `${Math.round(hourlyRate * 0.85).toLocaleString('vi-VN')} VNĐ/giờ`;
+              }
+              const raw = job?.salary || job?.salaryRange;
+              const unit = job?.salaryUnit || 'hour';
+              if (!raw) return '---';
+              if (typeof raw === 'number') {
+                const finalNum = raw < 1000 ? raw * 1000 : raw;
+                const unitLabel = unit === 'month' ? ' VNĐ/tháng' : ' VNĐ/h';
+                return `${finalNum.toLocaleString('vi-VN')}${unitLabel}`;
+              }
+              if (typeof raw === 'string') {
+                const cleanNum = parseFloat(raw.replace(/[^\d.]/g, ''));
+                if (!isNaN(cleanNum)) {
+                  const finalNum = cleanNum < 1000 ? cleanNum * 1000 : cleanNum;
+                  const unitLabel = unit === 'month' ? ' VNĐ/tháng' : ' VNĐ/h';
+                  return `${finalNum.toLocaleString('vi-VN')}${unitLabel}`;
+                }
+                return raw;
+              }
+              return '---';
+            })(),
+            workHours: job?.workHours || job?.shift || job?.shiftTime || '---',
+            description: job?.description || job?.jobDescription || '',
+            tags: job?.tags || [],
+            cvFilename: app.cvFilename || app.cvFileName || '',
+            cvUrl: app.cvUrl || '',
+            cvS3Key: app.cvS3Key || '',
+            rawStatus: app.status,
           };
         })
         // Only show applications where we have a valid, resolved job record
@@ -2545,20 +2631,7 @@ const CandidateDashboard = () => {
                 style={{ cursor: banners[currentBannerIndex]?.linkUrl ? 'pointer' : 'default' }}
                 $isTopSpotlight={banners[currentBannerIndex]?.isTopSpotlight}
               >
-                {banners[currentBannerIndex]?.isTopSpotlight ? (
-                  <BoostTag style={{
-                    background: 'linear-gradient(135deg, #DC2626 0%, #F59E0B 100%)',
-                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
-                    padding: '5px 14px',
-                    letterSpacing: '0.5px'
-                  }}>
-                    <Sparkles size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
-                    {language === 'vi' ? 'TOP SPOTLIGHT' : 'TOP SPOTLIGHT'}
-                  </BoostTag>
-                ) : (
-                  <BoostTag>{language === 'vi' ? '🔥Đề xuất' : '🔥Featured'}</BoostTag>
-                )}
+
                 <div style={{ position: 'relative', width: '100%', height: '100%', lineHeight: 0 }}>
                   <AnimatePresence mode="sync">
                     <motion.img
@@ -2575,7 +2648,7 @@ const CandidateDashboard = () => {
                       style={{
                         width: '100%',
                         height: '100%',
-                        objectFit: 'fill',
+                        objectFit: 'cover',
                         display: 'block'
                       }}
                     />
@@ -2633,65 +2706,116 @@ const CandidateDashboard = () => {
                       </button>
                     </KycPromptCard>
                   ) : realRecommendedJobs.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                      {realRecommendedJobs.map((job, index) => (
-                        <RecommendedJobCard
-                          key={job.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.4 + index * 0.1 }}
-                          whileHover={{ scale: 1.02 }}
-                          onClick={() => navigate({ pathname: '/candidate/jobs', search: `?tab=${job.isQuick ? 'shift' : 'standard'}` }, { state: { selectedJobId: job.id } })}
-                        >
-                          <JobHeader>
-                            <CompanyLogo>
-                              {job.company.charAt(0)}
-                            </CompanyLogo>
-                            <JobInfo>
-                              {job.isQuick && (
-                                <JobTypeBadge>
-                                  {language === 'vi' ? 'Tuyển gấp' : 'Urgent'}
-                                </JobTypeBadge>
-                              )}
-                              <h4><DynamicTranslate text={job.title} showIndicator={false} /></h4>
-                              <p><DynamicTranslate text={job.company} showIndicator={false} /></p>
-                            </JobInfo>
-                          </JobHeader>
-                          <JobDetails>
-                            <span>
-                              <MapPin />
-                              <DynamicTranslate text={job.location} showIndicator={false} />
-                            </span>
-                            <span>
-                              <span style={{ fontWeight: '500' }}>{language === 'vi' ? 'Thu nhập trung bình:' : 'Income:'}</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignItems: 'stretch' }}>
+                      {realRecommendedJobs.map((job, index) => {
+                        // Helpers
+                        const formatDate = (d) => {
+                          if (!d || d === 'undefined' || d === '') return '';
+                          try { const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; } catch { return d; }
+                        };
+                        const loc = job.location || '';
+                        const commaIdx = loc.indexOf(',');
+                        const shortLoc = commaIdx > 0 && commaIdx <= 40 ? loc.slice(0, commaIdx) : loc.slice(0, 38);
+                        const needsTruncate = loc.length > 40;
+
+                        return (
+                          <RecommendedJobCard
+                            key={job.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.4 + index * 0.1 }}
+                            whileHover={{ scale: 1.02 }}
+                            onClick={() => navigate({ pathname: '/candidate/jobs', search: `?tab=${job.isQuick ? 'shift' : 'standard'}` }, { state: { selectedJobId: job.id } })}
+                          >
+                            {/* Header: logo + title + company + urgent badge */}
+                            <JobHeader>
+                              <CompanyLogo>
+                                {job.companyLogo
+                                  ? <img src={job.companyLogo} alt={job.company} />
+                                  : job.company.charAt(0)}
+                              </CompanyLogo>
+                              <JobInfo>
+                                {(job.isQuick || job.urgent) ? (
+                                  <JobTypeBadge>{language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</JobTypeBadge>
+                                ) : (
+                                  <JobTypeBadge style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}</JobTypeBadge>
+                                )}
+                                <h4><DynamicTranslate text={job.title} showIndicator={false} /></h4>
+                                <p><DynamicTranslate text={job.company} showIndicator={false} /></p>
+                              </JobInfo>
+                            </JobHeader>
+
+                            {/* Address truncated */}
+                            {loc && (
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', fontSize: '12px', color: '#6B7280', marginBottom: '8px' }}>
+                                <MapPin size={12} style={{ flexShrink: 0, marginTop: '2px', color: '#9CA3AF' }} />
+                                <span>
+                                  <DynamicTranslate text={needsTruncate ? shortLoc : loc} showIndicator={false} />
+                                  {needsTruncate && <span style={{ color: '#3b82f6', fontWeight: 600, marginLeft: '3px', cursor: 'default' }}>...</span>}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Salary */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', fontWeight: 700, color: '#059669', marginBottom: '6px' }}>
+                              <span style={{ fontWeight: 500, color: '#6B7280' }}>{language === 'vi' ? 'Thu nhập trung bình:' : 'Income:'}</span>
                               {translateSalary(job.salary)}
-                            </span>
-                            <span>
-                              <Clock />
-                              {translatePostedAt(job.postedAt)}
-                            </span>
-                          </JobDetails>
-                          {job.tags && job.tags.filter(tag => tag && tag.trim() !== '').length > 0 && (
-                            <JobTags>
-                              {job.tags
-                                .filter(tag => tag && tag.trim() !== '')
-                                .map((tag, idx) => (
-                                  <DynamicTranslate key={idx} text={tag} showIndicator={false} />
+                            </div>
+
+                            {/* Work hours */}
+                            {job.workHours && job.workHours !== '' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#6B7280', marginBottom: '5px' }}>
+                                <Clock size={12} style={{ flexShrink: 0, color: '#9CA3AF' }} />
+                                <span>{language === 'vi' ? 'Thời gian:' : 'Hours:'} {job.workHours}</span>
+                              </div>
+                            )}
+
+                            {/* Deadline: standard job */}
+                            {!job.isQuick && job.workDays && job.workDays !== '' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#6B7280', marginBottom: '5px' }}>
+                                <Calendar size={12} style={{ flexShrink: 0, color: '#9CA3AF' }} />
+                                <span>{language === 'vi' ? 'Hạn nộp:' : 'Deadline:'} {formatDate(job.workDays)}</span>
+                              </div>
+                            )}
+
+                            {/* Work date: quick job */}
+                            {job.isQuick && job.workDate && job.workDate !== '' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#6B7280', marginBottom: '5px' }}>
+                                <Calendar size={12} style={{ flexShrink: 0, color: '#9CA3AF' }} />
+                                <span>{language === 'vi' ? 'Ngày làm:' : 'Work date:'} {formatDate(job.workDate)}</span>
+                              </div>
+                            )}
+
+                            {/* Posted time */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#9CA3AF', marginBottom: '8px' }}>
+                              <Clock size={12} style={{ flexShrink: 0 }} />
+                              <span>{translatePostedAt(job.postedAt)}</span>
+                            </div>
+
+                            {/* Tags */}
+                            {job.tags && job.tags.filter(t => t && t.trim() !== '').length > 0 && (
+                              <JobTags>
+                                {job.tags.filter(t => t && t.trim() !== '').map((tag, idx) => (
+                                  <span key={idx}>{tag}</span>
                                 ))}
-                            </JobTags>
-                          )}
-                          {job.matchScore !== undefined && (
-                            <AiMatchSection>
-                              <AiMatchBadge>
-                                <span>Phù hợp {job.matchScore}%</span>
-                              </AiMatchBadge>
-                              {job.matchReason && (
-                                <AiMatchReason>{job.matchReason}</AiMatchReason>
-                              )}
-                            </AiMatchSection>
-                          )}
-                        </RecommendedJobCard>
-                      ))}
+                              </JobTags>
+                            )}
+
+                            {/* AI match score */}
+                            {job.matchScore !== undefined && (
+                              <AiMatchSection>
+                                <AiMatchBadge>
+                                  <Sparkles size={13} />
+                                  <span>{language === 'vi' ? `Phù hợp ${job.matchScore}%` : `${job.matchScore}% match`}</span>
+                                </AiMatchBadge>
+                                {job.matchReason && (
+                                  <AiMatchReason>{job.matchReason}</AiMatchReason>
+                                )}
+                              </AiMatchSection>
+                            )}
+                          </RecommendedJobCard>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6B7280', fontSize: '14px', border: '1px dashed #E5E7EB', borderRadius: '12px' }}>
@@ -2728,17 +2852,21 @@ const CandidateDashboard = () => {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.3 + index * 0.08 }}
                           whileHover={{ scale: 1.01 }}
-                          onClick={() => navigate({
-                            pathname: '/candidate/jobs',
-                            search: `?tab=${app.urgent ? 'shift' : 'standard'}`
-                          }, { state: { selectedJobId: app.jobId } })}
+                          onClick={() => setSelectedAppDetail(app)}
                         >
                           <ApplicationHeader>
                             <ApplicationInfo>
                               <h4><DynamicTranslate text={app.title} showIndicator={false} /></h4>
                               <p><DynamicTranslate text={app.company} showIndicator={false} /></p>
                             </ApplicationInfo>
-                            <StatusBadge status={app.status} />
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                              <StatusBadge status={app.status} />
+                              {app.urgent ? (
+                                <StatusBadge status="urgent" size="sm">{language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</StatusBadge>
+                              ) : (
+                                <StatusBadge status="active" size="sm">{language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}</StatusBadge>
+                              )}
+                            </div>
                           </ApplicationHeader>
                           <ApplicationMeta>
                             <span>
@@ -2792,6 +2920,167 @@ const CandidateDashboard = () => {
               </Section>
             </div>
 
+            {/* Application Detail Modal */}
+            <AnimatePresence>
+              {selectedAppDetail && (
+                <ModalOverlay
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setSelectedAppDetail(null)}
+                >
+                  <ModalContent
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ModalHeader>
+                      <h2>
+                        <FileText />
+                        {language === 'vi' ? 'Chi Tiết Đơn Ứng Tuyển' : 'Application Details'}
+                      </h2>
+                      <button onClick={() => setSelectedAppDetail(null)}><X size={18} /></button>
+                    </ModalHeader>
+                    <ModalBody>
+                      {/* Job Info */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+                          {language === 'vi' ? 'Thông tin công việc' : 'Job Information'}
+                        </div>
+                        <JobDetailRow>
+                          <Briefcase />
+                          <span className="label">{language === 'vi' ? 'Vị trí' : 'Position'}</span>
+                          <span className="value"><DynamicTranslate text={selectedAppDetail.title} showIndicator={false} /></span>
+                        </JobDetailRow>
+                        <JobDetailRow>
+                          <Building2 />
+                          <span className="label">{language === 'vi' ? 'Công ty' : 'Company'}</span>
+                          <span className="value"><DynamicTranslate text={selectedAppDetail.company} showIndicator={false} /></span>
+                        </JobDetailRow>
+                        {selectedAppDetail.location && selectedAppDetail.location !== '---' && (
+                          <JobDetailRow>
+                            <MapPin />
+                            <span className="label">{language === 'vi' ? 'Địa điểm' : 'Location'}</span>
+                            <span className="value"><DynamicTranslate text={selectedAppDetail.location} showIndicator={false} /></span>
+                          </JobDetailRow>
+                        )}
+                        {selectedAppDetail.salary && selectedAppDetail.salary !== '---' && (
+                          <JobDetailRow>
+                            <DollarSign style={{ color: '#10B981' }} />
+                            <span className="label" style={{ color: '#10B981', fontWeight: '700' }}>{language === 'vi' ? 'Mức lương' : 'Salary'}</span>
+                            <span className="value" style={{ color: '#10B981', fontWeight: '800' }}>
+                              <DynamicTranslate text={selectedAppDetail.salary} showIndicator={false} />
+                            </span>
+                          </JobDetailRow>
+                        )}
+                        {selectedAppDetail.workHours && selectedAppDetail.workHours !== '---' && (
+                          <JobDetailRow>
+                            <Clock />
+                            <span className="label">{language === 'vi' ? 'Ca làm' : 'Shift'}</span>
+                            <span className="value"><DynamicTranslate text={selectedAppDetail.workHours} showIndicator={false} /></span>
+                          </JobDetailRow>
+                        )}
+                        <JobDetailRow>
+                          <Calendar />
+                          <span className="label">{language === 'vi' ? 'Ngày nộp' : 'Applied'}</span>
+                          <span className="value">{translatePostedAt(selectedAppDetail.appliedDate)}</span>
+                        </JobDetailRow>
+                        <JobDetailRow>
+                          <CheckCircle />
+                          <span className="label">{language === 'vi' ? 'Trạng thái' : 'Status'}</span>
+                          <span className="value"><StatusBadge status={selectedAppDetail.status} /></span>
+                        </JobDetailRow>
+                      </div>
+
+                      {/* CV Info */}
+                      <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '2px solid #E5E7EB' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
+                          {language === 'vi' ? 'CV đã ứng tuyển' : 'Submitted CV'}
+                        </div>
+                        {selectedAppDetail.cvFilename ? (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            background: '#F0FDF4',
+                            border: '1.5px solid #BBF7D0',
+                            borderRadius: '10px',
+                            padding: '12px 16px',
+                          }}>
+                            <div style={{
+                              width: '40px', height: '40px', borderRadius: '8px',
+                              background: '#10B981', display: 'flex', alignItems: 'center',
+                              justifyContent: 'center', flexShrink: 0
+                            }}>
+                              <FileText style={{ color: 'white', width: '20px', height: '20px' }} />
+                            </div>
+                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                              <div style={{ fontSize: '14px', fontWeight: '700', color: '#065F46', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {selectedAppDetail.cvFilename}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
+                                {language === 'vi' ? 'CV đã nộp kèm đơn' : 'CV submitted with application'}
+                              </div>
+                            </div>
+                            {selectedAppDetail.cvUrl && (
+                              <a
+                                href={selectedAppDetail.cvUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '6px',
+                                  padding: '7px 14px', borderRadius: '8px',
+                                  background: '#10B981', color: 'white',
+                                  fontSize: '13px', fontWeight: '700', textDecoration: 'none',
+                                  flexShrink: 0
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Eye style={{ width: '14px', height: '14px' }} />
+                                {language === 'vi' ? 'Xem' : 'View'}
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '13px', color: '#6B7280', fontStyle: 'italic', textAlign: 'center', padding: '12px', background: '#F9FAFB', borderRadius: '8px', border: '1px dashed #E5E7EB' }}>
+                            {language === 'vi' ? 'Không có thông tin CV.' : 'No CV information available.'}
+                          </div>
+                        )}
+                      </div>
+
+                      <ModalActions>
+                        <ModalButton
+                          className="secondary"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setSelectedAppDetail(null)}
+                        >
+                          {language === 'vi' ? 'Đóng' : 'Close'}
+                        </ModalButton>
+                        <ModalButton
+                          className="primary"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setSelectedAppDetail(null);
+                            navigate({
+                              pathname: '/candidate/jobs',
+                              search: `?tab=${selectedAppDetail.urgent ? 'shift' : 'standard'}`
+                            }, { state: { selectedJobId: selectedAppDetail.jobId } });
+                          }}
+                        >
+                          <Briefcase />
+                          {language === 'vi' ? 'Xem tin tuyển dụng' : 'View Job Post'}
+                        </ModalButton>
+                      </ModalActions>
+                    </ModalBody>
+                  </ModalContent>
+                </ModalOverlay>
+              )}
+            </AnimatePresence>
+
             {/* Side Banners */}
             <SidebarCol>
               <SideAdWrap
@@ -2800,7 +3089,6 @@ const CandidateDashboard = () => {
                 transition={{ duration: 0.5, delay: 0.3 }}
                 whileHover={{ y: -3 }}
               >
-                <SideAdTag>✨ Hot Hot Hot</SideAdTag>
                 <img src={s3Images.poster.phucloctho} alt="Phúc Lộc Thọ" />
               </SideAdWrap>
             </SidebarCol>

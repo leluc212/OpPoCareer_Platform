@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
-import { Button, Input, TextArea, FormGroup, Label, DateInput } from '../../components/FormElements';
+import { Button, Input, TextArea, FormGroup, Label, DateInput, Select } from '../../components/FormElements';
 import {
   CheckCircle,
   Circle,
@@ -340,7 +340,6 @@ const CompanyVerification = () => {
 
   const [step2Data, setStep2Data] = useState({
     companyName: '',
-    companyNameEn: '',
     taxCode: '',
     foundedYear: '',
     industry: '',
@@ -350,20 +349,8 @@ const CompanyVerification = () => {
     description: ''
   });
 
-  const [step3Data, setStep3Data] = useState({
-    representativeName: '',
-    position: '',
-    idNumber: '',
-    idFrontImage: null,
-    idBackImage: null,
-    authorizationLetter: null
-  });
-
   const [step4Data, setStep4Data] = useState({
     address: '',
-    city: '',
-    district: '',
-    ward: '',
     phone: '',
     emails: [''],
     emergencyContact: '',
@@ -383,11 +370,6 @@ const CompanyVerification = () => {
     },
     {
       id: 2,
-      label: language === 'vi' ? 'Người đại diện' : 'Representative',
-      icon: User
-    },
-    {
-      id: 3,
       label: language === 'vi' ? 'Liên hệ' : 'Contact',
       icon: Phone
     }
@@ -472,21 +454,9 @@ const CompanyVerification = () => {
         localStorage.setItem(testKey, compressedDataUrl);
         localStorage.removeItem(testKey);
       } catch (storageError) {
-        // LocalStorage full - try to clear old verification data
-        console.warn('LocalStorage full, attempting to clear old data...');
-        const oldVerification = localStorage.getItem('companyVerificationData');
-        if (oldVerification) {
-          if (confirm(language === 'vi'
-            ? 'Bộ nhớ đầy. Xóa dữ liệu xác thực cũ để tiếp tục?'
-            : 'Storage full. Clear old verification data to continue?')) {
-            localStorage.removeItem('companyVerificationData');
-            localStorage.removeItem('companyVerificationStatus');
-          } else {
-            throw storageError;
-          }
-        } else {
-          throw storageError;
-        }
+        // LocalStorage full
+        console.warn('LocalStorage full, cannot store compressed image');
+        throw storageError;
       }
 
       // Store both file name and compressed data
@@ -499,8 +469,6 @@ const CompanyVerification = () => {
 
       if (step === 0) {
         setStep1Data(prev => ({ ...prev, [field]: fileData }));
-      } else if (step === 2) {
-        setStep3Data(prev => ({ ...prev, [field]: fileData }));
       }
 
       // Show success message for this specific field
@@ -525,7 +493,7 @@ const CompanyVerification = () => {
       setCompletedSteps([...completedSteps, currentStep]);
     }
 
-    if (currentStep < 3) {
+    if (currentStep < 2) {
       setCurrentStep(currentStep + 1);
     } else {
       // All steps completed
@@ -569,14 +537,6 @@ const CompanyVerification = () => {
         }
         break;
       case 2:
-        if (!step3Data.representativeName) {
-          alert(language === 'vi'
-            ? 'Vui lòng điền đầy đủ thông tin người đại diện'
-            : 'Please fill in all required representative information');
-          return false;
-        }
-        break;
-      case 3:
         if (!step4Data.address || !step4Data.phone || !step4Data.emails[0]) {
           alert(language === 'vi'
             ? 'Vui lòng điền đầy đủ thông tin liên hệ'
@@ -604,20 +564,6 @@ const CompanyVerification = () => {
           : null
       },
       step2: step2Data,
-      step3: {
-        representativeName: step3Data.representativeName,
-        position: step3Data.position,
-        idNumber: step3Data.idNumber,
-        idFrontImage: step3Data.idFrontImage
-          ? { name: step3Data.idFrontImage.name, data: step3Data.idFrontImage.data, type: step3Data.idFrontImage.type }
-          : null,
-        idBackImage: step3Data.idBackImage
-          ? { name: step3Data.idBackImage.name, data: step3Data.idBackImage.data, type: step3Data.idBackImage.type }
-          : null,
-        authorizationLetter: step3Data.authorizationLetter
-          ? { name: step3Data.authorizationLetter.name, data: step3Data.authorizationLetter.data, type: step3Data.authorizationLetter.type }
-          : null
-      },
       step4: step4Data,
       submittedAt: new Date().toISOString()
     };
@@ -628,9 +574,39 @@ const CompanyVerification = () => {
     try {
       await employerProfileService.submitVerification(verificationData);
 
+      // Auto-fill employer profile with data entered in verification form
+      try {
+        const profileUpdates = {
+          // From step 2 - Company info
+          companyName:  step2Data.companyName  || '',
+          taxCode:      step2Data.taxCode      || '',
+          industry:     step2Data.industry     || '',
+          companySize:  step2Data.companySize  || '',
+          website:      step2Data.website      || '',
+          fanpage:      step2Data.fanpage      || '',
+          description:  step2Data.description  || '',
+          foundedYear:  step2Data.foundedYear  || '',
+          // From step 4 - Contact info
+          address:      step4Data.address      || '',
+          phone:        step4Data.phone        || '',
+          email:        step4Data.emails?.[0]  || '',
+          emergencyContact: step4Data.emergencyContact || '',
+          emergencyPhone:   step4Data.emergencyPhone   || '',
+        };
+        // Remove empty fields to avoid overwriting existing data with blanks
+        const cleanUpdates = Object.fromEntries(
+          Object.entries(profileUpdates).filter(([, v]) => v !== '')
+        );
+        await employerProfileService.updateProfile(cleanUpdates);
+        console.log('✅ Employer profile auto-filled from verification data');
+      } catch (profileErr) {
+        // Non-fatal — verification still succeeded
+        console.warn('⚠️ Could not auto-fill profile from verification:', profileErr);
+      }
+
       // Mark all steps as completed
-      setCompletedSteps([0, 1, 2, 3]);
-      setCurrentStep(4); // Show completion screen
+      setCompletedSteps([0, 1, 2]);
+      setCurrentStep(3); // Show completion screen
     } catch (error) {
       console.error('Error submitting verification:', error);
       alert(language === 'vi'
@@ -645,7 +621,7 @@ const CompanyVerification = () => {
     navigate('/employer/dashboard');
   };
 
-  if (currentStep === 4) {
+  if (currentStep === 3) {
     return (
       <DashboardLayout role="employer">
         <VerificationContainer>
@@ -678,8 +654,8 @@ const CompanyVerification = () => {
         <Header>
           <h1>{language === 'vi' ? 'Xác Thực Hồ Sơ Công Ty' : 'Company Verification'}</h1>
           <p>{language === 'vi'
-            ? 'Hoàn tất 4 bước để xác thực công ty và bắt đầu đăng tin tuyển dụng'
-            : 'Complete 4 steps to verify your company and start posting jobs'}</p>
+            ? 'Hoàn tất 3 bước để xác thực công ty và bắt đầu đăng tin tuyển dụng'
+            : 'Complete 3 steps to verify your company and start posting jobs'}</p>
         </Header>
 
         <StepperContainer>
@@ -799,24 +775,14 @@ const CompanyVerification = () => {
               </FormTitle>
 
               <FormGrid>
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Tên công ty (Tiếng Việt)' : 'Company Name (Vietnamese)'} *</Label>
+                <FormGroup style={{ gridColumn: '1 / -1' }}>
+                  <Label>{language === 'vi' ? 'Tên công ty' : 'Company Name'} *</Label>
                   <Input
                     type="text"
                     value={step2Data.companyName}
                     onChange={(e) => setStep2Data({ ...step2Data, companyName: e.target.value })}
                     placeholder={language === 'vi' ? 'Công ty TNHH ABC' : 'ABC Company Ltd.'}
                     required
-                  />
-                </FormGroup>
-
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Tên công ty (Tiếng Anh)' : 'Company Name (English)'}</Label>
-                  <Input
-                    type="text"
-                    value={step2Data.companyNameEn}
-                    onChange={(e) => setStep2Data({ ...step2Data, companyNameEn: e.target.value })}
-                    placeholder="ABC Company Limited"
                   />
                 </FormGroup>
 
@@ -832,7 +798,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Năm thành lập' : 'Founded Year'} *</Label>
+                  <Label>{language === 'vi' ? 'Năm thành lập' : 'Founded Year'}</Label>
                   <Input
                     type="number"
                     value={step2Data.foundedYear}
@@ -840,30 +806,52 @@ const CompanyVerification = () => {
                     placeholder="2020"
                     min="1900"
                     max={new Date().getFullYear()}
-                    required
                   />
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Ngành nghề' : 'Industry'} *</Label>
-                  <Input
-                    type="text"
+                  <Label>{language === 'vi' ? 'Lĩnh vực' : 'Industry'} *</Label>
+                  <Select
                     value={step2Data.industry}
                     onChange={(e) => setStep2Data({ ...step2Data, industry: e.target.value })}
-                    placeholder={language === 'vi' ? 'Công nghệ thông tin' : 'Information Technology'}
                     required
-                  />
+                  >
+                    <option value="">{language === 'vi' ? '-- Chọn lĩnh vực --' : '-- Select industry --'}</option>
+                    {[
+                      { vi: 'F&B / Ẩm thực', en: 'F&B / Food & Beverage' },
+                      { vi: 'Bán lẻ / Thương mại', en: 'Retail / Commerce' },
+                      { vi: 'Công nghệ thông tin', en: 'Information Technology' },
+                      { vi: 'Xây dựng / Bất động sản', en: 'Construction / Real Estate' },
+                      { vi: 'Sản xuất / Công nghiệp', en: 'Manufacturing / Industry' },
+                      { vi: 'Giáo dục / Đào tạo', en: 'Education / Training' },
+                      { vi: 'Y tế / Dược phẩm', en: 'Healthcare / Pharmaceutical' },
+                      { vi: 'Tài chính / Ngân hàng', en: 'Finance / Banking' },
+                      { vi: 'Logistics / Vận tải', en: 'Logistics / Transport' },
+                      { vi: 'Marketing / Quảng cáo', en: 'Marketing / Advertising' },
+                      { vi: 'Du lịch / Khách sạn', en: 'Tourism / Hospitality' },
+                      { vi: 'Nông nghiệp', en: 'Agriculture' },
+                      { vi: 'Dịch vụ khác', en: 'Other Services' },
+                    ].map((opt) => (
+                      <option key={opt.vi} value={language === 'vi' ? opt.vi : opt.en}>
+                        {language === 'vi' ? opt.vi : opt.en}
+                      </option>
+                    ))}
+                  </Select>
                 </FormGroup>
 
                 <FormGroup>
                   <Label>{language === 'vi' ? 'Quy mô công ty' : 'Company Size'} *</Label>
-                  <Input
-                    type="text"
+                  <Select
                     value={step2Data.companySize}
                     onChange={(e) => setStep2Data({ ...step2Data, companySize: e.target.value })}
-                    placeholder={language === 'vi' ? '50-200 nhân viên' : '50-200 employees'}
                     required
-                  />
+                  >
+                    <option value="">{language === 'vi' ? '-- Chọn quy mô --' : '-- Select size --'}</option>
+                    <option value="1-50">{language === 'vi' ? '1 - 50 nhân viên' : '1 - 50 employees'}</option>
+                    <option value="50-100">{language === 'vi' ? '50 - 100 nhân viên' : '50 - 100 employees'}</option>
+                    <option value="100-499">{language === 'vi' ? '100 - 499 nhân viên' : '100 - 499 employees'}</option>
+                    <option value="500+">{language === 'vi' ? '500+ nhân viên' : '500+ employees'}</option>
+                  </Select>
                 </FormGroup>
 
                 <FormGroup style={{ gridColumn: '1 / -1' }}>
@@ -887,7 +875,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup style={{ gridColumn: '1 / -1' }}>
-                  <Label>{language === 'vi' ? 'Mô tả công ty' : 'Company Description'} *</Label>
+                  <Label>{language === 'vi' ? 'Mô tả công ty' : 'Company Description'}</Label>
                   <TextArea
                     value={step2Data.description}
                     onChange={(e) => setStep2Data({ ...step2Data, description: e.target.value })}
@@ -895,7 +883,6 @@ const CompanyVerification = () => {
                       ? 'Mô tả ngắn gọn về công ty, lĩnh vực hoạt động, sản phẩm/dịch vụ chính...'
                       : 'Brief description about your company, business field, main products/services...'}
                     rows={5}
-                    required
                   />
                 </FormGroup>
               </FormGrid>
@@ -913,62 +900,8 @@ const CompanyVerification = () => {
             </FormCard>
           )}
 
-          {/* Step 3: Representative Information */}
+          {/* Step 3: Contact Information */}
           {currentStep === 2 && (
-            <FormCard
-              key="step3"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-            >
-              <FormTitle>
-                <div className="icon">
-                  <User />
-                </div>
-                <h2>{language === 'vi' ? 'Thông Tin Người Đại Diện' : 'Representative Information'}</h2>
-              </FormTitle>
-
-              <FormGrid>
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Họ và tên' : 'Full Name'} *</Label>
-                  <Input
-                    type="text"
-                    value={step3Data.representativeName}
-                    onChange={(e) => setStep3Data({ ...step3Data, representativeName: e.target.value })}
-                    placeholder={language === 'vi' ? 'Nguyễn Hùng Anh' : 'John Doe'}
-                    required
-                  />
-                </FormGroup>
-
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Chức vụ' : 'Position'} *</Label>
-                  <Input
-                    type="text"
-                    value={step3Data.position}
-                    onChange={(e) => setStep3Data({ ...step3Data, position: e.target.value })}
-                    placeholder={language === 'vi' ? 'Giám đốc' : 'Director'}
-                    required
-                  />
-                </FormGroup>
-
-              </FormGrid>
-
-              <ButtonGroup>
-                <Button $variant="secondary" onClick={handleBack}>
-                  <ArrowLeft size={18} />
-                  {language === 'vi' ? 'Quay lại' : 'Back'}
-                </Button>
-                <Button $variant="primary" onClick={handleNext}>
-                  {language === 'vi' ? 'Tiếp theo' : 'Next'}
-                  <ArrowRight size={18} />
-                </Button>
-              </ButtonGroup>
-            </FormCard>
-          )}
-
-          {/* Step 4: Contact Information */}
-          {currentStep === 3 && (
             <FormCard
               key="step4"
               initial={{ opacity: 0, x: 20 }}
@@ -997,39 +930,6 @@ const CompanyVerification = () => {
               </FormGroup>
 
               <FormGrid>
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Tỉnh/Thành phố' : 'City/Province'} *</Label>
-                  <Input
-                    type="text"
-                    value={step4Data.city}
-                    onChange={(e) => setStep4Data({ ...step4Data, city: e.target.value })}
-                    placeholder={language === 'vi' ? 'TP. Hồ Chí Minh' : 'Ho Chi Minh City'}
-                    required
-                  />
-                </FormGroup>
-
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Quận/Huyện' : 'District'} *</Label>
-                  <Input
-                    type="text"
-                    value={step4Data.district}
-                    onChange={(e) => setStep4Data({ ...step4Data, district: e.target.value })}
-                    placeholder={language === 'vi' ? 'Quận 1' : 'District 1'}
-                    required
-                  />
-                </FormGroup>
-
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Phường/Xã' : 'Ward'} *</Label>
-                  <Input
-                    type="text"
-                    value={step4Data.ward}
-                    onChange={(e) => setStep4Data({ ...step4Data, ward: e.target.value })}
-                    placeholder={language === 'vi' ? 'Phường Bến Nghé' : 'Ben Nghe Ward'}
-                    required
-                  />
-                </FormGroup>
-
                 <FormGroup>
                   <Label>{language === 'vi' ? 'Số điện thoại' : 'Phone Number'} *</Label>
                   <Input

@@ -945,6 +945,7 @@ const PostJob = () => {
     title: '',
     location: '',
     jobType: 'part-time',
+    urgencyLevel: 'standard',
     workDays: '',
     workHours: '',
     salary: '',
@@ -966,22 +967,17 @@ const PostJob = () => {
         if (profile && profile.isVerified === true) {
           setVerificationStatus('approved');
         } else {
-          // Check if pending (submitted but not yet approved)
           const verificationData = profile?.verificationStatus || null;
           if (verificationData === 'pending') {
             setVerificationStatus('pending');
           } else {
             setVerificationStatus('not_started');
           }
-          if (!isEditing) {
-            setShowVerificationModal(true);
-          }
+          // Không tự động hiện modal khi vào trang
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
-        // Fallback: block access
         setVerificationStatus('not_started');
-        if (!isEditing) setShowVerificationModal(true);
       }
     };
     checkVerification();
@@ -996,6 +992,7 @@ const PostJob = () => {
         title: editingJob.title || '',
         location: editingJob.location || '',
         jobType: editingJob.jobType || 'part-time',
+        urgencyLevel: editingJob.urgencyLevel || 'standard',
         workDays: editingJob.workDays || '',
         workHours: editingJob.workHours || serializeWorkHours(parsedWorkHours),
         salary: editingJob.salary || '',
@@ -1379,7 +1376,7 @@ const PostJob = () => {
         </BackButton>
 
         {/* Verification Warning */}
-        {verificationStatus !== 'approved' && !isEditing && (
+        {verificationStatus !== '' && verificationStatus !== 'approved' && !isEditing && (
           <VerificationWarning>
             <AlertCircle />
             <div className="content">
@@ -1643,6 +1640,63 @@ const PostJob = () => {
               </InfoBox>
 
               <form onSubmit={handleSubmit}>
+                {/* Phân loại job: Tiêu chuẩn / Tuyển gấp */}
+                <FormGroup style={{ marginBottom: '20px' }}>
+                  <Label>{language === 'vi' ? 'Phân loại tin tuyển dụng *' : 'Job Classification *'}</Label>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, urgencyLevel: 'standard' }))}
+                      style={{
+                        flex: 1,
+                        padding: '14px 16px',
+                        borderRadius: '12px',
+                        border: `2px solid ${formData.urgencyLevel === 'standard' ? '#1e40af' : '#e2e8f0'}`,
+                        background: formData.urgencyLevel === 'standard' ? '#eff6ff' : '#ffffff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '4px',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: formData.urgencyLevel === 'standard' ? '#1e40af' : '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '400' }}>
+                        {language === 'vi' ? 'Tuyển dụng dài hạn, hiển thị đến hết deadline' : 'Long-term hiring, shown until deadline'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, urgencyLevel: 'urgent' }))}
+                      style={{
+                        flex: 1,
+                        padding: '14px 16px',
+                        borderRadius: '12px',
+                        border: `2px solid ${formData.urgencyLevel === 'urgent' ? '#dc2626' : '#e2e8f0'}`,
+                        background: formData.urgencyLevel === 'urgent' ? '#fef2f2' : '#ffffff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '4px',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: formData.urgencyLevel === 'urgent' ? '#dc2626' : '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {language === 'vi' ? 'Tuyển gấp' : 'Urgent Hiring'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '400' }}>
+                        {language === 'vi' ? 'Ưu tiên hiển thị, badge đỏ nổi bật cho ứng viên' : 'Priority display, red badge highlighted for candidates'}
+                      </span>
+                    </button>
+                  </div>
+                </FormGroup>
+
                 <FormRow $columns="1fr 1fr">
                   <FormGroup>
                     <Label>{language === 'vi' ? 'Tiêu đề công việc - Vị trí công việc *' : 'Job Title - Position *'}</Label>

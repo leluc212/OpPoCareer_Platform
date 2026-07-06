@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Bell, Package, CheckCircle, X } from 'lucide-react';
+import { Bell, Package, CheckCircle, CheckCircle2, AlertCircle, Briefcase, Zap, Star, X } from 'lucide-react';
 import { getNotifications, getUnreadCount, markAsRead, markAllAsRead } from '../services/notificationService';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -231,10 +231,10 @@ const NotificationBell = ({ userId, role }) => {
 
       // Handle CV-approved notification (type: 'success') — redirect to AI interview
       // Also catches old notifications that still have '/candidate/dashboard' or '/candidate/jobs' as actionUrl
-      const isCvApproved = (notification.type === 'success' || notification.type === 'CV_ACCEPTED') && notifData?.jobId;
+      const isCvApproved = (notification.type === 'success' || notification.type === 'CV_ACCEPTED' || notification.type === 'employer_cv_approved') && notifData?.jobId;
       const isDashboardUrl = url === '/candidate/dashboard' || url === '/candidate/jobs';
       
-      if (isCvApproved || (isDashboardUrl && notification.type === 'success')) {
+      if (isCvApproved || (isDashboardUrl && (notification.type === 'success' || notification.type === 'employer_cv_approved'))) {
         navigate('/candidate/jobs?tab=standard', {
           state: { selectedJobId: notifData.jobId, openInterview: true }
         });
@@ -259,14 +259,86 @@ const NotificationBell = ({ userId, role }) => {
     await loadNotifications();
   };
 
-  const getIcon = (iconType) => {
+  const getIcon = (notification) => {
+    const iconType = notification.icon;
+    const type = notification.type || '';
+    const title = (notification.title || '').toLowerCase();
+    const message = (notification.message || '').toLowerCase();
+
+    const isSuccess = title.includes('thành công') || title.includes('success') || title.includes('chấp nhận') || title.includes('accepted');
+    const isUrgent = title.includes('tuyển gấp') || title.includes('urgent') || message.includes('tuyển gấp');
+
+    // Ưu tiên detect từ nội dung trước
+    if (isSuccess) return <CheckCircle2 style={{ color: '#10B981' }} />;
+    if (isUrgent) return <Zap style={{ color: '#ef4444' }} />;
+
+    // Fallback theo type từ DB
+    switch (type) {
+      case 'success':
+      case 'CV_ACCEPTED':
+      case 'application_success':
+      case 'cv_approved':
+      case 'ai_screening_passed':
+      case 'employer_cv_approved':
+        return <CheckCircle2 style={{ color: '#10B981' }} />;
+      case 'application':
+        return <Briefcase />;
+      case 'job_urgent':
+      case 'urgent':
+        return <Zap style={{ color: '#ef4444' }} />;
+      case 'employer_review':
+        return <Star style={{ color: '#F59E0B' }} />;
+      case 'ai_screening_rejected':
+      case 'employer_cv_rejected':
+        return <AlertCircle style={{ color: '#ef4444' }} />;
+      default:
+        break;
+    }
+
+    // Fallback theo icon string từ DB
     switch (iconType) {
       case 'package':
         return <Package />;
       case 'check-circle':
-        return <CheckCircle />;
+        return <CheckCircle2 style={{ color: '#10B981' }} />;
+      case 'briefcase':
+        return <Briefcase />;
       default:
         return <Bell />;
+    }
+  };
+
+  const getColor = (notification) => {
+    const title = (notification.title || '').toLowerCase();
+    const message = (notification.message || '').toLowerCase();
+    const type = notification.type || '';
+
+    const isSuccess = title.includes('thành công') || title.includes('success') || title.includes('chấp nhận') || title.includes('accepted');
+    const isUrgent = title.includes('tuyển gấp') || title.includes('urgent') || message.includes('tuyển gấp');
+
+    if (isSuccess) return '#10B981';
+    if (isUrgent) return '#ef4444';
+
+    switch (type) {
+      case 'success':
+      case 'CV_ACCEPTED':
+      case 'application_success':
+      case 'cv_approved':
+      case 'ai_screening_passed':
+      case 'employer_cv_approved':
+        return '#10B981';
+      case 'job_urgent':
+      case 'urgent':
+        return '#ef4444';
+      case 'employer_review':
+        return '#F59E0B';
+      case 'application':
+        return '#1e40af';
+      case 'ai_screening_rejected':
+      case 'employer_cv_rejected':
+        return '#ef4444';
+      default:
+        return notification.color || '#1e40af';
     }
   };
 
@@ -317,8 +389,8 @@ const NotificationBell = ({ userId, role }) => {
                 onClick={() => handleNotificationClick(notification)}
               >
                 {!notification.read && <UnreadDot />}
-                <NotificationIcon $color={notification.color}>
-                  {getIcon(notification.icon)}
+                <NotificationIcon $color={getColor(notification)}>
+                  {getIcon(notification)}
                 </NotificationIcon>
                 <NotificationTitle>
                   {language === 'vi' ? notification.title : notification.titleEn}

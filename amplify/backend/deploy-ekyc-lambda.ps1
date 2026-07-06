@@ -9,6 +9,7 @@
 $REGION        = "ap-southeast-1"
 $FUNCTION_NAME = "ekyc-handler"
 $API_ID        = "sd7ds72m8g"       # API Gateway HTTP API — dùng chung với candidate profile
+$AUTHORIZER_ID = "w7g6id"           # CognitoAuthorizer — JWT verify bằng Cognito User Pool
 $ZIP_FILE      = "ekyc-handler.zip"
 
 Write-Host "📦 Updating ekyc_handler.py inside zip..."
@@ -90,13 +91,32 @@ $INTEGRATION_ID = (aws apigatewayv2 create-integration `
     --query "IntegrationId" --output text)
 Write-Host "✅ Integration ID: $INTEGRATION_ID"
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
-Write-Host "🛣️  Creating routes..."
-aws apigatewayv2 create-route --api-id $API_ID --route-key "POST /ekyc/ocr"              --target "integrations/$INTEGRATION_ID" --region $REGION
-aws apigatewayv2 create-route --api-id $API_ID --route-key "POST /ekyc/verify-face"      --target "integrations/$INTEGRATION_ID" --region $REGION
-aws apigatewayv2 create-route --api-id $API_ID --route-key "GET /ekyc/status/{userId}"   --target "integrations/$INTEGRATION_ID" --region $REGION
-aws apigatewayv2 create-route --api-id $API_ID --route-key "OPTIONS /ekyc/ocr"           --target "integrations/$INTEGRATION_ID" --region $REGION
-aws apigatewayv2 create-route --api-id $API_ID --route-key "OPTIONS /ekyc/verify-face"   --target "integrations/$INTEGRATION_ID" --region $REGION
+# ── Routes — POST/GET routes yêu cầu Cognito JWT, OPTIONS không cần ───────────
+Write-Host "🛣️  Creating routes with Cognito authorizer..."
+# POST /ekyc/ocr — yêu cầu đăng nhập
+aws apigatewayv2 create-route --api-id $API_ID --route-key "POST /ekyc/ocr" `
+    --target "integrations/$INTEGRATION_ID" `
+    --authorization-type JWT `
+    --authorizer-id $AUTHORIZER_ID `
+    --region $REGION
+
+# POST /ekyc/verify-face — yêu cầu đăng nhập
+aws apigatewayv2 create-route --api-id $API_ID --route-key "POST /ekyc/verify-face" `
+    --target "integrations/$INTEGRATION_ID" `
+    --authorization-type JWT `
+    --authorizer-id $AUTHORIZER_ID `
+    --region $REGION
+
+# GET /ekyc/status/{userId} — yêu cầu đăng nhập
+aws apigatewayv2 create-route --api-id $API_ID --route-key "GET /ekyc/status/{userId}" `
+    --target "integrations/$INTEGRATION_ID" `
+    --authorization-type JWT `
+    --authorizer-id $AUTHORIZER_ID `
+    --region $REGION
+
+# OPTIONS — không cần auth (CORS preflight)
+aws apigatewayv2 create-route --api-id $API_ID --route-key "OPTIONS /ekyc/ocr"         --target "integrations/$INTEGRATION_ID" --region $REGION
+aws apigatewayv2 create-route --api-id $API_ID --route-key "OPTIONS /ekyc/verify-face" --target "integrations/$INTEGRATION_ID" --region $REGION
 
 # ── Lambda invoke permission ───────────────────────────────────────────────────
 Write-Host "🔐 Adding Lambda invoke permission..."

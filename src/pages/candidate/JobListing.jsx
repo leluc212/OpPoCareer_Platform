@@ -22,9 +22,10 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { s3Images } from '../../utils/s3Images';
 import { getActiveBanners } from '../../services/bannerService';
 import { getTopSpotlightEmployerIds, filterTopSpotlightJobs } from '../../services/topSpotlightService';
-import TopSpotlightBanner from '../../components/TopSpotlightBanner';
 import TopSpotlightJobCard from '../../components/TopSpotlightJobCard';
+import VerticalAdBanner from '../../components/VerticalAdBanner';
 import { getAuthHeaders } from '../../services/authHeaders';
+import { getIdToken } from '../../services/authHeaders';
 import { requestInterviewMedia } from '../../services/interviewMediaService';
 import * as applicationService from '../../services/applicationService';
 import adminEmployerService from '../../services/adminEmployerService';
@@ -1219,56 +1220,179 @@ const ConfirmationContent = styled.div`
 
 const MainLayout = styled.div`
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 28px;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
   align-items: start;
   
+  @media (max-width: 1280px) {
+    grid-template-columns: 260px 1fr;
+  }
+
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
   }
 `;
 
-const FilterSidebar = styled(motion.aside)`
-  background: ${props => props.theme.colors.bgLight};
-  border-radius: ${props => props.theme.borderRadius.xl};
-  padding: 20px;
-  border: 1px solid ${props => props.theme.colors.border};
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-  position: sticky;
-  top: 100px;
+/* ── Cột trái chứa VerticalAdBanner ── */
+const SideVerticalBanner = styled(motion.aside)`
+  width: 280px;
   align-self: flex-start;
-  max-height: calc(100vh - 120px);
-  overflow-y: auto;
-  
+
+  @media (max-width: 1280px) {
+    width: 260px;
+  }
+
   @media (max-width: 1024px) {
-    position: static;
-    max-height: none;
-    overflow: visible;
-    margin-bottom: 24px;
+    display: none;
   }
 `;
 
-const FilterHeader = styled.div`
+const VerticalBannerWrap = styled(motion.div)`
+  position: relative;
+  width: 200px;
+  height: calc(100vh - 130px);
+  max-height: 860px;
+  min-height: 360px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  cursor: pointer;
+  border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
+  animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
+  transition: box-shadow 0.3s ease;
+  background: transparent;
+
+  /* gradient overlay mỏng từ dưới để dots dễ đọc */
+  &::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 100%);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* shine sweep animation */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,0.22) 50%,
+      rgba(255,255,255,0) 100%
+    );
+    transform: skewX(-25deg);
+    animation: ${props => props.$isTopSpotlight ? css`${shine} 3.5s infinite ease-in-out` : 'none'};
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  &:hover img {
+    transform: scale(1.04);
+  }
+
+  &:hover {
+    box-shadow: 0 12px 48px rgba(0,0,0,0.28);
+  }
+`;
+
+/* ── Bộ lọc ngang (click/hover dropdown) ── */
+const HorizontalFilterBar = styled(motion.div)`
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid ${props => props.theme.colors.border};
-  
-  h3 {
-    font-size: 18px;
-    font-weight: 700;
+`;
+
+const FilterDropdown = styled.div`
+  position: relative;
+`;
+
+const FilterDropdownTrigger = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: ${props => props.$active ? props.theme.colors.primary : props.theme.colors.bgLight};
+  color: ${props => props.$active ? '#fff' : props.theme.colors.text};
+  border: 1.5px solid ${props => props.$active ? props.theme.colors.primary : props.theme.colors.border};
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+
+  svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.2s;
+  }
+
+  &:hover {
+    background: ${props => props.$active ? props.theme.colors.primary : props.theme.colors.bgDark};
+    border-color: ${props => props.theme.colors.primary};
+  }
+`;
+
+const FilterDropdownMenu = styled.div`
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  background: ${props => props.theme.colors.bgLight};
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  padding: 8px;
+  z-index: 200;
+  max-height: 320px;
+  overflow-y: auto;
+  /* Thêm pseudo-element để lấp gap giữa trigger và menu */
+  &::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 0;
+    right: 0;
+    height: 8px;
+  }
+`;
+
+const FilterDropdownItem = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: ${props => props.theme.colors.bgDark};
+  }
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: ${props => props.theme.colors.primary};
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  span {
+    font-size: 13px;
+    font-weight: 500;
     color: ${props => props.theme.colors.text};
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    
-    svg {
-      width: 22px;
-      height: 22px;
-      color: ${props => props.theme.colors.primary};
-    }
   }
 `;
 
@@ -1289,78 +1413,23 @@ const ClearButton = styled.button`
   }
 `;
 
-const FilterSection = styled.div`
-  margin-bottom: 20px;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const FilterTitle = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  cursor: pointer;
-  user-select: none;
-  
-  h4 {
-    font-size: 15px;
-    font-weight: 600;
-    color: ${props => props.theme.colors.text};
-  }
-  
-  svg {
-    width: 18px;
-    height: 18px;
-    color: ${props => props.theme.colors.textLight};
-    transition: transform 0.2s ease;
-    transform: ${props => props.$expanded ? 'rotate(180deg)' : 'rotate(0)'};
-  }
-`;
-
-const FilterOptions = styled(motion.div)`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-`;
-
-const FilterOption = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: ${props => props.theme.borderRadius.md};
-  transition: all 0.2s ease;
-  
-  &:hover {
-    background: ${props => props.theme.colors.bgDark};
-  }
-  
-  input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    accent-color: ${props => props.theme.colors.primary};
-  }
-  
-  span {
-    font-size: 14px;
-    color: ${props => props.theme.colors.text};
-    font-weight: 500;
-  }
-  
-  small {
-    margin-left: auto;
-    font-size: 12px;
-    color: ${props => props.theme.colors.textLight};
-    font-weight: 600;
-  }
-`;
-
 const MainContent = styled.div``;
+
+/* Banner ngang trên mobile — chỉ hiện khi SideVerticalBanner bị ẩn */
+const MobileBannerSection = styled.div`
+  display: none;
+
+  @media (max-width: 1024px) {
+    display: block;
+    margin-bottom: 16px;
+
+    /* Banner dạng ngang, aspect-ratio 16:6 */
+    & > div {
+      position: static !important;
+      width: 100%;
+    }
+  }
+`;
 
 const ContentHeader = styled.div`
   display: flex;
@@ -1479,8 +1548,9 @@ const ReloadButton = styled(motion.button)`
 // Job Cards
 const JobsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: ${props => props.$viewMode === 'list' ? '1fr' : 'repeat(2, 1fr)'};
   gap: 12px;
+  align-items: stretch;
   
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
@@ -1504,8 +1574,7 @@ const BoostBannerWrap = styled(motion.div)`
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0,0,0,0.15);
   cursor: pointer;
-  aspect-ratio: 16/5;
-  background: #1a1a1a;
+  aspect-ratio: 16/6;
   border: ${props => props.$isTopSpotlight ? '3px solid #dc2626' : 'none'};
   animation: ${props => props.$isTopSpotlight ? css`${pulseSpotlight} 3s infinite ease-in-out` : 'none'};
   transition: all 0.4s ease;
@@ -1574,32 +1643,17 @@ const BannerDot = styled.button`
   `}
 `;
 
-const BoostTag = styled.div`
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(0,0,0,0.55);
-  backdrop-filter: blur(6px);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  z-index: 2;
-`;
-
 const JobCardWrapper = styled(motion.div)`
   background: ${props => props.$quickBoosted ? 'rgba(16, 185, 129, 0.04)' : (props.$highlighted ? props.theme.colors.primary + '08' : props.theme.colors.bgLight)};
   border-radius: ${props => props.theme.borderRadius.lg};
   border: ${props => props.$quickBoosted ? '2px solid #10b981' : (props.$highlighted ? `1.5px solid ${props.theme.colors.primary}` : `1px solid ${props.theme.colors.border}`)};
-  padding: 14px;
+  padding: 10px 12px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow: ${props => props.$quickBoosted ? '0 4px 20px rgba(16, 185, 129, 0.15)' : (props.$highlighted ? `0 0 20px ${props.theme.colors.primary}30` : 'none')};
   
   &::before {
@@ -1669,8 +1723,8 @@ const AiBadge = styled.span`
 
 const JobCardHeader = styled.div`
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 `;
 
 const CompanyLogo = styled.div`
@@ -1681,11 +1735,12 @@ const CompanyLogo = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: ${props => props.theme.colors.primary};
   flex-shrink: 0;
   border: 2px solid ${props => props.theme.colors.border};
+  overflow: hidden;
 `;
 
 const JobInfo = styled.div`
@@ -1694,13 +1749,14 @@ const JobInfo = styled.div`
 `;
 
 const JobTitle = styled.h3`
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: ${props => props.theme.colors.text};
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   display: flex;
   align-items: center;
   gap: 6px;
+  letter-spacing: 0.2px;
   
   &:hover {
     color: ${props => props.theme.colors.primary};
@@ -1710,55 +1766,56 @@ const JobTitle = styled.h3`
 const CompanyName = styled.div`
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 11px;
   color: ${props => props.theme.colors.textLight};
   font-weight: 500;
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   
   svg {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
   }
 `;
 
 const JobMeta = styled.div`
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 `;
 
 const MetaItem = styled.div`
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: 11px;
   color: ${props => props.theme.colors.textLight};
   font-weight: 500;
   
   svg {
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
   }
 `;
 
 const JobCardBody = styled.div`
-  margin-bottom: 12px;
+  flex: 1;
+  margin-bottom: 8px;
 `;
 
 const JobTags = styled.div`
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 `;
 
 const Tag = styled.span`
-  padding: 4px 10px;
+  padding: 2px 7px;
   background: ${props => props.theme.colors.bgLight};
   color: ${props => props.theme.colors.text};
   border-radius: ${props => props.theme.borderRadius.full};
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   border: 1px solid ${props => props.theme.colors.border};
 `;
@@ -1766,20 +1823,20 @@ const Tag = styled.span`
 const JobSalary = styled.div`
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 5px 10px;
   background: linear-gradient(135deg, ${props => props.theme.colors.success}10, ${props => props.theme.colors.success}05);
   border-radius: ${props => props.theme.borderRadius.md};
   border: 1px solid ${props => props.theme.colors.success}30;
   
   svg {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
     color: ${props => props.theme.colors.success};
   }
   
   span {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
     color: ${props => props.theme.colors.success};
   }
@@ -1789,7 +1846,7 @@ const JobCardFooter = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
+  padding-top: 8px;
   border-top: 1px solid ${props => props.theme.colors.border};
 `;
 
@@ -1812,28 +1869,28 @@ const pulseBlink = keyframes`
 `;
 
 const ActionButton = styled(motion.button)`
-  padding: 8px 14px;
+  padding: 6px 11px;
   background: ${props => props.$primary
     ? `linear-gradient(135deg, ${props.theme.colors.primary}, ${props.theme.colors.secondary})`
     : props.theme.colors.bgLight};
   color: ${props => props.$primary ? 'white' : props.theme.colors.text};
   border: 1px solid ${props => props.$primary ? 'transparent' : props.theme.colors.border};
   border-radius: ${props => props.theme.borderRadius.md};
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   transition: all 0.2s ease;
   
   svg {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
   }
   
   &:hover {
-    transform: translateY(-2px);
+    transform: translateY(-1px);
     box-shadow: 0 4px 12px ${props => props.$primary
     ? `${props.theme.colors.primary}40`
     : 'rgba(0,0,0,0.08)'};
@@ -1845,8 +1902,8 @@ const ActionButton = styled(motion.button)`
 `;
 
 const SaveButton = styled(motion.button)`
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: ${props => props.theme.borderRadius.md};
   border: 1px solid ${props => props.theme.colors.border};
   background: ${props => props.$saved ? props.theme.colors.warning + '15' : props.theme.colors.bgLight};
@@ -1858,8 +1915,8 @@ const SaveButton = styled(motion.button)`
   transition: all 0.2s ease;
   
   svg {
-    width: 16px;
-    height: 16px;
+    width: 13px;
+    height: 13px;
     fill: ${props => props.$saved ? props.theme.colors.warning : 'none'};
   }
   
@@ -2285,23 +2342,17 @@ const translateTag = (tagStr, language) => {
 
 // Translate job type
 const translateJobType = (typeStr, language) => {
-  // If it's a shift job (contains "Ca"), return Part-time
-  if (typeStr.includes('Ca ')) {
-    return language === 'vi' ? 'Part-time' : 'Part-time';
+  if (!typeStr) return language === 'vi' ? 'Part-time' : 'Part-time';
+  
+  const lower = typeStr.toLowerCase();
+  
+  // Map full-time
+  if (lower.includes('full')) {
+    return language === 'vi' ? 'Full-time' : 'Full-time';
   }
-
-  // If already Part-time, keep it
-  if (typeStr.includes('Part-time')) {
-    return typeStr;
-  }
-
-  // For English translation
-  if (language === 'en') {
-    return typeStr
-      .replace(/Part-time/g, 'Part-time');
-  }
-
-  return typeStr;
+  
+  // Map part-time (default for shift jobs, etc)
+  return language === 'vi' ? 'Part-time' : 'Part-time';
 };
 
 
@@ -2351,27 +2402,79 @@ const JobListing = () => {
   // employerProfiles: { [userId]: { companyLogo, companyName } }
   const [employerProfiles, setEmployerProfiles] = useState({});
 
+  // Fetch employer profile by employerId (individual call, used after jobs load)
+  const fetchEmployerProfile = async (employerId) => {
+    try {
+      const token = await getIdToken();
+      if (!token) return null;
+      
+      const response = await fetch(`${import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod'}/profile/${employerId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        console.warn(`Failed to fetch employer profile for ${employerId}`);
+        return null;
+      }
+      
+      const result = await response.json();
+      return result.success && result.data ? result.data : null;
+    } catch (error) {
+      console.error(`Error fetching employer profile ${employerId}:`, error);
+      return null;
+    }
+  };
+
+  // Fetch all unique employer profiles from job list
   useEffect(() => {
     let cancelled = false;
-    adminEmployerService.getAllEmployers()
-      .then(employers => {
-        if (cancelled) return;
-        const logos = {};
-        const profiles = {};
-        employers.forEach(emp => {
-          if (!emp.userId) return;
-          if (emp.companyLogo) logos[emp.userId] = emp.companyLogo;
-          profiles[emp.userId] = {
-            companyLogo: emp.companyLogo || null,
-            companyName: emp.companyName || emp.businessName || null,
-          };
-        });
-        setEmployerLogos(logos);
-        setEmployerProfiles(profiles);
-      })
-      .catch(err => console.error('Error fetching employer logos:', err));
+    const uniqueEmployerIds = new Set();
+    
+    // Collect unique employerIds from all jobs
+    [...dynamoDBJobs, ...quickJobs].forEach(job => {
+      if (job.employerId) uniqueEmployerIds.add(job.employerId);
+    });
+    
+    if (uniqueEmployerIds.size === 0) return;
+    
+    // Only fetch employers not yet in profiles map
+    const toFetch = Array.from(uniqueEmployerIds).filter(id => !(id in employerProfiles));
+    if (toFetch.length === 0) return;
+    
+    // Fetch profiles for each new employer
+    Promise.all(
+      toFetch.map(id => fetchEmployerProfile(id))
+    ).then(profiles => {
+      if (cancelled) return;
+      
+      const profilesMap = {};
+      const logosMap = {};
+      
+      profiles.forEach(profile => {
+        if (!profile || !profile.userId) return;
+        
+        profilesMap[profile.userId] = {
+          companyLogo: profile.companyLogo || null,
+          companyName: profile.companyName || profile.businessName || null,
+        };
+        
+        if (profile.companyLogo) {
+          logosMap[profile.userId] = profile.companyLogo;
+        }
+      });
+      
+      setEmployerProfiles(prev => ({ ...prev, ...profilesMap }));
+      setEmployerLogos(prev => ({ ...prev, ...logosMap }));
+      console.log(`✅ Fetched ${profiles.filter(p => p).length} employer profiles`);
+    }).catch(err => {
+      console.error('Error fetching employer profiles:', err);
+    });
+    
     return () => { cancelled = true; };
-  }, []);
+  }, [dynamoDBJobs.length, quickJobs.length]); // Re-run when jobs change
 
   // AI Screening & Interview states
   const [pendingApplication, setPendingApplication] = useState(null);
@@ -3089,6 +3192,26 @@ Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được
     // employer — the CV must not be sent.
     if (finalResult === 'fail') {
       console.log('🚫 CV failed AI Round 1 screening — application not submitted, employer not notified.');
+
+      // Thông báo 3: AI_REJECTED — gửi cho ứng viên khi CV không qua sàng lọc AI
+      try {
+        const { createCandidateAiScreeningRejectedNotification } = await import('../../services/notificationService');
+        const { fetchAuthSession } = await import('aws-amplify/auth');
+        const session = await fetchAuthSession();
+        const candidateId = session.tokens?.idToken?.payload?.sub;
+        if (candidateId) {
+          await createCandidateAiScreeningRejectedNotification({
+            candidateId,
+            jobTitle: job.title,
+            companyName: job.company,
+            jobId: job.idJob || job.jobID || job.id
+          });
+          console.log('✅ Sent AI_REJECTED notification to candidate:', candidateId);
+        }
+      } catch (notifErr) {
+        console.error('Failed to send AI screening rejected notification:', notifErr);
+      }
+
       setAiScreeningLoading(false);
       return;
     }
@@ -3468,7 +3591,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               lat: lat, // Add coordinates for location-based filtering
               lng: lng,
               salary: formatSalaryFromDB(job.salary, language === 'vi' ? 'Thỏa thuận' : 'Negotiable', job.salaryUnit),
-              type: (language === 'vi' ? 'Bán thời gian' : 'Part-time'),
+              type: (() => {
+                const raw = (job.jobType || '').toLowerCase();
+                if (raw.includes('full')) return 'Full-time';
+                return 'Part-time';
+              })(),
               category: String(job.category || 'standard'), // Use category from DynamoDB
               tags: job.tags ? String(job.tags).split(',').map(t => String(t).trim()).filter(t => t) : [],
               postedDate: String(job.createdAt || new Date().toISOString()),
@@ -3487,7 +3614,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               isAiScreeningEnabled: !!job.isAiScreeningEnabled,
               customQuestions: job.customQuestions || [],
               isFromDynamoDB: true, // Flag to identify DynamoDB jobs
-              quickBoost: !!job.quickBoost
+              quickBoost: !!job.quickBoost,
+              urgencyLevel: job.urgencyLevel || 'standard',
+              urgent: job.urgencyLevel === 'urgent' // standard jobs can also be urgent
             };
           } catch (err) {
             console.error('Error transforming job:', job, err);
@@ -3612,6 +3741,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               isQuickJob: true, // Flag to identify quick jobs
               urgent: true, // Mark as urgent to show red badge
               isUrgent: true,
+              urgencyLevel: 'urgent',
               quickBoost: !!job.quickBoost
             };
           } catch (err) {
@@ -3730,10 +3860,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState('list');
   const [expandedFilters, setExpandedFilters] = useState({
-    workTime: true,
-    postTime: true,
-    salary: true,
-    company: true
+    jobPosition: true,
+    workArea: true,
+    fbModel: true,
   });
 
   // Filter states
@@ -3741,6 +3870,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   const [selectedPostTimes, setSelectedPostTimes] = useState([]);
   const [selectedSalaryRanges, setSelectedSalaryRanges] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
+  const [selectedJobPositions, setSelectedJobPositions] = useState([]);
+  const [selectedWorkAreas, setSelectedWorkAreas] = useState([]);
+  const [selectedFbModels, setSelectedFbModels] = useState([]);
+  const [openFilter, setOpenFilter] = useState(null); // 'position' | 'area' | 'fb' | null
 
   // Location-based states
   const [userLocation, setUserLocation] = useState(null);
@@ -3820,7 +3953,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
   // Automatically request location when job search status is active and user switches to shift tab
   useEffect(() => {
-    if (isAvailable && jobCategory === 'shift' && !userLocation) {
+    if (isAvailable && jobCategory === 'shift' && !userLocation && locationWatchIdRef.current === null) {
       getUserLocation();
     }
   }, [isAvailable, jobCategory]);
@@ -3965,10 +4098,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
   // Auto scroll when filters change
   useEffect(() => {
-    if (selectedWorkTimes.length > 0 || selectedPostTimes.length > 0 || selectedSalaryRanges.length > 0 || selectedCompanies.length > 0) {
+    if (selectedJobPositions.length > 0 || selectedWorkAreas.length > 0 || selectedFbModels.length > 0 ||
+        selectedWorkTimes.length > 0 || selectedPostTimes.length > 0 || selectedSalaryRanges.length > 0 || selectedCompanies.length > 0) {
       scrollToResults();
     }
-  }, [selectedWorkTimes, selectedPostTimes, selectedSalaryRanges, selectedCompanies]);
+  }, [selectedJobPositions, selectedWorkAreas, selectedFbModels, selectedWorkTimes, selectedPostTimes, selectedSalaryRanges, selectedCompanies]);
 
   // Reset nearby jobs when switching from shift to standard category
   useEffect(() => {
@@ -4003,28 +4137,46 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       navigator.geolocation.clearWatch(locationWatchIdRef.current);
     }
 
-    locationWatchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
-        setIsLoadingLocation(false);
-        setShowNearbyJobs(true);
-      },
-      (error) => {
-        console.error('Error getting location:', error);
-        setUserLocation(null);
-        setIsLoadingLocation(false);
-        setShowNearbyJobs(true);
-        toast.error(language === 'vi' ? 'Vui lòng cấp quyền truy cập vị trí (GPS) để tìm việc tuyển gấp gần bạn.' : 'Please allow location GPS access to find urgent jobs nearby.');
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 10000,
-        timeout: 5000
-      }
-    );
+    const startWatch = () => {
+      locationWatchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          setIsLoadingLocation(false);
+          setShowNearbyJobs(true);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setUserLocation(null);
+          setIsLoadingLocation(false);
+          setShowNearbyJobs(true);
+          toast.error(language === 'vi' ? 'Vui lòng cấp quyền truy cập vị trí (GPS) để tìm việc tuyển gấp gần bạn.' : 'Please allow location GPS access to find urgent jobs nearby.');
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 10000,
+          timeout: 5000
+        }
+      );
+    };
+
+    // Check permission first — if already granted, start silently without popup
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        if (result.state === 'granted' || result.state === 'prompt') {
+          startWatch();
+        } else {
+          // denied
+          setIsLoadingLocation(false);
+          setShowNearbyJobs(false);
+          toast.error(language === 'vi' ? 'Vui lòng cấp quyền truy cập vị trí (GPS) để tìm việc tuyển gấp gần bạn.' : 'Please allow location GPS access to find urgent jobs nearby.');
+        }
+      }).catch(() => startWatch());
+    } else {
+      startWatch();
+    }
   };
 
   const handleSaveJob = async (jobId, e) => {
@@ -4687,6 +4839,24 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     );
   };
 
+  const toggleJobPosition = (pos) => {
+    setSelectedJobPositions(prev =>
+      prev.includes(pos) ? prev.filter(p => p !== pos) : [...prev, pos]
+    );
+  };
+
+  const toggleWorkArea = (area) => {
+    setSelectedWorkAreas(prev =>
+      prev.includes(area) ? prev.filter(a => a !== area) : [...prev, area]
+    );
+  };
+
+  const toggleFbModel = (model) => {
+    setSelectedFbModels(prev =>
+      prev.includes(model) ? prev.filter(m => m !== model) : [...prev, model]
+    );
+  };
+
   const clearAllFilters = () => {
     setSearchKeyword('');
     setSelectedLocation('');
@@ -4694,6 +4864,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     setSelectedPostTimes([]);
     setSelectedSalaryRanges([]);
     setSelectedCompanies([]);
+    setSelectedJobPositions([]);
+    setSelectedWorkAreas([]);
+    setSelectedFbModels([]);
     setQuickFilter('all');
   };
 
@@ -4802,7 +4975,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     const count = (fn) => base.filter(fn).length;
     return {
       // fulltime count removed
-      parttime: count(j => (j.type || '').toLowerCase().includes('part-time') || (j.type || '').toLowerCase().includes('bán thời gian')),
+      parttime: count(j => (j.type || '').toLowerCase().includes('part-time')),
       morning: count(j => getShiftBucket(j) === 'sáng'),
       afternoon: count(j => getShiftBucket(j) === 'chiều'),
       night: count(j => getShiftBucket(j) === 'đêm'),
@@ -4936,6 +5109,35 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       );
     }
 
+    // Filter by job position
+    if (selectedJobPositions.length > 0) {
+      result = result.filter(job =>
+        selectedJobPositions.some(pos =>
+          (job.title || '').toLowerCase().includes(pos.toLowerCase()) ||
+          (job.tags || []).some(tag => tag.toLowerCase().includes(pos.toLowerCase()))
+        )
+      );
+    }
+
+    // Filter by work area (district/city)
+    if (selectedWorkAreas.length > 0) {
+      result = result.filter(job =>
+        selectedWorkAreas.some(area =>
+          (job.location || '').toLowerCase().includes(area.toLowerCase())
+        )
+      );
+    }
+
+    // Filter by F&B model
+    if (selectedFbModels.length > 0) {
+      result = result.filter(job =>
+        selectedFbModels.some(model => {
+          const haystack = `${job.title || ''} ${job.company || ''} ${(job.tags || []).join(' ')} ${job.description || ''}`.toLowerCase();
+          return haystack.includes(model.toLowerCase());
+        })
+      );
+    }
+
     // Quick filters
     if (quickFilter === 'urgent') result = result.filter(job => job.urgent);
     if (quickFilter === 'featured') result = result.filter(job => job.featured);
@@ -4961,7 +5163,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         case 'views':
           return b.views - a.views;
         case 'newest':
-          // Sort by posted time (newer jobs first - smaller hours value = more recent)
+          // Sort by posted time (newer jobs first)
+          if (a.createdAt && b.createdAt) {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+          }
           return parseTimeToHours(a.postedAt) - parseTimeToHours(b.postedAt);
         case 'relevant':
         default:
@@ -4971,7 +5176,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
     return result;
   }, [jobCategory, searchKeyword, selectedLocation, selectedWorkTimes, selectedPostTimes,
-    selectedSalaryRanges, selectedCompanies,
+    selectedSalaryRanges, selectedCompanies, selectedJobPositions, selectedWorkAreas, selectedFbModels,
     quickFilter, savedJobs, sortBy, userLocation, showNearbyJobs, nearbyJobs, allJobs, showSavedJobsOnly, hotSearchEmployerIds]);
 
   // Compute search suggestions
@@ -5211,7 +5416,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                               {isAvailable ? <CheckCircle /> : <XCircle />}
                               {isAvailable
                                 ? (language === 'vi' ? 'Trạng thái tìm việc đang bật' : 'Job Search Active')
-                                : (language === 'vi' ? 'Trạng thái tìm việc đang tắt' : 'Job Search Paused')}
+                                : (language === 'vi' ? 'Trạng thái tìm việc gấp đang tắt' : 'Job Search Paused')}
                             </div>
                           </div>
                           <ToggleButton
@@ -5237,7 +5442,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                       $active={showNearbyJobs}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={getUserLocation}
+                      onClick={() => {
+                        if (showNearbyJobs) {
+                          // Tắt vị trí
+                          setShowNearbyJobs(false);
+                          setUserLocation(null);
+                          if (locationWatchIdRef.current !== null && navigator.geolocation) {
+                            navigator.geolocation.clearWatch(locationWatchIdRef.current);
+                            locationWatchIdRef.current = null;
+                          }
+                        } else {
+                          getUserLocation();
+                        }
+                      }}
                       disabled={isLoadingLocation}
                     >
                       {isLoadingLocation ? (
@@ -5336,113 +5553,142 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
         {/* Main Content with Filters */}
         <MainLayout>
-          {/* Filter Sidebar */}
-          <FilterSidebar
+          {/* Banner dọc bên trái — dùng VerticalAdBanner */}
+          <SideVerticalBanner
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <FilterHeader>
-              <h3>
-                <SlidersHorizontal />
-                {language === 'vi' ? 'Bộ lọc' : 'Filters'}
-              </h3>
-              <ClearButton onClick={clearAllFilters}>{language === 'vi' ? 'Xóa' : 'Clear'}</ClearButton>
-            </FilterHeader>
-
-            <FilterSection>
-              <FilterTitle onClick={() => toggleFilter('workTime')} $expanded={expandedFilters.workTime}>
-                <h4>{language === 'vi' ? 'Thời gian làm việc' : 'Work Time'}</h4>
-                <ChevronDown />
-              </FilterTitle>
-              {expandedFilters.workTime && (
-                <FilterOptions
-                  initial={{ height: 0 }}
-                  animate={{ height: 'auto' }}
-                  exit={{ height: 0 }}
-                >
-                  {[
-                    { val: 'morning', label: language === 'vi' ? 'Buổi sáng (trước 12:00)' : 'Morning (< 12:00)' },
-                    { val: 'afternoon', label: language === 'vi' ? 'Buổi chiều (12:00 – 18:00)' : 'Afternoon (12:00 - 18:00)' },
-                    { val: 'evening', label: language === 'vi' ? 'Buổi tối (sau 18:00)' : 'Evening (> 18:00)' },
-                    { val: 'weekend', label: language === 'vi' ? 'Cuối tuần (T7 & CN)' : 'Weekend (Sat & Sun)' },
-                  ].map(opt => (
-                    <FilterOption key={opt.val}>
-                      <input type="checkbox"
-                        checked={selectedWorkTimes.includes(opt.val)}
-                        onChange={() => toggleWorkTime(opt.val)}
-                      />
-                      <span>{opt.label}</span>
-                    </FilterOption>
-                  ))}
-                </FilterOptions>
-              )}
-            </FilterSection>
-
-            <FilterSection>
-              <FilterTitle onClick={() => toggleFilter('postTime')} $expanded={expandedFilters.postTime}>
-                <h4>{language === 'vi' ? 'Mới đăng' : 'Date Posted'}</h4>
-                <ChevronDown />
-              </FilterTitle>
-              {expandedFilters.postTime && (
-                <FilterOptions
-                  initial={{ height: 0 }}
-                  animate={{ height: 'auto' }}
-                  exit={{ height: 0 }}
-                >
-                  {[
-                    { val: '3d', label: language === 'vi' ? 'Trong 3 ngày' : 'Within 3 days' },
-                    { val: '1w', label: language === 'vi' ? 'Trong 1 tuần' : 'Within 1 week' },
-                    { val: '2w', label: language === 'vi' ? 'Trong 2 tuần' : 'Within 2 weeks' }
-                  ].map(opt => (
-                    <FilterOption key={opt.val}>
-                      <input type="checkbox"
-                        checked={selectedPostTimes.includes(opt.val)}
-                        onChange={() => togglePostTime(opt.val)}
-                      />
-                      <span>{opt.label}</span>
-                    </FilterOption>
-                  ))}
-                </FilterOptions>
-              )}
-            </FilterSection>
-
-            <FilterSection>
-              <FilterTitle onClick={() => toggleFilter('salary')} $expanded={expandedFilters.salary}>
-                <h4>{language === 'vi' ? 'Thu nhập/giờ' : 'Hourly Rate'}</h4>
-                <ChevronDown />
-              </FilterTitle>
-              {expandedFilters.salary && (
-                <FilterOptions
-                  initial={{ height: 0 }}
-                  animate={{ height: 'auto' }}
-                  exit={{ height: 0 }}
-                >
-                  <FilterOption>
-                    <input type="checkbox" id="25k-30k"
-                      checked={selectedSalaryRanges.includes('25k-30k')}
-                      onChange={() => toggleSalaryRange('25k-30k')} />
-                    <span>{language === 'vi' ? '25.000 – 30.000đ/giờ' : '25k – 30k/hr'}</span>
-                  </FilterOption>
-                  <FilterOption>
-                    <input type="checkbox" id="30k-35k"
-                      checked={selectedSalaryRanges.includes('30k-35k')}
-                      onChange={() => toggleSalaryRange('30k-35k')} />
-                    <span>{language === 'vi' ? '30.000 – 35.000đ/giờ' : '30k – 35k/hr'}</span>
-                  </FilterOption>
-                  <FilterOption>
-                    <input type="checkbox" id="over-35k"
-                      checked={selectedSalaryRanges.includes('over-35k')}
-                      onChange={() => toggleSalaryRange('over-35k')} />
-                    <span>{language === 'vi' ? 'Trên 35.000đ/giờ' : 'Over 35k/hr'}</span>
-                  </FilterOption>
-                </FilterOptions>
-              )}
-            </FilterSection>
-          </FilterSidebar>
+            <VerticalAdBanner
+              jobs={topSpotlightJobs}
+              banners={banners}
+              onJobClick={handleJobClick}
+              language={language}
+            />
+          </SideVerticalBanner>
 
           {/* Jobs List */}
           <MainContent ref={resultsRef}>
+            {/* Banner mobile — hiện dạng ngang trên tablet/mobile */}
+            <MobileBannerSection>
+              <VerticalAdBanner
+                jobs={topSpotlightJobs}
+                banners={banners}
+                onJobClick={handleJobClick}
+                language={language}
+              />
+            </MobileBannerSection>
+
+            {/* Bộ lọc ngang */}
+            <HorizontalFilterBar
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <SlidersHorizontal size={16} style={{ color: 'var(--color-textLight, #64748b)', flexShrink: 0 }} />
+
+              {/* Vị trí công việc */}
+              <FilterDropdown
+                onMouseEnter={() => setOpenFilter('position')}
+                onMouseLeave={() => setOpenFilter(null)}
+              >
+                <FilterDropdownTrigger $active={selectedJobPositions.length > 0}>
+                  Vị trí {selectedJobPositions.length > 0 && `(${selectedJobPositions.length})`}
+                  <ChevronDown />
+                </FilterDropdownTrigger>
+                {openFilter === 'position' && (
+                  <FilterDropdownMenu>
+                    {[
+                      { val: 'phục vụ', label: 'Phục vụ' },
+                      { val: 'pha chế', label: 'Pha chế' },
+                      { val: 'bếp', label: 'Bếp' },
+                      { val: 'thu ngân', label: 'Thu ngân' },
+                      { val: 'tạp vụ', label: 'Tạp vụ' },
+                      { val: 'quản lý', label: 'Quản lý ca' },
+                      { val: 'giao hàng', label: 'Giao hàng' },
+                    ].map(opt => (
+                      <FilterDropdownItem key={opt.val}>
+                        <input type="checkbox"
+                          checked={selectedJobPositions.includes(opt.val)}
+                          onChange={() => toggleJobPosition(opt.val)}
+                        />
+                        <span>{opt.label}</span>
+                      </FilterDropdownItem>
+                    ))}
+                  </FilterDropdownMenu>
+                )}
+              </FilterDropdown>
+
+              {/* Khu vực */}
+              <FilterDropdown
+                onMouseEnter={() => setOpenFilter('area')}
+                onMouseLeave={() => setOpenFilter(null)}
+              >
+                <FilterDropdownTrigger $active={selectedWorkAreas.length > 0}>
+                  Khu vực {selectedWorkAreas.length > 0 && `(${selectedWorkAreas.length})`}
+                  <ChevronDown />
+                </FilterDropdownTrigger>
+                {openFilter === 'area' && (
+                  <FilterDropdownMenu>
+                    {[
+                      'Quận 1', 'Quận 2', 'Quận 3', 'Quận 4', 'Quận 5',
+                      'Quận 6', 'Quận 7', 'Quận 8', 'Quận 9', 'Quận 10',
+                      'Quận 11', 'Quận 12', 'Bình Thạnh', 'Gò Vấp',
+                      'Phú Nhuận', 'Tân Bình', 'Tân Phú', 'Bình Tân',
+                      'Thủ Đức', 'Nhà Bè', 'Hóc Môn', 'Bình Chánh', 'Củ Chi',
+                    ].map(area => (
+                      <FilterDropdownItem key={area}>
+                        <input type="checkbox"
+                          checked={selectedWorkAreas.includes(area)}
+                          onChange={() => toggleWorkArea(area)}
+                        />
+                        <span>{area}</span>
+                      </FilterDropdownItem>
+                    ))}
+                  </FilterDropdownMenu>
+                )}
+              </FilterDropdown>
+
+              {/* Loại hình F&B */}
+              <FilterDropdown
+                onMouseEnter={() => setOpenFilter('fb')}
+                onMouseLeave={() => setOpenFilter(null)}
+              >
+                <FilterDropdownTrigger $active={selectedFbModels.length > 0}>
+                  Loại hình F&B {selectedFbModels.length > 0 && `(${selectedFbModels.length})`}
+                  <ChevronDown />
+                </FilterDropdownTrigger>
+                {openFilter === 'fb' && (
+                  <FilterDropdownMenu>
+                    {[
+                      { val: 'cafe', label: 'Cafe / Cà phê' },
+                      { val: 'trà sữa', label: 'Trà sữa' },
+                      { val: 'bakery', label: 'Bakery / Tiệm bánh' },
+                      { val: 'nhà hàng', label: 'Nhà hàng' },
+                      { val: 'quán ăn', label: 'Quán ăn bình dân' },
+                      { val: 'bar', label: 'Bar / Pub / Lounge' },
+                      { val: 'fast food', label: 'Thức ăn nhanh' },
+                      { val: 'buffet', label: 'Buffet' },
+                      { val: 'khách sạn', label: 'Khách sạn' },
+                    ].map(opt => (
+                      <FilterDropdownItem key={opt.val}>
+                        <input type="checkbox"
+                          checked={selectedFbModels.includes(opt.val)}
+                          onChange={() => toggleFbModel(opt.val)}
+                        />
+                        <span>{opt.label}</span>
+                      </FilterDropdownItem>
+                    ))}
+                  </FilterDropdownMenu>
+                )}
+              </FilterDropdown>
+
+              {/* Nút xóa filter */}
+              {(selectedJobPositions.length > 0 || selectedWorkAreas.length > 0 || selectedFbModels.length > 0) && (
+                <ClearButton onClick={clearAllFilters}>Xóa lọc</ClearButton>
+              )}
+            </HorizontalFilterBar>
+
             <ContentHeader>
               <ResultsInfo>
                 <h2>
@@ -5502,68 +5748,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               </ViewControls>
             </ContentHeader>
 
-            {/* ── Vị trí 1: Top Spotlight Banner Carousel ── */}
-            {topSpotlightJobs.length > 0 && (
-              <TopSpotlightBanner
-                jobs={topSpotlightJobs}
-                onJobClick={handleJobClick}
-                language={language}
-              />
-            )}
-
-            {/* Banner Carousel (ảnh admin upload — chỉ hiện khi không có Top Spotlight) */}
-            {topSpotlightJobs.length === 0 && (
-            <BoostBannerWrap
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.22 }}
-              whileHover={{ y: -2 }}
-              onClick={() => {
-                const link = banners[currentBannerIndex]?.linkUrl;
-                if (link) window.open(link, '_blank', 'noopener,noreferrer');
-              }}
-              style={{ cursor: banners[currentBannerIndex]?.linkUrl ? 'pointer' : 'default' }}
-              $isTopSpotlight={banners[currentBannerIndex]?.isTopSpotlight}
-            >
-              {banners[currentBannerIndex]?.isTopSpotlight ? (
-                <BoostTag style={{
-                  background: 'linear-gradient(135deg, #DC2626 0%, #F59E0B 100%)',
-                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  padding: '5px 14px',
-                  letterSpacing: '0.5px'
-                }}>
-                  <Sparkles size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
-                  {language === 'vi' ? 'TOP SPOTLIGHT' : 'TOP SPOTLIGHT'}
-                </BoostTag>
-              ) : (
-                <BoostTag>🔥Hot deal</BoostTag>
-              )}
-              <motion.img
-                key={currentBannerIndex}
-                initial={{ opacity: 0.8 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6 }}
-                src={banners[currentBannerIndex].src}
-                alt={banners[currentBannerIndex].alt}
-                style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }}
-              />
-              <BannerDots>
-                {banners.map((_, idx) => (
-                  <BannerDot
-                    key={idx}
-                    $active={currentBannerIndex === idx}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCurrentBannerIndex(idx);
-                    }}
-                  />
-                ))}
-              </BannerDots>
-            </BoostBannerWrap>
-            )}
-
-            <JobsGrid>
+            <JobsGrid $viewMode={viewMode}>
               {filteredJobs.length > 0 ? (
                 (() => {
                   // ── Vị trí 2: Chèn TopSpotlightJobCard xen kẽ mỗi 4 job thường ──
@@ -5640,15 +5825,15 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                     <>
                       <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
                       <p style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
-                        {language === 'vi' ? 'Bật trạng thái làm việc và vị trí để tìm công việc' : 'Enable work status and location to see jobs'}
+                        {language === 'vi' ? 'Bạn cần bật trạng thái Tìm việc gấp để có thể thao tác.' : 'Enable work status and location to see jobs'}
                       </p>
                       <p style={{ fontSize: '15px', color: '#6b7280', marginBottom: '20px' }}>
                         {language === 'vi'
                           ? !isAvailable
-                            ? 'Vui lòng bật trạng thái làm việc ở phía trên, '
+                            ? 'Vui lòng bật trạng thái làm việc ở phía trên. '
                             : `Vui lòng nhấn nút "Tìm việc gần tôi" ở phía trên để tìm các công việc tuyển gấp trong bán kính ${nearbyRadius}km`
                           : !isAvailable
-                            ? 'Please enable work status above, '
+                            ? 'Please enable work status above. '
                             : ''}
                       </p>
                     </>
@@ -5708,17 +5893,17 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           </div>
           <h3>
             {isAvailable
-              ? (language === 'vi' ? 'Tắt tìm việc?' : 'Pause Job Search?')
-              : (language === 'vi' ? 'Bật tìm việc?' : 'Activate Job Search?')}
+              ? (language === 'vi' ? 'Tắt Tìm Việc Gấp?' : 'Pause Urgent Job Search?')
+              : (language === 'vi' ? 'Tìm Việc Gấp?' : 'Activate Job Search?')}
           </h3>
           <p>
             {isAvailable
               ? (language === 'vi'
-                ? 'Hồ sơ của bạn sẽ bị ẩn với nhà tuyển dụng và bạn sẽ không nhận được thông báo về cơ hội việc làm.'
-                : 'Your profile will be hidden from employers and you will not receive job opportunity notifications.')
+                ? 'Bạn sẽ không nhận được thông báo và đề xuất khi Nhà Tuyển Dụng đăng bài tuyển gấp.'
+                : 'You will not receive notifications and suggestions when employers post urgent job listings.')
               : (language === 'vi'
-                ? 'Hồ sơ của bạn sẽ hiển thị với nhà tuyển dụng và bạn sẽ nhận được thông báo về cơ hội việc làm phù hợp.'
-                : 'Your profile will be visible to employers and you will receive notifications about suitable job opportunities.')}
+                ? 'Bạn sẽ nhận được thông báo và đề xuất khi Nhà Tuyển Dụng đăng bài tuyển gấp.'
+                : 'You will receive notifications and suggestions when employers post urgent job listings.')}
           </p>
           <div className="button-group">
             <button className="cancel" onClick={() => setShowConfirmModal(false)}>
@@ -7179,9 +7364,47 @@ if (typeof document !== 'undefined') {
 
 // Job Card Component
 const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, showDistance = false, language, isHighlighted, isHotSearch }) => {
+  const [showFullAddress, setShowFullAddress] = React.useState(false);
+
   const getCompanyInitial = (company) => {
     return company.charAt(0).toUpperCase();
   };
+
+  // Truncate address: show first ~40 chars or up to first comma
+  const getShortAddress = (addr) => {
+    if (!addr) return '';
+    const commaIdx = addr.indexOf(',');
+    const short = commaIdx > 0 && commaIdx <= 45 ? addr.slice(0, commaIdx) : addr.slice(0, 42);
+    return short.trim();
+  };
+
+  const locationText = job.location || '';
+  const needsTruncate = locationText.length > 45;
+  const displayAddress = (!needsTruncate || showFullAddress) ? locationText : getShortAddress(locationText);
+
+  // Format workDate for quick jobs (YYYY-MM-DD → DD/MM/YYYY)
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const [year, month, day] = dateStr.split('-');
+      return `${day}/${month}/${year}`;
+    } catch (e) { return dateStr; }
+  };
+
+  // "Vị trí phù hợp" suggestion based on tags/title keywords
+  const getSuggestionText = () => {
+    const titleLower = (job.title || '').toLowerCase();
+    const tagsJoined = (job.tags || []).join(' ').toLowerCase();
+    if (titleLower.includes('pha chế') || tagsJoined.includes('pha chế') || tagsJoined.includes('bartender')) {
+      return language === 'vi' ? 'Vị trí này có thể phù hợp với bạn' : 'This position may suit you';
+    }
+    if (titleLower.includes('phục vụ') || tagsJoined.includes('phục vụ') || tagsJoined.includes('f&b')) {
+      return language === 'vi' ? 'Vị trí này có thể phù hợp với bạn' : 'This position may suit you';
+    }
+    return null;
+  };
+
+  const suggestionText = getSuggestionText();
 
   return (
     <JobCardWrapper
@@ -7221,9 +7444,27 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
             <DynamicTranslate text={job.company} showIndicator={false} />
           </CompanyName>
           <JobMeta>
-            <MetaItem>
-              <MapPin />
-              <DynamicTranslate text={job.location} showIndicator={false} />
+            <MetaItem style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <MapPin style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span>
+                <DynamicTranslate text={displayAddress} showIndicator={false} />
+                {needsTruncate && !showFullAddress && (
+                  <span
+                    onClick={(e) => { e.stopPropagation(); setShowFullAddress(true); }}
+                    style={{ color: '#3b82f6', fontWeight: 600, cursor: 'pointer', marginLeft: '4px', whiteSpace: 'nowrap' }}
+                  >
+                    {language === 'vi' ? 'xem thêm' : 'more'}
+                  </span>
+                )}
+                {needsTruncate && showFullAddress && (
+                  <span
+                    onClick={(e) => { e.stopPropagation(); setShowFullAddress(false); }}
+                    style={{ color: '#3b82f6', fontWeight: 600, cursor: 'pointer', marginLeft: '4px', whiteSpace: 'nowrap' }}
+                  >
+                    {language === 'vi' ? 'rút gọn' : 'less'}
+                  </span>
+                )}
+              </span>
             </MetaItem>
             {showDistance && job.distance !== undefined && (
               <MetaItem style={{ color: '#10b981', fontWeight: '600' }}>
@@ -7243,9 +7484,13 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
             </MetaItem>
           </JobMeta>
         </JobInfo>
-        {(job.urgent || job.quickBoost) && (
-          <div style={{ marginLeft: 'auto', alignSelf: 'flex-start' }}>
+        {(job.urgent || job.quickBoost) ? (
+          <div style={{ marginLeft: 'auto', alignSelf: 'flex-start', flexShrink: 0 }}>
             <StatusBadge status="urgent" size="sm">{language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</StatusBadge>
+          </div>
+        ) : (
+          <div style={{ marginLeft: 'auto', alignSelf: 'flex-start', flexShrink: 0 }}>
+            <StatusBadge status="active" size="sm">{language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}</StatusBadge>
           </div>
         )}
       </JobCardHeader>
@@ -7262,23 +7507,56 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
           <span>{translateSalary(job.category === 'shift' ? calculateShiftSalary(job, language) : job.salary, language)}</span>
         </JobSalary>
 
-        {(job.workDate || job.workDays) && (
+        {job.workHours && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: 'var(--text-secondary, #6B7280)' }}>
+            <Clock size={13} style={{ flexShrink: 0 }} />
+            <span>
+              {language === 'vi' ? 'Thời gian:' : 'Hours:'}
+              {' '}
+              {job.workHours}
+            </span>
+          </div>
+        )}
+
+        {job.category !== 'shift' && job.workDays && job.workDays !== 'undefined' && job.workDays !== '' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: 'var(--text-secondary, #6B7280)' }}>
             <Calendar size={13} style={{ flexShrink: 0 }} />
             <span>
               {language === 'vi' ? 'Hạn nộp:' : 'Deadline:'}
               {' '}
-              {job.workDate
-                ? (() => {
-                    try {
-                      const [year, month, day] = job.workDate.split('-');
-                      return `${day}/${month}/${year}`;
-                    } catch (e) {
-                      return job.workDate;
-                    }
-                  })()
-                : job.workDays}
+              {formatDate(job.workDays)}
             </span>
+          </div>
+        )}
+
+        {job.isQuickJob && job.workDate && job.workDate !== 'undefined' && job.workDate !== '' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px', color: '#ef4444', fontWeight: 600 }}>
+            <Calendar size={13} style={{ flexShrink: 0 }} />
+            <span>
+              {language === 'vi' ? 'Ngày làm:' : 'Work date:'}
+              {' '}
+              {formatDate(job.workDate)}
+            </span>
+          </div>
+        )}
+
+        {/* "Vị trí này có thể phù hợp với bạn" */}
+        {suggestionText && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            marginTop: '7px',
+            padding: '4px 8px',
+            background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+            borderRadius: '6px',
+            border: '1px solid #bfdbfe',
+            fontSize: '11px',
+            fontWeight: 600,
+            color: '#1d4ed8',
+          }}>
+            <span style={{ fontSize: '13px' }}>✨</span>
+            {suggestionText}
           </div>
         )}
       </JobCardBody>

@@ -99,10 +99,34 @@ def strip_prefix(b64):
     return b64 or ''
 
 def extract_user_id(event):
+    """
+    Lấy user sub từ Cognito JWT đã được API Gateway verify.
+    Ưu tiên requestContext.authorizer (đã verify chữ ký) thay vì tự decode token.
+    Fallback: tự decode payload nếu không qua authorizer (local dev / direct call).
+    """
+    # 1. Ưu tiên: lấy từ requestContext.authorizer — API Gateway đã verify JWT signature
+    try:
+        req_ctx = event.get('requestContext') or {}
+        # HTTP API (v2 payload) → requestContext.authorizer.jwt.claims
+        jwt_claims = (req_ctx.get('authorizer') or {}).get('jwt', {}).get('claims') or {}
+        sub = jwt_claims.get('sub')
+        if sub:
+            return sub
+        # REST API (v1 payload) → requestContext.authorizer.claims
+        claims = (req_ctx.get('authorizer') or {}).get('claims') or {}
+        sub = claims.get('sub')
+        if sub:
+            return sub
+    except Exception:
+        pass
+
+    # 2. Fallback: tự decode JWT payload (chỉ dùng khi không qua Cognito authorizer)
+    # LƯU Ý: không verify signature — chỉ dùng để lấy userId, không dùng cho authorization
     try:
         auth = ((event.get('headers') or {}).get('authorization') or
                 (event.get('headers') or {}).get('Authorization') or '')
-        if not auth.startswith('Bearer '): return None
+        if not auth.startswith('Bearer '):
+            return None
         p = auth[7:].split('.')[1]
         p += '=' * (4 - len(p) % 4)
         return json.loads(base64.b64decode(p).decode()).get('sub')
@@ -118,7 +142,10 @@ def load_creds():
         raise
 
 def get_auth(creds):
-    """Trả (bearer_token, token_id, token_key). Tự refresh khi hết hạn."""
+    """Trả (bearer_token, token_id, token_key). Tự refresh khi hết hạn.
+    Nếu tất cả refresh đều fail (VNPT không support), dùng token trong secret
+    và để VNPT quyết định — không block luồng vì exp check phía client.
+    """
     now      = int(time.time())
     token    = creds.get('bearer_token', '')
     tid      = creds.get('token_id', '')
@@ -138,7 +165,7 @@ def get_auth(creds):
         print(f'Token OK exp in {exp-now}s')
         return token, tid, tkey
 
-    print('Token expired, refreshing...')
+    print(f'Token exp={exp} now={now} diff={exp-now}s, attempting refresh...')
     
     # Thử client_credentials grant type trước (cho tk thật tế, scope=idgv2 hoặc read)
     for scope in ['idgv2', 'read']:
@@ -201,7 +228,11 @@ def get_auth(creds):
     except Exception as e:
         print(f'password grant failed: {e}')
 
-    _token_cache.update({'bearer': token, 'exp': now + 60, 'token_id': tid, 'token_key': tkey})
+    # Tất cả refresh đều fail (VNPT không support auto-refresh với tài khoản này).
+    # Dùng token trong secret và cache 30 phút — tránh spam VNPT token endpoint.
+    # VNPT server là nơi quyết định cuối cùng token có hợp lệ không.
+    print(f'All refresh attempts failed. Using existing token from secret (may be expired by clock). VNPT will decide.')
+    _token_cache.update({'bearer': token, 'exp': now + 1800, 'token_id': tid, 'token_key': tkey})
     return token, tid, tkey
 
 
@@ -646,6 +677,11 @@ def lambda_handler(event, context):
         return {'statusCode': 200, 'headers': get_cors_headers(), 'body': ''}
 
     user_id = extract_user_id(event)
+    print(f'user_id={user_id}')
+
+    # Nếu không có user_id và không phải OPTIONS → từ chối ngay
+    if not user_id:
+        return resp(401, {'success': False, 'errorMsg': 'Cần đăng nhập'})
 
     try:
         if method == 'POST' and path == '/ekyc/ocr':

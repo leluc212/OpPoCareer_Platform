@@ -2506,6 +2506,7 @@ const JobListing = () => {
   const [interviewInputText, setInterviewInputText] = useState('');
   const [interviewQuestionCount, setInterviewQuestionCount] = useState(0);
   const [interviewMediaByTurn, setInterviewMediaByTurn] = useState({});
+  const [mockQuestions, setMockQuestions] = useState([]);
 
   const currentInterviewMedia = interviewMediaByTurn[interviewQuestionCount] || null;
   const hasReadyInterviewVideo = currentInterviewMedia?.status === 'ready' && Boolean(currentInterviewMedia?.videoUrl);
@@ -3344,10 +3345,46 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setInterviewSessionId("mock-session-id");
-      const initialQuestion = language === 'vi'
-        ? `Chào bạn, tôi là AI Interviewer. Cảm ơn bạn đã ứng tuyển vào vị trí ${job.title}. Bạn có thể tự giới thiệu ngắn gọn về bản thân và kinh nghiệm làm việc liên quan được không?`
-        : `Hello, I'm the AI Interviewer. Thank you for applying for the ${job.title} role. Could you briefly introduce yourself and share your relevant work experience?`;
 
+      const isVi = language === 'vi';
+      const customQ = job.customQuestions || [];
+      const questionsList = [];
+
+      // Q0 (initial): Greeting & Self-Introduction
+      questionsList.push(isVi
+        ? `Chào bạn, tôi là AI Interviewer. Cảm ơn bạn đã ứng tuyển vào vị trí ${job.title}. Bạn có thể tự giới thiệu ngắn gọn về bản thân và kinh nghiệm làm việc liên quan được không?`
+        : `Hello, I'm the AI Interviewer. Thank you for applying for the ${job.title} role. Could you briefly introduce yourself and share your relevant work experience?`);
+
+      // Q1: Simple Experience
+      questionsList.push(isVi
+        ? "Cảm ơn phần giới thiệu của bạn. Trước khi đi vào các câu hỏi chuyên sâu, bạn có thể chia sẻ một chút về nhiệm vụ hàng ngày bạn thích làm nhất ở công việc cũ không?"
+        : "Thank you for the introduction. Before we go deeper, could you share a bit about what daily task you enjoyed doing the most at your previous job?");
+
+      // Q2: Technical / CV-based
+      questionsList.push(isVi
+        ? "Dựa vào kinh nghiệm bạn đã chia sẻ, bạn có thể kể thêm về một kỹ năng chuyên môn hoặc quy trình vận hành nào bạn tự tin nhất và đã áp dụng hiệu quả trong công việc trước đây không?"
+        : "Based on the experience you shared, could you tell me more about a professional skill or operational process you're most confident in and have applied effectively in your previous work?");
+
+      // Q3: Situation Handling (Xử lý tình huống khó)
+      questionsList.push(isVi
+        ? "Bạn có thể chia sẻ về một tình huống khó khăn hoặc sự cố thực tế bạn từng gặp trong công việc — ví dụ khách hàng khó tính phàn nàn, thiếu người trong giờ cao điểm, hoặc bất đồng với đồng nghiệp — và cách bạn đã giải quyết nó không?"
+        : "Could you share about a difficult situation or real problem you encountered at work — for example a difficult customer complaint, being short-staffed during peak hours, or a disagreement with a colleague — and how you resolved it?");
+
+      // Custom questions from Employer
+      customQ.forEach(q => {
+        questionsList.push(isVi
+          ? `Đây là câu hỏi từ phía Nhà tuyển dụng: ${q}`
+          : `This is a question from the Employer: ${q}`);
+      });
+
+      // Last real question: Salary & Work Expectations
+      questionsList.push(isVi
+        ? "Tuyệt vời. Cuối cùng, bạn có mong muốn gì về mức lương hoặc chế độ đãi ngộ, và bạn có thể bắt đầu đi làm từ khi nào?"
+        : "Great. Lastly, what are your expectations regarding salary or benefits, and when would you be available to start?");
+
+      setMockQuestions(questionsList);
+
+      const initialQuestion = questionsList[0];
       setInterviewMessages([{
         text: initialQuestion,
         isMe: false,
@@ -3407,44 +3444,20 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         const nextTimeStr = new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
 
         const isVi = language === 'vi';
+        const questionIndex = interviewQuestionCount; // 1-indexed current, maps to next question in array
 
-        if (interviewQuestionCount === 1) {
-          const nextQuestion = isVi
-            ? "Cảm ơn phần giới thiệu của bạn. Trước khi đi vào các câu hỏi chuyên sâu, bạn có thể chia sẻ một chút về nhiệm vụ hàng ngày bạn thích làm nhất ở công việc cũ không?"
-            : "Thank you for the introduction. Before we go deeper, could you share a bit about what daily task you enjoyed doing the most at your previous job?";
-
+        if (questionIndex < mockQuestions.length) {
+          // There are more questions to ask
+          const nextQuestion = mockQuestions[questionIndex];
           setInterviewMessages(prev => [...prev, {
             text: nextQuestion,
             isMe: false,
             time: nextTimeStr
           }]);
-          setInterviewQuestionCount(2);
-          speakVietnamese(nextQuestion);
-        } else if (interviewQuestionCount === 2) {
-          const nextQuestion = isVi
-            ? "Cảm ơn câu trả lời của bạn. Bây giờ, bạn có thể chia sẻ thêm về cách bạn giải quyết một tình huống khách hàng phàn nàn hoặc gặp khó khăn khi làm việc nhóm không?"
-            : "Thank you for your answer. Now, could you share how you handle a customer complaint or a difficult situation when working in a team?";
-
-          setInterviewMessages(prev => [...prev, {
-            text: nextQuestion,
-            isMe: false,
-            time: nextTimeStr
-          }]);
-          setInterviewQuestionCount(3);
-          speakVietnamese(nextQuestion);
-        } else if (interviewQuestionCount === 3) {
-          const nextQuestion = isVi
-            ? "Tuyệt vời. Cuối cùng, bạn có mong muốn gì về mức lương hoặc chế độ đãi ngộ, và bạn có thể bắt đầu đi làm từ khi nào?"
-            : "Great. Lastly, what are your expectations regarding salary or benefits, and when would you be available to start?";
-
-          setInterviewMessages(prev => [...prev, {
-            text: nextQuestion,
-            isMe: false,
-            time: nextTimeStr
-          }]);
-          setInterviewQuestionCount(4);
+          setInterviewQuestionCount(questionIndex + 1);
           speakVietnamese(nextQuestion);
         } else {
+          // All questions answered — finish interview
           setInterviewFinished(true);
           exitFullscreenMode();
           const score = Math.floor(Math.random() * 15) + 75; // Score 75-89

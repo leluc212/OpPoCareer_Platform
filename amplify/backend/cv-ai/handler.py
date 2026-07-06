@@ -1241,6 +1241,13 @@ Lưu ý: Không được tự tiện thay đổi hoặc bỏ qua câu hỏi này
 [Nội dung câu hỏi cho lượt này]:
 Ở bước (3), dựa vào CV của ứng viên và bản mô tả công việc (JD), hãy đặt MỘT câu hỏi phỏng vấn kỹ thuật hoặc tình huống chuyên môn thực tế và sâu sắc để thử thách năng lực của ứng viên.
 """
+        elif question == "Situation Handling Question":
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+Ở bước (3), hãy đặt MỘT câu hỏi về kinh nghiệm xử lý tình huống khó hoặc giải quyết sự cố thực tế trong công việc F&B (ví dụ: đối phó với khách hàng giận dữ/khó tính, xử lý sai sót khi phục vụ/pha chế, thiếu người trong giờ cao điểm, hoặc giải quyết xung đột với đồng nghiệp/cấp trên). Hãy yêu cầu ứng viên kể lại cách họ đã giải quyết tình huống đó và bài học rút ra.
+"""
         elif question == "Salary and Work Expectations":
             return f"""
 {preamble}
@@ -2051,12 +2058,11 @@ def lambda_handler(event, context):
                 job_title, job_description, cv_text, custom_questions
             )
             
-            turns = ["Greeting and Self-Introduction", "Simple Experience Question", "Technical Question based on CV/JD"]
+            turns = ["Greeting and Self-Introduction", "Simple Experience Question", "Technical Question based on CV/JD", "Situation Handling Question"]
             if custom_questions:
                 for q in custom_questions:
                     turns.append(f"Custom Question: {q}")
-            else:
-                turns.append("Salary and Work Expectations")
+            turns.append("Salary and Work Expectations")
             turns.append("Candidate Questions & Wrap up")
             
             session = {

@@ -1703,14 +1703,8 @@ const AdminDashboard = () => {
                                     companyName: req.employerName,
                                     candidateName: req.candidateName,
                                     changeRequestType: cr.reasonType,
-                                    applicationId: req.applicationId
                                   })
                                 ]);
-                                if (result.recommendations) {
-                                  setActiveRecommendations(result.recommendations);
-                                  setRecJobTitle(result.jobTitle || req.jobTitle || 'Ca làm');
-                                  setShowRecsModal(true);
-                                }
                               } catch (e) {
                                 alert(language === 'vi' ? `Lỗi: ${e.message}` : `Error: ${e.message}`);
                               } finally {

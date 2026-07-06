@@ -1497,7 +1497,7 @@ const AdminWallet = () => {
         const candidateConfirmed = !!completedApp;
         
         let status = 'held';
-        if (job.status === 'deleted') {
+        if (job.status === 'deleted' || job.status === 'ĐÃ_HOÀN_TRẢ' || job.status === 'refunded') {
           status = 'refunded';
         } else if (completedApp) {
           status = 'released';
@@ -1507,8 +1507,11 @@ const AdminWallet = () => {
         const hourlyRate = Number(job.hourlyRate || 0);
         const amount = Number(job.totalSalary) || (hourlyRate * totalHours) || 0;
 
-        const assignedApp = completedApp || pendingCandidateApp || jobApps.find(app => ['accepted', 'approved', 'reviewed'].includes(app.status)) || jobApps[0];
-        const candidateName = assignedApp ? (assignedApp.fullName || assignedApp.candidateName || assignedApp.candidateEmail || assignedApp.candidateId) : null;
+        const replacedApps = jobApps.filter(app => app.status === 'ĐÃ_BỊ_THAY_THẾ');
+        const replacedCandidateNames = replacedApps.map(app => app.fullName || app.candidateName || app.candidateEmail || app.candidateId).filter(Boolean);
+
+        const activeApp = completedApp || pendingCandidateApp || jobApps.find(app => ['accepted', 'approved', 'reviewed'].includes(app.status) && app.status !== 'ĐÃ_BỊ_THAY_THẾ');
+        const candidateName = activeApp ? (activeApp.fullName || activeApp.candidateName || activeApp.candidateEmail || activeApp.candidateId) : null;
         const employerName = job.companyName || job.employerEmail || job.employerId || (language === 'vi' ? 'Chưa rõ' : 'Unknown');
 
         return {
@@ -1523,7 +1526,8 @@ const AdminWallet = () => {
           totalHours: totalHours,
           hourlyRate: hourlyRate,
           employerName,
-          candidateName
+          candidateName,
+          replacedCandidateNames
         };
       }).filter(ej => ej.amount > 0);
 
@@ -2845,9 +2849,28 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                           <div className="detail-value" style={{ fontSize: 15 }}>{selectedEscrowJob.employerName || (language === 'vi' ? 'Chưa rõ' : 'Unknown')}</div>
                         </EscrowDetailBox>
                         <EscrowDetailBox>
-                          <div className="detail-label"><Users size={14} /> {language === 'vi' ? 'Ứng viên' : 'Candidate'}</div>
-                          <div className="detail-value" style={{ fontSize: 15 }}>{selectedEscrowJob.candidateName || (language === 'vi' ? 'Chưa có' : 'None')}</div>
+                          <div className="detail-label">
+                            <Users size={14} />{' '}
+                            {selectedEscrowJob.replacedCandidateNames && selectedEscrowJob.replacedCandidateNames.length > 0
+                              ? (language === 'vi' ? 'Ứng viên thay thế' : 'Replacement Candidate')
+                              : (language === 'vi' ? 'Ứng viên' : 'Candidate')}
+                          </div>
+                          <div className="detail-value" style={{ fontSize: 15, color: selectedEscrowJob.replacedCandidateNames && selectedEscrowJob.replacedCandidateNames.length > 0 ? '#10B981' : 'inherit', fontWeight: selectedEscrowJob.replacedCandidateNames && selectedEscrowJob.replacedCandidateNames.length > 0 ? 700 : 500 }}>
+                            {selectedEscrowJob.candidateName || (language === 'vi' ? 'Chưa có' : 'None')}
+                          </div>
                         </EscrowDetailBox>
+                        {selectedEscrowJob.replacedCandidateNames && selectedEscrowJob.replacedCandidateNames.length > 0 && (
+                          <EscrowDetailBox $bg="#FEF2F2" $borderColor="#FCA5A5" $valueColor="#EF4444">
+                            <div className="detail-label">
+                              <Users size={14} /> {language === 'vi' ? 'Ứng viên bị thay thế' : 'Replaced Candidate(s)'}
+                            </div>
+                            <div className="detail-value" style={{ fontSize: 13, color: '#EF4444', textDecoration: 'line-through' }}>
+                              {selectedEscrowJob.replacedCandidateNames.map((name, idx) => (
+                                <div key={idx} style={{ marginTop: idx > 0 ? '4px' : '0' }}>👤 {name}</div>
+                              ))}
+                            </div>
+                          </EscrowDetailBox>
+                        )}
                         <EscrowDetailBox>
                           <div className="detail-label"><Clock size={14} /> {language === 'vi' ? 'Số giờ làm' : 'Working Hours'}</div>
                           <div className="detail-value">{selectedEscrowJob.totalHours}h</div>

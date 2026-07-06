@@ -115,6 +115,12 @@ def lambda_handler(event, context):
             application_id = path.split('/')[-2]
             print(f"✅ Matched update application status route: application_id={application_id}")
             return update_application_status(event, application_id, candidate_id, create_response)
+
+        # PUT /applications/{applicationId}/reject-replacement - Employer: reject replacement worker
+        elif http_method == 'PUT' and normalized_path.endswith('/reject-replacement'):
+            application_id = normalized_path.split('/')[-2]
+            print(f"✅ Matched reject replacement route: application_id={application_id}")
+            return reject_replacement_worker(event, application_id, candidate_id, create_response)
         
         else:
             return create_response(404, {'error': f'Route not found: {http_method} {path}'})
@@ -453,6 +459,133 @@ def get_job_applications(job_id, user_id, create_response):
         })
     except Exception as e:
         print(f"❌ Error getting job applications: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+def reject_replacement_worker(event, application_id, user_id, create_response):
+    """Employer rejects the replacement worker and requests 85% refund back to employer wallet."""
+    try:
+        # 1. Fetch current application (replaced worker A)
+        app_item = applications_table.get_item(
+            Key={'applicationId': application_id},
+            ConsistentRead=True
+        ).get('Item')
+        if not app_item:
+            return create_response(404, {'error': 'Replaced application not found'})
+            
+        employer_id = app_item.get('employerId')
+        if employer_id != user_id:
+            return create_response(403, {'error': 'Forbidden - You are not the employer for this job'})
+            
+        job_id = app_item.get('jobId')
+        if not job_id:
+            return create_response(400, {'error': 'Job ID not found on application'})
+            
+        now_iso = datetime.utcnow().isoformat() + 'Z'
+        
+        # 2. Find any active replacement candidate application
+        job_apps = []
+        try:
+            job_apps = applications_table.query(
+                IndexName='JobIndex',
+                KeyConditionExpression='jobId = :jid',
+                ExpressionAttributeValues={':jid': str(job_id)}
+            ).get('Items', [])
+        except Exception as qe:
+            print(f"⚠️ Could not query applications for job {job_id}: {qe}")
+            
+        replacement_app = None
+        for ja in job_apps:
+            if ja.get('applicationId') != application_id and ja.get('status') in ['accepted', 'active', 'completed_pending_candidate', 'completed']:
+                replacement_app = ja
+                break
+                
+        # 3. Update replacement candidate's application status to ĐÃ_BỊ_THAY_THẾ if it exists
+        if replacement_app:
+            applications_table.update_item(
+                Key={'applicationId': replacement_app['applicationId']},
+                UpdateExpression='SET #status = :replaced, updatedAt = :now REMOVE chatMessages',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':replaced': 'ĐÃ_BỊ_THAY_THẾ',
+                    ':now': now_iso
+                }
+            )
+            print(f"✅ Replacement worker application {replacement_app['applicationId']} status updated to ĐÃ_BỊ_THAY_THẾ")
+            
+        # 4. Fetch job details from quick_jobs_table to calculate salary
+        job_salary = Decimal('0')
+        qj = {}
+        try:
+            qj_resp = quick_jobs_table.get_item(Key={'idJob': str(job_id)})
+            if 'Item' in qj_resp:
+                qj = qj_resp['Item']
+                total_salary = Decimal(str(qj.get('totalSalary') or 0))
+                hourly_rate = Decimal(str(qj.get('hourlyRate') or 0))
+                total_hours = Decimal(str(qj.get('totalHours') or 0))
+                job_salary = total_salary if total_salary > 0 else (hourly_rate * total_hours)
+        except Exception as je:
+            print(f"⚠️ Could not fetch job for replacement rejection: {je}")
+            
+        refund_amount = (job_salary * Decimal('0.85')).to_integral_value()
+        
+        # 5. Refund 85% back to Employer's wallet balance
+        if refund_amount > 0 and employer_id:
+            employer_table = dynamodb.Table('EmployerProfiles')
+            try:
+                emp_resp = employer_table.get_item(Key={'userId': employer_id})
+                if 'Item' in emp_resp:
+                    emp_profile = emp_resp['Item']
+                    current_bal = emp_profile.get('walletBalance', Decimal('0'))
+                    new_bal = current_bal + refund_amount
+                    
+                    # Append refund transaction record
+                    txn_id = f"TXN-REF-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+                    txn_record = {
+                        'transactionId': txn_id,
+                        'type': 'credit',
+                        'amount': refund_amount,
+                        'description': f"Hoàn trả 85% lương tin tuyển gấp ID {job_id} do từ chối ứng viên thay thế",
+                        'timestamp': now_iso,
+                        'status': 'completed'
+                    }
+                    txs = emp_profile.get('walletTransactions', [])
+                    txs.insert(0, txn_record)
+                    
+                    # Update employer profile
+                    employer_table.update_item(
+                        Key={'userId': employer_id},
+                        UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
+                        ExpressionAttributeValues={
+                            ':bal': new_bal,
+                            ':txs': txs,
+                            ':updatedAt': now_iso
+                        }
+                    )
+                    print(f"✅ Refunded {refund_amount} VND back to employer {employer_id} (Rejected replacement worker)")
+            except Exception as we:
+                print(f"⚠️ Could not update employer walletBalance for refund: {we}")
+                
+        # 6. Update job status to ĐÃ_HOÀN_TRẢ
+        if qj:
+            try:
+                quick_jobs_table.update_item(
+                    Key={'idJob': str(job_id)},
+                    UpdateExpression='SET #status = :refunded, updatedAt = :now REMOVE currentWorkerId',
+                    ExpressionAttributeNames={'#status': 'status'},
+                    ExpressionAttributeValues={':refunded': 'ĐÃ_HOÀN_TRẢ', ':now': now_iso}
+                )
+                print(f"✅ Job {job_id} status updated to ĐÃ_HOÀN_TRẢ")
+            except Exception as je:
+                print(f"⚠️ Could not update job status to ĐÃ_HOÀN_TRẢ: {je}")
+                
+        return create_response(200, {
+            'success': True,
+            'message': 'Đã từ chối ứng viên thay thế và hoàn trả 85% tiền cọc về ví của bạn.',
+            'refundAmount': int(refund_amount)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in reject_replacement_worker: {str(e)}")
         return create_response(500, {'error': str(e)})
 
 def update_application_status(event, application_id, user_id, create_response):
@@ -799,8 +932,42 @@ def list_change_requests(create_response):
 
         # ── Enrich employer & worker names ────────────────────────────────────
         # Thu thập unique IDs cần lookup (bỏ qua rỗng / None)
-        employer_ids = list({app['employerId'] for app in applications if app.get('employerId')})
-        worker_ids   = list({app['candidateId'] for app in applications if app.get('candidateId')})
+        employer_ids_set = {app['employerId'] for app in applications if app.get('employerId')}
+        worker_ids_set   = {app['candidateId'] for app in applications if app.get('candidateId')}
+
+        # Tìm ứng viên thay thế cho từng request
+        for app in applications:
+            job_id = app.get('jobId')
+            old_worker_id = app.get('candidateId')
+            replacement_worker_id = None
+            replacement_accepted_at = None
+            if job_id:
+                try:
+                    # Query các application của job này
+                    job_apps = applications_table.query(
+                        IndexName='JobIndex',
+                        KeyConditionExpression='jobId = :jid',
+                        ExpressionAttributeValues={':jid': str(job_id)}
+                    ).get('Items', [])
+                    
+                    # Tìm app đã nhận việc (status = accepted, completed, completed_pending_candidate, pending_change, change_approved)
+                    for ja in job_apps:
+                        if ja.get('candidateId') != old_worker_id:
+                            status = ja.get('status')
+                            if status in ('accepted', 'completed', 'completed_pending_candidate', 'pending_change', 'change_approved'):
+                                replacement_worker_id = ja.get('candidateId')
+                                replacement_accepted_at = ja.get('acceptedAt') or ja.get('updatedAt') or ja.get('appliedAt')
+                                break
+                except Exception as e:
+                    print(f"⚠️ Could not find replacement worker for app {app.get('applicationId')}: {e}")
+            
+            if replacement_worker_id:
+                app['replacementCandidateId'] = replacement_worker_id
+                app['replacementCandidateAcceptedAt'] = replacement_accepted_at
+                worker_ids_set.add(replacement_worker_id)
+
+        employer_ids = list(employer_ids_set)
+        worker_ids   = list(worker_ids_set)
 
         employer_name_map = {}  # employerId → companyName
         worker_name_map   = {}  # candidateId → display name
@@ -847,6 +1014,7 @@ def list_change_requests(create_response):
         for app in applications:
             eid = app.get('employerId', '')
             wid = app.get('candidateId', '')
+            rep_wid = app.get('replacementCandidateId', '')
             app['employerName'] = (
                 app.get('employerName')
                 or app.get('companyName')
@@ -856,6 +1024,11 @@ def list_change_requests(create_response):
                 app.get('candidateName')
                 or worker_name_map.get(wid, '')
             )
+            if rep_wid:
+                app['replacementCandidateName'] = worker_name_map.get(rep_wid, '') or '(Chưa xác định)'
+            else:
+                app['replacementCandidateName'] = '---'
+                app['replacementCandidateAcceptedAt'] = None
         # ─────────────────────────────────────────────────────────────────────
 
         # FIX Bug 2 (backend): Sort by updatedAt DESC (mới nhất lên đầu), áp dụng cho mọi trạng thái
@@ -1048,8 +1221,23 @@ def approve_change_request(event, application_id, create_response):
         reason_type   = change_req.get('reasonType', '')
         reason_detail = change_req.get('reasonDetail') or change_req.get('reason', '')
 
-        # Lấy thêm thông tin job từ quick_jobs_table và MỞ LẠI job để tuyển người mới
+        # Lấy thêm thông tin job từ quick_jobs_table và kiểm tra xem đã có ứng viên bị thay thế trước đó chưa
         qj = {}
+        has_previous_replacement = False
+        if job_id:
+            try:
+                job_apps = applications_table.query(
+                    IndexName='JobIndex',
+                    KeyConditionExpression='jobId = :jid',
+                    ExpressionAttributeValues={':jid': str(job_id)}
+                ).get('Items', [])
+                for ja in job_apps:
+                    if ja.get('status') == 'ĐÃ_BỊ_THAY_THẾ' and ja.get('applicationId') != application_id:
+                        has_previous_replacement = True
+                        break
+            except Exception as qe:
+                print(f"⚠️ Could not check for previous replacement applications: {qe}")
+
         if job_id:
             try:
                 qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
@@ -1061,14 +1249,68 @@ def approve_change_request(event, application_id, create_response):
                     if start_t and end_t:
                         job_shift = f"{start_t} - {end_t}"
                     job_workdate = job_workdate or qj.get('workDate', '')
-                    # Mở lại job — KHÔNG huỷ, chỉ đổi về ĐANG_TUYỂN để nhận ứng viên mới
-                    quick_jobs_table.update_item(
-                        Key={'idJob': str(job_id)},
-                        UpdateExpression='SET #status = :open, updatedAt = :now REMOVE currentWorkerId',
-                        ExpressionAttributeNames={'#status': 'status'},
-                        ExpressionAttributeValues={':open': 'ĐANG_TUYỂN', ':now': now_iso}
-                    )
-                    print(f"✅ Job {job_id} status reopened to ĐANG_TUYỂN (ready for new applicant)")
+
+                    if has_previous_replacement:
+                        # Hủy/đổi lần 2: Hoàn tiền 85% về ví Employer, chuyển trạng thái job sang ĐÃ_HOÀN_TRẢ
+                        total_salary = Decimal(str(qj.get('totalSalary') or 0))
+                        hourly_rate = Decimal(str(qj.get('hourlyRate') or 0))
+                        total_hours = Decimal(str(qj.get('totalHours') or 0))
+                        job_salary = total_salary if total_salary > 0 else (hourly_rate * total_hours)
+                        refund_amount = (job_salary * Decimal('0.85')).to_integral_value()
+
+                        if refund_amount > 0 and employer_id:
+                            employer_table = dynamodb.Table('EmployerProfiles')
+                            try:
+                                emp_resp = employer_table.get_item(Key={'userId': employer_id})
+                                if 'Item' in emp_resp:
+                                    emp_profile = emp_resp['Item']
+                                    current_bal = emp_profile.get('walletBalance', Decimal('0'))
+                                    new_bal = current_bal + refund_amount
+
+                                    # Tạo giao dịch hoàn trả
+                                    txn_id = f"TXN-REF-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+                                    txn_record = {
+                                        'transactionId': txn_id,
+                                        'type': 'credit',
+                                        'amount': refund_amount,
+                                        'description': f"Hoàn trả 85% lương tin tuyển gấp ID {job_id} do hủy/đổi nhân viên lần 2",
+                                        'timestamp': now_iso,
+                                        'status': 'completed'
+                                    }
+                                    txs = emp_profile.get('walletTransactions', [])
+                                    txs.insert(0, txn_record)
+
+                                    # Cập nhật ví nhà tuyển dụng
+                                    employer_table.update_item(
+                                        Key={'userId': employer_id},
+                                        UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
+                                        ExpressionAttributeValues={
+                                            ':bal': new_bal,
+                                            ':txs': txs,
+                                            ':updatedAt': now_iso
+                                        }
+                                    )
+                                    print(f"✅ Refunded {refund_amount} VND back to employer {employer_id} (Second replacement cancellation)")
+                            except Exception as we:
+                                print(f"⚠️ Could not update employer walletBalance for refund: {we}")
+
+                        # Cập nhật trạng thái job thành ĐÃ_HOÀN_TRẢ
+                        quick_jobs_table.update_item(
+                            Key={'idJob': str(job_id)},
+                            UpdateExpression='SET #status = :refunded, updatedAt = :now REMOVE currentWorkerId',
+                            ExpressionAttributeNames={'#status': 'status'},
+                            ExpressionAttributeValues={':refunded': 'ĐÃ_HOÀN_TRẢ', ':now': now_iso}
+                        )
+                        print(f"✅ Job {job_id} status updated to ĐÃ_HOÀN_TRẢ (refunded 85% to employer)")
+                    else:
+                        # Hủy/đổi lần 1: Mở lại job — KHÔNG huỷ, chỉ đổi về active để nhận ứng viên mới
+                        quick_jobs_table.update_item(
+                            Key={'idJob': str(job_id)},
+                            UpdateExpression='SET #status = :open, updatedAt = :now REMOVE currentWorkerId',
+                            ExpressionAttributeNames={'#status': 'status'},
+                            ExpressionAttributeValues={':open': 'active', ':now': now_iso}
+                        )
+                        print(f"✅ Job {job_id} status reopened to active (ready for new applicant)")
             except Exception as je:
                 print(f"⚠️ Could not update job status: {je}")
 
@@ -1098,23 +1340,29 @@ def approve_change_request(event, application_id, create_response):
         )
         print(f"✅ Worker replaced for applicationId={application_id}, workerId={worker_id}, job {job_id} reopened")
 
-        # AI Recommender for urgent worker replacement
+        # AI Recommender for urgent worker replacement (Chỉ đề xuất nếu mở lại tuyển người mới, không áp dụng khi hoàn tiền)
         recommendations = {
             'priority1': [],
             'priority2': [],
             'priority3': [],
             'emailsSent': 0
         }
-        if qj and qj.get('latitude') is not None and qj.get('longitude') is not None:
+        if not has_previous_replacement and qj and qj.get('latitude') is not None and qj.get('longitude') is not None:
             try:
                 from job_recommender import find_and_recommend_urgent_workers
                 recommendations = find_and_recommend_urgent_workers(qj)
             except Exception as rec_err:
                 print(f"⚠️ Urgent recommender failed: {rec_err}")
 
+        success_msg = (
+            'Yêu cầu thay đổi nhân viên đã được duyệt — 85% lương đã được hoàn trả về ví nhà tuyển dụng'
+            if has_previous_replacement
+            else 'Yêu cầu thay đổi nhân viên đã được duyệt — job đã được mở lại để tuyển người mới'
+        )
+
         return create_response(200, {
             'success':        True,
-            'message':        'Yêu cầu thay đổi nhân viên đã được duyệt — job đã được mở lại để tuyển người mới',
+            'message':        success_msg,
             'applicationId':  application_id,
             'replacedAt':     now_iso,
             'workerId':       worker_id,

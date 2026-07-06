@@ -104,8 +104,8 @@ def is_match(candidate, job, is_quick_job=False):
                     break
             
             if not location_ok:
-                # For standard jobs, city-level match is acceptable
-                if not is_quick_job:
+                # City-level match is acceptable as fallback for both standard and quick jobs
+                if True:
                     cities = ['hcm', 'ho chi minh', 'ha noi', 'da nang', 'can tho', 'hai phong']
                     for city in cities:
                         if city in cand_loc_clean and city in job_loc_clean:
@@ -554,10 +554,18 @@ def recommend_job_to_candidates(job_item, is_quick_job=False):
             
         active_candidates = []
         for cand in candidates:
-            # Must have isActive == True or 'true'
             is_active = cand.get('isActive')
-            if not is_active or str(is_active).lower() == 'false':
-                continue
+            is_urgent_approved = cand.get('verificationStatus') == 'APPROVED' or cand.get('kycCompleted') == True
+            
+            if is_quick_job:
+                # For quick jobs, accept if active OR approved/verified for quick jobs
+                if not is_active and not is_urgent_approved:
+                    continue
+            else:
+                # For standard jobs, must be active
+                if not is_active or str(is_active).lower() == 'false':
+                    continue
+                    
             email = cand.get('email')
             if not email or '@' not in email:
                 continue
@@ -976,10 +984,13 @@ def find_and_recommend_urgent_workers(job_item):
             
         active_candidates = []
         for cand in candidates:
-            # Must have isActive == True or 'true'
             is_active = cand.get('isActive')
-            if not is_active or str(is_active).lower() == 'false':
+            is_urgent_approved = cand.get('verificationStatus') == 'APPROVED' or cand.get('kycCompleted') == True
+            
+            # Only recommend candidates currently opening/active in working status
+            if not is_active:
                 continue
+                
             email = cand.get('email')
             if not email or '@' not in email:
                 continue
@@ -1001,8 +1012,6 @@ def find_and_recommend_urgent_workers(job_item):
             dist = get_distance_km(cand_lat, cand_lng, job_lat, job_lng)
             if dist is None or dist > 10.0:
                 continue
-                
-            # Check suitability (checks skills/title matches)
             suitable, reasons = is_match(cand, job_item, is_quick_job=True)
             
             cand_info = {

@@ -30,6 +30,7 @@ import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
 import ExperienceManagement from './ExperienceManagement';
 import { getAllExperiences } from '../../services/experienceService';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const API_URL = import.meta.env.VITE_CANDIDATE_API_URL;
 
@@ -702,6 +703,14 @@ const CandidatesManagement = () => {
   const [verifLoading, setVerifLoading] = useState(false);
   const [deletionRequests, setDeletionRequests] = useState([]);
   const [deletionLoading, setDeletionLoading] = useState(false);
+  const [confirmModalState, setConfirmModalState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'warning',
+    confirmText: '',
+    onConfirm: () => {}
+  });
 
   const getCandidateInitials = (name) => {
     if (!name || name === 'N/A') return '?';
@@ -1465,6 +1474,7 @@ const CandidatesManagement = () => {
                   <th>{language === 'vi' ? 'Số điện thoại' : 'Phone Number'}</th>
                   <th>{language === 'vi' ? 'Xác nhận 4 bước eKYC' : 'eKYC 4 Steps Verification'}</th>
                   <th>{language === 'vi' ? 'Ngày tham gia' : 'Join Date'}</th>
+                  <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1497,6 +1507,116 @@ const CandidatesManagement = () => {
                         {candidate.joined}
                       </DateText>
                     </td>
+                     <td>
+                       <div style={{ display: 'flex', gap: '8px' }}>
+                         {!candidate.ekycVerified ? (
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setConfirmModalState({
+                                 isOpen: true,
+                                 title: language === 'vi' ? 'Duyệt KYC thủ công' : 'Manual KYC Approval',
+                                 message: language === 'vi' 
+                                   ? `Bạn có chắc muốn duyệt KYC thủ công cho ứng viên ${candidate.name}?` 
+                                   : `Are you sure you want to manually verify KYC for candidate ${candidate.name}?`,
+                                 type: 'success',
+                                 confirmText: language === 'vi' ? 'Duyệt ngay' : 'Approve',
+                                 cancelText: language === 'vi' ? 'Hủy' : 'Cancel',
+                                 onConfirm: async () => {
+                                   try {
+                                     await candidateProfileService.adminUpdateCandidateProfile(candidate.id, {
+                                       kycCompleted: true,
+                                       ekycStatus: 'verified'
+                                     });
+                                     setCandidates(prev => prev.map(c => 
+                                       c.id === candidate.id ? { ...c, ekycVerified: true } : c
+                                     ));
+                                     showAdminToast('success', language === 'vi' ? 'Duyệt KYC thủ công thành công!' : 'Manually verified KYC successfully!');
+                                   } catch (err) {
+                                     console.error(err);
+                                     showAdminToast('error', language === 'vi' ? 'Không thể duyệt KYC thủ công.' : 'Failed to manually verify KYC.');
+                                   } finally {
+                                     setConfirmModalState(prev => ({ ...prev, isOpen: false }));
+                                   }
+                                 }
+                               });
+                             }}
+                             style={{
+                               background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                               color: 'white',
+                               border: 'none',
+                               padding: '6px 12px',
+                               borderRadius: '6px',
+                               fontSize: '12.5px',
+                               fontWeight: '600',
+                               cursor: 'pointer',
+                               display: 'flex',
+                               alignItems: 'center',
+                               gap: '4px',
+                               boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                               transition: 'transform 0.1s'
+                             }}
+                             onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+                             onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                           >
+                             <CheckSquare size={13} />
+                             {language === 'vi' ? 'Duyệt thủ công' : 'Manual Verify'}
+                           </button>
+                         ) : (
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setConfirmModalState({
+                                 isOpen: true,
+                                 title: language === 'vi' ? 'Hủy duyệt KYC' : 'Cancel KYC Approval',
+                                 message: language === 'vi' 
+                                   ? `Bạn có chắc muốn HỦY duyệt KYC thủ công cho ứng viên ${candidate.name}?` 
+                                   : `Are you sure you want to cancel manual KYC verification for candidate ${candidate.name}?`,
+                                 type: 'danger',
+                                 confirmText: language === 'vi' ? 'Hủy duyệt' : 'Cancel Verification',
+                                 cancelText: language === 'vi' ? 'Quay lại' : 'Go back',
+                                 onConfirm: async () => {
+                                   try {
+                                     await candidateProfileService.adminUpdateCandidateProfile(candidate.id, {
+                                       kycCompleted: false,
+                                       ekycStatus: 'unverified'
+                                     });
+                                     setCandidates(prev => prev.map(c => 
+                                       c.id === candidate.id ? { ...c, ekycVerified: false } : c
+                                     ));
+                                     showAdminToast('success', language === 'vi' ? 'Đã hủy duyệt KYC!' : 'Manual KYC verification cancelled!');
+                                   } catch (err) {
+                                     console.error(err);
+                                     showAdminToast('error', language === 'vi' ? 'Không thể hủy duyệt KYC.' : 'Failed to cancel manual KYC.');
+                                   } finally {
+                                     setConfirmModalState(prev => ({ ...prev, isOpen: false }));
+                                   }
+                                 }
+                               });
+                             }}
+                             style={{
+                               background: '#F1F5F9',
+                               color: '#64748B',
+                               border: '1px solid #CBD5E1',
+                               padding: '6px 12px',
+                               borderRadius: '6px',
+                               fontSize: '12.5px',
+                               fontWeight: '600',
+                               cursor: 'pointer',
+                               display: 'flex',
+                               alignItems: 'center',
+                               gap: '4px',
+                               transition: 'transform 0.1s'
+                             }}
+                             onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+                             onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                           >
+                             <XSquare size={13} />
+                             {language === 'vi' ? 'Hủy duyệt' : 'Cancel Verify'}
+                           </button>
+                         )}
+                       </div>
+                     </td>
                   </tr>
                 ))}
               </tbody>
@@ -1869,6 +1989,17 @@ const CandidatesManagement = () => {
           {adminToast.message}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
+        cancelText={confirmModalState.cancelText}
+        type={confirmModalState.type}
+        onConfirm={confirmModalState.onConfirm}
+        onCancel={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))}
+      />
     </DashboardLayout>
   );
 };

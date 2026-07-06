@@ -1939,11 +1939,33 @@ def lambda_handler(event, context):
             body_data = _parse_body(event)
             validated = _validate_recommend_payload(body_data)
             is_quick_job = validated.get("isQuickJob", False)
-            candidates = [_summarize_candidate(c) for c in _fetch_verified_candidates(is_quick_job=is_quick_job)]
+            raw_candidates = _fetch_verified_candidates(is_quick_job=is_quick_job)
+            candidates = [_summarize_candidate(c) for c in raw_candidates]
             if not candidates:
                 return _response(event, 200, {"recommendations": []})
             started = time.monotonic()
             ai_result = call_gemini_recommend(validated, candidates)
+            
+            # Enrich recommendations with contact details and full profiles
+            if isinstance(ai_result, dict) and "recommendations" in ai_result:
+                raw_cand_map = {c.get("userId"): c for c in raw_candidates if c.get("userId")}
+                for rec in ai_result["recommendations"]:
+                    c_id = rec.get("candidateId")
+                    if c_id in raw_cand_map:
+                        orig = raw_cand_map[c_id]
+                        rec["phone"] = orig.get("phone") or orig.get("contactPhone") or ""
+                        rec["email"] = orig.get("email") or ""
+                        rec["bio"] = orig.get("bio") or ""
+                        
+                        skills = orig.get("skills") or []
+                        if isinstance(skills, (set, frozenset)):
+                            skills = list(skills)
+                        elif not isinstance(skills, list):
+                            skills = [skills]
+                        rec["skills"] = skills
+                        rec["experience"] = orig.get("experience") or ""
+                        rec["education"] = orig.get("education") or ""
+            
             processing_ms = round((time.monotonic() - started) * 1_000)
             print(json.dumps({
                 "event": "cv_recommendation_completed",

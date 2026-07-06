@@ -1412,12 +1412,6 @@ const EmployersManagement = () => {
       }
 
       showEmpToast('success', language === 'vi' ? 'Đã duyệt — ca làm việc đã được huỷ thành công' : 'Approved — shift has been successfully cancelled');
-      
-      if (result.recommendations) {
-        setActiveRecommendations(result.recommendations);
-        setRecJobTitle(result.jobTitle || (reqItem && reqItem.jobTitle) || 'Ca làm');
-        setShowRecsModal(true);
-      }
     } catch (err) {
       console.error('Error approving change request:', err);
       const msg = err.message || '';
@@ -2361,6 +2355,8 @@ const EmployersManagement = () => {
                     <tr>
                       <th>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</th>
                       <th>{language === 'vi' ? 'Nhân viên ứng tuyển' : 'Candidate'}</th>
+                      <th>{language === 'vi' ? 'Ứng viên thay thế' : 'Replacement Candidate'}</th>
+                      <th>{language === 'vi' ? 'Thời gian nhận việc' : 'Accepted Time'}</th>
                       <th>{language === 'vi' ? 'Loại thay đổi' : 'Change Type'}</th>
                       <th>{language === 'vi' ? 'Ngày gửi' : 'Requested At'}</th>
                       <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
@@ -2396,6 +2392,35 @@ const EmployersManagement = () => {
                           <td>
                             <div style={{ fontWeight: 600 }}>👤 {req.workerName || req.candidateName || '(Không xác định)'}</div>
                             <div style={{ fontSize: '12px', color: '#64748B' }}>Job ID: {req.jobId}</div>
+                          </td>
+                          <td>
+                            {req.replacementCandidateName ? (
+                              req.replacementCandidateName !== '---' ? (
+                                <div>
+                                  <div style={{ fontWeight: 600, color: '#10B981' }}>
+                                    👤 {req.replacementCandidateName}
+                                  </div>
+                                  {req.replacementCandidateId && (
+                                    <div style={{ fontSize: '11px', color: '#64748B' }}>
+                                      ID: {req.replacementCandidateId.substring(0, 8)}...
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94A3B8' }}>---</span>
+                              )
+                            ) : (
+                              <span style={{ color: '#94A3B8' }}>---</span>
+                            )}
+                          </td>
+                          <td>
+                            {req.replacementCandidateAcceptedAt ? (
+                              <div style={{ fontSize: '13px', fontWeight: 500, color: '#334155' }}>
+                                📅 {new Date(req.replacementCandidateAcceptedAt).toLocaleString('vi-VN')}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94A3B8' }}>---</span>
+                            )}
                           </td>
                           <td>
                             {(() => {
@@ -2505,7 +2530,7 @@ const EmployersManagement = () => {
                     })}
                     {currentChangeRequests.length === 0 && (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
                           {language === 'vi' ? 'Không tìm thấy yêu cầu thay đổi nào' : 'No change requests found'}
                         </td>
                       </tr>

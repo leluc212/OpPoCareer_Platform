@@ -18,6 +18,7 @@ import experienceService from '../../services/experienceService';
 import candidateProfileService from '../../services/candidateProfileService';
 import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification, createEmployerReviewNotification, createChangeRequestSubmittedNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
+import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
 
 // Helper: tính số giờ từ chuỗi shift "HH:MM - HH:MM"
 const calcShiftHours = (shift) => {
@@ -1088,11 +1089,11 @@ const QuickJobPostButton = styled(motion.button)`
   &:hover {
     transform: translateY(-2px);
     box-shadow: ${props => {
-      if (props.$variant === 'primary') return '0 6px 16px rgba(245, 158, 11, 0.4)';
-      if (props.$variant === 'danger') return '0 6px 16px rgba(239, 68, 68, 0.4)';
-      if (props.$variant === 'ai') return '0 6px 16px rgba(168, 85, 247, 0.4)';
-      return '0 6px 16px rgba(30, 64, 175, 0.2)';
-    }};
+    if (props.$variant === 'primary') return '0 6px 16px rgba(245, 158, 11, 0.4)';
+    if (props.$variant === 'danger') return '0 6px 16px rgba(239, 68, 68, 0.4)';
+    if (props.$variant === 'ai') return '0 6px 16px rgba(168, 85, 247, 0.4)';
+    return '0 6px 16px rgba(30, 64, 175, 0.2)';
+  }};
   }
   
   &:active {
@@ -2820,6 +2821,192 @@ const LoadingText = styled.p`
   margin: 0;
 `;
 
+const PendingChangeTabContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+`;
+
+const PendingChangeSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+`;
+
+const ReplacementSectionTitle = styled.h3`
+  font-size: 16px;
+  font-weight: 700;
+  color: #1E293B;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px 0;
+`;
+
+const ReplacementJobCard = styled(motion.div)`
+  background: white;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #F97316 0%, #D97706 100%);
+  }
+`;
+
+const ReplacementJobHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-bottom: 1px solid #F1F5F9;
+  padding-bottom: 16px;
+`;
+
+const ReplacementJobInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  h4 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0F172A;
+    margin: 0;
+  }
+`;
+
+const ReplacementJobMeta = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 4px;
+`;
+
+const MetaItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: #64748B;
+  font-weight: 500;
+
+  svg {
+    width: 15px;
+    height: 15px;
+    color: #94A3B8;
+  }
+`;
+
+const ReplacementBadge = styled.span`
+  background: #FFF7ED;
+  color: #EA580C;
+  border: 1px solid #FFEDD5;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  svg {
+    animation: spin 3s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+
+const ReplacementSubSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const SubSectionHeader = styled.h5`
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1.5px solid #F1F5F9;
+  padding-bottom: 8px;
+`;
+
+const RecommendationItemCard = styled(motion.div)`
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #CBD5E1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+`;
+
+const RecommendationHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const CandidateName = styled.div`
+  font-weight: 700;
+  font-size: 14.5px;
+  color: #1E293B;
+`;
+
+const ScoreBadge = styled.span`
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+  color: white;
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.2);
+`;
+
+const CircularProgress = styled.div`
+  width: 24px;
+  height: 24px;
+  border: 3px solid #E2E8F0;
+  border-top-color: #F97316;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
 const WorkHistoryList = styled.div`
   display: flex;
   flex-direction: column;
@@ -2875,6 +3062,261 @@ const EmptyWorkHistory = styled.div`
   p { font-size: 13px; margin: 0; }
 `;
 
+// AI Candidate Recommendations for Replacement Component
+const ReplacementJobRecommendations = React.memo(({ job, onViewProfile }) => {
+  const { language } = useLanguage();
+  const [loading, setLoading] = useState(true);
+  const [recs, setRecs] = useState([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const fetchRecs = async () => {
+      try {
+        setLoading(true);
+        const result = await cvAiService.recommendCandidates({
+          jobData: {
+            title: job.title,
+            description: job.description || '',
+            requirements: job.requirements || '',
+            responsibilities: '',
+            benefits: '',
+          },
+          isQuickJob: true,
+          language,
+        });
+        if (active) {
+          setRecs(result?.recommendations || []);
+        }
+      } catch (err) {
+        console.error('Error fetching recommendations for job', job.idJob, err);
+        if (active) {
+          setError(language === 'vi' ? 'Không thể tải đề xuất AI.' : 'Failed to load AI recommendations.');
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchRecs();
+    return () => { active = false; };
+  }, [job, language]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '20px 0', textAlign: 'center' }}>
+        <CircularProgress />
+        <p style={{ fontSize: '13px', color: '#64748B', marginTop: '8px' }}>
+          {language === 'vi' ? 'AI đang tìm kiếm ứng viên phù hợp...' : 'AI is searching for suitable candidates...'}
+        </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ color: '#EF4444', fontSize: '13px', padding: '12px 0' }}>
+        {error}
+      </div>
+    );
+  }
+
+  if (recs.length === 0) {
+    return (
+      <div style={{ color: '#64748B', fontSize: '13px', padding: '12px 0', fontStyle: 'italic' }}>
+        {language === 'vi' ? 'Không có ứng viên gợi ý nào phù hợp.' : 'No recommended candidates found.'}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', marginTop: '12px' }}>
+      {recs.map(rec => (
+        <RecommendationItemCard
+          key={rec.candidateId}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          whileHover={{ y: -2 }}
+        >
+          <RecommendationHeader>
+            <CandidateName>{rec.fullName}</CandidateName>
+            <ScoreBadge>Match {rec.matchScore}%</ScoreBadge>
+          </RecommendationHeader>
+          <div style={{ fontSize: '12.5px', color: '#475569', lineHeight: '1.5', margin: '4px 0' }}>
+            <strong>AI Match:</strong> {rec.matchReason}
+          </div>
+          {rec.experience && (
+            <div style={{ fontSize: '12px', color: '#64748B' }}>
+              <strong>💼 {language === 'vi' ? 'Kinh nghiệm' : 'Experience'}:</strong> {rec.experience}
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0', padding: '10px', background: '#F1F5F9', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+            <div style={{ fontSize: '12px', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+              <Phone size={13} style={{ color: '#10B981' }} />
+              <a href={`tel:${rec.phone}`} style={{ color: '#1E293B', textDecoration: 'none' }}>{rec.phone || 'N/A'}</a>
+            </div>
+            <div style={{ fontSize: '12px', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+              <Mail size={13} style={{ color: '#3B82F6' }} />
+              <a href={`mailto:${rec.email}`} style={{ color: '#1E293B', textDecoration: 'none' }}>{rec.email || 'N/A'}</a>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+            <button
+              onClick={() => onViewProfile({
+                id: rec.candidateId,
+                candidateId: rec.candidateId,
+                candidate: rec.fullName,
+                job: job.title,
+                applied: '-',
+                status: 'pending',
+                email: rec.email,
+                phone: rec.phone,
+                location: '-',
+                education: rec.education || '-',
+                experience: rec.experience || '-',
+                skills: rec.skills || [],
+                bio: rec.bio || '-',
+                reviews: [],
+                marked: false
+              })}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(124, 58, 237, 0.2)'
+              }}
+            >
+              <Eye size={12} />
+              {language === 'vi' ? 'Xem hồ sơ' : 'View profile'}
+            </button>
+          </div>
+        </RecommendationItemCard>
+      ))}
+    </div>
+  );
+});
+ReplacementJobRecommendations.displayName = 'ReplacementJobRecommendations';
+
+
+// Replacement Job block component
+const ReplacementJobBlock = React.memo(({ job, applicants, onViewProfile, onConfirmCV, onRejectStaff, onShowCVPreview, onSetSelectedCV }) => {
+  const { language } = useLanguage();
+
+  return (
+    <ReplacementJobCard
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <ReplacementJobHeader>
+        <ReplacementJobInfo>
+          <h4>{job.title}</h4>
+          <ReplacementJobMeta>
+            <MetaItem><Calendar />{job.workDate}</MetaItem>
+            <MetaItem><Clock />{job.startTime} - {job.endTime}</MetaItem>
+            <MetaItem><MapPin />{job.location}</MetaItem>
+          </ReplacementJobMeta>
+        </ReplacementJobInfo>
+        <ReplacementBadge>
+          <Sparkles size={14} />
+          {language === 'vi' ? 'Đang tuyển nhân viên thay thế' : 'Seeking Replacement'}
+        </ReplacementBadge>
+      </ReplacementJobHeader>
+
+      {/* Part 1: Ứng viên mới ứng tuyển */}
+      <ReplacementSubSection>
+        <SubSectionHeader>
+          <Users size={16} style={{ color: '#F97316' }} />
+          {language === 'vi' ? 'Ứng viên mới ứng tuyển' : 'New Applicants'}
+        </SubSectionHeader>
+        {applicants.length === 0 ? (
+          <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '12px', textAlign: 'center', border: '1px dashed #E2E8F0', color: '#64748B', fontSize: '13px' }}>
+            {language === 'vi' ? 'Chưa có ứng viên ứng tuyển ca làm này. AI gợi ý cho bạn các ứng viên bên dưới.' : 'No applicants yet. AI recommendations are shown below.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+            {applicants.map(staff => (
+              <div key={staff.id} style={{ border: '1.5px solid #F1F5F9', background: 'white', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #F97316, #EA580C)', color: 'white', display: 'flex', alignItems: 'center', justify: 'center', fontWeight: '700', fontSize: '14px' }}>
+                    {staff.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '14px', color: '#0F172A' }}>{staff.name}</div>
+                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{staff.position}</div>
+                  </div>
+                </div>
+                {staff.experience && (
+                  <div style={{ fontSize: '12.5px', color: '#475569' }}>
+                    <strong>💼 {language === 'vi' ? 'Kinh nghiệm' : 'Experience'}:</strong> {staff.experience}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
+                  {staff.cvUrl && (
+                    <button
+                      onClick={() => {
+                        onSetSelectedCV({ url: staff.cvUrl, filename: staff.cvFilename, applicationId: staff.id, jobId: staff.jobId });
+                        onShowCVPreview(true);
+                      }}
+                      style={{
+                        background: '#F1F5F9', color: '#334155', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                      }}
+                    >
+                      <Eye size={13} />
+                      {language === 'vi' ? 'Xem CV' : 'View CV'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onConfirmCV(staff.id)}
+                    style={{
+                      background: 'linear-gradient(135deg, #10B981, #059669)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                    }}
+                  >
+                    <CheckCircle size={13} />
+                    {language === 'vi' ? 'Nhận việc' : 'Approve'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      onRejectStaff(staff);
+                    }}
+                    style={{
+                      background: '#FFF1F2', color: '#E11D48', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                    }}
+                  >
+                    <XCircle size={13} />
+                    {language === 'vi' ? 'Từ chối' : 'Reject'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </ReplacementSubSection>
+
+      {/* Part 2: Gợi ý ứng viên có tiềm năng thay thế */}
+      <ReplacementSubSection>
+        <SubSectionHeader>
+          <Sparkles size={16} style={{ color: '#7C3AED' }} />
+          {language === 'vi' ? 'Gợi ý ứng viên có tiềm năng thay thế' : 'AI Potential Replacement Recommendations'}
+        </SubSectionHeader>
+        <ReplacementJobRecommendations job={job} onViewProfile={onViewProfile} />
+      </ReplacementSubSection>
+    </ReplacementJobCard>
+  );
+});
+ReplacementJobBlock.displayName = 'ReplacementJobBlock';
+
 // ─── Component ─────────────────────────────────────────────
 const HRManagement = () => {
   const { language } = useLanguage();
@@ -2903,6 +3345,8 @@ const HRManagement = () => {
   const [cancelCRConfirmId, setCancelCRConfirmId] = useState(null);
   const [viewedChangeRequest, setViewedChangeRequest] = useState(null);
   const [isProcessingChange, setIsProcessingChange] = useState(false);
+  const [rejectReplacementAppId, setRejectReplacementAppId] = useState(null);
+  const [isRejectingReplacement, setIsRejectingReplacement] = useState(false);
 
   const handleViewProfile = useCallback(async (app) => {
     // Set basic info from application immediately
@@ -2921,7 +3365,7 @@ const HRManagement = () => {
         // Only fetch job details for completed applications (work history)
         const completedApps = candidateApps.filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate');
         const neededJobIds = [...new Set(completedApps.map(a => a.jobId).filter(Boolean))];
-        
+
         let finalAllJobs = [];
         if (neededJobIds.length > 0) {
           // Batch requests (max 3 concurrent) to avoid Lambda throttling
@@ -2975,18 +3419,18 @@ const HRManagement = () => {
           ? prof.experience
           : approvedExperiences.length > 0
             ? approvedExperiences
-                .slice(0, 3)
-                .map(exp => {
-                  const role = exp.jobTitle || 'Kinh nghiệm';
-                  const company = exp.companyName ? ` tại ${exp.companyName}` : '';
-                  const period = exp.isCurrent
-                    ? ' (Hiện tại)'
-                    : (exp.startMonth && exp.startYear)
-                      ? ` (${exp.startMonth}/${exp.startYear}${exp.endMonth && exp.endYear ? ` - ${exp.endMonth}/${exp.endYear}` : ''})`
-                      : '';
-                  return `${role}${company}${period}`;
-                })
-                .join('; ')
+              .slice(0, 3)
+              .map(exp => {
+                const role = exp.jobTitle || 'Kinh nghiệm';
+                const company = exp.companyName ? ` tại ${exp.companyName}` : '';
+                const period = exp.isCurrent
+                  ? ' (Hiện tại)'
+                  : (exp.startMonth && exp.startYear)
+                    ? ` (${exp.startMonth}/${exp.startYear}${exp.endMonth && exp.endYear ? ` - ${exp.endMonth}/${exp.endYear}` : ''})`
+                    : '';
+                return `${role}${company}${period}`;
+              })
+              .join('; ')
             : (app.experience || '');
 
         if (prof) {
@@ -3394,6 +3838,7 @@ const HRManagement = () => {
             jobWorkDate: job.workDate,
             companyName: job.companyName,
             jobType: 'quick',
+            jobStatus: job.status,
             _jobExpired: jobExpired
           }));
 
@@ -3597,10 +4042,21 @@ const HRManagement = () => {
   const [showErrorNotification, setShowErrorNotification] = useState(false);
   const [errorNotificationMessage, setErrorNotificationMessage] = useState('');
 
+  const [showUrgentRecsModal, setShowUrgentRecsModal] = useState(false);
+  const [urgentRecommendations, setUrgentRecommendations] = useState(null);
+  const [urgentRecommendationsJobTitle, setUrgentRecommendationsJobTitle] = useState('');
+
   // Poll applications periodically when in 'hr' section to get new chat messages.
   // Dùng adaptive interval: 3s khi có pending_change (chờ admin duyệt), 10s bình thường.
   const hasPendingChange = useMemo(
-    () => realApplications.some(app => app.status === 'pending_change'),
+    () => realApplications.some(app => 
+      app.status === 'pending_change' || 
+      (app.status === 'ĐÃ_BỊ_THAY_THẾ' && !realApplications.some(otherApp => 
+        otherApp.jobId === app.jobId && 
+        otherApp.applicationId !== app.applicationId && 
+        ['accepted', 'active', 'completed', 'completed_pending_candidate'].includes(otherApp.status)
+      ))
+    ),
     [realApplications]
   );
 
@@ -3682,7 +4138,7 @@ const HRManagement = () => {
     const nowTimeStr = now.toTimeString().slice(0, 5); // HH:MM
 
     return realApplications
-      .filter(app => app.status === 'pending' || app.status === 'accepted' || app.status === 'pending_change' || app.status === 'change_approved')
+      .filter(app => app.status === 'pending' || app.status === 'accepted' || app.status === 'pending_change' || app.status === 'change_approved' || app.status === 'ĐÃ_BỊ_THAY_THẾ')
       // Loại trừ worker đã bị thay thế khỏi danh sách nhân sự đang làm
       .filter(app => {
         // Guard: hide applications whose job has already expired
@@ -3786,10 +4242,18 @@ const HRManagement = () => {
         // Bug 5 fix: thêm case cho ĐÃ_BỊ_THAY_THẾ — không được fallback về 'active'
         const mappedStatus = app.status === 'pending'
           ? 'pending_confirmation'
-          : app.status === 'change_approved'
+          : (app.status === 'change_approved' || app.status === 'completed' || app.status === 'completed_pending_candidate')
             ? 'completed'
             : app.status === 'ĐÃ_BỊ_THAY_THẾ'
-              ? 'replaced'          // Tab lịch sử — hiện thị đúng, không xuất hiện trong "Đang làm"
+              ? (() => {
+                  // Check if there is another candidate accepted for this job
+                  const hasReplacement = realApplications.some(otherApp => 
+                    otherApp.jobId === app.jobId &&
+                    otherApp.applicationId !== app.applicationId &&
+                    ['accepted', 'active', 'completed', 'completed_pending_candidate'].includes(otherApp.status)
+                  );
+                  return hasReplacement ? 'replaced' : 'pending_change';
+                })()
               : (app.status === 'pending_change' || hasPendingChangeRequest)
                 ? 'pending_change'
                 : 'active';
@@ -3856,7 +4320,7 @@ const HRManagement = () => {
           paymentRecipientId: app.paymentRecipientId || app.candidateId,
           candidateEmail: app.candidateEmail,
           jobId: app.jobId,
-          changeRequest: hasPendingChangeRequest ? effectiveChangeRequest : null,
+          changeRequest: effectiveChangeRequest,
           changeRequestStatus: normalizedChangeRequestStatus,
           adminNotes: app.adminNotes || '',
           // Worker bị thay thế: luôn finalAmount=0, không tính giờ thực tế
@@ -3864,6 +4328,7 @@ const HRManagement = () => {
           finalAmount: null, // Không hiển thị finalAmount theo giờ
           actualEndTime: null, // Xoá actualEndTime — không còn tính tiền theo giờ
           unreadCount: unreadCount,
+          jobStatus: app.jobStatus,
           // Time-gate: thời hạn cho phép gửi yêu cầu thay đổi
           changeDeadline: changeDeadline,   // Date object hoặc null
           changeAllowed: changeAllowed,     // boolean
@@ -3871,6 +4336,7 @@ const HRManagement = () => {
       });
   }, [realApplications, language]);
 
+  // Combine mock staff with real applications
   // Combine mock staff with real applications
   const allStaff = useMemo(() => {
     // When real data exists, avoid mixing demo rows to prevent action/status confusion.
@@ -3880,23 +4346,61 @@ const HRManagement = () => {
     return hrStaff;
   }, [hrStaff, staffFromApplications]);
 
+  const isReplacementCandidate = useCallback((staff) => {
+    if (!staff.jobId) return false;
+    return allStaff.some(
+      s => s.jobId === staff.jobId && s.status === 'replaced'
+    );
+  }, [allStaff]);
+
+  const replacementJobs = useMemo(() => {
+    // Find all unique jobIds that have at least one application with status 'replaced'
+    const replacedJobIds = new Set(
+      allStaff
+        .filter(s => s.status === 'replaced')
+        .map(s => s.jobId)
+    );
+    
+    // Filter allQuickJobs to only include those that are replaced and do not have an active worker
+    return allQuickJobs.filter(job => {
+      const jobId = job.idJob || job.id;
+      if (!replacedJobIds.has(jobId)) return false;
+      
+      // If the job is refunded (ĐÃ_HOÀN_TRẢ) or deleted, it is not active anymore
+      if (job.status === 'ĐÃ_HOÀN_TRẢ' || job.status === 'deleted' || job.status === 'closed') return false;
+      
+      // Check if there is an active/accepted/completed worker in allStaff
+      const hasActiveWorker = allStaff.some(
+        s => String(s.jobId) === String(jobId) && ['active', 'completed', 'pending_confirmation', 'completed_pending_candidate'].includes(s.status) && !isReplacementCandidate(s)
+      );
+      
+      return !hasActiveWorker;
+    });
+  }, [allQuickJobs, allStaff, isReplacementCandidate]);
+
   const staffTabCounts = useMemo(() => {
     const counts = {
       working: 0,
       pending_confirm: 0,
       pending_change: 0,
-      replaced: 0  // Bug 5 fix: đếm workers đã bị thay thế cho tab lịch sử
+      replaced: 0
     };
 
     allStaff.forEach(staff => {
       if (staff.status === 'active') counts.working += 1;
-      if (staff.status === 'pending_confirmation') counts.pending_confirm += 1;
+      if (staff.status === 'pending_confirmation') {
+        if (!isReplacementCandidate(staff)) {
+          counts.pending_confirm += 1;
+        }
+      }
       if (staff.status === 'pending_change') counts.pending_change += 1;
       if (staff.status === 'replaced') counts.replaced += 1;
     });
 
+    counts.pending_change += replacementJobs.length;
+
     return counts;
-  }, [allStaff]);
+  }, [allStaff, isReplacementCandidate, replacementJobs]);
 
   // Mock wallet connection status - in real app, get from user context or API
   const [isWalletConnected] = useState(() => {
@@ -4126,22 +4630,22 @@ const HRManagement = () => {
       // Nếu có application cũ ĐÃ_BỊ_THAY_THẾ cùng jobId → đây là worker mới thay thế.
       const isReplacementWorker = staff.jobId
         ? realApplications.some(
-            app => app.jobId === staff.jobId
-              && app.status === 'ĐÃ_BỊ_THAY_THẾ'
-              && app.applicationId !== staff.applicationId
-          )
+          app => app.jobId === staff.jobId
+            && app.status === 'ĐÃ_BỊ_THAY_THẾ'
+            && app.applicationId !== staff.applicationId
+        )
         : false;
 
       // === Tạo welcome system message cho worker mới (ca thay thế) ===
       // Nội dung bao gồm tên ca, địa điểm, và thông báo rõ đây là vị trí vừa trống
       const welcomeChatMessages = isReplacementWorker
         ? [{
-            id: Date.now(),
-            sender: 'system',
-            text: `Bạn đã được nhận vào ca làm${staff.position ? ` ${staff.position}` : ''}${staff.location ? ` tại ${staff.location}` : (staff.jobLocation ? ` tại ${staff.jobLocation}` : '')}, thay thế cho vị trí vừa trống. Hãy trao đổi với nhà tuyển dụng nếu cần hỗ trợ.`,
-            time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-            isSystem: true
-          }]
+          id: Date.now(),
+          sender: 'system',
+          text: `Bạn đã được nhận vào ca làm${staff.position ? ` ${staff.position}` : ''}${staff.location ? ` tại ${staff.location}` : (staff.jobLocation ? ` tại ${staff.jobLocation}` : '')}, thay thế cho vị trí vừa trống. Hãy trao đổi với nhà tuyển dụng nếu cần hỗ trợ.`,
+          time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          isSystem: true
+        }]
         : null;
 
       // === Việc 1 + 2 + 3 thực hiện đồng thời trong 1 API call ===
@@ -4149,9 +4653,9 @@ const HRManagement = () => {
       // Khi là worker bình thường: chỉ update status accepted
       const updatePayload = isReplacementWorker
         ? {
-            chatMessages: welcomeChatMessages,
-            paymentRecipientId: staff.candidateId  // Việc 1: chuyển quyền nhận tiền sang worker mới
-          }
+          chatMessages: welcomeChatMessages,
+          paymentRecipientId: staff.candidateId  // Việc 1: chuyển quyền nhận tiền sang worker mới
+        }
         : {};
 
       await applicationService.updateApplicationStatus(
@@ -4184,12 +4688,12 @@ const HRManagement = () => {
       setRealApplications(prev => prev.map(app =>
         app.applicationId === staff.applicationId
           ? {
-              ...app,
-              status: 'accepted',
-              acceptedAt: newConfirmedAt,
-              paymentRecipientId: staff.candidateId,
-              ...(welcomeChatMessages ? { chatMessages: welcomeChatMessages } : {})
-            }
+            ...app,
+            status: 'accepted',
+            acceptedAt: newConfirmedAt,
+            paymentRecipientId: staff.candidateId,
+            ...(welcomeChatMessages ? { chatMessages: welcomeChatMessages } : {})
+          }
           : app
       ));
 
@@ -4263,7 +4767,7 @@ const HRManagement = () => {
       setSuccessToastMessage(language === 'vi' ? 'Đã hủy yêu cầu thành công' : 'Request cancelled successfully');
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 3000);
-      loadApplicationsFromQuickJobs().catch(() => {});
+      loadApplicationsFromQuickJobs().catch(() => { });
       return;
     }
 
@@ -4308,6 +4812,32 @@ const HRManagement = () => {
       setTimeout(() => setShowErrorNotification(false), 3000);
     } finally {
       setIsProcessingChange(false);
+    }
+  };
+
+  const handleConfirmRejectReplacement = async () => {
+    if (!rejectReplacementAppId) return;
+    try {
+      setIsRejectingReplacement(true);
+      await applicationService.rejectReplacementWorker(rejectReplacementAppId);
+
+      setSuccessToastMessage(language === 'vi'
+        ? 'Đã từ chối ứng viên thay thế và hoàn trả 85% tiền cọc.'
+        : 'Replacement candidate rejected and 85% deposit refunded.');
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
+
+      // Reload applications to update UI
+      await loadQuickJobsFromDynamoDB();
+      await loadApplicationsFromQuickJobs();
+    } catch (err) {
+      console.error('Error rejecting replacement worker:', err);
+      setErrorNotificationMessage(err.message || 'Error rejecting replacement worker');
+      setShowErrorNotification(true);
+      setTimeout(() => setShowErrorNotification(false), 3000);
+    } finally {
+      setIsRejectingReplacement(false);
+      setRejectReplacementAppId(null);
     }
   };
 
@@ -4944,14 +5474,14 @@ const HRManagement = () => {
             </StaffTabBar>
 
             {allStaff.filter(staff => {
-              if (staffTabFilter === 'working') return staff.status === 'active' || staff.status === 'completed_pending_candidate';
-              if (staffTabFilter === 'pending_confirm') return staff.status === 'pending_confirmation';
+              if (staffTabFilter === 'working') return staff.status === 'active';
+              if (staffTabFilter === 'pending_confirm') return staff.status === 'pending_confirmation' && !isReplacementCandidate(staff);
               if (staffTabFilter === 'pending_change') return staff.status === 'pending_change';
-              if (staffTabFilter === 'completed') return staff.status === 'completed';
+              if (staffTabFilter === 'completed') return staff.status === 'completed' || staff.status === 'completed_pending_candidate';
               // Bug 5 fix: tab lịch sử nhân sự đã bị thay thế
               if (staffTabFilter === 'replaced') return staff.status === 'replaced';
               return false;
-            }).length === 0 ? (
+            }).length === 0 && (staffTabFilter !== 'pending_change' || replacementJobs.length === 0) ? (
               <div style={{
                 padding: '60px 20px',
                 textAlign: 'center',
@@ -4968,25 +5498,147 @@ const HRManagement = () => {
                 </p>
               </div>
             ) : (
-              <StaffGrid>
-                <AnimatePresence>
-                  {allStaff
-                    .filter(staff => {
-                      if (staffTabFilter === 'working') return staff.status === 'active' || staff.status === 'completed_pending_candidate';
-                      if (staffTabFilter === 'pending_confirm') return staff.status === 'pending_confirmation';
-                      if (staffTabFilter === 'pending_change') return staff.status === 'pending_change';
-                      if (staffTabFilter === 'completed') return staff.status === 'completed';
-                      // Bug 5 fix: tab lịch sử nhân sự đã bị thay thế
-                      if (staffTabFilter === 'replaced') return staff.status === 'replaced';
-                      return false;
-                    })
-                    .map((staff, index) => (
-                      <StaffCard
-                        key={staff.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.15 }}
-                      >
+              staffTabFilter === 'pending_change' ? (
+                <PendingChangeTabContainer>
+                  {/* Part 1: Active Change Requests (if any) */}
+                  {allStaff.filter(staff => staff.status === 'pending_change').length > 0 && (
+                    <PendingChangeSection>
+                      <ReplacementSectionTitle>
+                        <AlertCircle size={18} style={{ color: '#F97316' }} />
+                        {language === 'vi' ? 'Yêu cầu thay đổi nhân sự đang chờ duyệt' : 'Pending Personnel Change Requests'}
+                      </ReplacementSectionTitle>
+                      <StaffGrid>
+                        <AnimatePresence>
+                          {allStaff
+                            .filter(staff => staff.status === 'pending_change')
+                            .map((staff, index) => (
+                              <StaffCard
+                                key={staff.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.15 }}
+                              >
+                                <StaffHeader>
+                                  <div>
+                                    <StaffName>{staff.name}</StaffName>
+                                    <StaffPosition>{staff.position}</StaffPosition>
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                    <StaffStatus $status="pending_change">
+                                      {language === 'vi' ? 'Chờ xác nhận' : 'Pending Confirm'}
+                                    </StaffStatus>
+                                  </div>
+                                </StaffHeader>
+
+                                <StaffMeta>
+                                  <div className="meta-row">
+                                    <MapPin />{staff.location}
+                                  </div>
+                                  <div className="meta-row">
+                                    <Calendar />{language === 'vi' ? 'Ngày làm:' : 'Work date:'} {staff.startDate}
+                                  </div>
+                                  <div className="meta-row">
+                                    <Clock />{language === 'vi' ? 'Giờ làm:' : 'Work hours:'} {staff.shift}
+                                  </div>
+                                  <div className="meta-row">
+                                    <CheckCircle />{language === 'vi' ? 'Xác nhận:' : 'Confirmed:'} {staff.confirmedAt}
+                                  </div>
+                                  {staff.status === 'replaced' ? (
+                                    <div className="meta-row" style={{ color: '#EF4444', fontWeight: '600' }}>
+                                      <Banknote />{language === 'vi' ? 'Số tiền chi: 0 VNĐ' : 'Amount paid: 0 VND'}
+                                    </div>
+                                  ) : (
+                                    <div className="meta-row" style={{ color: '#10B981', fontWeight: '600' }}>
+                                      <Banknote />{language === 'vi' ? 'Số tiền chi:' : 'Amount paid:'} {staff.totalPaid.toLocaleString('vi-VN')} VNĐ
+                                    </div>
+                                  )}
+                                </StaffMeta>
+
+                                {staff.changeRequest && (
+                                  <ChangeRequestBanner>
+                                    <div className="cr-header">
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', color: '#F97316', fontSize: '13px' }}>
+                                        <RefreshCw size={14} />
+                                        Đang chờ admin duyệt thay đổi
+                                      </span>
+                                    </div>
+                                    {staff.changeRequest.newWorkerName && (
+                                      <div className="cr-shift-row" style={{ color: '#10B981', fontWeight: '600' }}>
+                                        <User size={14} />
+                                        Worker mới đề xuất: <strong>{staff.changeRequest.newWorkerName}</strong>
+                                      </div>
+                                    )}
+                                    <div className="cr-reason">"{staff.changeRequest.reasonDetail || staff.changeRequest.reason}"</div>
+                                    <div className="cr-time">
+                                      <Clock />{language === 'vi' ? 'Gửi lúc:' : 'Sent at:'} {staff.changeRequest.requestedAt}
+                                    </div>
+                                  </ChangeRequestBanner>
+                                )}
+
+                                <StaffActions>
+                                  <StaffButton
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => setViewedChangeRequest(staff)}
+                                    style={{ background: '#FFF7ED', color: '#F97316', border: '1.5px solid #FFEDD5' }}
+                                  >
+                                    <Eye />{language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                                  </StaffButton>
+                                  <StaffButton
+                                    $variant="danger"
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => {
+                                      console.log('Staff list cancel clicked for', staff.applicationId || staff.id);
+                                      handleCancelChangeRequest(staff.applicationId || staff.id);
+                                    }}
+                                  >
+                                    <XCircle />{language === 'vi' ? 'Hủy yêu cầu' : 'Cancel'}
+                                  </StaffButton>
+                                </StaffActions>
+                              </StaffCard>
+                            ))}
+                        </AnimatePresence>
+                      </StaffGrid>
+                    </PendingChangeSection>
+                  )}
+
+                  {/* Part 2: Replacement Jobs */}
+                  {replacementJobs.map(job => {
+                    const applicants = allStaff.filter(s => s.status === 'pending_confirmation' && String(s.jobId) === String(job.idJob || job.id));
+                    return (
+                      <ReplacementJobBlock
+                        key={job.idJob || job.id}
+                        job={job}
+                        applicants={applicants}
+                        onViewProfile={handleViewProfile}
+                        onConfirmCV={handleConfirmCV}
+                        onRejectStaff={setRejectStaff}
+                        onShowCVPreview={setShowCVPreview}
+                        onSetSelectedCV={setSelectedCV}
+                      />
+                    );
+                  })}
+                </PendingChangeTabContainer>
+              ) : (
+                <StaffGrid>
+                  <AnimatePresence>
+                    {allStaff
+                      .filter(staff => {
+                        if (staffTabFilter === 'working') return staff.status === 'active';
+                        if (staffTabFilter === 'pending_confirm') return staff.status === 'pending_confirmation' && !isReplacementCandidate(staff);
+                        if (staffTabFilter === 'completed') return staff.status === 'completed' || staff.status === 'completed_pending_candidate';
+                        // Bug 5 fix: tab lịch sử nhân sự đã bị thay thế
+                        if (staffTabFilter === 'replaced') return staff.status === 'replaced';
+                        return false;
+                      })
+                      .map((staff, index) => (
+                        <StaffCard
+                          key={staff.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.15 }}
+                        >
                         <StaffHeader>
                           <div>
                             <StaffName>{staff.name}</StaffName>
@@ -5010,16 +5662,16 @@ const HRManagement = () => {
                                 ) : (
                                   <StaffStatus $status={staff.status}>
                                     {staff.status === 'active'
-                                        ? (language === 'vi' ? 'Đang làm' : 'Active')
-                                        : staff.status === 'completed'
-                                          ? (language === 'vi' ? 'Hoàn thành' : 'Completed')
-                                          : staff.status === 'completed_pending_candidate'
-                                            ? (language === 'vi' ? 'Chờ ứng viên xác nhận' : 'Pending Candidate Confirm')
-                                            : staff.status === 'pending_confirmation'
+                                      ? (language === 'vi' ? 'Đang làm' : 'Active')
+                                      : staff.status === 'completed'
+                                        ? (language === 'vi' ? 'Hoàn thành' : 'Completed')
+                                        : staff.status === 'completed_pending_candidate'
+                                          ? (language === 'vi' ? 'Chờ ứng viên xác nhận' : 'Pending Candidate Confirm')
+                                          : staff.status === 'pending_confirmation'
+                                            ? (language === 'vi' ? 'Chờ xác nhận' : 'Pending Confirm')
+                                            : staff.status === 'pending_change'
                                               ? (language === 'vi' ? 'Chờ xác nhận' : 'Pending Confirm')
-                                              : staff.status === 'pending_change'
-                                                ? (language === 'vi' ? 'Chờ xác nhận' : 'Pending Confirm')
-                                                : (language === 'vi' ? 'Đang làm' : 'Active')}
+                                              : (language === 'vi' ? 'Đang làm' : 'Active')}
                                   </StaffStatus>
                                 )
                               )
@@ -5053,17 +5705,31 @@ const HRManagement = () => {
 
                         {staff.status === 'replaced' && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px', width: '100%' }}>
-                            <div style={{ background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: '12px', padding: '14px 16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', color: '#DC2626', fontSize: '13.5px', marginBottom: '8px' }}>
-                                <AlertCircle size={16} />
-                                {language === 'vi' ? 'Nhân viên đã bị thay thế' : 'Worker has been replaced'}
+                            {staff.jobStatus === 'ĐÃ_HOÀN_TRẢ' ? (
+                              <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '14px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', color: '#D97706', fontSize: '13.5px', marginBottom: '8px' }}>
+                                  <AlertCircle size={16} />
+                                  {language === 'vi' ? 'Đã hoàn trả ví Escrow' : 'Refunded Escrow Wallet'}
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#B45309', lineHeight: '1.6' }}>
+                                  {language === 'vi'
+                                    ? 'Bạn đã từ chối ứng viên thay thế. 85% tiền lương ca làm đã được hoàn trả về ví của bạn.'
+                                    : 'You rejected the replacement candidate. 85% of the shift salary has been refunded to your wallet.'}
+                                </div>
                               </div>
-                              <div style={{ fontSize: '13px', color: '#7F1D1D', lineHeight: '1.6' }}>
-                                {language === 'vi'
-                                  ? 'Ca làm đã bị huỷ trước khi hoàn thành. Nhân viên này không phát sinh tiền công.'
-                                  : 'The shift was cancelled before completion. No wages are paid for this worker.'}
+                            ) : (
+                              <div style={{ background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: '12px', padding: '14px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', color: '#DC2626', fontSize: '13.5px', marginBottom: '8px' }}>
+                                  <AlertCircle size={16} />
+                                  {language === 'vi' ? 'Nhân viên đã bị thay thế' : 'Worker has been replaced'}
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#7F1D1D', lineHeight: '1.6' }}>
+                                  {language === 'vi'
+                                    ? 'Ca làm đã bị huỷ trước khi hoàn thành. Nhân viên này không phát sinh tiền công.'
+                                    : 'The shift was cancelled before completion. No wages are paid for this worker.'}
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         )}
 
@@ -5160,12 +5826,19 @@ const HRManagement = () => {
                         )}
 
                         {staff.status === 'pending_change' && staff.changeRequest && (
-                          <ChangeRequestBanner>
+                          <ChangeRequestBanner style={staff.changeRequestStatus === 'approved' ? { background: '#ECFDF5', border: '1.5px solid #A7F3D0' } : {}}>
                             <div className="cr-header">
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', color: '#F97316', fontSize: '13px' }}>
-                                <RefreshCw size={14} />
-                                Đang chờ admin duyệt thay đổi
-                              </span>
+                              {staff.changeRequestStatus === 'approved' ? (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', color: '#059669', fontSize: '13px' }}>
+                                  <CheckCircle size={14} />
+                                  Yêu cầu đổi nhân viên đã được duyệt - Đang tìm người thay thế
+                                </span>
+                              ) : (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', color: '#F97316', fontSize: '13px' }}>
+                                  <RefreshCw size={14} />
+                                  Đang chờ admin duyệt thay đổi
+                                </span>
+                              )}
                             </div>
                             {staff.changeRequest.newWorkerName && (
                               <div className="cr-shift-row" style={{ color: '#10B981', fontWeight: '600' }}>
@@ -5193,14 +5866,47 @@ const HRManagement = () => {
                         )}
 
                         <StaffActions>
-                          {/* Temporarily hidden - View profile button */}
-                          {/* <StaffButton
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => setSelectedStaff(staff)}
-                          >
-                            <User />{language === 'vi' ? 'Xem hồ sơ' : 'View profile'}
-                          </StaffButton> */}
+                          {staff.status === 'replaced' && (
+                            <>
+                              <StaffButton
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => {
+                                  if (staff.cvUrl) {
+                                    setSelectedCV({ url: staff.cvUrl, filename: staff.cvFilename, applicationId: staff.id, jobId: staff.jobId });
+                                    setShowCVPreview(true);
+                                  } else {
+                                    setSelectedStaff(staff);
+                                  }
+                                }}
+                              >
+                                <Eye />{language === 'vi' ? 'Xem' : 'View'}
+                              </StaffButton>
+                              <StaffButton
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => {
+                                  handleChatWithStaff(staff);
+                                }}
+                                style={{ position: 'relative' }}
+                              >
+                                <MessageSquare />{language === 'vi' ? 'Nhắn tin' : 'Chat'}
+                              </StaffButton>
+                              <StaffButton
+                                $variant="danger"
+                                disabled={staff.jobStatus === 'ĐÃ_HOÀN_TRẢ'}
+                                whileHover={staff.jobStatus !== 'ĐÃ_HOÀN_TRẢ' ? { scale: 1.02 } : {}}
+                                whileTap={staff.jobStatus !== 'ĐÃ_HOÀN_TRẢ' ? { scale: 0.98 } : {}}
+                                onClick={() => {
+                                  if (staff.jobStatus === 'ĐÃ_HOÀN_TRẢ') return;
+                                  setRejectReplacementAppId(staff.applicationId || staff.id);
+                                }}
+                                style={staff.jobStatus === 'ĐÃ_HOÀN_TRẢ' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                              >
+                                <XCircle />{language === 'vi' ? 'Từ chối ứng viên' : 'Reject worker'}
+                              </StaffButton>
+                            </>
+                          )}
 
                           {/* Show chat button when job is active or completed, change request only when active */}
                           {(staff.status === 'active' || staff.status === 'completed') && (
@@ -5384,17 +6090,33 @@ const HRManagement = () => {
                               >
                                 <Eye />{language === 'vi' ? 'Xem chi tiết' : 'View details'}
                               </StaffButton>
-                              <StaffButton
-                                $variant="danger"
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => {
-                                  console.log('Staff list cancel clicked for', staff.applicationId || staff.id);
-                                  handleCancelChangeRequest(staff.applicationId || staff.id);
-                                }}
-                              >
-                                <XCircle />{language === 'vi' ? 'Hủy yêu cầu' : 'Cancel'}
-                              </StaffButton>
+                              {staff.changeRequestStatus === 'approved' && staff.changeRequest?.recommendations && (
+                                <StaffButton
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => {
+                                    setUrgentRecommendations(staff.changeRequest.recommendations);
+                                    setUrgentRecommendationsJobTitle(staff.position || staff.jobTitle || 'Ca làm');
+                                    setShowUrgentRecsModal(true);
+                                  }}
+                                  style={{ background: '#ECFDF5', color: '#10B981', border: '1.5px solid #A7F3D0' }}
+                                >
+                                  <Sparkles />{language === 'vi' ? 'Xem gợi ý AI' : 'AI Recommendations'}
+                                </StaffButton>
+                              )}
+                              {staff.changeRequestStatus !== 'approved' && (
+                                <StaffButton
+                                  $variant="danger"
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => {
+                                    console.log('Staff list cancel clicked for', staff.applicationId || staff.id);
+                                    handleCancelChangeRequest(staff.applicationId || staff.id);
+                                  }}
+                                >
+                                  <XCircle />{language === 'vi' ? 'Hủy yêu cầu' : 'Cancel'}
+                                </StaffButton>
+                              )}
                             </>
                           )}
                         </StaffActions>
@@ -5402,7 +6124,8 @@ const HRManagement = () => {
                     ))}
                 </AnimatePresence>
               </StaffGrid>
-            )}
+            )
+          )}
           </>
         )}
 
@@ -7407,6 +8130,28 @@ const HRManagement = () => {
         type="warning"
         isLoading={isProcessingChange}
       />
+
+      {/* Modal xác nhận từ chối ứng viên thay thế */}
+      <ConfirmModal
+        isOpen={!!rejectReplacementAppId}
+        title={language === 'vi' ? 'Từ chối ứng viên thay thế' : 'Reject Replacement Candidate'}
+        message={language === 'vi'
+          ? 'Nếu bạn từ chối ứng viên thay thế, bạn sẽ không được phép yêu cầu thay đổi nhân sự cho ca làm này nữa. Đồng thời, 85% tiền cọc sẽ được hoàn trả về ví của bạn, 15% phí nền tảng. Bạn có chắc chắn muốn từ chối?'
+          : 'If you reject the replacement candidate, you will not be allowed to request any further changes for this shift. At the same time, 85% of the deposit will be refunded to your wallet, and the remaining 15% will go to platform fee. Are you sure you want to proceed?'}
+        confirmText={language === 'vi' ? 'Xác nhận từ chối' : 'Confirm Rejection'}
+        cancelText={language === 'vi' ? 'Hủy' : 'Cancel'}
+        onConfirm={handleConfirmRejectReplacement}
+        onCancel={() => setRejectReplacementAppId(null)}
+        type="danger"
+        isLoading={isRejectingReplacement}
+      />
+
+      <UrgentRecommendationsModal
+        isOpen={showUrgentRecsModal}
+        onClose={() => setShowUrgentRecsModal(false)}
+        recommendations={urgentRecommendations}
+        jobTitle={urgentRecommendationsJobTitle}
+      />
     </DashboardLayout>
   );
 };
@@ -7417,11 +8162,11 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
 
   const initials = candidate.candidate
     ? candidate.candidate
-        .split(' ')
-        .slice(0, 2)
-        .map(n => n[0])
-        .join('')
-        .toUpperCase()
+      .split(' ')
+      .slice(0, 2)
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
     : 'CN';
 
   const avgRating = candidate.reviews && candidate.reviews.length > 0
@@ -7598,3 +8343,4 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
 ProfileDetailModal.displayName = 'ProfileDetailModal';
 
 export default HRManagement;
+// Touched to refresh HMR cache

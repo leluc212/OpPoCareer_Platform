@@ -8,6 +8,10 @@ import notificationService from '../services/notificationService';
 import jobPostService from '../services/jobPostService';
 import quickJobService from '../services/quickJobService';
 import applicationService from '../services/applicationService';
+import adminEmployerService from '../services/adminEmployerService';
+import { getWithdrawalRequests } from '../services/packageCatalogService';
+import candidateProfileService from '../services/candidateProfileService';
+import feedbackService from '../services/feedbackService';
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -342,19 +346,106 @@ const Sidebar = ({ role, onHoverChange }) => {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [standardPendingCount, setStandardPendingCount] = useState(0);
   const [quickPendingCount, setQuickPendingCount] = useState(0);
+  const [adminBadges, setAdminBadges] = useState({
+    employers: 0,
+    candidates: 0,
+    posts: 0,
+    wallet: 0,
+    notifications: 0,
+    reports: 0
+  });
 
   useEffect(() => {
     let active = true;
     let intervalId;
 
     const fetchCounts = async () => {
-      const userId = user?.userId || user?.id || user?.email;
+      const userId = role === 'admin' ? 'admin' : (user?.userId || user?.id || user?.email);
       if (!userId || !role) return;
 
       try {
         // 1. Fetch unread notifications count
-        const count = await notificationService.getUnreadCount(userId, role);
-        if (active) setUnreadNotifications(count);
+        if (role === 'admin') {
+          const [notifs, employers, changeRequestsRaw, standardJobsRaw, quickJobsRaw, withdrawalsRaw, candidatesRaw, feedbacksRaw] = await Promise.all([
+            notificationService.getNotifications(userId, role).catch(() => []),
+            adminEmployerService.getAllEmployers().catch(() => []),
+            applicationService.listChangeRequests().catch(() => []),
+            (jobPostService.getAllJobPosts ? jobPostService.getAllJobPosts() : jobPostService.getAllActiveJobs()).catch(() => []),
+            (quickJobService.getAllQuickJobs ? quickJobService.getAllQuickJobs() : quickJobService.getAllActiveQuickJobs()).catch(() => []),
+            getWithdrawalRequests().catch(() => []),
+            candidateProfileService.getAllCandidates().catch(() => []),
+            feedbackService.getAllFeedbacks().catch(() => [])
+          ]);
+          const unreadNotifs = notifs.filter(n => !n.read);
+          
+          const reportsCount = (feedbacksRaw || []).filter(item => item.status === 'unread').length;
+          
+          const pendingVerificationCount = employers.filter(e => e.verificationStatus === 'pending' && !e.isVerified).length;
+          const pendingQuickJobCount = employers.filter(e => e.quickJobStatus === 'pending').length;
+          
+          const pendingChanges = (changeRequestsRaw || []).filter(app => {
+            const crStatus = app.changeRequestStatus || app.change_request_status ||
+              (app.changeRequest && app.changeRequest.status) ||
+              (app.change_request && app.change_request.status) ||
+              (app.extraFields && (app.extraFields.changeRequestStatus || app.extraFields.change_request_status));
+            const isCancelled = crStatus && String(crStatus).toLowerCase() === 'cancelled';
+            return !isCancelled;
+          });
+          const pendingChangeCount = pendingChanges.filter(r => !r.changeRequestStatus || r.changeRequestStatus === 'pending').length;
+          
+          const employersCount = pendingVerificationCount + pendingChangeCount + pendingQuickJobCount;
+          const candidatesCount = unreadNotifs.filter(n => n.actionUrl === '/admin/candidates' && n.type !== 'candidate_withdrawal_request').length;
+
+          // Calculate pending standard and quick jobs (neither approved nor rejected)
+          const standardList = Array.isArray(standardJobsRaw) ? standardJobsRaw : (standardJobsRaw?.data || []);
+          const quickList = Array.isArray(quickJobsRaw) ? quickJobsRaw : (quickJobsRaw?.data || []);
+          const getPendingCount = (list) => {
+            return (list || []).filter(job => {
+              const status = typeof job.status === 'string' ? job.status.trim().toLowerCase() : '';
+              const isApproved = ['active', 'approved', 'ai-approved'].includes(status);
+              const isRejected = ['closed', 'deleted', 'rejected'].includes(status);
+              return !isApproved && !isRejected;
+            }).length;
+          };
+          const pendingStandardCount = getPendingCount(standardList);
+          const pendingQuickCount = getPendingCount(quickList);
+          const pendingChangeRequestsCount = (changeRequestsRaw || []).filter(r => r.status === 'pending_change').length;
+
+          const postsCount = pendingStandardCount + pendingQuickCount + pendingChangeRequestsCount;
+
+          // Calculate pending withdrawal requests (status === 'pending') for employers and candidates
+          const pendingEmployerWithdrawals = (withdrawalsRaw || []).filter(w => (w.status === 'pending' || !w.status) && w.isCandidate !== true).length;
+          let pendingCandidateWithdrawals = 0;
+          if (Array.isArray(candidatesRaw)) {
+            candidatesRaw.forEach(c => {
+              if (Array.isArray(c.withdrawals)) {
+                c.withdrawals.forEach(w => {
+                  const status = w.status || 'pending';
+                  if (status === 'pending') {
+                    pendingCandidateWithdrawals++;
+                  }
+                });
+              }
+            });
+          }
+          const walletCount = pendingEmployerWithdrawals + pendingCandidateWithdrawals;
+          const totalUnreadCount = unreadNotifs.length;
+          
+          if (active) {
+            setAdminBadges({
+              employers: employersCount,
+              candidates: candidatesCount,
+              posts: postsCount,
+              wallet: walletCount,
+              notifications: totalUnreadCount,
+              reports: reportsCount
+            });
+            setUnreadNotifications(totalUnreadCount);
+          }
+        } else {
+          const count = await notificationService.getUnreadCount(userId, role);
+          if (active) setUnreadNotifications(count);
+        }
 
         // 2. Fetch unread chat count
         let chatCount = 0;
@@ -452,9 +543,18 @@ const Sidebar = ({ role, onHoverChange }) => {
     fetchCounts();
     intervalId = setInterval(fetchCounts, 10000); // poll every 10s
 
+    const handleUpdate = () => {
+      fetchCounts();
+    };
+
+    window.addEventListener('newFeedbackSubmitted', handleUpdate);
+    window.addEventListener('feedbackStatusChanged', handleUpdate);
+
     return () => {
       active = false;
       clearInterval(intervalId);
+      window.removeEventListener('newFeedbackSubmitted', handleUpdate);
+      window.removeEventListener('feedbackStatusChanged', handleUpdate);
     };
   }, [user, role]);
 
@@ -613,12 +713,28 @@ const Sidebar = ({ role, onHoverChange }) => {
               const Icon = link.icon;
               
               let badgeCount = 0;
-              if (link.to.endsWith('/notifications')) {
-                badgeCount = unreadNotifications + unreadChatCount;
-              } else if (link.to === '/employer/standard-jobs') {
-                badgeCount = standardPendingCount;
-              } else if (link.to === '/employer/quick-jobs') {
-                badgeCount = quickPendingCount;
+              if (role === 'admin') {
+                if (link.to === '/admin/employers') {
+                  badgeCount = adminBadges.employers;
+                } else if (link.to === '/admin/candidates') {
+                  badgeCount = adminBadges.candidates;
+                } else if (link.to === '/admin/posts') {
+                  badgeCount = adminBadges.posts;
+                } else if (link.to === '/admin/wallet') {
+                  badgeCount = adminBadges.wallet;
+                } else if (link.to === '/admin/notifications') {
+                  badgeCount = adminBadges.notifications;
+                } else if (link.to === '/admin/reports') {
+                  badgeCount = adminBadges.reports;
+                }
+              } else {
+                if (link.to.endsWith('/notifications')) {
+                  badgeCount = unreadNotifications + unreadChatCount;
+                } else if (link.to === '/employer/standard-jobs') {
+                  badgeCount = standardPendingCount;
+                } else if (link.to === '/employer/quick-jobs') {
+                  badgeCount = quickPendingCount;
+                }
               }
 
               return (

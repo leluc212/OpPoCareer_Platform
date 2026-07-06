@@ -13,8 +13,6 @@ import CVUpload from '../../components/CVUpload';
 import WorkExperienceSection from '../../components/WorkExperienceSection';
 import candidateProfileService from '../../services/candidateProfileService';
 import applicationService from '../../services/applicationService';
-import jobPostService from '../../services/jobPostService';
-import quickJobService from '../../services/quickJobService';
 import { 
   Upload, 
   Save, 
@@ -1109,33 +1107,6 @@ const CandidateProfile = () => {
     try {
       const apps = await applicationService.getMyCandidateApplications();
       
-      // Only fetch job details for relevant applications (completed/rated)
-      const relevantApps = apps.filter(app => 
-        app.status === 'completed' || app.status === 'completed_pending_candidate' || 
-        (app.employerRating && typeof app.employerRating.overall === 'number')
-      );
-      const neededJobIds = [...new Set(relevantApps.map(app => app.jobId).filter(Boolean))];
-      
-      let finalAllJobs = [];
-      if (neededJobIds.length > 0) {
-        // Batch requests (max 3 concurrent) to avoid Lambda throttling
-        for (let i = 0; i < neededJobIds.length; i += 3) {
-          const batch = neededJobIds.slice(i, i + 3);
-          const batchResults = await Promise.all(batch.map(async (id) => {
-            try {
-              if (/^\d+$/.test(id)) return null;
-              if (id.startsWith('QJOB-')) {
-                return await quickJobService.getQuickJob(id).catch(() => null);
-              }
-              return await jobPostService.getJobPost(id).catch(() => null);
-            } catch (e) {
-              return null;
-            }
-          }));
-          finalAllJobs.push(...batchResults.filter(Boolean));
-        }
-      }
-
       // Process apps to find those with employerRating
       const ratedApps = apps.filter(app => app.employerRating && typeof app.employerRating.overall === 'number');
       if (ratedApps.length > 0) {
@@ -1149,20 +1120,19 @@ const CandidateProfile = () => {
       }
 
       // Map completed and completed_pending_candidate apps for Work History
+      // Use data already stored in the application record to avoid 404 errors
+      // from fetching deleted/expired job posts individually
       const completedApps = apps
         .filter(app => app.status === 'completed' || app.status === 'completed_pending_candidate')
-        .map(app => {
-          const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === app.jobId);
-          return {
-            id: app.applicationId || app.id,
-            jobTitle: job?.title || app.jobTitle || '---',
-            companyName: job?.employerName || job?.companyName || app.employerName || '---',
-            location: job?.location || app.location || '---',
-            salary: job?.salary || job?.totalSalary || '---',
-            completedAt: app.updatedAt || app.appliedAt || app.createdAt,
-            employerRating: app.employerRating || null
-          };
-        })
+        .map(app => ({
+          id: app.applicationId || app.id,
+          jobTitle: app.jobTitle || '---',
+          companyName: app.employerName || '---',
+          location: app.location || '---',
+          salary: app.salary || app.totalSalary || '---',
+          completedAt: app.updatedAt || app.appliedAt || app.createdAt,
+          employerRating: app.employerRating || null
+        }))
         .sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
 
       setWorkHistory(completedApps);
@@ -1413,91 +1383,34 @@ const CandidateProfile = () => {
         kycCompleted // Include eKYC status
       };
       
-      // Save to DynamoDB
+      // Save to DynamoDB - ALWAYS use updateProfile (PUT) which is safe
+      // PUT uses update_item which only updates specified fields without overwriting the entire record
+      // This prevents data loss that could occur when createProfile (POST) used put_item
       try {
-        // Check if profile exists
-        const existingProfile = await candidateProfileService.getMyProfile();
+        const updatedProfile = await candidateProfileService.updateProfile(profileData);
+        console.log('✅ Profile saved in DynamoDB');
         
-        if (existingProfile) {
-          // Update existing profile
-          const updatedProfile = await candidateProfileService.updateProfile(profileData);
-          console.log('✅ Profile updated in DynamoDB');
-          
-          // Update local state with returned data
-          if (updatedProfile) {
-            setFormData({
-              fullName: updatedProfile.fullName || '',
-              email: updatedProfile.email,
-              phone: updatedProfile.phone || '',
-              location: updatedProfile.location || '',
-              cccd: updatedProfile.cccd || '',
-              dateOfBirth: updatedProfile.dateOfBirth || '',
-              title: updatedProfile.title || '',
-              bio: updatedProfile.bio || '',
-              socialLinks: updatedProfile.socialLinks || {
-                facebook: '',
-                instagram: '',
-                zalo: '',
-                website: ''
-              }
-            });
-            setOriginalFormData({
-              fullName: updatedProfile.fullName || '',
-              email: updatedProfile.email,
-              phone: updatedProfile.phone || '',
-              location: updatedProfile.location || '',
-              cccd: updatedProfile.cccd || '',
-              dateOfBirth: updatedProfile.dateOfBirth || '',
-              title: updatedProfile.title || '',
-              bio: updatedProfile.bio || '',
-              socialLinks: updatedProfile.socialLinks || {
-                facebook: '',
-                instagram: '',
-                zalo: '',
-                website: ''
-              }
-            });
+        // Helper to extract form data from profile response
+        const extractFormData = (profile) => ({
+          fullName: profile.fullName || '',
+          email: profile.email,
+          phone: profile.phone || '',
+          location: profile.location || '',
+          cccd: profile.cccd || '',
+          dateOfBirth: profile.dateOfBirth || '',
+          title: profile.title || '',
+          bio: profile.bio || '',
+          socialLinks: profile.socialLinks || {
+            facebook: '',
+            instagram: '',
+            zalo: '',
+            website: ''
           }
-        } else {
-          // Create new profile
-          const newProfile = await candidateProfileService.createProfile(profileData);
-          console.log('✅ Profile created');
-          
-          // Update local state with returned data
-          if (newProfile) {
-            setFormData({
-              fullName: newProfile.fullName || '',
-              email: newProfile.email,
-              phone: newProfile.phone || '',
-              location: newProfile.location || '',
-              cccd: newProfile.cccd || '',
-              dateOfBirth: newProfile.dateOfBirth || '',
-              title: newProfile.title || '',
-              bio: newProfile.bio || '',
-              socialLinks: newProfile.socialLinks || {
-                facebook: '',
-                instagram: '',
-                zalo: '',
-                website: ''
-              }
-            });
-            setOriginalFormData({
-              fullName: newProfile.fullName || '',
-              email: newProfile.email,
-              phone: newProfile.phone || '',
-              location: newProfile.location || '',
-              cccd: newProfile.cccd || '',
-              dateOfBirth: newProfile.dateOfBirth || '',
-              title: newProfile.title || '',
-              bio: newProfile.bio || '',
-              socialLinks: newProfile.socialLinks || {
-                facebook: '',
-                instagram: '',
-                zalo: '',
-                website: ''
-              }
-            });
-          }
+        });
+        
+        if (updatedProfile) {
+          setFormData(extractFormData(updatedProfile));
+          setOriginalFormData(extractFormData(updatedProfile));
         }
         
         setIsEditing(false);

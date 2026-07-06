@@ -450,6 +450,17 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: { status: 'pending' } }) };
     }
 
+    // GET /admin/employers/pending-changes - Get all pending profile change requests (Admin only)
+    // PHẢI đứng trước GET /profile/{userId} vì {proxy+} parse pathUserId = "pending-changes"
+    if (httpMethod === 'GET' && (event.path === '/admin/employers/pending-changes' || event.path?.endsWith('/admin/employers/pending-changes'))) {
+      const result = await employerProfileService.getAllPendingChanges();
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: true, data: result.requests })
+      };
+    }
+
     // GET /profile/{userId} - Get profile
     if (httpMethod === 'GET' && pathUserId) {
       try {
@@ -496,7 +507,115 @@ exports.handler = async (event) => {
       };
     }
 
-    // PUT /profile/{userId} - Update profile
+    // PUT /profile/{userId}/submit-changes - Submit pending changes for admin review (NEW)
+    if (httpMethod === 'PUT' && pathUserId && event.path?.endsWith('/submit-changes')) {
+      // Verify user is updating their own profile
+      if (userId !== pathUserId) {
+        return {
+          statusCode: 403,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: false, 
+            message: 'Access denied - can only update own profile' 
+          })
+        };
+      }
+
+      const body = JSON.parse(event.body || '{}');
+      
+      // Get current profile first
+      let currentProfile;
+      try {
+        currentProfile = await employerProfileService.getProfile(userId);
+      } catch (error) {
+        return {
+          statusCode: 404,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: false, 
+            message: 'Profile not found. Please create profile first.' 
+          })
+        };
+      }
+
+      // Check if there's already a pending request
+      if (currentProfile.pendingProfileChanges && currentProfile.pendingProfileChanges.status === 'PENDING_REVIEW') {
+        return {
+          statusCode: 400,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: false, 
+            message: 'Đang có yêu cầu chỉnh sửa chờ duyệt' 
+          })
+        };
+      }
+      
+      // Submit pending changes (does not update main profile)
+      const pendingChanges = await employerProfileService.submitPendingChanges(userId, body.changes);
+      
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({ 
+          success: true, 
+          message: 'Đã gửi yêu cầu chỉnh sửa hồ sơ. Nội dung sẽ được cập nhật sau khi admin duyệt.',
+          data: pendingChanges 
+        })
+      };
+    }
+
+    // POST /admin/employers/{userId}/approve-changes - Approve pending profile changes (Admin only)
+    if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/approve-changes')) {
+      try {
+        const result = await employerProfileService.approvePendingChanges(pathUserId);
+        return {
+          statusCode: 200,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'Yêu cầu chỉnh sửa hồ sơ đã được duyệt',
+            data: result 
+          })
+        };
+      } catch (error) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: false, 
+            message: error.message 
+          })
+        };
+      }
+    }
+
+    // POST /admin/employers/{userId}/reject-changes - Reject pending profile changes (Admin only)
+    if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/reject-changes')) {
+      const body = JSON.parse(event.body || '{}');
+      try {
+        const result = await employerProfileService.rejectPendingChanges(pathUserId, body.rejectionReason || '');
+        return {
+          statusCode: 200,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'Yêu cầu chỉnh sửa hồ sơ đã bị từ chối',
+            data: result 
+          })
+        };
+      } catch (error) {
+        return {
+          statusCode: 400,
+          headers: corsHeaders,
+          body: JSON.stringify({ 
+            success: false, 
+            message: error.message 
+          })
+        };
+      }
+    }
+
+    // PUT /profile/{userId} - Update profile (LEGACY - direct update, kept for compatibility)
     if (httpMethod === 'PUT' && pathUserId) {
       // Verify user is updating their own profile
       if (userId !== pathUserId) {

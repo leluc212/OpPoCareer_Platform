@@ -4438,7 +4438,7 @@ const LandingPage = ({ children }) => {
                 </div>
                 <div className="contact-info">
                   <h4>{language === 'vi' ? 'Liên hệ' : 'Contact'}</h4>
-                  <p>{language === 'vi' ? 'Hotline hệ thống:' : 'System Hotline:'} <strong>0379 784 509</strong></p>
+                  <p>{language === 'vi' ? 'Hotline kĩ thuật:' : 'Technical Hotline:'} <strong>0379 784 509</strong></p>
                   <p>{language === 'vi' ? 'Hỗ trợ khách hàng:' : 'Customer Support:'} <strong>0563 518 922</strong></p>
                   <p>Email: oppohiringplatform@gmail.com</p>
                   <p>TikTok: <strong><a href="https://www.tiktok.com/@oppo.career?is_from_webapp=1&sender_device=pc" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>tiktok.com/@oppo.career</a></strong></p>

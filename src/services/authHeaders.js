@@ -6,6 +6,10 @@
  */
 import { fetchAuthSession } from 'aws-amplify/auth';
 
+// Cognito User Pool Client ID — used to scan localStorage for the idToken
+// when the Amplify session object returns a non-JWT value.
+const USER_POOL_CLIENT_ID = '2mv7qt4gpmq03dmlm0or9724n8';
+
 /**
  * Decode a JWT and return its payload, or null on failure.
  */
@@ -30,34 +34,94 @@ function isTokenExpired(token) {
 }
 
 /**
- * Extract a validated JWT string from an Amplify v6 idToken object (or plain string).
- * Returns null if the value is not a proper 3-part JWT.
+ * Validate that a string is a proper 3-part JWT (header.payload.signature).
+ * Returns the cleaned token string, or null if invalid.
  */
-function extractJwtString(idToken) {
-  if (!idToken) return null;
-
-  // Amplify v6 JWT class: toString() returns full JWT string.
-  // Prefer toString() over jwtToken (jwtToken may be just the signature in some versions).
-  const raw =
-    (typeof idToken === 'string' ? idToken : null) ||
-    idToken?.toString?.() ||
-    idToken?.jwtToken ||
-    '';
-
+function validateJwt(raw) {
+  if (!raw || typeof raw !== 'string') return null;
   const cleaned = raw.trim().replace(/[\r\n\t]/g, '');
-
-  // Must be a 3-part JWT: header.payload.signature
-  if (cleaned.split('.').length !== 3) {
-    console.warn(
-      `⚠️ [getIdToken] Non-JWT value from Amplify (${cleaned.slice(0, 40)}...) — skipping. Parts: ${cleaned.split('.').length}`
-    );
-    return null;
-  }
+  if (cleaned.split('.').length !== 3) return null;
   return cleaned;
 }
 
 /**
+ * Extract a validated JWT string from an Amplify v6 idToken object (or plain string).
+ *
+ * Amplify v6 wraps the token in a decoded object: { toString: () => rawJwt, payload }.
+ * We must call toString() to get the raw JWT string.
+ * We do NOT use idToken.jwtToken — in some builds that field holds only the
+ * signature (a bare Base64 hash), not the full JWT.
+ */
+function extractJwtString(idToken) {
+  if (!idToken) return null;
+
+  // Try each possible source in order of reliability
+  const candidates = [
+    typeof idToken === 'string' ? idToken : null,   // already a string
+    idToken?.toString?.(),                            // Amplify v6 JWT object toString()
+  ];
+
+  for (const candidate of candidates) {
+    const jwt = validateJwt(candidate);
+    if (jwt) return jwt;
+  }
+
+  console.warn(
+    `⚠️ [getIdToken] Could not extract valid JWT from Amplify token object`
+  );
+  return null;
+}
+
+/**
+ * Scan localStorage for an Amplify-stored idToken for the configured client.
+ * Amplify v6 stores tokens under keys like:
+ *   CognitoIdentityServiceProvider.<clientId>.<username>.idToken
+ * or the newer format:
+ *   amplify-signin-with-hostedUI / cognito.<clientId>.<username>.idToken
+ *
+ * Returns a valid non-expired JWT string, or null.
+ */
+function getIdTokenFromLocalStorage() {
+  try {
+    const prefix = `CognitoIdentityServiceProvider.${USER_POOL_CLIENT_ID}`;
+    const lastUserKey = `${prefix}.LastAuthUser`;
+    const username = localStorage.getItem(lastUserKey);
+
+    if (username) {
+      const tokenKey = `${prefix}.${username}.idToken`;
+      const token = localStorage.getItem(tokenKey);
+      const jwt = validateJwt(token);
+      if (jwt && !isTokenExpired(jwt)) {
+        console.log('[getIdToken] ✅ Retrieved valid token from localStorage');
+        return jwt;
+      }
+    }
+
+    // Fallback: scan all keys for any matching idToken pattern
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        key.includes(USER_POOL_CLIENT_ID) &&
+        key.endsWith('.idToken')
+      ) {
+        const token = localStorage.getItem(key);
+        const jwt = validateJwt(token);
+        if (jwt && !isTokenExpired(jwt)) {
+          console.log(`[getIdToken] ✅ Found valid token via localStorage scan (key: ${key})`);
+          return jwt;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[getIdToken] localStorage scan failed:', err?.message);
+  }
+  return null;
+}
+
+/**
  * Returns the raw JWT id-token string from Amplify fetchAuthSession().
+ * If the Amplify session object yields a bad value, falls back to localStorage.
  * If the token is expired, forces a session refresh.
  * Returns null if no valid token is available (user not logged in).
  */
@@ -83,7 +147,7 @@ export async function getIdToken() {
         return cleaned;
       }
 
-      // extractJwtString returned null → try forceRefresh
+      // Amplify session object gave us a bad token value → try forceRefresh first
       console.warn('[getIdToken] extractJwtString returned null — trying forceRefresh');
       try {
         const refreshed = await fetchAuthSession({ forceRefresh: true });
@@ -98,6 +162,11 @@ export async function getIdToken() {
   } catch (err) {
     console.warn('[getIdToken] fetchAuthSession threw:', err?.message);
   }
+
+  // Last resort: read directly from localStorage (bypasses Amplify token object)
+  console.warn('[getIdToken] Falling back to localStorage token retrieval');
+  const lsToken = getIdTokenFromLocalStorage();
+  if (lsToken) return lsToken;
 
   return null;
 }

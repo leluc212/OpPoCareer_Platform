@@ -2793,6 +2793,16 @@ const Applications = () => {
   // Verification gate — check isVerified from API
   const [isVerified, setIsVerified] = useState(null); // null = checking, true/false = result
   const [verificationPending, setVerificationPending] = useState(false);
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+
+  // Guard: chỉ chạy action nếu đã xác thực, ngược lại hiện modal tương ứng
+  const requireVerified = (action) => {
+    if (isVerified) {
+      action();
+    } else {
+      setShowVerifyModal(true); // hiện modal xác thực hoặc pending tùy verificationPending
+    }
+  };
 
   useEffect(() => {
     const checkVerification = async () => {
@@ -3495,7 +3505,7 @@ const Applications = () => {
 
   // Open delete confirmation modal
   const handleDeleteJob = (jobId) => {
-    setDeleteJobId(jobId);
+    requireVerified(() => setDeleteJobId(jobId));
   };
 
   // Confirm and delete job post
@@ -3622,11 +3632,13 @@ const Applications = () => {
 
   // Edit job
   const handleEditJob = (jobId) => {
-    const job = jobPosts.find(j => j.id === jobId);
-    if (job) {
-      // Navigate to PostJob page with job data
-      navigate('/employer/post-job', { state: { job } });
-    }
+    requireVerified(() => {
+      const job = jobPosts.find(j => j.id === jobId);
+      if (job) {
+        // Navigate to PostJob page with job data
+        navigate('/employer/post-job', { state: { job } });
+      }
+    });
   };
 
   // Cancel edit
@@ -3651,44 +3663,206 @@ const Applications = () => {
           </div>
         )}
 
-        {/* Not verified — block access */}
-        {isVerified === false && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center' }}>
-            <div style={{ width: '72px', height: '72px', borderRadius: '20px', background: '#FEF3C7', border: '2px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-              <ShieldCheck style={{ width: 36, height: 36, color: '#D97706' }} />
-            </div>
-            <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1E293B', marginBottom: '12px' }}>
-              {language === 'vi' ? 'Tài khoản chưa được xác thực' : 'Account Not Verified'}
-            </h2>
-            <p style={{ fontSize: '15px', color: '#64748B', maxWidth: '480px', lineHeight: 1.6, marginBottom: '8px' }}>
-              {verificationPending
-                ? (language === 'vi'
-                  ? 'Hồ sơ xác thực của bạn đang được admin xem xét. Bạn sẽ có thể đăng bài và xem CV ứng viên ngay khi được phê duyệt.'
-                  : 'Your verification is under admin review. You will be able to post jobs and view applicant CVs once approved.')
-                : (language === 'vi'
-                  ? 'Bạn cần hoàn tất xác thực hồ sơ công ty và được admin phê duyệt trước khi đăng tin tuyển dụng và xem CV ứng viên tiêu chuẩn.'
-                  : 'You need to complete company verification and get admin approval before posting jobs and viewing standard applicant CVs.')
-              }
-            </p>
-            {verificationPending ? (
-              <div style={{ marginTop: '20px', padding: '14px 28px', background: '#FEF3C7', border: '1.5px solid #FDE68A', borderRadius: '12px', fontSize: '14px', fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Clock style={{ width: 18, height: 18 }} />
-                {language === 'vi' ? 'Đang chờ admin duyệt — thường trong 24-48 giờ' : 'Pending admin approval — usually within 24-48 hours'}
+        {/* Verify modal — hiện khi bấm chức năng mà chưa xác thực (và không pending) */}
+        {showVerifyModal && !verificationPending && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowVerifyModal(false)}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', zIndex: 1000, padding: '20px',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: 'white', borderRadius: '24px', maxWidth: '480px',
+                width: '100%', overflow: 'hidden',
+                boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+              }}
+            >
+              <div style={{
+                background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+                padding: '48px 32px 32px', textAlign: 'center', color: 'white',
+              }}>
+                <div style={{
+                  width: '80px', height: '80px', borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.2)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
+                }}>
+                  <ShieldCheck style={{ width: 40, height: 40, color: 'white' }} />
+                </div>
+                <h2 style={{ fontSize: '26px', fontWeight: 800, marginBottom: '12px', lineHeight: 1.2 }}>
+                  {language === 'vi' ? 'Xác thực tài khoản công ty!' : 'Verify Your Company Account!'}
+                </h2>
+                <p style={{ fontSize: '15px', opacity: 0.9, lineHeight: 1.5, margin: 0 }}>
+                  {language === 'vi'
+                    ? 'Bạn cần xác thực tài khoản để sử dụng tính năng này'
+                    : 'You need to verify your account to use this feature'}
+                </p>
               </div>
-            ) : (
-              <button
-                onClick={() => navigate('/employer/verification')}
-                style={{ marginTop: '20px', padding: '14px 32px', background: 'linear-gradient(135deg,#1e40af,#2563eb)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: 700, fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                <ShieldCheck style={{ width: 18, height: 18 }} />
-                {language === 'vi' ? 'Xác thực hồ sơ ngay' : 'Verify Now'}
-              </button>
-            )}
-          </div>
+              <div style={{ background: 'white', padding: '32px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '28px' }}>
+                  {[
+                    {
+                      icon: Users,
+                      title: language === 'vi' ? 'Ứng viên tin tưởng hơn' : 'More candidate trust',
+                      desc: language === 'vi'
+                        ? 'Tài khoản xác thực giúp bạn nổi bật và tăng độ tin cậy với ứng viên'
+                        : 'Verified accounts stand out and build trust with candidates',
+                    },
+                    {
+                      icon: TrendingUp,
+                      title: language === 'vi' ? 'Đăng tin tuyển dụng ngay' : 'Post jobs immediately',
+                      desc: language === 'vi'
+                        ? 'Sau khi xác thực, bạn có thể đăng bài và tiếp cận hàng nghìn ứng viên'
+                        : 'Once verified, post jobs and reach thousands of candidates',
+                    },
+                    {
+                      icon: ShieldCheck,
+                      title: language === 'vi' ? 'Xem hồ sơ ứng viên' : 'View applicant profiles',
+                      desc: language === 'vi'
+                        ? 'Truy cập đầy đủ CV và thông tin ứng viên tiêu chuẩn'
+                        : 'Full access to standard applicant CVs and profiles',
+                    },
+                  ].map((item, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '14px',
+                      padding: '14px', background: '#F8FAFC', borderRadius: '14px',
+                      border: '1px solid #E2E8F0',
+                    }}>
+                      <div style={{
+                        width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0,
+                        background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <item.icon style={{ width: 22, height: 22, color: 'white' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#1E293B', marginBottom: '4px' }}>{item.title}</div>
+                        <div style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.5 }}>{item.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    onClick={() => setShowVerifyModal(false)}
+                    style={{
+                      flex: 1, padding: '14px 20px', borderRadius: '12px', fontSize: '15px',
+                      fontWeight: 600, cursor: 'pointer', border: '1.5px solid #E2E8F0',
+                      background: '#F8FAFC', color: '#64748B',
+                    }}
+                  >
+                    {language === 'vi' ? 'Để sau' : 'Later'}
+                  </button>
+                  <button
+                    onClick={() => { setShowVerifyModal(false); navigate('/employer/verification'); }}
+                    style={{
+                      flex: 1, padding: '14px 20px', borderRadius: '12px', fontSize: '15px',
+                      fontWeight: 700, cursor: 'pointer', border: 'none',
+                      background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+                      color: 'white', boxShadow: '0 8px 24px rgba(30,64,175,0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    }}
+                  >
+                    <ShieldCheck style={{ width: 18, height: 18 }} />
+                    {language === 'vi' ? 'Xác thực ngay' : 'Verify Now'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
 
-        {/* Verified — show full content */}
-        {isVerified === true && (<>
+        {/* Pending approval — modal, chỉ hiện khi bấm chức năng */}
+        {showVerifyModal && verificationPending && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setShowVerifyModal(false)}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', zIndex: 1000, padding: '20px',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: 'white', borderRadius: '24px', maxWidth: '440px',
+                width: '100%', overflow: 'hidden',
+                boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+              }}
+            >
+              {/* Header */}
+              <div style={{
+                background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)',
+                padding: '40px 32px 32px', textAlign: 'center', color: 'white',
+              }}>
+                <div style={{
+                  width: '80px', height: '80px', borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.2)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+                }}>
+                  <Clock style={{ width: 40, height: 40, color: 'white' }} />
+                </div>
+                <h2 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '10px', lineHeight: 1.2 }}>
+                  {language === 'vi' ? 'Đang chờ xét duyệt' : 'Pending Approval'}
+                </h2>
+                <p style={{ fontSize: '14px', opacity: 0.92, lineHeight: 1.6, margin: 0 }}>
+                  {language === 'vi'
+                    ? 'Hồ sơ xác thực của bạn đang được admin xem xét'
+                    : 'Your verification profile is under admin review'}
+                </p>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '28px 32px 32px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '14px',
+                  padding: '16px', background: '#FEF3C7', borderRadius: '14px',
+                  border: '1.5px solid #FDE68A', marginBottom: '20px',
+                }}>
+                  <Clock style={{ width: 20, height: 20, color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#92400E', marginBottom: '4px' }}>
+                      {language === 'vi' ? 'Thường trong 24-48 giờ' : 'Usually within 24-48 hours'}
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#A16207', lineHeight: 1.5 }}>
+                      {language === 'vi'
+                        ? 'Bạn sẽ có thể đăng bài và sử dụng đầy đủ tính năng ngay khi được phê duyệt.'
+                        : 'You will be able to post jobs and use all features once approved.'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowVerifyModal(false)}
+                  style={{
+                    width: '100%', padding: '14px 20px', borderRadius: '12px', fontSize: '15px',
+                    fontWeight: 600, cursor: 'pointer', border: '1.5px solid #E2E8F0',
+                    background: '#F8FAFC', color: '#64748B',
+                  }}
+                >
+                  {language === 'vi' ? 'Đóng' : 'Close'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isVerified !== null && (<>
         <PageHeader>
           <PageTitleGroup>
             <PageIconBox><Briefcase /></PageIconBox>
@@ -3749,7 +3923,7 @@ const Applications = () => {
               <CreatePostButton
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/employer/post-job')}
+                onClick={() => requireVerified(() => navigate('/employer/post-job'))}
               >
                 <Plus />
                 {language === 'vi' ? 'Đăng bài mới' : 'Post New Job'}

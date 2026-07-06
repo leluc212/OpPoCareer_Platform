@@ -467,6 +467,7 @@ const JobManagement = () => {
             responseRate: job.responseRate || 0,
             location: jobLocation,
             jobType: job.jobType || 'part-time',
+            urgencyLevel: job.urgencyLevel || 'standard',
             department: 'Bán thời gian'
           };
         });
@@ -636,7 +637,18 @@ const JobManagement = () => {
                 <CardContent>
                   <CardHeader>
                     <JobInfo>
-                      <JobTitle><DynamicTranslate text={job.title} showIndicator={false} /></JobTitle>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                        <JobTitle style={{ marginBottom: 0 }}><DynamicTranslate text={job.title} showIndicator={false} /></JobTitle>
+                        {job.urgencyLevel === 'urgent' ? (
+                          <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', whiteSpace: 'nowrap' }}>
+                            {language === 'vi' ? 'Tuyển gấp' : 'Urgent'}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '6px', background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', whiteSpace: 'nowrap' }}>
+                            {language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}
+                          </span>
+                        )}
+                      </div>
                       <JobMeta>
                         <MetaItem>
                           <Clock />

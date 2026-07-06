@@ -27,13 +27,15 @@ import {
   Download,
   Eye,
   Plus,
-  AlertCircle
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
 import { getJobApplications } from '../../services/applicationService';
+import { createProfileChangeRequestNotification } from '../../services/notificationService';
 
 const fadeIn = keyframes`
   from {
@@ -758,6 +760,32 @@ const InfoBox = styled.div`
     }
   }
 `;
+
+const PendingChangesBanner = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: #FEF9C3;
+  border: 1.5px solid #FDE047;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(234, 179, 8, 0.1);
+
+  svg {
+    color: #CA8A04;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+  }
+
+  p {
+    font-size: 14px;
+    font-weight: 600;
+    color: #92400E;
+    margin: 0;
+  }
+`;
 const EmployerProfile = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -784,6 +812,10 @@ const EmployerProfile = () => {
   });
   
   const [originalFormData, setOriginalFormData] = useState({});
+  const [originalCompanyLogo, setOriginalCompanyLogo] = useState('');
+  const [originalCompanyBanner, setOriginalCompanyBanner] = useState('');
+  const [originalCompanyVideo, setOriginalCompanyVideo] = useState('');
+  const [originalCompanyImages, setOriginalCompanyImages] = useState([]);
   const [companyLogo, setCompanyLogo] = useState('');
   const [companyBanner, setCompanyBanner] = useState('');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -798,6 +830,7 @@ const EmployerProfile = () => {
   });
   const [documents, setDocuments] = useState([]);
   const [verificationDocuments, setVerificationDocuments] = useState([]);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false); // Track if there are pending profile changes waiting for admin approval
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [profileStats, setProfileStats] = useState({
@@ -862,12 +895,24 @@ const EmployerProfile = () => {
           setCompanyBanner(profile.companyBanner || '');
           setCompanyVideo(profile.companyVideo || '');
           setCompanyImages(profile.companyImages || []);
+          setOriginalCompanyLogo(profile.companyLogo || '');
+          setOriginalCompanyBanner(profile.companyBanner || '');
+          setOriginalCompanyVideo(profile.companyVideo || '');
+          setOriginalCompanyImages(profile.companyImages || []);
           
           // Set locked fields
           setIsLockedFields({
             taxCode: !!profile.taxCode,
             businessLicense: !!profile.businessLicense
           });
+          
+          // Check if there are pending profile changes waiting for admin review
+          if (profile.pendingProfileChanges && profile.pendingProfileChanges.status === 'PENDING_REVIEW') {
+            setHasPendingChanges(true);
+            console.log('⏳ Có yêu cầu chỉnh sửa đang chờ duyệt');
+          } else {
+            setHasPendingChanges(false);
+          }
           
           console.log('✅ Employer profile loaded successfully');
         } else {
@@ -1069,22 +1114,15 @@ const EmployerProfile = () => {
         companyImages
       };
       
-      // Try to save to DynamoDB first, fallback to localStorage if API fails
+      // Try to save to DynamoDB
       try {
         const existingProfile = await employerProfileService.getMyProfile();
         
-        let savedProfile;
-        if (existingProfile) {
-          // Update existing profile
-          savedProfile = await employerProfileService.updateProfile(profileData);
-          console.log('✅ Employer profile updated');
-        } else {
-          // Create new profile
-          savedProfile = await employerProfileService.createProfile(profileData);
-          console.log('✅ Employer profile created');
-        }
-        
-        if (savedProfile) {
+        if (!existingProfile) {
+          // NEW PROFILE: Create directly without admin approval
+          const savedProfile = await employerProfileService.createProfile(profileData);
+          console.log('✅ Employer profile created (new user)');
+          
           setOriginalFormData({
             companyName: savedProfile.companyName || '',
             email: savedProfile.email || '',
@@ -1102,14 +1140,69 @@ const EmployerProfile = () => {
           });
           setCompanyVideo(savedProfile.companyVideo || '');
           setCompanyImages(savedProfile.companyImages || []);
+          
+          setIsEditing(false);
+          toast.success(language === 'vi' ? 'Đã tạo hồ sơ công ty thành công!' : 'Company profile created successfully!');
+        } else {
+          // EXISTING PROFILE: Submit pending changes for admin approval (NEW FLOW)
+          // Chỉ gửi những field thực sự thay đổi so với profile gốc
+          const changedFields = {};
+
+          // Diff text fields
+          for (const key of Object.keys(formData)) {
+            const current = formData[key] ?? '';
+            const original = originalFormData[key] ?? '';
+            if (String(current) !== String(original)) {
+              changedFields[key] = formData[key];
+            }
+          }
+
+          // Diff media fields
+          if (companyLogo !== originalCompanyLogo) {
+            changedFields.companyLogo = companyLogo;
+          }
+          if (companyBanner !== originalCompanyBanner) {
+            changedFields.companyBanner = companyBanner;
+          }
+          if (companyVideo !== originalCompanyVideo) {
+            changedFields.companyVideo = companyVideo;
+          }
+          if (JSON.stringify(companyImages) !== JSON.stringify(originalCompanyImages)) {
+            changedFields.companyImages = companyImages;
+          }
+
+          if (Object.keys(changedFields).length === 0) {
+            toast.info(language === 'vi' ? 'Không có thay đổi nào để gửi.' : 'No changes to submit.');
+            setIsEditing(false);
+            setIsLoadingProfile(false);
+            return;
+          }
+
+          await employerProfileService.submitPendingChanges(changedFields);
+          console.log('✅ Pending profile changes submitted for admin review');
+          
+          // Notify admin about the pending profile change request
+          try {
+            await createProfileChangeRequestNotification({
+              employerId: user?.username || user?.userId,
+              companyName: profileData.companyName || formData.companyName || 'Nhà tuyển dụng'
+            });
+            console.log('✅ Admin notification sent for profile change request');
+          } catch (notifErr) {
+            console.error('⚠️ Failed to send admin notification (non-critical):', notifErr);
+          }
+          
+          setHasPendingChanges(true); // Show banner indicating pending changes
+          setIsEditing(false);
+          
+          toast.success(language === 'vi' 
+            ? 'Đã gửi yêu cầu chỉnh sửa hồ sơ. Nội dung sẽ được cập nhật sau khi admin duyệt.' 
+            : 'Profile change request submitted. Changes will be applied after admin approval.');
         }
-        
-        setIsEditing(false);
-        toast.success(language === 'vi' ? 'Đã cập nhật hồ sơ công ty thành công!' : 'Company profile updated successfully!');
         
       } catch (apiError) {
         console.error('❌ API Error saving profile:', apiError);
-        toast.error(language === 'vi' ? 'Lỗi khi lưu hồ sơ. Vui lòng thử lại.' : 'Error saving profile. Please try again.');
+        toast.error(apiError.message || (language === 'vi' ? 'Lỗi khi lưu hồ sơ. Vui lòng thử lại.' : 'Error saving profile. Please try again.'));
       }
       
     } catch (error) {
@@ -1545,13 +1638,15 @@ const EmployerProfile = () => {
               </PageTitleGroup>
               
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={isEditing ? handleCancel : () => setIsEditing(true)}
+                whileHover={{ scale: hasPendingChanges ? 1 : 1.05 }}
+                whileTap={{ scale: hasPendingChanges ? 1 : 0.95 }}
+                onClick={isEditing ? handleCancel : (!hasPendingChanges ? () => setIsEditing(true) : undefined)}
+                disabled={!isEditing && hasPendingChanges}
+                title={!isEditing && hasPendingChanges ? (language === 'vi' ? 'Đang có yêu cầu chỉnh sửa chờ duyệt' : 'A profile change request is pending approval') : undefined}
                 style={{
                   padding: '12px 24px',
                   borderRadius: '12px',
-                  background: isEditing ? '#6B7280' : '#1e40af',
+                  background: isEditing ? '#6B7280' : (hasPendingChanges ? '#D1D5DB' : '#1e40af'),
                   color: 'white',
                   border: 'none',
                   fontWeight: '700',
@@ -1559,14 +1654,23 @@ const EmployerProfile = () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  cursor: 'pointer',
-                  boxShadow: isEditing ? 'none' : '0 4px 12px rgba(30, 64, 175, 0.2)'
+                  cursor: (isEditing || !hasPendingChanges) ? 'pointer' : 'not-allowed',
+                  boxShadow: isEditing ? 'none' : (hasPendingChanges ? 'none' : '0 4px 12px rgba(30, 64, 175, 0.2)'),
+                  opacity: (!isEditing && hasPendingChanges) ? 0.65 : 1
                 }}
               >
                 <Edit3 size={18} />
                 {isEditing ? (language === 'vi' ? 'Hủy' : 'Cancel') : (language === 'vi' ? 'Chỉnh Sửa' : 'Edit')}
               </motion.button>
             </PageHeader>
+
+            {/* Banner cảnh báo khi có yêu cầu đang chờ duyệt */}
+            {hasPendingChanges && (
+              <PendingChangesBanner>
+                <Clock />
+                <p>⏳ {language === 'vi' ? 'Nội dung chỉnh sửa của bạn đang được admin duyệt.' : 'Your profile changes are pending admin approval.'}</p>
+              </PendingChangesBanner>
+            )}
 
         <ProfileContent>
           <SidePanel

@@ -142,7 +142,10 @@ def load_creds():
         raise
 
 def get_auth(creds):
-    """Trả (bearer_token, token_id, token_key). Tự refresh khi hết hạn."""
+    """Trả (bearer_token, token_id, token_key). Tự refresh khi hết hạn.
+    Nếu tất cả refresh đều fail (VNPT không support), dùng token trong secret
+    và để VNPT quyết định — không block luồng vì exp check phía client.
+    """
     now      = int(time.time())
     token    = creds.get('bearer_token', '')
     tid      = creds.get('token_id', '')
@@ -162,7 +165,7 @@ def get_auth(creds):
         print(f'Token OK exp in {exp-now}s')
         return token, tid, tkey
 
-    print('Token expired, refreshing...')
+    print(f'Token exp={exp} now={now} diff={exp-now}s, attempting refresh...')
     
     # Thử client_credentials grant type trước (cho tk thật tế, scope=idgv2 hoặc read)
     for scope in ['idgv2', 'read']:
@@ -225,7 +228,11 @@ def get_auth(creds):
     except Exception as e:
         print(f'password grant failed: {e}')
 
-    _token_cache.update({'bearer': token, 'exp': now + 60, 'token_id': tid, 'token_key': tkey})
+    # Tất cả refresh đều fail (VNPT không support auto-refresh với tài khoản này).
+    # Dùng token trong secret và cache 30 phút — tránh spam VNPT token endpoint.
+    # VNPT server là nơi quyết định cuối cùng token có hợp lệ không.
+    print(f'All refresh attempts failed. Using existing token from secret (may be expired by clock). VNPT will decide.')
+    _token_cache.update({'bearer': token, 'exp': now + 1800, 'token_id': tid, 'token_key': tkey})
     return token, tid, tkey
 
 

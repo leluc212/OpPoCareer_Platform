@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { Users, UsersRound, FileText, MessageSquare, Clock, MapPin, Phone, Mail, Edit, Edit3, Trash2, Eye, CheckCircle, Send, Search, Calendar, Newspaper, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, User, Plus, X, XCircle, Wallet, Save, Award, Star, Briefcase, Zap, Banknote, ThumbsUp, ThumbsDown, ArrowRight, RefreshCw, Sparkles, Puzzle, Frown, Wrench, ShieldX, MoreHorizontal } from 'lucide-react';
+import { Users, UsersRound, FileText, MessageSquare, Clock, MapPin, Phone, Mail, Edit, Edit3, Trash2, Eye, CheckCircle, Send, Search, Calendar, Newspaper, TrendingUp, TrendingDown, AlertCircle, AlertTriangle, User, Plus, X, XCircle, Wallet, Save, Award, Star, Briefcase, Zap, Banknote, ThumbsUp, ThumbsDown, ArrowRight, RefreshCw, Sparkles, Puzzle, Frown, Wrench, ShieldX, MoreHorizontal, ShieldCheck } from 'lucide-react';
 import Modal from '../../components/Modal';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -2889,6 +2889,7 @@ const HRManagement = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [requestSending, setRequestSending] = useState(false);
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
+  const [showVerifyModalHR, setShowVerifyModalHR] = useState(false);
   // Việc 1: modal xác nhận hủy yêu cầu đổi nhân sự — thay thế window.confirm()
   const [cancelCRConfirmId, setCancelCRConfirmId] = useState(null);
   const [viewedChangeRequest, setViewedChangeRequest] = useState(null);
@@ -3046,6 +3047,16 @@ const HRManagement = () => {
   }, []);
 
   const handleRequestActivation = async () => {
+    // Kiểm tra xác thực trước khi gửi yêu cầu
+    const isVerifiedNow =
+      profile?.isVerified === true ||
+      profile?.isVerified === 'true' ||
+      profile?.verificationStatus === 'approved' ||
+      profile?.verificationStatus === 'APPROVED';
+    if (!isVerifiedNow) {
+      setShowVerifyModalHR(true);
+      return;
+    }
     try {
       setRequestSending(true);
       const updated = await employerProfileService.updateProfile({
@@ -4546,8 +4557,111 @@ const HRManagement = () => {
   }
 
   if (profile?.quickJobStatus !== 'approved') {
+    const isVerifiedForHR =
+      profile?.isVerified === true ||
+      profile?.isVerified === 'true' ||
+      profile?.verificationStatus === 'approved' ||
+      profile?.verificationStatus === 'APPROVED';
+    const verificationPendingForHR = profile?.verificationStatus === 'pending';
+
     return (
       <DashboardLayout role="employer" key={language}>
+        {/* Verify modal — hiện khi bấm "Gửi yêu cầu" mà chưa xác thực */}
+        {showVerifyModalHR && !verificationPendingForHR && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            onClick={() => setShowVerifyModalHR(false)}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'white', borderRadius: '24px', maxWidth: '480px', width: '100%', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
+            >
+              <div style={{ background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)', padding: '48px 32px 32px', textAlign: 'center', color: 'white' }}>
+                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+                  <ShieldCheck style={{ width: 40, height: 40, color: 'white' }} />
+                </div>
+                <h2 style={{ fontSize: '26px', fontWeight: 800, marginBottom: '12px', lineHeight: 1.2 }}>
+                  {language === 'vi' ? 'Xác thực tài khoản công ty!' : 'Verify Your Company Account!'}
+                </h2>
+                <p style={{ fontSize: '15px', opacity: 0.9, lineHeight: 1.5, margin: 0 }}>
+                  {language === 'vi' ? 'Bạn cần xác thực tài khoản để sử dụng tính năng này' : 'You need to verify your account to use this feature'}
+                </p>
+              </div>
+              <div style={{ padding: '32px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '28px' }}>
+                  {[
+                    { icon: Users, title: language === 'vi' ? 'Ứng viên tin tưởng hơn' : 'More candidate trust', desc: language === 'vi' ? 'Tài khoản xác thực giúp bạn nổi bật và tăng độ tin cậy với ứng viên' : 'Verified accounts stand out and build trust with candidates' },
+                    { icon: Zap, title: language === 'vi' ? 'Mở khóa tuyển gấp' : 'Unlock urgent recruitment', desc: language === 'vi' ? 'Sau khi xác thực, bạn có thể kích hoạt và sử dụng tính năng tuyển gấp' : 'Once verified, activate and use the urgent job posting feature' },
+                    { icon: ShieldCheck, title: language === 'vi' ? 'Đăng tin tuyển dụng ngay' : 'Post jobs immediately', desc: language === 'vi' ? 'Tiếp cận hàng nghìn ứng viên và lấp đầy ca làm việc chỉ trong vài giờ' : 'Reach thousands of candidates and fill shifts within hours' },
+                  ].map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', padding: '14px', background: '#F8FAFC', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0, background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <item.icon style={{ width: 22, height: 22, color: 'white' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#1E293B', marginBottom: '4px' }}>{item.title}</div>
+                        <div style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.5 }}>{item.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button onClick={() => setShowVerifyModalHR(false)} style={{ flex: 1, padding: '14px 20px', borderRadius: '12px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', border: '1.5px solid #E2E8F0', background: '#F8FAFC', color: '#64748B' }}>
+                    {language === 'vi' ? 'Để sau' : 'Later'}
+                  </button>
+                  <button onClick={() => { setShowVerifyModalHR(false); navigate('/employer/verification'); }} style={{ flex: 1, padding: '14px 20px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: 'pointer', border: 'none', background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)', color: 'white', boxShadow: '0 8px 24px rgba(30,64,175,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <ShieldCheck style={{ width: 18, height: 18 }} />
+                    {language === 'vi' ? 'Xác thực ngay' : 'Verify Now'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Pending modal — hiện khi bấm "Gửi yêu cầu" mà đang chờ duyệt tài khoản */}
+        {showVerifyModalHR && verificationPendingForHR && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            onClick={() => setShowVerifyModalHR(false)}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'white', borderRadius: '24px', maxWidth: '440px', width: '100%', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
+            >
+              <div style={{ background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)', padding: '40px 32px 32px', textAlign: 'center', color: 'white' }}>
+                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                  <Clock style={{ width: 40, height: 40, color: 'white' }} />
+                </div>
+                <h2 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '10px', lineHeight: 1.2 }}>
+                  {language === 'vi' ? 'Đang chờ xét duyệt' : 'Pending Approval'}
+                </h2>
+                <p style={{ fontSize: '14px', opacity: 0.92, lineHeight: 1.6, margin: 0 }}>
+                  {language === 'vi' ? 'Hồ sơ xác thực của bạn đang được admin xem xét' : 'Your verification profile is under admin review'}
+                </p>
+              </div>
+              <div style={{ padding: '28px 32px 32px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', padding: '16px', background: '#FEF3C7', borderRadius: '14px', border: '1.5px solid #FDE68A', marginBottom: '20px' }}>
+                  <Clock style={{ width: 20, height: 20, color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#92400E', marginBottom: '4px' }}>{language === 'vi' ? 'Thường trong 24-48 giờ' : 'Usually within 24-48 hours'}</div>
+                    <div style={{ fontSize: '13px', color: '#A16207', lineHeight: 1.5 }}>{language === 'vi' ? 'Bạn sẽ có thể gửi yêu cầu kích hoạt tuyển gấp ngay khi được phê duyệt.' : 'You will be able to request urgent job activation once approved.'}</div>
+                  </div>
+                </div>
+                <button onClick={() => setShowVerifyModalHR(false)} style={{ width: '100%', padding: '14px 20px', borderRadius: '12px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', border: '1.5px solid #E2E8F0', background: '#F8FAFC', color: '#64748B' }}>
+                  {language === 'vi' ? 'Đóng' : 'Close'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         <IntroWrapper>
           <IntroHero>
             <HeroBadge>

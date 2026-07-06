@@ -17,6 +17,7 @@ const CVUploadContainer = styled.div`
 
 const HeaderRow = styled.div`
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
@@ -31,6 +32,7 @@ const Title = styled.h3`
   align-items: center;
   gap: 8px;
   margin: 0;
+  white-space: nowrap;
 `;
 
 const CreateCVLink = styled(Link)`
@@ -45,6 +47,7 @@ const CreateCVLink = styled(Link)`
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
   transition: all 0.2s;
 
   &:hover {

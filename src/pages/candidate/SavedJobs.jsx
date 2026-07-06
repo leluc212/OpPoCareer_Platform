@@ -370,7 +370,11 @@ const SavedJobs = () => {
                   <JobInfo>
                     <JobTitle>
                       {job.title}
-                      {job.urgent && <StatusBadge status="urgent" size="sm">{language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</StatusBadge>}
+                      {(job.urgent || job.isQuickJob) ? (
+                        <StatusBadge status="urgent" size="sm">{language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</StatusBadge>
+                      ) : (
+                        <StatusBadge status="active" size="sm">{language === 'vi' ? 'Tiêu chuẩn' : 'Standard'}</StatusBadge>
+                      )}
                       {job.featured && <Star size={18} fill="#F59E0B" color="#F59E0B" />}
                     </JobTitle>
                     <CompanyName>

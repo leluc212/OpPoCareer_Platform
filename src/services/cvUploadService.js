@@ -2,7 +2,7 @@
 const API_BASE_URL_PROD = 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod';
 const API_BASE_URL = import.meta.env.DEV ? '/api-cv' : API_BASE_URL_PROD;
 
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { getIdToken } from './authHeaders.js';
 
 /**
  * Upload CV file to S3
@@ -60,14 +60,13 @@ export const uploadCV = async (userId, file) => {
       'Content-Type': 'application/json',
     };
     try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
+      const token = await getIdToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
         console.log('🔑 [cvUploadService] Auth token added (with Bearer) to upload request');
       }
     } catch (authError) {
-      console.warn('⚠️ [cvUploadService] Could not get auth session for upload:', authError);
+      console.warn('⚠️ [cvUploadService] Could not get auth token for upload:', authError);
     }
 
     const response = await fetch(uploadUrl, {
@@ -107,14 +106,13 @@ export const getCVInfo = async (userId) => {
       'Content-Type': 'application/json',
     };
     try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
+      const token = await getIdToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
         console.log('🔑 [cvUploadService] Auth token added (with Bearer) to getCVInfo request');
       }
     } catch (authError) {
-      console.warn('⚠️ [cvUploadService] Could not get auth session for getCVInfo:', authError);
+      console.warn('⚠️ [cvUploadService] Could not get auth token for getCVInfo:', authError);
     }
 
     const response = await fetch(`${API_BASE_URL_PROD}/cv/${userId}`, {
@@ -179,14 +177,13 @@ export const deleteCV = async (userId, cvId = null) => {
     // Get auth token from Amplify
     let headers = {};
     try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
+      const token = await getIdToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
         console.log('🔑 [cvUploadService] Auth token added (with Bearer) to DELETE request');
       }
     } catch (authError) {
-      console.warn('⚠️ [cvUploadService] Could not get auth session for DELETE:', authError);
+      console.warn('⚠️ [cvUploadService] Could not get auth token for DELETE:', authError);
     }
 
     const response = await fetch(url, {

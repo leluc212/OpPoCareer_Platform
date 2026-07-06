@@ -19,7 +19,8 @@ import {
   Check,
   PenSquare,
   ImagePlus,
-  Trash2
+  Trash2,
+  Bookmark
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -322,15 +323,15 @@ const FormGroup = styled.div`
 `;
 
 const CategoryGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 10px;
   margin-bottom: 16px;
 `;
 
 const CategoryCard = styled.button`
-  padding: 12px;
-  border-radius: 12px;
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 10px;
   border: 1px solid ${props => props.$selected ? props.theme.colors.primary : props.theme.colors.border};
   background: ${props => props.$selected ? props.theme.colors.primary + '08' : 'transparent'};
   color: ${props => props.$selected ? props.theme.colors.primary : props.theme.colors.text};
@@ -339,6 +340,10 @@ const CategoryCard = styled.button`
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   box-shadow: ${props => props.$selected ? `0 0 12px ${props.theme.colors.primary}15` : 'none'};
 
   &:hover {
@@ -787,7 +792,7 @@ export default function FloatingSupportBar() {
     setTimeout(() => setCopiedText(null), 2000);
   };
 
-  const MAX_IMAGES = 3;
+  const MAX_IMAGES = 5;
   const MAX_SIZE_MB = 5;
 
   const handleImageSelect = (e) => {
@@ -861,9 +866,13 @@ export default function FloatingSupportBar() {
       await feedbackService.submitFeedback(feedbackCategory, feedbackComment, userContext, feedbackImages.map(img => img.base64));
       
       success(
-        language === 'vi'
-          ? 'Cảm ơn góp ý của bạn! Chúng tôi sẽ phản hồi sớm nhất.'
-          : 'Thank you for your feedback! We will get back to you soon.'
+        feedbackCategory === 'bug'
+          ? (language === 'vi'
+              ? 'Báo lỗi đã được gửi! Chúng tôi sẽ xem xét và xử lý sớm nhất.'
+              : 'Bug report submitted! We will review and fix it as soon as possible.')
+          : (language === 'vi'
+              ? 'Cảm ơn góp ý của bạn! Chúng tôi sẽ phản hồi sớm nhất.'
+              : 'Thank you for your feedback! We will get back to you soon.')
       );
     } catch (err) {
       console.error('Error submitting feedback:', err);
@@ -884,36 +893,36 @@ export default function FloatingSupportBar() {
   const faqs = language === 'vi' ? [
     {
       q: 'Làm thế nào để ứng tuyển công việc?',
-      a: 'Click vào công việc bạn quan tâm, chọn "Ứng tuyển ngay", sau đó chọn CV có sẵn và nhấn xác nhận.'
+      a: 'Để ứng tuyển, bạn cần hoàn thiện hồ sơ và tìm kiếm ca làm việc phù hợp. Sau đó, bấm "Ứng tuyển ngay", đính kèm CV và nhấn xác nhận để hoàn tất.'
     },
     {
       q: 'Xác thực KYC để làm gì?',
-      a: 'Xác thực KYC giúp tăng độ tin cậy của tài khoản, cho phép bạn ứng tuyển các công việc có yêu cầu cao và rút tiền từ ví điện tử.'
+      a: 'Xác thực danh tính (KYC) giúp bảo vệ quyền lợi lao động của bạn, tăng độ uy tín cho hồ sơ, và là điều kiện bắt buộc để có thể nhận và rút tiền thù lao an toàn.'
     },
     {
       q: 'Ví điện tử hoạt động như thế nào?',
-      a: 'Ví điện tử lưu trữ thu nhập của bạn từ các công việc đã hoàn thành. Bạn có thể liên kết tài khoản ngân hàng và thực hiện rút tiền bất kỳ lúc nào.'
+      a: 'Ví điện tử là nơi nhận và quản lý thu nhập từ các công việc đã hoàn thành. Để rút tiền, bạn chỉ cần liên kết tài khoản ngân hàng và thực hiện giao dịch bất cứ lúc nào.'
     },
     {
-      q: 'Làm sao để biết nhà tuyển dụng đã đánh giá tôi?',
-      a: 'Khi nhà tuyển dụng hoàn thành công việc và đánh giá, bạn sẽ nhận được thông báo và điểm sao trung bình sẽ tự động cập nhật trong hồ sơ của bạn.'
+      q: 'Đánh giá từ nhà tuyển dụng được cập nhật như thế nào?',
+      a: 'Ngay khi nhà tuyển dụng hoàn tất đánh giá sau ca làm, bạn sẽ nhận được thông báo và điểm sao trung bình sẽ tự động cập nhật trong hồ sơ của bạn.'
     }
   ] : [
     {
       q: 'How do I apply for a job?',
-      a: 'Click on the job you are interested in, select "Apply Now", choose your uploaded CV, and confirm.'
+      a: 'To apply, complete your profile and search for a suitable shift. Then click "Apply Now", attach your CV, and confirm to finish.'
     },
     {
       q: 'Why should I verify my identity (KYC)?',
-      a: 'KYC increases your profile\'s credibility, allows you to apply for premium jobs, and enables wallet withdrawals.'
+      a: 'Identity verification (KYC) protects your labor rights, boosts your profile credibility, and is required to receive and withdraw your earnings safely.'
     },
     {
       q: 'How does the E-wallet work?',
-      a: 'The E-wallet stores your earnings from completed jobs. You can link your bank account and withdraw funds at any time.'
+      a: 'The E-wallet is where you receive and manage income from completed jobs. To withdraw, simply link your bank account and make a transaction at any time.'
     },
     {
-      q: 'How do I know if an employer has reviewed me?',
-      a: 'Once the employer completes the job and reviews you, you will receive a notification and your average star rating will automatically update on your profile.'
+      q: 'How are employer reviews updated?',
+      a: 'As soon as an employer completes their review after a shift, you will receive a notification and your average star rating will automatically update on your profile.'
     }
   ];
 
@@ -987,6 +996,26 @@ export default function FloatingSupportBar() {
               {language === 'vi' ? 'Trung tâm hỗ trợ' : 'Help Center'}
             </Tooltip>
           </CapsuleBtn>
+
+          {/* Saved Jobs - candidates only */}
+          {isCandidate && isAuthenticated && (
+            <>
+              <Divider />
+              <CapsuleBtn
+                onClick={() => {
+                  navigate('/candidate/jobs?tab=saved');
+                }}
+                style={{ position: 'relative' }}
+              >
+                <Bookmark />
+                <span>{language === 'vi' ? 'Đã lưu' : 'Saved'}</span>
+
+                <Tooltip>
+                  {language === 'vi' ? 'Công việc đã lưu' : 'Saved Jobs'}
+                </Tooltip>
+              </CapsuleBtn>
+            </>
+          )}
         </CapsuleContainer>
       </FloatContainer>
 
@@ -1019,10 +1048,11 @@ export default function FloatingSupportBar() {
               <ModalBody>
                 <form onSubmit={handleFeedbackSubmit}>
                   <FormGroup>
-                    <label>{language === 'vi' ? 'Phân loại góp ý' : 'Feedback Category'}</label>
+                    <label>{language === 'vi' ? 'Phân loại' : 'Category'}</label>
                     <CategoryGrid>
                       <CategoryCard
                         type="button"
+                        $type="bug"
                         $selected={feedbackCategory === 'bug'}
                         onClick={() => setFeedbackCategory('bug')}
                       >
@@ -1030,17 +1060,11 @@ export default function FloatingSupportBar() {
                       </CategoryCard>
                       <CategoryCard
                         type="button"
+                        $type="suggestion"
                         $selected={feedbackCategory === 'suggestion'}
                         onClick={() => setFeedbackCategory('suggestion')}
                       >
                         {language === 'vi' ? 'Góp ý' : 'Suggestion'}
-                      </CategoryCard>
-                      <CategoryCard
-                        type="button"
-                        $selected={feedbackCategory === 'other'}
-                        onClick={() => setFeedbackCategory('other')}
-                      >
-                        {language === 'vi' ? 'Khác' : 'Other'}
                       </CategoryCard>
                     </CategoryGrid>
                   </FormGroup>
@@ -1077,14 +1101,23 @@ export default function FloatingSupportBar() {
                   )}
 
                   <FormGroup>
-                    <label>{language === 'vi' ? 'Nội dung góp ý' : 'Comments & Details'}</label>
+                    <label>
+                      {language === 'vi'
+                        ? (feedbackCategory === 'bug' ? 'Nội dung báo lỗi' : 'Nội dung góp ý')
+                        : (feedbackCategory === 'bug' ? 'Bug Description' : 'Comments & Details')
+                      } <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
                     <TextArea
                       value={feedbackComment}
                       onChange={e => setFeedbackComment(e.target.value)}
                       placeholder={
                         language === 'vi'
-                          ? 'Vui lòng mô tả chi tiết ý kiến hoặc lỗi bạn gặp phải để chúng tôi cải thiện hệ thống...'
-                          : 'Please describe the bug or details of your suggestion to help us improve the platform...'
+                          ? (feedbackCategory === 'bug'
+                            ? 'Mô tả chi tiết lỗi bạn gặp phải, bước tái hiện lỗi...'
+                            : 'Vui lòng mô tả chi tiết ý kiến để chúng tôi cải thiện hệ thống...')
+                          : (feedbackCategory === 'bug'
+                            ? 'Describe the bug in detail, steps to reproduce...'
+                            : 'Please describe your suggestion to help us improve the platform...')
                       }
                       required
                     />
@@ -1093,7 +1126,10 @@ export default function FloatingSupportBar() {
                   {/* Image Upload */}
                   <FormGroup>
                     <label>
-                      {language === 'vi' ? 'Đính kèm ảnh' : 'Attach images'}
+                      {language === 'vi' ? 'Đính kèm ảnh' : 'Attach images'} <span style={{ color: '#ef4444' }}>*</span>
+                      <span style={{ fontWeight: 400, fontSize: '12px', color: '#64748b', marginLeft: '6px' }}>
+                        ({language === 'vi' ? `tối thiểu 1, tối đa ${MAX_IMAGES} ảnh` : `min 1, max ${MAX_IMAGES} images`})
+                      </span>
                     </label>
                     <ImageUploadArea>
                       <ImageUploadLabel htmlFor="feedback-image-input">
@@ -1126,7 +1162,7 @@ export default function FloatingSupportBar() {
                     )}
                   </FormGroup>
 
-                  <SubmitBtn type="submit" disabled={isSubmittingFeedback || !feedbackComment.trim()}>
+                  <SubmitBtn type="submit" disabled={isSubmittingFeedback || !feedbackComment.trim() || feedbackImages.length === 0}>
                     <Send size={18} />
                     {isSubmittingFeedback
                       ? (language === 'vi' ? 'Đang gửi...' : 'Sending...')
@@ -1187,10 +1223,27 @@ export default function FloatingSupportBar() {
                     <ContactItem>
                       <div className="info">
                         <Phone />
-                        <span>Hotline/Zalo: 0563 518 922</span>
+                        <span>
+                          {language === 'vi'
+                            ? 'Hotline kĩ thuật: 0379 784 509'
+                            : 'Technical Hotline: 0379 784 509'}
+                        </span>
                       </div>
-                      <CopyButton onClick={() => handleCopy('0563 518 922', 'phone')}>
-                        {copiedText === 'phone' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
+                      <CopyButton onClick={() => handleCopy('0379 784 509', 'phone_tech')}>
+                        {copiedText === 'phone_tech' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
+                      </CopyButton>
+                    </ContactItem>
+                    <ContactItem>
+                      <div className="info">
+                        <Phone />
+                        <span>
+                          {language === 'vi'
+                            ? 'Hotline hỗ trợ khách hàng: 0563 518 922'
+                            : 'Customer Support Hotline: 0563 518 922'}
+                        </span>
+                      </div>
+                      <CopyButton onClick={() => handleCopy('0563 518 922', 'phone_cs')}>
+                        {copiedText === 'phone_cs' ? <Check style={{ color: '#1e40af' }} /> : <Copy />}
                       </CopyButton>
                     </ContactItem>
                     <ContactItem>
@@ -1207,8 +1260,8 @@ export default function FloatingSupportBar() {
                         <Clock />
                         <span>
                           {language === 'vi'
-                            ? 'Giờ làm việc: 8:00 - 19:30 (T2 - T7)'
-                            : 'Working Hours: 8:00 AM - 6:30 PM (Mon - Sat)'}
+                            ? 'Giờ làm việc: 8:00 - 17:00 (T2 - T7)'
+                            : 'Working Hours: 8:00 AM - 5:00 PM (Mon - Sat)'}
                         </span>
                       </div>
                     </ContactItem>

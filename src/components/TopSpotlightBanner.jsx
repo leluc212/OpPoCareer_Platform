@@ -73,47 +73,20 @@ const ringPulse = keyframes`
 const Wrapper = styled.div`
   position: relative;
   margin-bottom: 24px;
-  border-radius: 20px;
+  border-radius: 16px;
   overflow: hidden;
-  outline: 3px solid transparent;
-  background-clip: padding-box;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -3px;
-    border-radius: 23px;
-    background: linear-gradient(
-      135deg,
-      #f59e0b 0%,
-      #dc2626 30%,
-      #f59e0b 60%,
-      #fbbf24 80%,
-      #dc2626 100%
-    );
-    background-size: 300% 300%;
-    animation: ${gradientShift} 6s ease infinite, ${shimmerBorder} 2.5s ease-in-out infinite;
-    z-index: 0;
-  }
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 3px;
-    border-radius: 17px;
-    background: transparent;
-    z-index: 1;
-    pointer-events: none;
-  }
+  box-shadow: 0 4px 24px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.07);
+  border: 1px solid rgba(251,191,36,0.18);
+  container-type: inline-size;
 `;
 
 // Nền gradient mới: xanh dương/tím đồng bộ theme app, bỏ tông tím đen như thiên hà
 const Inner = styled.div`
   position: relative;
   z-index: 2;
-  border-radius: 17px;
+  border-radius: 15px;
   overflow: hidden;
-  height: 260px;
+  height: 200px;
   cursor: pointer;
   background: linear-gradient(
     135deg,
@@ -128,7 +101,7 @@ const Inner = styled.div`
   animation: ${gradientShift} 12s ease infinite;
 
   @media (max-width: 768px) {
-    height: 170px;
+    height: 150px;
     animation: none;
     background: linear-gradient(135deg, #0d1b4b 0%, #162c7a 50%, #1a3a8f 100%);
   }
@@ -214,22 +187,24 @@ const SlideContent = styled.div`
   inset: 0;
   display: flex;
   align-items: center;
-  padding: 0 32px;
-  gap: 24px;
+  padding: 36px 20px 20px;
+  gap: 16px;
   z-index: 5;
   animation: ${fadeSlideIn} 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  overflow: hidden;
+  min-width: 0;
 
   @media (max-width: 768px) {
-    padding: 0 16px;
-    gap: 14px;
+    padding: 36px 12px 12px;
+    gap: 10px;
     animation: none;
   }
 `;
 
 const LogoBox = styled.div`
-  width: 80px;
-  height: 80px;
-  border-radius: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.12);
   border: 2px solid rgba(255, 255, 255, 0.2);
   display: flex;
@@ -243,133 +218,112 @@ const LogoBox = styled.div`
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 14px;
+    border-radius: 10px;
   }
 
   @media (max-width: 768px) {
-    width: 56px;
-    height: 56px;
-    border-radius: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
   }
 `;
 
 const LogoFallback = styled.div`
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 900;
   color: rgba(255, 255, 255, 0.9);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-
-  @media (max-width: 768px) {
-    font-size: 20px;
-  }
 `;
 
 const TextBlock = styled.div`
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 `;
 
 const JobTitle = styled.h2`
-  font-size: 26px;
+  font-size: clamp(13px, 2.2cqw, 20px);
   font-weight: 900;
   color: #fff;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   line-height: 1.2;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-
-  @media (max-width: 768px) {
-    font-size: 16px;
-    margin-bottom: 4px;
-  }
+  max-width: 100%;
 `;
 
 const CompanyName = styled.p`
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.75);
-  margin: 0 0 14px;
-
-  @media (max-width: 768px) {
-    font-size: 12px;
-    margin-bottom: 6px;
-  }
+  margin: 0 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 const MetaRow = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
-  margin-bottom: 18px;
-
-  @media (max-width: 768px) {
-    gap: 8px;
-    margin-bottom: 10px;
-  }
+  margin-bottom: 10px;
 `;
 
 const MetaItem = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 11px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.8);
   background: rgba(255, 255, 255, 0.1);
-  padding: 4px 12px;
+  padding: 3px 8px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(4px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
 
   svg {
-    width: 13px;
-    height: 13px;
+    width: 11px;
+    height: 11px;
     flex-shrink: 0;
     color: #fbbf24;
-  }
-
-  @media (max-width: 768px) {
-    font-size: 11px;
-    padding: 3px 8px;
-    gap: 3px;
-    svg { width: 11px; height: 11px; }
   }
 `;
 
 const SalaryBadge = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 800;
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.15);
-  padding: 5px 14px;
+  padding: 3px 10px;
   border-radius: 20px;
   border: 1.5px solid rgba(251, 191, 36, 0.4);
+  white-space: nowrap;
 
   svg {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     color: #fbbf24;
-  }
-
-  @media (max-width: 768px) {
-    font-size: 12px;
-    padding: 3px 10px;
   }
 `;
 
 const ApplyButton = styled.button`
   flex-shrink: 0;
-  padding: 14px 28px;
-  border-radius: 14px;
+  padding: 10px 18px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #f59e0b 0%, #dc2626 100%);
   color: #fff;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 800;
   border: none;
   cursor: pointer;
@@ -385,12 +339,6 @@ const ApplyButton = styled.button`
 
   &:active {
     transform: translateY(0) scale(0.99);
-  }
-
-  @media (max-width: 768px) {
-    font-size: 12px;
-    padding: 8px 16px;
-    border-radius: 10px;
   }
 `;
 
@@ -499,24 +447,9 @@ const HoverZone = styled.div`
   &:hover ${ArrowBtn} { opacity: 1; }
 `;
 
+/* SlideCounter ẩn — đã thay bằng dots ở đáy */
 const SlideCounter = styled.div`
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 10;
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.65);
-  background: rgba(0, 0, 0, 0.3);
-  padding: 3px 10px;
-  border-radius: 12px;
-  backdrop-filter: blur(4px);
-
-  @media (max-width: 768px) {
-    font-size: 10px;
-    top: 8px;
-    right: 8px;
-  }
+  display: none;
 `;
 
 // ─── Icon SVG theo ngành nghề (CSS-only, không cần file) ─────────────────────

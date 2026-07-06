@@ -12,12 +12,12 @@ export const translations = {
     // Sidebar
     sidebar: {
       main: 'CHÍNH',
-      communication: 'LIÊN LẠC',
+      communication: 'HOẠT ĐỘNG',
       account: 'TÀI KHOẢN',
       platform: 'NỀN TẢNG',
       utilities: 'TIỆN ÍCH',
       dashboard: 'Trang chủ',
-      findJobs: 'Bài đăng',
+      findJobs: 'Công việc',
       savedJobs: 'Việc Đã Lưu',
       messages: 'Tin Nhắn',
       notifications: 'Thông Báo',
@@ -558,12 +558,12 @@ export const translations = {
     // Sidebar
     sidebar: {
       main: 'MAIN',
-      communication: 'COMMUNICATION',
+      communication: 'ACTIVITY',
       account: 'ACCOUNT',
       platform: 'PLATFORM',
       utilities: 'UTILITIES',
       dashboard: 'Dashboard',
-      findJobs: 'Find Jobs',
+      findJobs: 'Jobs',
       savedJobs: 'Saved Jobs',
       messages: 'Messages',
       notifications: 'Notifications',

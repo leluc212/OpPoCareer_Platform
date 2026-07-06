@@ -312,10 +312,10 @@ export const createCandidateCvAcceptedNotification = async (payload) => {
 
   const notification = {
     type: 'success',
-    title: 'CV của bạn đã được chấp nhận',
-    titleEn: 'Your CV has been accepted',
-    message: `CV của bạn đã được ${safeCompanyName} chấp nhận cho vị trí ${safeJobTitle}. Bạn có thể nhắn tin cho Nhà tuyển dụng ngay ở phần bong bóng chat bên phải dưới màn hình.`,
-    messageEn: `Your CV was accepted by ${safeCompanyName} for the ${safeJobTitle} position. You can message the employer using the chat bubble at the bottom right of the screen.`,
+    title: 'Bạn đã nhận được ca gấp',
+    titleEn: 'You got the urgent shift',
+    message: `Hồ sơ của bạn đã được ${safeCompanyName} duyệt. Liên hệ với NTD qua bong bóng chat ở góc phải màn hình để biết thông tin chi tiết và nhận ca ngay!`,
+    messageEn: `Your profile has been approved by ${safeCompanyName}. Contact the employer via the chat bubble on the right side of the screen for details and to confirm your shift!`,
     recipientId: candidateId,
     recipientRole: 'candidate',
     senderId: employerId || 'employer',
@@ -361,10 +361,10 @@ export const createCandidateCvRejectedNotification = async (payload) => {
 
   const notification = {
     type: 'system',
-    title: 'CV của bạn chưa được chấp nhận',
-    titleEn: 'Your CV was not accepted',
-    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} chưa được chấp nhận. Bạn có thể cập nhật hồ sơ và tiếp tục ứng tuyển các công việc phù hợp khác.`,
-    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} was not accepted. You can update your profile and apply for other suitable jobs.`,
+    title: 'Hồ sơ ca gấp chưa được thông qua',
+    titleEn: 'Quick shift application not approved',
+    message: `${safeCompanyName} đã xem xét nhưng CV của bạn chưa phù hợp cho ca gấp này. Vẫn còn rất nhiều công việc phù hợp khác đang chờ bạn ứng tuyển!`,
+    messageEn: `${safeCompanyName} has reviewed your application but your CV wasn't the right fit for this shift. There are still many other suitable jobs waiting for you!`,
     recipientId: candidateId,
     recipientRole: 'candidate',
     senderId: employerId || 'employer',
@@ -387,7 +387,9 @@ export const createCandidateCvRejectedNotification = async (payload) => {
 };
 
 /**
- * Create notification when employer approves candidate CV for a standard job (directing to AI interview within 2 days)
+ * Create notification when employer approves candidate CV for a standard job.
+ * Trigger: NTD bấm "Duyệt"/"Đồng ý" trên CV đã qua vòng AI.
+ * Kèm theo: ứng viên có 2 ngày để thực hiện phỏng vấn AI.
  * @param {object} payload - Candidate notification data
  */
 export const createCandidateCvApprovedNotification = async (payload) => {
@@ -408,12 +410,15 @@ export const createCandidateCvApprovedNotification = async (payload) => {
   const safeJobTitle = jobTitle || 'công việc tiêu chuẩn';
   const safeCompanyName = companyName || 'Nhà tuyển dụng';
 
+  // Tính deadline phỏng vấn AI: now + 2 ngày
+  const interviewDeadline = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+
   const notification = {
-    type: 'success',
-    title: 'CV của bạn đã được duyệt vòng 1',
-    titleEn: 'Your CV has been approved (Round 1)',
-    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã được duyệt. Trong vòng 2 ngày bạn phải vào hệ thống để phỏng vấn với AI.`,
-    messageEn: `Your CV for the position ${safeJobTitle} at ${safeCompanyName} has been approved. You must enter the platform to interview with AI within 2 days.`,
+    type: 'employer_cv_approved',
+    title: 'CV của bạn đã được NTD duyệt và tiến hành vòng phỏng vấn',
+    titleEn: 'Your CV has been approved — proceed to AI Interview',
+    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã được thông qua. Hãy đăng nhập vào hệ thống trong vòng 2 ngày để tiến hành bước phỏng vấn với AI.`,
+    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} has been approved. Please log in within 2 days to proceed with the AI interview.`,
     recipientId: candidateId,
     recipientRole: 'candidate',
     senderId: employerId || 'employer',
@@ -423,11 +428,13 @@ export const createCandidateCvApprovedNotification = async (payload) => {
       jobTitle: safeJobTitle,
       companyName: safeCompanyName,
       employerId: employerId || null,
-      isQuickJob: false
+      isQuickJob: false,
+      interviewDeadline,
+      stage: 'employer_approved'
     },
     icon: 'check-circle',
     color: '#10b981',
-    actionUrl: '/candidate/jobs',
+    actionUrl: '/candidate/jobs?tab=standard',
     actionText: 'Phỏng vấn với AI ngay',
     actionTextEn: 'Start AI Interview'
   };
@@ -436,7 +443,8 @@ export const createCandidateCvApprovedNotification = async (payload) => {
 };
 
 /**
- * Create notification when employer rejects candidate CV for a standard job
+ * Create notification when employer rejects candidate CV for a standard job.
+ * Trigger: NTD bấm "Từ chối"/"Không duyệt" trên CV đã qua vòng AI.
  * @param {object} payload - Candidate notification data
  */
 export const createCandidateCvRejectedStandardNotification = async (payload) => {
@@ -458,11 +466,11 @@ export const createCandidateCvRejectedStandardNotification = async (payload) => 
   const safeCompanyName = companyName || 'Nhà tuyển dụng';
 
   const notification = {
-    type: 'system',
-    title: 'Hồ sơ tuyển dụng của bạn không được duyệt',
-    titleEn: 'Your CV was not accepted',
-    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} chưa được chấp nhận. Bạn có thể cập nhật hồ sơ và tiếp tục ứng tuyển các công việc phù hợp khác.`,
-    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} was not accepted. You can update your profile and apply for other suitable jobs.`,
+    type: 'employer_cv_rejected',
+    title: 'Hồ sơ chưa được duyệt',
+    titleEn: 'Your application was not approved',
+    message: `Rất tiếc, CV ứng tuyển vị trí ${safeJobTitle} tại ${safeCompanyName} của bạn chưa phù hợp với tiêu chí của nhà tuyển dụng ở thời điểm hiện tại. Hãy cập nhật thêm kỹ năng và thử sức với các cơ hội khác nhé!`,
+    messageEn: `Unfortunately, your CV for the ${safeJobTitle} position at ${safeCompanyName} did not meet the employer's criteria at this time. Update your skills and explore other opportunities!`,
     recipientId: candidateId,
     recipientRole: 'candidate',
     senderId: employerId || 'employer',
@@ -472,11 +480,12 @@ export const createCandidateCvRejectedStandardNotification = async (payload) => 
       jobTitle: safeJobTitle,
       companyName: safeCompanyName,
       employerId: employerId || null,
-      isQuickJob: false
+      isQuickJob: false,
+      stage: 'employer_rejected'
     },
     icon: 'x-circle',
     color: '#ef4444',
-    actionUrl: '/candidate/jobs',
+    actionUrl: '/candidate/jobs?tab=standard',
     actionText: 'Tìm việc làm khác',
     actionTextEn: 'Browse other jobs'
   };
@@ -788,6 +797,7 @@ export const createCandidateVerificationRequestNotification = async (candidateId
 
 /**
  * Create notification when candidate's CV passes AI screening round 1
+ * Trigger: Ngay sau khi AI chấm điểm CV và xác định ĐẠT tiêu chí sơ loại.
  * @param {object} payload - { candidateId, jobTitle, companyName, jobId, score }
  */
 export const createCandidateAiScreeningPassedNotification = async (payload) => {
@@ -802,11 +812,11 @@ export const createCandidateAiScreeningPassedNotification = async (payload) => {
   const safeCompanyName = companyName || 'Nhà tuyển dụng';
 
   const notification = {
-    type: 'success',
+    type: 'ai_screening_passed',
     title: 'Hồ sơ ứng tuyển đã qua sàng lọc AI',
     titleEn: 'Your CV passed AI screening',
-    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã vượt qua vòng sàng lọc sơ bộ của AI và đang chờ Nhà tuyển dụng xem xét duyệt vòng 1.`,
-    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} has passed the AI screening and is pending employer review for Round 1.`,
+    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã qua vòng sơ loại AI và đang chờ Nhà tuyển dụng xét duyệt.`,
+    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} has passed the AI screening and is pending employer review.`,
     recipientId: candidateId,
     recipientRole: 'candidate',
     senderId: 'system',
@@ -816,13 +826,56 @@ export const createCandidateAiScreeningPassedNotification = async (payload) => {
       jobTitle: safeJobTitle,
       companyName: safeCompanyName,
       score: score || null,
-      stage: 'round1_passed'
+      stage: 'ai_passed'
     },
     icon: 'check-circle',
     color: '#10b981',
-    actionUrl: '/candidate/jobs',
-    actionText: 'Xem việc làm',
-    actionTextEn: 'View jobs'
+    actionUrl: '/candidate/jobs?tab=standard',
+    actionText: 'Xem trạng thái hồ sơ',
+    actionTextEn: 'View application status'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Create notification when candidate's CV FAILS AI screening round 1
+ * Trigger: AI chấm điểm CV và xác định KHÔNG ĐẠT tiêu chí sơ loại.
+ * CV dừng lại ở đây — KHÔNG gửi cho NTD.
+ * @param {object} payload - { candidateId, jobTitle, companyName, jobId }
+ */
+export const createCandidateAiScreeningRejectedNotification = async (payload) => {
+  const { candidateId, jobTitle, companyName, jobId } = payload;
+
+  if (!candidateId) {
+    console.error('❌ candidateId is required for AI screening rejected notification');
+    return null;
+  }
+
+  const safeJobTitle = jobTitle || 'công việc';
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'ai_screening_rejected',
+    title: 'Hồ sơ không qua sàng lọc AI',
+    titleEn: 'Your CV did not pass AI screening',
+    message: `Rất tiếc, CV ứng tuyển vị trí ${safeJobTitle} tại ${safeCompanyName} của bạn chưa phù hợp ở vòng sơ loại AI. Hãy cập nhật thêm kỹ năng và thử sức với các cơ hội khác nhé!`,
+    messageEn: `Unfortunately, your CV for the ${safeJobTitle} position at ${safeCompanyName} did not meet the AI screening criteria. Update your skills and try other opportunities!`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: 'system',
+    senderName: 'Hệ thống AI',
+    data: {
+      jobId: jobId || null,
+      jobTitle: safeJobTitle,
+      companyName: safeCompanyName,
+      stage: 'ai_rejected'
+    },
+    icon: 'alert-circle',
+    color: '#ef4444',
+    actionUrl: '/candidate/jobs?tab=standard',
+    actionText: 'Xem việc làm khác',
+    actionTextEn: 'Browse other jobs'
   };
 
   return await saveNotification(notification);
@@ -1377,16 +1430,16 @@ export const createWorkerReplacedNotification = async ({ workerId, jobLocation, 
     : '';
   const notification = {
     type: 'worker_replaced_shift_cancelled',
-    title: 'Ca làm của bạn đã bị huỷ',
-    titleEn: 'Your shift has been cancelled',
-    message: `Ca làm của bạn tại ${safeLocation} ngày ${safeDate} đã bị huỷ.${reasonStr ? ` Lý do: ${reasonStr}.` : ''} Ca này sẽ không được tính tiền công.`,
-    messageEn: `Your shift at ${safeLocation} on ${safeDate} has been cancelled.${reasonStr ? ` Reason: ${reasonStr}.` : ''} This shift will not be compensated.`,
+    title: 'Thông báo hủy ca làm',
+    titleEn: 'Shift cancellation notice',
+    message: `Rất tiếc, ca làm của bạn tại ${safeLocation} vào ${safeDate} đã bị hủy.${reasonStr ? ` Lý do: ${reasonStr}.` : ''}`,
+    messageEn: `We're sorry, your shift at ${safeLocation} on ${safeDate} has been cancelled.${reasonStr ? ` Reason: ${reasonStr}.` : ''}`,
     recipientId: workerId,
     recipientRole: 'candidate',
     senderId: 'admin',
     senderName: 'Admin',
     data: { workerId, jobLocation: safeLocation, workDateDisplay: safeDate, jobTitle, reasonType, reasonDetail },
-    icon: 'x-circle',
+    icon: 'bell',
     color: '#EF4444',
     actionUrl: '/candidate/applications',
     actionText: 'Xem lịch sử làm việc',
@@ -1519,6 +1572,7 @@ export default {
   createCandidateWithdrawalRequestNotification,
   createCandidateWithdrawalStatusNotification,
   createCandidateAiScreeningPassedNotification,
+  createCandidateAiScreeningRejectedNotification,
   createCandidateApplicationSubmittedNotification,
   createChangeRequestSubmittedNotification,
   createChangeRequestApprovedNotification,
@@ -1583,6 +1637,117 @@ export const createEmployerReviewNotification = async (payload) => {
     actionUrl: '/candidate/profile',
     actionText: 'Xem hồ sơ của bạn',
     actionTextEn: 'View your profile'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Thông báo cho Admin khi NTD gửi yêu cầu chỉnh sửa hồ sơ công ty
+ * @param {object} payload - { employerId, companyName }
+ */
+export const createProfileChangeRequestNotification = async (payload) => {
+  const { employerId, companyName } = payload;
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'profile_change_request',
+    title: 'Yêu cầu chỉnh sửa hồ sơ công ty',
+    titleEn: 'Company Profile Change Request',
+    message: `Nhà tuyển dụng "${safeCompanyName}" đã gửi yêu cầu chỉnh sửa hồ sơ công ty. Vui lòng xem xét và phê duyệt.`,
+    messageEn: `Employer "${safeCompanyName}" has submitted a company profile change request. Please review and approve.`,
+    recipientId: 'admin',
+    recipientRole: 'admin',
+    senderId: employerId,
+    senderName: safeCompanyName,
+    data: {
+      employerId,
+      companyName: safeCompanyName
+    },
+    icon: 'edit',
+    color: '#f59e0b',
+    actionUrl: '/admin/employers?tab=profile-changes',
+    actionText: 'Xem yêu cầu',
+    actionTextEn: 'View request'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Thông báo cho NTD khi Admin duyệt yêu cầu chỉnh sửa hồ sơ
+ * @param {string} employerId
+ * @param {string} companyName
+ */
+export const createProfileChangeApprovedNotification = async (employerId, companyName) => {
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+
+  const notification = {
+    type: 'profile_change_approved',
+    title: 'Hồ sơ công ty đã được cập nhật',
+    titleEn: 'Company Profile Updated',
+    message: `Yêu cầu chỉnh sửa hồ sơ công ty của bạn đã được Admin duyệt. Thông tin công ty đã được cập nhật.`,
+    messageEn: `Your company profile change request has been approved by Admin. Company information has been updated.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      employerId,
+      companyName: safeCompanyName
+    },
+    icon: 'check-circle',
+    color: '#10b981',
+    actionUrl: '/employer/profile',
+    actionText: 'Xem hồ sơ',
+    actionTextEn: 'View profile'
+  };
+
+  return await saveNotification(notification);
+};
+
+/**
+ * Thông báo cho NTD khi Admin từ chối yêu cầu chỉnh sửa hồ sơ
+ * @param {string} employerId
+ * @param {string} companyName
+ * @param {string} rejectionReason
+ */
+export const createProfileChangeRejectedNotification = async (employerId, companyName, rejectionReason = '') => {
+  if (!employerId) {
+    throw new Error('employerId is required');
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+  const reasonText = rejectionReason ? ` Lý do: ${rejectionReason}.` : '';
+
+  const notification = {
+    type: 'profile_change_rejected',
+    title: 'Yêu cầu chỉnh sửa hồ sơ bị từ chối',
+    titleEn: 'Company Profile Change Rejected',
+    message: `Yêu cầu chỉnh sửa hồ sơ công ty của bạn đã bị Admin từ chối.${reasonText} Vui lòng kiểm tra lại thông tin và gửi lại.`,
+    messageEn: `Your company profile change request has been rejected by Admin.${rejectionReason ? ` Reason: ${rejectionReason}.` : ''} Please review and resubmit.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'admin',
+    senderName: 'Admin',
+    data: {
+      employerId,
+      companyName: safeCompanyName,
+      rejectionReason
+    },
+    icon: 'x-circle',
+    color: '#ef4444',
+    actionUrl: '/employer/profile',
+    actionText: 'Chỉnh sửa lại',
+    actionTextEn: 'Edit again'
   };
 
   return await saveNotification(notification);

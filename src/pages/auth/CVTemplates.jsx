@@ -1411,7 +1411,12 @@ const CVTemplates = () => {
       if (aiAnalysis.improvements && Array.isArray(aiAnalysis.improvements)) {
         aiAnalysis.improvements.forEach(imp => {
           const lower = imp.toLowerCase();
-          if (lower.includes('kinh nghiệm') || lower.includes('làm việc') || lower.includes('công việc') || lower.includes('experience') || lower.includes('work')) {
+          const matchKeywords = [
+            'kinh nghiệm', 'làm việc', 'công việc', 'lịch sử',
+            'kinh nghiem', 'lam viec', 'cong viec', 'lich su',
+            'experience', 'work', 'job', 'position', 'company', 'công ty'
+          ];
+          if (matchKeywords.some(kw => lower.includes(kw))) {
             if (!expSuggestions.includes(imp)) {
               expSuggestions.push(imp);
             }
@@ -1419,14 +1424,23 @@ const CVTemplates = () => {
         });
       }
 
-      if (newExperiences.length === 0 && expSuggestions.length > 0) {
-        // Create new experience entries
-        newExperiences = expSuggestions.map(sug => ({
-          company: vi ? 'Tên công ty (Gợi ý)' : 'Company Name (Suggested)',
-          role: vi ? 'Chức danh (Gợi ý)' : 'Job Title (Suggested)',
-          duration: vi ? 'Thời gian' : 'Duration',
-          description: vi ? `[Gợi ý cải thiện từ AI]: ${sug}` : `[AI Improvement Suggestion]: ${sug}`
-        }));
+      if (newExperiences.length === 0) {
+        // Always create at least one experience entry if it's empty
+        if (expSuggestions.length > 0) {
+          newExperiences = expSuggestions.map(sug => ({
+            company: vi ? 'Tên công ty (Gợi ý)' : 'Company Name (Suggested)',
+            role: vi ? 'Chức danh (Gợi ý)' : 'Job Title (Suggested)',
+            duration: vi ? 'Thời gian' : 'Duration',
+            description: vi ? `[Gợi ý cải thiện từ AI]: ${sug}` : `[AI Improvement Suggestion]: ${sug}`
+          }));
+        } else {
+          newExperiences = [{
+            company: vi ? 'Tên công ty' : 'Company Name',
+            role: vi ? 'Chức danh / Vị trí' : 'Job Title',
+            duration: vi ? 'Thời gian' : 'Duration',
+            description: vi ? 'Mô tả công việc và các nhiệm vụ cụ thể.' : 'Description of work and responsibilities.'
+          }];
+        }
       } else if (expSuggestions.length > 0) {
         newExperiences = newExperiences.map((exp, idx) => {
           const sug = expSuggestions[idx] || expSuggestions[0];
@@ -1451,7 +1465,12 @@ const CVTemplates = () => {
       if (aiAnalysis.improvements && Array.isArray(aiAnalysis.improvements)) {
         aiAnalysis.improvements.forEach(imp => {
           const lower = imp.toLowerCase();
-          if (lower.includes('học vấn') || lower.includes('trường') || lower.includes('bằng') || lower.includes('education') || lower.includes('school') || lower.includes('study')) {
+          const matchKeywords = [
+            'học vấn', 'trường', 'bằng', 'học tập', 'đào tạo',
+            'hoc van', 'truong', 'bang', 'hoc tap', 'dao tao',
+            'education', 'school', 'degree', 'gpa', 'course', 'study', 'university', 'college'
+          ];
+          if (matchKeywords.some(kw => lower.includes(kw))) {
             if (!eduSuggestions.includes(imp)) {
               eduSuggestions.push(imp);
             }
@@ -1459,13 +1478,23 @@ const CVTemplates = () => {
         });
       }
 
-      if (newEducations.length === 0 && eduSuggestions.length > 0) {
-        newEducations = eduSuggestions.map(sug => ({
-          school: vi ? 'Trường học (Gợi ý)' : 'School Name (Suggested)',
-          degree: vi ? 'Bằng cấp / Ngành học (Gợi ý)' : 'Degree / Major (Suggested)',
-          duration: vi ? 'Thời gian' : 'Duration',
-          description: vi ? `[Gợi ý cải thiện từ AI]: ${sug}` : `[AI Improvement Suggestion]: ${sug}`
-        }));
+      if (newEducations.length === 0) {
+        // Always create at least one education entry if it's empty
+        if (eduSuggestions.length > 0) {
+          newEducations = eduSuggestions.map(sug => ({
+            school: vi ? 'Trường học (Gợi ý)' : 'School Name (Suggested)',
+            degree: vi ? 'Bằng cấp / Ngành học (Gợi ý)' : 'Degree / Major (Suggested)',
+            duration: vi ? 'Thời gian' : 'Duration',
+            description: vi ? `[Gợi ý cải thiện từ AI]: ${sug}` : `[AI Improvement Suggestion]: ${sug}`
+          }));
+        } else {
+          newEducations = [{
+            school: vi ? 'Trường học' : 'School Name',
+            degree: vi ? 'Bằng cấp / Ngành học' : 'Degree / Major',
+            duration: vi ? 'Thời gian' : 'Duration',
+            description: vi ? 'Mô tả học vấn (GPA, hoạt động, thành tích).' : 'Education details (GPA, activities, achievements).'
+          }];
+        }
       } else if (eduSuggestions.length > 0) {
         newEducations = newEducations.map((edu, idx) => {
           const sug = eduSuggestions[idx] || eduSuggestions[0];

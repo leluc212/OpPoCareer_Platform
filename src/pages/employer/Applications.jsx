@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+﻿import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -627,26 +627,32 @@ const PostsSectionTitle = styled.h2`
 `;
 
 const CreatePostButton = styled(motion.button)`
-  padding: 12px 24px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  padding: 12px 28px;
+  border-radius: 9999px; /* Premium pill shape */
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
   color: white;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 8px;
-  border: none;
+  border: 1px solid #1e40af;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
-  transition: all 0.2s ease;
+  box-shadow: 
+    0 4px 14px rgba(37, 99, 235, 0.25), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
 
   &:hover {
-    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
-    box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    border-color: #2563eb;
+    box-shadow: 
+      0 6px 20px rgba(37, 99, 235, 0.35), 
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
     transform: translateY(-2px);
   }
-  
+
   &:active {
     transform: translateY(0);
   }
@@ -654,6 +660,7 @@ const CreatePostButton = styled(motion.button)`
   svg {
     width: 18px;
     height: 18px;
+    stroke-width: 2.8; /* Bold modern stroke */
   }
 `;
 
@@ -3867,10 +3874,18 @@ const Applications = () => {
           <PageTitleGroup>
             <PageIconBox><Briefcase /></PageIconBox>
             <PageTitleText>
-              <h1>{language === 'vi' ? 'Công việc tiêu chuẩn' : 'Standard Jobs'}</h1>
-              <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tiêu chuẩn (không bao gồm tuyển gấp)' : 'Manage posts and applications for standard jobs (excluding quick jobs)'}</p>
+              <h1>{language === 'vi' ? 'Công việc tuyển dụng' : 'Standard Jobs'}</h1>
+              <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tuyển dụng (không bao gồm tuyển gấp)' : 'Manage posts and applications for standard jobs (excluding quick jobs)'}</p>
             </PageTitleText>
           </PageTitleGroup>
+          <CreatePostButton
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/employer/post-job')}
+          >
+            <Plus />
+            {language === 'vi' ? 'Đăng bài mới' : 'Post New Job'}
+          </CreatePostButton>
         </PageHeader>
 
         {/* Standard Jobs Section */}

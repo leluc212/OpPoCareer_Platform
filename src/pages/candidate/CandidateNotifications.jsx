@@ -4,9 +4,10 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import RelativeTime from '../../components/RelativeTime';
+import Modal from '../../components/Modal';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { getNotifications, markAsRead, setNotificationDeleted } from '../../services/notificationService';
+import { getNotifications, markAsRead, setNotificationDeleted, clearAllNotifications } from '../../services/notificationService';
 import {
   Bell,
   Briefcase,
@@ -20,7 +21,8 @@ import {
   Mail,
   Star,
   Zap,
-  FileCheck
+  FileCheck,
+  Trash2
 } from 'lucide-react';
 
 const NotificationsContainer = styled.div`
@@ -189,6 +191,67 @@ const FilterButton = styled(motion.button)`
     `}
   }
   
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const ClearAllButton = styled(motion.button)`
+  padding: 10px 20px;
+  border-radius: 24px;
+  border: 1.5px solid #fca5a5;
+  background: #fef2f2;
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  
+  &:hover {
+    background: #fee2e2;
+    border-color: #f87171;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.16);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+`;
+
+const ToggleShowButton = styled(motion.button)`
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 1.5px solid ${props => props.theme.colors.border};
+  background: ${props => props.theme.colors.bgLight};
+  color: ${props => props.theme.colors.primary};
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px auto 0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+
+  &:hover {
+    background: ${props => props.theme.colors.primary}08;
+    border-color: ${props => props.theme.colors.primary}80;
+    transform: translateY(-1px);
+  }
+
   &:active {
     transform: translateY(0);
   }
@@ -533,6 +596,9 @@ function CandidateNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [undoInfo, setUndoInfo] = useState(null);
   const undoTimerRef = useRef(null);
+  const [resolvedUserId, setResolvedUserId] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     if (!user) return;
@@ -553,6 +619,7 @@ function CandidateNotifications() {
 
     console.log('🔔 [CandidateNotifications] Final userId:', userId);
     if (!userId) return;
+    setResolvedUserId(userId);
 
     try {
       const notifs = await getNotifications(userId, 'candidate');
@@ -597,6 +664,28 @@ function CandidateNotifications() {
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
+
+  const handleClearAll = () => {
+    if (!resolvedUserId) return;
+    setShowClearConfirm(true);
+  };
+
+  const executeClearAll = async () => {
+    try {
+      const success = await clearAllNotifications(resolvedUserId, 'candidate');
+      if (success) {
+        setNotifications([]);
+      } else {
+        alert(
+          language === 'vi' 
+            ? 'Không thể xóa thông báo. Vui lòng thử lại sau.' 
+            : 'Could not clear notifications. Please try again later.'
+        );
+      }
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+    }
+  };
 
   useEffect(() => () => {
     if (undoTimerRef.current) {
@@ -707,6 +796,10 @@ function CandidateNotifications() {
       ? notifications.filter(n => n.unread)
       : notifications.filter(n => n.type === filter);
 
+  const displayedNotifications = showAll
+    ? filteredNotifications
+    : filteredNotifications.slice(0, 10);
+
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
@@ -762,9 +855,20 @@ function CandidateNotifications() {
                 <span>{language === 'vi' ? 'Chưa đọc' : 'Unread'}</span>
                 <span className="badge">{unreadCount}</span>
               </FilterButton>
+
+              {notifications.length > 0 && (
+                <ClearAllButton
+                  onClick={handleClearAll}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Trash2 />
+                  <span>{language === 'vi' ? 'Xóa tất cả' : 'Clear all'}</span>
+                </ClearAllButton>
+              )}
             </FilterBar>
 
-            {filteredNotifications.map((notif, index) => (
+            {displayedNotifications.map((notif, index) => (
               <NotificationCard
                 key={notif.id}
                 $unread={notif.unread}
@@ -835,6 +939,18 @@ function CandidateNotifications() {
                 </ActionButton>
               </NotificationCard>
             ))}
+
+            {filteredNotifications.length > 10 && (
+              <ToggleShowButton
+                onClick={() => setShowAll(!showAll)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {showAll 
+                  ? (language === 'vi' ? 'Thu gọn bớt' : 'Show less') 
+                  : (language === 'vi' ? `Xem thêm (${filteredNotifications.length - 10} thông báo ẩn)` : `Show more (${filteredNotifications.length - 10} more)`)}
+              </ToggleShowButton>
+            )}
 
             {filteredNotifications.length === 0 && (
               <Card
@@ -927,6 +1043,97 @@ function CandidateNotifications() {
           </UndoToast>
         </UndoToastWrap>
       )}
+
+      <Modal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        title=""
+      >
+        <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+          <div style={{
+            fontSize: '48px',
+            marginBottom: '20px',
+            background: '#FEE2E2',
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#EF4444',
+            margin: '0 auto 20px'
+          }}>
+            <Trash2 size={40} />
+          </div>
+          
+          <h3 style={{
+            fontSize: '22px',
+            fontWeight: '800',
+            color: '#0F172A',
+            marginBottom: '10px'
+          }}>
+            {language === 'vi' ? 'Xác nhận xóa tất cả?' : 'Confirm Clear All?'}
+          </h3>
+          
+          <p style={{
+            fontSize: '15px',
+            color: '#475569',
+            lineHeight: '1.6',
+            marginBottom: '28px',
+            maxWidth: '400px',
+            margin: '0 auto 28px'
+          }}>
+            {language === 'vi'
+              ? 'Hành động này sẽ xóa vĩnh viễn toàn bộ thông báo của bạn. Bạn không thể hoàn tác hành động này!'
+              : 'This action will permanently delete all your notifications. You cannot undo this action!'}
+          </p>
+
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <button
+              onClick={() => setShowClearConfirm(false)}
+              style={{
+                flex: 1,
+                padding: '12px 20px',
+                borderRadius: '12px',
+                border: '1.5px solid #E2E8F0',
+                background: 'white',
+                color: '#64748B',
+                fontWeight: '600',
+                fontSize: '14.5px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+              onMouseLeave={e => e.currentTarget.style.background = 'white'}
+            >
+              {language === 'vi' ? 'Hủy bỏ' : 'Cancel'}
+            </button>
+            <button
+              onClick={async () => {
+                setShowClearConfirm(false);
+                await executeClearAll();
+              }}
+              style={{
+                flex: 1.2,
+                padding: '12px 20px',
+                borderRadius: '12px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                color: 'white',
+                fontWeight: '700',
+                fontSize: '14.5px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.25)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+            >
+              {language === 'vi' ? 'Đồng ý xóa' : 'Yes, clear all'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

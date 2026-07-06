@@ -137,10 +137,10 @@ hoặc khéo léo hướng câu chuyện về chủ đề phỏng vấn chính m
 SCORING_RUBRIC: str = """\
 RUBRIC CHẤM ĐIỂM (mỗi trục cho điểm số nguyên 0–100):
 
-1) past_experience_score — Kinh nghiệm làm việc ngành F&B:
-   - 0–39: Hầu như không có kinh nghiệm liên quan, mô tả mơ hồ.
-   - 40–69: Có một số kinh nghiệm liên quan nhưng còn hạn chế hoặc chưa rõ vai trò.
-   - 70–100: Kinh nghiệm phong phú, đúng vị trí, nêu được ví dụ cụ thể và kết quả.
+1) past_experience_score — Kinh nghiệm làm việc ngành F&B (Yêu cầu chấm điểm nhẹ nhàng, khích lệ):
+   - 0–39: Hoàn toàn không có bất kỳ kinh nghiệm nào và không thể hiện thái độ cầu thị/học hỏi.
+   - 40–69: Chưa có nhiều kinh nghiệm F&B chính thức nhưng có hiểu biết sơ bộ và ham học hỏi.
+   - 70–100: Đã từng làm công việc F&B (dù ngắn hạn, bán thời gian, phụ việc) hoặc mô tả được cơ bản kinh nghiệm, thái độ cầu tiến tốt.
 
 2) situation_handling_score — Giải quyết và xử lý tình huống thực tế:
    - 0–39: Lúng túng, không đưa ra hướng xử lý hợp lý.

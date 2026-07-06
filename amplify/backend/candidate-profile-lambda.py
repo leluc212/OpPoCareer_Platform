@@ -197,7 +197,7 @@ def lambda_handler(event, context):
             return response(200, {'success': True, 'data': item})
  
         elif http_method == 'POST':
-            # POST /profile - Create profile
+            # POST /profile - Create profile (SAFE: merge into existing if profile already exists)
             body = float_to_decimal(json.loads(event.get('body') or '{}'))
             if not user_id:
                 # Get userId from body or token
@@ -206,24 +206,73 @@ def lambda_handler(event, context):
                 return response(400, {'success': False, 'message': 'userId is required'})
  
             timestamp = datetime.utcnow().isoformat() + 'Z'
-            item = {
-                'userId': user_id,
-                'fullName': body.get('fullName', ''),
-                'email': body.get('email', ''),
-                'phone': body.get('phone', ''),
-                'location': body.get('location', ''),
-                'title': body.get('title', ''),
-                'bio': body.get('bio', ''),
-                'skills': body.get('skills', []),
-                'profileImage': body.get('profileImage'),
-                'socialLinks': body.get('socialLinks', {}),
-                'createdAt': timestamp,
-                'updatedAt': timestamp,
-                'isActive': True,
-                'profileCompletion': 0
-            }
-            table.put_item(Item=item)
-            return response(200, {'success': True, 'data': item})
+
+            # Check if profile already exists — if so, merge instead of overwriting
+            existing = None
+            try:
+                existing_resp = table.get_item(Key={'userId': user_id})
+                existing = existing_resp.get('Item')
+            except Exception as check_err:
+                print(f"Warning: Could not check existing profile: {check_err}")
+
+            if existing:
+                # Profile exists! Use update_item to merge new data WITHOUT losing existing fields
+                # Only update fields that are non-empty in the incoming body
+                print(f"⚠️ POST /profile called but profile already exists for {user_id}. Merging data safely.")
+                merge_fields = {}
+                for key in ['fullName', 'email', 'phone', 'location', 'title', 'bio', 'skills', 'profileImage', 'socialLinks', 'dateOfBirth', 'cccd']:
+                    if key in body:
+                        val = body[key]
+                        # Don't overwrite existing non-empty data with empty values
+                        existing_val = existing.get(key)
+                        if val is not None and val != '' and val != [] and val != {}:
+                            merge_fields[key] = val
+                        elif existing_val is not None and existing_val != '' and existing_val != [] and existing_val != {}:
+                            # Keep existing non-empty value
+                            pass
+                        else:
+                            merge_fields[key] = val
+                
+                merge_fields['updatedAt'] = timestamp
+
+                if merge_fields:
+                    update_expr = 'SET ' + ', '.join(f'#k{i} = :v{i}' for i, k in enumerate(merge_fields))
+                    attr_names = {f'#k{i}': k for i, k in enumerate(merge_fields)}
+                    attr_values = {f':v{i}': v for i, (k, v) in enumerate(merge_fields.items())}
+
+                    result = table.update_item(
+                        Key={'userId': user_id},
+                        UpdateExpression=update_expr,
+                        ExpressionAttributeNames=attr_names,
+                        ExpressionAttributeValues=attr_values,
+                        ReturnValues='ALL_NEW'
+                    )
+                    merged = result.get('Attributes', {})
+                    return response(200, {'success': True, 'data': merged})
+                else:
+                    return response(200, {'success': True, 'data': existing})
+            else:
+                # Profile does NOT exist — create new
+                item = {
+                    'userId': user_id,
+                    'fullName': body.get('fullName', ''),
+                    'email': body.get('email', ''),
+                    'phone': body.get('phone', ''),
+                    'location': body.get('location', ''),
+                    'title': body.get('title', ''),
+                    'bio': body.get('bio', ''),
+                    'skills': body.get('skills', []),
+                    'profileImage': body.get('profileImage'),
+                    'socialLinks': body.get('socialLinks', {}),
+                    'dateOfBirth': body.get('dateOfBirth', ''),
+                    'cccd': body.get('cccd', ''),
+                    'createdAt': timestamp,
+                    'updatedAt': timestamp,
+                    'isActive': True,
+                    'profileCompletion': 0
+                }
+                table.put_item(Item=item)
+                return response(200, {'success': True, 'data': item})
  
         elif http_method == 'PUT' and user_id:
             # Fetch existing profile to compare active status

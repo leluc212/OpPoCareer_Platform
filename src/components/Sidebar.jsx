@@ -1,9 +1,17 @@
-import React, { useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { s3Images } from '../utils/s3Images';
+import notificationService from '../services/notificationService';
+import jobPostService from '../services/jobPostService';
+import quickJobService from '../services/quickJobService';
+import applicationService from '../services/applicationService';
+import adminEmployerService from '../services/adminEmployerService';
+import { getWithdrawalRequests } from '../services/packageCatalogService';
+import candidateProfileService from '../services/candidateProfileService';
+import feedbackService from '../services/feedbackService';
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -298,14 +306,258 @@ const NavLink = styled.div`
   }
 `;
 
+const IconWrapper = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const Badge = styled.div`
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  background: ${props => props.theme.colors.danger || '#ef4444'};
+  color: white;
+  border-radius: 99px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid ${props => props.theme.colors.white || '#ffffff'};
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  z-index: 10;
+`;
+
 const Sidebar = ({ role, onHoverChange }) => {
   const { t, language } = useLanguage();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const navRef = useRef(null);
   const isNavigatingRef = useRef(false);
-  
+
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [standardPendingCount, setStandardPendingCount] = useState(0);
+  const [quickPendingCount, setQuickPendingCount] = useState(0);
+  const [adminBadges, setAdminBadges] = useState({
+    employers: 0,
+    candidates: 0,
+    posts: 0,
+    wallet: 0,
+    notifications: 0,
+    reports: 0
+  });
+
+  useEffect(() => {
+    let active = true;
+    let intervalId;
+
+    const fetchCounts = async () => {
+      const userId = role === 'admin' ? 'admin' : (user?.userId || user?.id || user?.email);
+      if (!userId || !role) return;
+
+      try {
+        // 1. Fetch unread notifications count
+        if (role === 'admin') {
+          const [notifs, employers, changeRequestsRaw, standardJobsRaw, quickJobsRaw, withdrawalsRaw, candidatesRaw, feedbacksRaw] = await Promise.all([
+            notificationService.getNotifications(userId, role).catch(() => []),
+            adminEmployerService.getAllEmployers().catch(() => []),
+            applicationService.listChangeRequests().catch(() => []),
+            (jobPostService.getAllJobPosts ? jobPostService.getAllJobPosts() : jobPostService.getAllActiveJobs()).catch(() => []),
+            (quickJobService.getAllQuickJobs ? quickJobService.getAllQuickJobs() : quickJobService.getAllActiveQuickJobs()).catch(() => []),
+            getWithdrawalRequests().catch(() => []),
+            candidateProfileService.getAllCandidates().catch(() => []),
+            feedbackService.getAllFeedbacks().catch(() => [])
+          ]);
+          const unreadNotifs = notifs.filter(n => !n.read);
+          
+          const reportsCount = (feedbacksRaw || []).filter(item => item.status === 'unread').length;
+          
+          const pendingVerificationCount = employers.filter(e => e.verificationStatus === 'pending' && !e.isVerified).length;
+          const pendingQuickJobCount = employers.filter(e => e.quickJobStatus === 'pending').length;
+          
+          const pendingChanges = (changeRequestsRaw || []).filter(app => {
+            const crStatus = app.changeRequestStatus || app.change_request_status ||
+              (app.changeRequest && app.changeRequest.status) ||
+              (app.change_request && app.change_request.status) ||
+              (app.extraFields && (app.extraFields.changeRequestStatus || app.extraFields.change_request_status));
+            const isCancelled = crStatus && String(crStatus).toLowerCase() === 'cancelled';
+            return !isCancelled;
+          });
+          const pendingChangeCount = pendingChanges.filter(r => !r.changeRequestStatus || r.changeRequestStatus === 'pending').length;
+          
+          const employersCount = pendingVerificationCount + pendingChangeCount + pendingQuickJobCount;
+          const candidatesCount = unreadNotifs.filter(n => n.actionUrl === '/admin/candidates' && n.type !== 'candidate_withdrawal_request').length;
+
+          // Calculate pending standard and quick jobs (neither approved nor rejected)
+          const standardList = Array.isArray(standardJobsRaw) ? standardJobsRaw : (standardJobsRaw?.data || []);
+          const quickList = Array.isArray(quickJobsRaw) ? quickJobsRaw : (quickJobsRaw?.data || []);
+          const getPendingCount = (list) => {
+            return (list || []).filter(job => {
+              const status = typeof job.status === 'string' ? job.status.trim().toLowerCase() : '';
+              const isApproved = ['active', 'approved', 'ai-approved'].includes(status);
+              const isRejected = ['closed', 'deleted', 'rejected'].includes(status);
+              return !isApproved && !isRejected;
+            }).length;
+          };
+          const pendingStandardCount = getPendingCount(standardList);
+          const pendingQuickCount = getPendingCount(quickList);
+          const pendingChangeRequestsCount = (changeRequestsRaw || []).filter(r => r.status === 'pending_change').length;
+
+          const postsCount = pendingStandardCount + pendingQuickCount + pendingChangeRequestsCount;
+
+          // Calculate pending withdrawal requests (status === 'pending') for employers and candidates
+          const pendingEmployerWithdrawals = (withdrawalsRaw || []).filter(w => (w.status === 'pending' || !w.status) && w.isCandidate !== true).length;
+          let pendingCandidateWithdrawals = 0;
+          if (Array.isArray(candidatesRaw)) {
+            candidatesRaw.forEach(c => {
+              if (Array.isArray(c.withdrawals)) {
+                c.withdrawals.forEach(w => {
+                  const status = w.status || 'pending';
+                  if (status === 'pending') {
+                    pendingCandidateWithdrawals++;
+                  }
+                });
+              }
+            });
+          }
+          const walletCount = pendingEmployerWithdrawals + pendingCandidateWithdrawals;
+          const totalUnreadCount = unreadNotifs.length;
+          
+          if (active) {
+            setAdminBadges({
+              employers: employersCount,
+              candidates: candidatesCount,
+              posts: postsCount,
+              wallet: walletCount,
+              notifications: totalUnreadCount,
+              reports: reportsCount
+            });
+            setUnreadNotifications(totalUnreadCount);
+          }
+        } else {
+          const count = await notificationService.getUnreadCount(userId, role);
+          if (active) setUnreadNotifications(count);
+        }
+
+        // 2. Fetch unread chat count
+        let chatCount = 0;
+        if (role === 'candidate') {
+          const apps = await applicationService.getMyCandidateApplications().catch(() => []);
+          apps.forEach(app => {
+            if (app.status === 'completed' || app.status === 'completed_pending_candidate' || app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') {
+              return;
+            }
+            let messages = app.chatMessages || [];
+            const savedMessages = localStorage.getItem(`chat_${app.applicationId}`);
+            if (savedMessages) {
+              try {
+                const localMsgs = JSON.parse(savedMessages);
+                if (localMsgs.length > messages.length) messages = localMsgs;
+              } catch (e) {}
+            }
+            if (messages.length > 0) {
+              const lastMsg = messages[messages.length - 1];
+              if (lastMsg && lastMsg.sender === 'me') {
+                const lastReadId = localStorage.getItem(`chat_read_${app.applicationId}`);
+                if (lastReadId !== String(lastMsg.id)) {
+                  chatCount++;
+                }
+              }
+            }
+          });
+        } else if (role === 'employer') {
+          const quickJobs = await quickJobService.getMyQuickJobs().catch(() => []);
+          for (const job of quickJobs) {
+            const apps = await applicationService.getJobApplications(job.idJob || job.id).catch(() => []);
+            apps.forEach(app => {
+              if (app.status === 'accepted') {
+                let messages = app.chatMessages || [];
+                const savedMessages = localStorage.getItem(`chat_${app.applicationId}`);
+                if (savedMessages) {
+                  try {
+                    const localMsgs = JSON.parse(savedMessages);
+                    if (localMsgs.length > messages.length) messages = localMsgs;
+                  } catch (e) {}
+                }
+                if (messages.length > 0) {
+                  const lastMsg = messages[messages.length - 1];
+                  if (lastMsg && lastMsg.sender === 'them') {
+                    const lastReadId = localStorage.getItem(`chat_read_employer_${app.applicationId}`);
+                    if (lastReadId !== String(lastMsg.id)) {
+                      chatCount++;
+                    }
+                  }
+                }
+              }
+            });
+          }
+        }
+        if (active) setUnreadChatCount(chatCount);
+
+        // 3. Fetch applications counts for employer
+        if (role === 'employer') {
+          // Standard Job Applications Count (status === 'pending')
+          const stdJobs = await jobPostService.getMyJobPosts();
+          if (stdJobs && stdJobs.length > 0) {
+            const stdPromises = stdJobs.map(job =>
+              applicationService.getJobApplications(job.idJob).catch(() => [])
+            );
+            const stdAppsList = await Promise.all(stdPromises);
+            const pendingStdCount = stdAppsList.flat().filter(app => app.status === 'pending').length;
+            if (active) setStandardPendingCount(pendingStdCount);
+          } else {
+            if (active) setStandardPendingCount(0);
+          }
+
+          // Quick Job Applications Count (Chờ xác nhận & Chờ thay đổi)
+          const quickJobs = await quickJobService.getMyQuickJobs();
+          if (quickJobs && quickJobs.length > 0) {
+            const quickPromises = quickJobs.map(job =>
+              applicationService.getJobApplications(job.id || job.idJob || job.jobID).catch(() => [])
+            );
+            const quickAppsList = await Promise.all(quickPromises);
+            const pendingQCount = quickAppsList.flat().filter(app => {
+              const status = app.status || 'pending';
+              const changeStatus = app.changeRequestStatus || app.change_request_status || app.changeRequest?.status || app.change_request?.status;
+              const hasPendingChange = changeStatus && !['approved', 'rejected', 'cancelled'].includes(String(changeStatus).toLowerCase());
+              return status === 'pending' || status === 'pending_change' || hasPendingChange;
+            }).length;
+            if (active) setQuickPendingCount(pendingQCount);
+          } else {
+            if (active) setQuickPendingCount(0);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching sidebar counts:', error);
+      }
+    };
+
+    fetchCounts();
+    intervalId = setInterval(fetchCounts, 10000); // poll every 10s
+
+    const handleUpdate = () => {
+      fetchCounts();
+    };
+
+    window.addEventListener('newFeedbackSubmitted', handleUpdate);
+    window.addEventListener('feedbackStatusChanged', handleUpdate);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+      window.removeEventListener('newFeedbackSubmitted', handleUpdate);
+      window.removeEventListener('feedbackStatusChanged', handleUpdate);
+    };
+  }, [user, role]);
+
   const handleMouseEnter = () => {
     if (onHoverChange) onHoverChange(true);
   };
@@ -459,6 +711,32 @@ const Sidebar = ({ role, onHoverChange }) => {
             <NavSectionTitle>{section.section}</NavSectionTitle>
             {section.items.map((link, linkIdx) => {
               const Icon = link.icon;
+              
+              let badgeCount = 0;
+              if (role === 'admin') {
+                if (link.to === '/admin/employers') {
+                  badgeCount = adminBadges.employers;
+                } else if (link.to === '/admin/candidates') {
+                  badgeCount = adminBadges.candidates;
+                } else if (link.to === '/admin/posts') {
+                  badgeCount = adminBadges.posts;
+                } else if (link.to === '/admin/wallet') {
+                  badgeCount = adminBadges.wallet;
+                } else if (link.to === '/admin/notifications') {
+                  badgeCount = adminBadges.notifications;
+                } else if (link.to === '/admin/reports') {
+                  badgeCount = adminBadges.reports;
+                }
+              } else {
+                if (link.to.endsWith('/notifications')) {
+                  badgeCount = unreadNotifications + unreadChatCount;
+                } else if (link.to === '/employer/standard-jobs') {
+                  badgeCount = standardPendingCount;
+                } else if (link.to === '/employer/quick-jobs') {
+                  badgeCount = quickPendingCount;
+                }
+              }
+
               return (
                 <NavLink
                   key={linkIdx}
@@ -467,7 +745,12 @@ const Sidebar = ({ role, onHoverChange }) => {
                   onMouseDown={(e) => e.preventDefault()}
                   tabIndex={0}
                 >
-                  <Icon />
+                  <IconWrapper>
+                    <Icon />
+                    {badgeCount > 0 && (
+                      <Badge>{badgeCount > 99 ? '99+' : badgeCount}</Badge>
+                    )}
+                  </IconWrapper>
                   <span>{link.label}</span>
                 </NavLink>
               );

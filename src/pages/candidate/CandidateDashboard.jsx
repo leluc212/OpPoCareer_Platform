@@ -1326,6 +1326,10 @@ const CandidateDashboard = () => {
   const navigate = useNavigate();
   const [currentTime] = useState(new Date());
   const [showJobDetail, setShowJobDetail] = useState(false);
+  const showJobDetailRef = useRef(false);
+  useEffect(() => {
+    showJobDetailRef.current = showJobDetail;
+  }, [showJobDetail]);
   const [jobCompleted, setJobCompleted] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
@@ -1744,10 +1748,14 @@ const CandidateDashboard = () => {
             employerConfirmedAt: acceptedApp.employerConfirmedAt || null
           });
         } else {
-          setCurrentJob(null);
+          if (!showJobDetailRef.current) {
+            setCurrentJob(null);
+          }
         }
       } else {
-        setCurrentJob(null);
+        if (!showJobDetailRef.current) {
+          setCurrentJob(null);
+        }
       }
 
       // Bug 6 fix: detect recently-replaced applications để hiện banner thông báo cho candidate

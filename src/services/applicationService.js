@@ -257,6 +257,36 @@ export async function updateApplicationStatus(applicationId, status, extraFields
 }
 
 /**
+ * Employer rejects the replacement worker and requests 85% refund
+ * @param {string} applicationId - Application ID of the replaced worker
+ * @returns {Promise<Object>} Refund response
+ */
+export async function rejectReplacementWorker(applicationId) {
+  try {
+    console.log('📤 Rejecting replacement worker for:', applicationId);
+    const headers = await getAuthHeaders();
+    const url = import.meta.env.DEV
+      ? `/api-applications/${applicationId}/reject-replacement`
+      : `${API_BASE_URL}/applications/${applicationId}/reject-replacement`;
+      
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to reject replacement worker');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('❌ Error rejecting replacement worker:', error);
+    throw error;
+  }
+}
+
+/**
  * Get all applications (admin only)
  * Intelligent fetcher that handles IAM vs Cognito authorizer mismatches
  * @returns {Promise<Array>} List of all applications
@@ -314,6 +344,7 @@ const applicationService = {
   getCandidateApplications,
   getJobApplications,
   updateApplicationStatus,
+  rejectReplacementWorker,
   
   /**
    * Get all applications via Vite proxy → Lambda Function URL (no browser CORS issues)

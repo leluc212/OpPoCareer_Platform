@@ -469,7 +469,8 @@ const Table = styled.table`
 const ActionButtons = styled.div`
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
 `;
 
 const IconButton = styled.button`
@@ -834,12 +835,6 @@ const PostsManagement = () => {
       showCRToast('success', 'Đã duyệt — ca làm việc đã được xử lý thành công, job mở lại để tuyển người mới');
       setSelectedCR(null);
       await loadChangeRequests();
-
-      if (result.recommendations) {
-        setActiveRecommendations(result.recommendations);
-        setRecJobTitle(result.jobTitle || cr.jobTitle || 'Ca làm');
-        setShowRecsModal(true);
-      }
     } catch (err) {
       console.error('❌ Approve CR failed:', err);
       showCRToast('error', err.message || 'Lỗi khi duyệt yêu cầu');
@@ -1372,31 +1367,9 @@ const PostsManagement = () => {
               {urgentJobs.length}
             </span>
           </Tab>
-          <Tab
-            $active={activeTab === 'change_requests'}
-            onClick={() => setActiveTab('change_requests')}
-            style={{ position: 'relative' }}
-          >
-            <RefreshCw size={16} />
-            Yêu cầu đổi nhân viên
-            {changeRequests.filter(r => r.status === 'pending_change').length > 0 && (
-              <span style={{
-                marginLeft: '4px',
-                padding: '2px 8px',
-                background: activeTab === 'change_requests' ? '#F97316' : '#EF4444',
-                color: 'white',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: '700',
-                animation: 'pulse 1.5s infinite'
-              }}>
-                {changeRequests.filter(r => r.status === 'pending_change').length}
-              </span>
-            )}
-          </Tab>
+
         </TabContainer>
 
-        {activeTab !== 'change_requests' && (
         <>
 
         <ChartsContainer>
@@ -1650,7 +1623,7 @@ const PostsManagement = () => {
                 <th>{language === 'vi' ? 'Ứng tuyển' : 'Applications'}</th>
                 <th>{language === 'vi' ? 'CV đã gửi' : 'CV Sent'}</th>
                 <th>{language === 'vi' ? 'Gói hỗ trợ' : 'Support Package'}</th>
-                <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                <th style={{ minWidth: '240px' }}>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
               </tr>
             </thead>
             <tbody>
@@ -1698,7 +1671,7 @@ const PostsManagement = () => {
                     })()}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '12px', flexWrap: 'nowrap' }}>
                       {(() => {
                         const s = job.status;
                         const cfg = s === 'pending'
@@ -1847,8 +1820,7 @@ const PostsManagement = () => {
           </PaginationContainer>
         )}
 
-        </> /* end activeTab !== 'change_requests' */
-        )}
+        </>
 
         {showDetailModal && selectedJob && (<>
           <Modal
@@ -2059,235 +2031,7 @@ const PostsManagement = () => {
           </div>
         </Modal>
 
-        {/* ═══ CHANGE REQUESTS PANEL ═══════════════════════════════════════ */}
-        {activeTab === 'change_requests' && (
-          <>
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                <div>
-                  {/* Bug 4 fix: tiêu đề phản ánh đúng toàn bộ lịch sử */}
-                  <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#1E293B', margin: '0 0 4px' }}>
-                    Yêu cầu thay đổi nhân viên ({changeRequests.length} tổng)
-                  </h2>
-                  <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
-                    Toàn bộ lịch sử — kể cả đã duyệt và từ chối
-                  </p>
-                </div>
-                <button
-                  onClick={loadChangeRequests}
-                  disabled={loadingCR}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 16px', borderRadius: '8px',
-                    border: '1.5px solid #E2E8F0', background: '#F8FAFC',
-                    fontSize: '13px', fontWeight: '600', color: '#64748B',
-                    cursor: loadingCR ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  <RefreshCw size={14} style={{ animation: loadingCR ? 'spin 1s linear infinite' : 'none' }} />
-                  Tải lại
-                </button>
-              </div>
-            </div>
 
-            {/* Bug 2 fix: Status filter tabs — Chờ duyệt / Đã duyệt / Từ chối */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              {[
-                { key: 'pending', label: `Chờ duyệt (${crCounts.pending})`, color: '#F97316', bg: '#FFF7ED', border: '#FED7AA' },
-                { key: 'approved', label: `Đã duyệt (${crCounts.approved})`, color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0' },
-                { key: 'rejected', label: `Từ chối (${crCounts.rejected})`, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
-                { key: 'all', label: `Tất cả (${changeRequests.length})`, color: '#6B7280', bg: '#F9FAFB', border: '#E5E7EB' },
-              ].map(({ key, label, color, bg, border }) => (
-                <button
-                  key={key}
-                  onClick={() => setCrStatusFilter(key)}
-                  style={{
-                    padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: '700',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                    border: `1.5px solid ${crStatusFilter === key ? color : border}`,
-                    background: crStatusFilter === key ? bg : 'white',
-                    color: crStatusFilter === key ? color : '#64748B',
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {loadingCR ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748B' }}>
-                <RefreshCw size={32} style={{ margin: '0 auto 12px', display: 'block', animation: 'spin 1s linear infinite', color: '#F97316' }} />
-                <p style={{ fontSize: '14px', fontWeight: '600' }}>Đang tải yêu cầu...</p>
-              </div>
-            ) : filteredChangeRequests.length === 0 ? (
-              <EmptyChangeRequests>
-                <div className="icon">✅</div>
-                <h3>{crStatusFilter === 'pending' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu nào'}</h3>
-                <p>Tất cả yêu cầu đổi nhân viên đã được xử lý</p>
-              </EmptyChangeRequests>
-            ) : (
-              <ChangeRequestGrid>
-                {/* Bug 2 fix: dùng filteredChangeRequests đã sort theo updatedAt DESC */}
-                {filteredChangeRequests.map(cr => {
-                  const changeReq = cr.changeRequest || {};
-                  const isProcessing = processingCRId === cr.applicationId;
-                  const startIso = cr.acceptedAt || cr.appliedAt || cr.createdAt;
-                  const workedTime = calcWorkedTime(startIso);
-                  const startDisplay = fmtTime(startIso);
-                  // Bug 4 fix: xác định trạng thái hiển thị đúng
-                  const crStatus = String(cr.changeRequestStatus || '').toLowerCase();
-                  const isPending = cr.status === 'pending_change';
-                  const isApproved = crStatus === 'approved' || cr.status === 'ĐÃ_BỊ_THAY_THẾ';
-                  const isRejected = crStatus === 'rejected';
-
-                  return (
-                    <ChangeRequestCard key={cr.applicationId} style={
-                      isApproved ? { borderColor: '#A7F3D0', boxShadow: '0 2px 8px rgba(16,185,129,0.08)' } :
-                      isRejected ? { borderColor: '#FECACA', boxShadow: '0 2px 8px rgba(239,68,68,0.08)' } : {}
-                    }>
-                      <CRHeader>
-                        {/* Bug 4 fix: hiển thị badge đúng trạng thái */}
-                        {isPending && (
-                          <CRBadge>
-                            <RefreshCw size={10} />
-                            Chờ duyệt
-                          </CRBadge>
-                        )}
-                        {isApproved && (
-                          <CRBadge style={{ background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0' }}>
-                            <CheckCircle size={10} />
-                            Đã duyệt
-                          </CRBadge>
-                        )}
-                        {isRejected && (
-                          <CRBadge style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}>
-                            <X size={10} />
-                            Từ chối
-                          </CRBadge>
-                        )}
-                        <span style={{ fontSize: '11px', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Clock size={11} />
-                          {changeReq.requestedAt || fmtTime(cr.updatedAt)}
-                        </span>
-                      </CRHeader>
-
-                      {/* Tên job + địa điểm */}
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ fontWeight: '700', fontSize: '14.5px', color: '#1E293B', marginBottom: '3px' }}>
-                          {cr._jobTitle || cr.jobTitle || 'Ca làm việc'}
-                        </div>
-                        {(cr._jobLocation || cr.jobLocation) && (
-                          <div style={{ fontSize: '12.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <MapPin size={11} />
-                            {cr._jobLocation || cr.jobLocation}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Worker cũ → Worker mới */}
-                      <CRWorkerRow>
-                        <div className="worker-box" style={{ borderColor: '#FECACA', background: '#FEF2F2' }}>
-                          <div className="worker-label" style={{ color: '#F87171' }}>Worker hiện tại</div>
-                          <div className="worker-name">{cr.candidateName || cr.candidateEmail?.split('@')[0] || 'Worker cũ'}</div>
-                        </div>
-                        <ArrowRight size={18} className="arrow" />
-                        <div className="worker-box" style={{ borderColor: '#A7F3D0', background: '#ECFDF5' }}>
-                          <div className="worker-label" style={{ color: '#34D399' }}>Worker mới</div>
-                          <div className="worker-name">{changeReq.newWorkerName || changeReq.newWorkerId?.slice(0, 8) || '---'}</div>
-                        </div>
-                      </CRWorkerRow>
-
-                      {/* Meta: giờ bắt đầu, đã làm bao lâu */}
-                      <CRMeta>
-                        <div className="meta-row">
-                          <Clock />
-                          <span>Ca bắt đầu: <strong>{cr._jobStartTime || startDisplay}</strong></span>
-                          {cr._jobEndTime && <span>— kết thúc: <strong>{cr._jobEndTime}</strong></span>}
-                        </div>
-                        <div className="meta-row">
-                          <AlertCircle />
-                          <span>Đã làm: <strong style={{ color: '#F97316' }}>{workedTime}</strong></span>
-                        </div>
-                        {cr.companyName && (
-                          <div className="meta-row">
-                            <Briefcase />
-                            <span>{cr.companyName}</span>
-                          </div>
-                        )}
-                      </CRMeta>
-
-                      {/* Lý do */}
-                      {(changeReq.reasonDetail || changeReq.reasonType || changeReq.reason) && (
-                        <CRReason>
-                          {changeReq.reasonType && (
-                            <div style={{ fontWeight: '700', marginBottom: '4px', fontSize: '12px', color: '#9A3412', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                              {changeReq.reasonType}
-                            </div>
-                          )}
-                          "{changeReq.reasonDetail || changeReq.reason}"
-                        </CRReason>
-                      )}
-
-                      {/* Cảnh báo */}
-                      <div style={{
-                        background: '#FFF7ED', border: '1px solid #FFEDD5',
-                        borderRadius: '8px', padding: '10px 12px',
-                        fontSize: '12.5px', color: '#7C2D12', lineHeight: '1.5',
-                        marginBottom: '14px', display: 'flex', gap: '8px', alignItems: 'flex-start'
-                      }}>
-                        <AlertCircle size={14} color="#F97316" style={{ flexShrink: 0, marginTop: '1px' }} />
-                        <span>
-                          Nếu duyệt, worker cũ kết thúc ca <strong>ngay lập tức</strong>.
-                          Tiền công tính đến thời điểm bấm Duyệt.
-                        </span>
-                      </div>
-
-                      {/* Bug 4 fix: chỉ hiện nút Duyệt/Từ chối cho records đang chờ */}
-                      {isPending && (
-                      <CRActions>
-                        <CRButton
-                          $variant="approve"
-                          disabled={isProcessing}
-                          onClick={() => handleApproveCR(cr)}
-                        >
-                          {isProcessing ? (
-                            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                          ) : (
-                            <CheckCircle size={14} />
-                          )}
-                          {isProcessing ? 'Đang xử lý...' : 'Duyệt'}
-                        </CRButton>
-                        <CRButton
-                          disabled={isProcessing}
-                          onClick={() => handleRejectCR(cr)}
-                        >
-                          {isProcessing ? (
-                            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                          ) : (
-                            <X size={14} />
-                          )}
-                          Từ chối
-                        </CRButton>
-                      </CRActions>
-                      )}
-                      {/* Hiện thông tin xử lý cho records đã xong */}
-                      {(isApproved || isRejected) && (
-                        <div style={{ padding: '10px 12px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '600',
-                          background: isApproved ? '#ECFDF5' : '#FEF2F2',
-                          color: isApproved ? '#065F46' : '#991B1B',
-                          display: 'flex', alignItems: 'center', gap: '6px'
-                        }}>
-                          {isApproved ? <CheckCircle size={13} /> : <X size={13} />}
-                          {isApproved ? 'Đã được duyệt' : 'Đã từ chối'} — {cr.replacedAt || cr.updatedAt ? new Date(cr.replacedAt || cr.updatedAt).toLocaleString('vi-VN') : '--'}
-                        </div>
-                      )}
-                    </ChangeRequestCard>
-                  );
-                })}
-              </ChangeRequestGrid>
-            )}
-          </>
-        )}
 
         {/* Urgent recommendations modal */}
         <UrgentRecommendationsModal

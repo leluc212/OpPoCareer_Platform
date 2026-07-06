@@ -50,7 +50,7 @@ INTERVIEW_REPORT_SCHEMA = {
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
-MAX_BODY_BYTES = 100_000
+MAX_BODY_BYTES = 3_500_000
 MAX_TEXT_LENGTH = 8_000
 
 
@@ -388,8 +388,13 @@ def _candidate_claims(event):
             ]
 
     normalized = {str(group).lower() for group in groups}
-    profile_role = str(claims.get("profile") or "").lower()
-    if "candidate" not in normalized and profile_role != "candidate":
+    roles = set()
+    for key in ["custom:role", "role", "profile", "userRole"]:
+        val = claims.get(key)
+        if val:
+            roles.add(str(val).lower())
+
+    if "candidate" not in normalized and not roles.intersection({"candidate"}):
         raise RequestError(403, "FORBIDDEN", "Only candidates can analyze a CV.")
     return claims
 
@@ -412,8 +417,13 @@ def _employer_claims(event):
             ]
 
     normalized = {str(group).lower() for group in groups}
-    profile_role = str(claims.get("profile") or "").lower()
-    if "employer" not in normalized and profile_role != "employer" and "admin" not in normalized:
+    roles = set()
+    for key in ["custom:role", "role", "profile", "userRole"]:
+        val = claims.get(key)
+        if val:
+            roles.add(str(val).lower())
+
+    if "employer" not in normalized and not roles.intersection({"employer", "admin"}) and "admin" not in normalized:
         raise RequestError(403, "FORBIDDEN", "Only employers can request candidate recommendations.")
     return claims
 
@@ -423,7 +433,7 @@ def _parse_body(event):
     if event.get("isBase64Encoded"):
         raise RequestError(400, "INVALID_BODY", "Base64 request bodies are not supported.")
     if len(raw_body.encode("utf-8")) > MAX_BODY_BYTES:
-        raise RequestError(413, "PAYLOAD_TOO_LARGE", "The CV payload is too large.")
+        raise RequestError(413, "PAYLOAD_TOO_LARGE", "The request payload is too large.")
     try:
         body = json.loads(raw_body)
     except (TypeError, json.JSONDecodeError):
@@ -1976,7 +1986,11 @@ def lambda_handler(event, context):
             }))
             return _response(event, 200, ai_result)
 
-        claims = _candidate_claims(event)
+        # CV analyze/generate: only require authentication (valid sub), not role
+        # These endpoints operate on user-provided data and don't need role-based access control
+        claims = _claims(event)
+        if not claims.get("sub"):
+            raise RequestError(401, "UNAUTHORIZED", "Missing or invalid authentication token.")
         if path == "/cv/analyze":
             validated = validate_payload(_parse_body(event))
             result = analyze(validated, request_id)

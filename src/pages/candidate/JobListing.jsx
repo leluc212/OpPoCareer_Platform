@@ -2518,7 +2518,9 @@ const JobListing = () => {
   const recognitionRef = useRef(null);
   const autoSendTimerRef = useRef(null);
   const candidateHasSpokenRef = useRef(false);
-  const lastInputTextRef = useRef('');
+  const lastSpeechActivityRef = useRef(0);
+  const silenceCheckIntervalRef = useRef(null);
+  const candidateTurnStartRef = useRef(0);
   const isExitingFullscreenRef = useRef(false);
   const shouldBeListeningRef = useRef(false);
   const handleSendInterviewAnswerRef = useRef(null);
@@ -2574,7 +2576,7 @@ const JobListing = () => {
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'vi-VN';
 
     recognition.onstart = () => {
@@ -2582,6 +2584,11 @@ const JobListing = () => {
     };
 
     recognition.onresult = (event) => {
+      // Track voice activity on ANY result (interim or final)
+      lastSpeechActivityRef.current = Date.now();
+      candidateHasSpokenRef.current = true;
+
+      // Only use final results for the answer text
       let accumulatedText = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -2837,7 +2844,7 @@ const JobListing = () => {
   useEffect(() => {
     setHasReplayedCurrent(false);
     candidateHasSpokenRef.current = false;
-    lastInputTextRef.current = '';
+    lastSpeechActivityRef.current = 0;
   }, [interviewQuestionCount]);
 
   // Update ref for handleSendInterviewAnswer to avoid stale closure issues in useEffect timer
@@ -2845,20 +2852,12 @@ const JobListing = () => {
     handleSendInterviewAnswerRef.current = handleSendInterviewAnswer;
   }, [handleSendInterviewAnswer]);
 
-  // Track whether the candidate has started speaking (input text changed to non-empty)
+  // Silence detection using interval-based voice activity tracking.
+  // - Checks every 500ms if the candidate has been silent too long.
+  // - 10s with no voice at all after AI finishes speaking → skip to next question.
+  // - 5s of silence after the candidate has started speaking → auto-submit their answer.
+  // - While the candidate IS speaking (voice activity detected), the timer never fires.
   useEffect(() => {
-    lastInputTextRef.current = interviewInputText;
-    if (interviewInputText.trim()) {
-      candidateHasSpokenRef.current = true;
-    }
-  }, [interviewInputText]);
-
-  // Auto-transition silence timer:
-  // - 10s after AI finishes speaking if candidate hasn't said anything
-  // - 5s of silence after candidate has started speaking
-  // The timer restarts when: AI stops speaking, candidate speaks, or sending state changes.
-  useEffect(() => {
-    // Check if we are in the active interview and candidate's turn to speak
     const isCandidateTurn =
       showAiScreeningModal &&
       aiScreeningStep === 'interview' &&
@@ -2868,45 +2867,57 @@ const JobListing = () => {
       !isPreparingInterviewMedia;
 
     if (!isCandidateTurn) {
-      if (autoSendTimerRef.current) {
-        clearTimeout(autoSendTimerRef.current);
-        autoSendTimerRef.current = null;
+      if (silenceCheckIntervalRef.current) {
+        clearInterval(silenceCheckIntervalRef.current);
+        silenceCheckIntervalRef.current = null;
       }
       return;
     }
 
-    // Determine timeout: 10s if candidate hasn't spoken yet, 5s if they have
-    const hasSpoken = candidateHasSpokenRef.current;
-    const timeoutMs = hasSpoken ? 5000 : 10000;
+    // Mark the start of candidate's turn
+    candidateTurnStartRef.current = Date.now();
 
-    if (autoSendTimerRef.current) {
-      clearTimeout(autoSendTimerRef.current);
-    }
+    silenceCheckIntervalRef.current = setInterval(() => {
+      const now = Date.now();
+      const hasSpoken = candidateHasSpokenRef.current;
+      const lastActivity = lastSpeechActivityRef.current;
 
-    autoSendTimerRef.current = setTimeout(() => {
-      const currentText = lastInputTextRef.current.trim();
-      if (hasSpoken) {
-        console.log('⏰ 5s silence after candidate spoke, auto-submitting answer...');
-        const textToSend = currentText || (language === 'vi' ? '(Không trả lời)' : '(No answer)');
-        if (handleSendInterviewAnswerRef.current) {
-          handleSendInterviewAnswerRef.current(textToSend);
+      if (!hasSpoken) {
+        // Candidate hasn't said anything yet — check 10s no-response timeout
+        const elapsed = now - candidateTurnStartRef.current;
+        if (elapsed >= 10000) {
+          clearInterval(silenceCheckIntervalRef.current);
+          silenceCheckIntervalRef.current = null;
+          console.log('⏰ 10s no response from candidate, prompting and moving on...');
+          const promptMsg = language === 'vi'
+            ? 'Bạn trả lời hơi lâu rồi, mình sẽ chuyển sang câu tiếp theo nhé.'
+            : 'You\'re taking a bit long to respond. Let\'s move to the next question.';
+          const timeStr = new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+          setInterviewMessages(prev => [...prev, { text: promptMsg, isMe: false, time: timeStr }]);
+          if (handleSendInterviewAnswerRef.current) {
+            handleSendInterviewAnswerRef.current(language === 'vi' ? '(Không trả lời)' : '(No answer)');
+          }
         }
       } else {
-        console.log('⏰ 10s no response from candidate, prompting and moving on...');
-        const promptMsg = language === 'vi'
-          ? 'Bạn trả lời hơi lâu rồi, mình sẽ chuyển sang câu tiếp theo nhé.'
-          : 'You\'re taking a bit long to respond. Let\'s move to the next question.';
-        const timeStr = new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-        setInterviewMessages(prev => [...prev, { text: promptMsg, isMe: false, time: timeStr }]);
-        if (handleSendInterviewAnswerRef.current) {
-          handleSendInterviewAnswerRef.current(language === 'vi' ? '(Không trả lời)' : '(No answer)');
+        // Candidate has spoken — check 5s silence after last voice activity
+        const silenceDuration = now - lastActivity;
+        if (silenceDuration >= 5000) {
+          clearInterval(silenceCheckIntervalRef.current);
+          silenceCheckIntervalRef.current = null;
+          console.log('⏰ 5s silence after candidate spoke, auto-submitting answer...');
+          const currentText = interviewInputText.trim();
+          const textToSend = currentText || (language === 'vi' ? '(Không trả lời)' : '(No answer)');
+          if (handleSendInterviewAnswerRef.current) {
+            handleSendInterviewAnswerRef.current(textToSend);
+          }
         }
       }
-    }, timeoutMs);
+    }, 500);
 
     return () => {
-      if (autoSendTimerRef.current) {
-        clearTimeout(autoSendTimerRef.current);
+      if (silenceCheckIntervalRef.current) {
+        clearInterval(silenceCheckIntervalRef.current);
+        silenceCheckIntervalRef.current = null;
       }
     };
   }, [
@@ -2916,7 +2927,6 @@ const JobListing = () => {
     interviewSending,
     isSpeaking,
     isPreparingInterviewMedia,
-    interviewInputText,
     language
   ]);
 

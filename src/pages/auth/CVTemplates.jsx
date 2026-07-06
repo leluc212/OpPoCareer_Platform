@@ -1919,6 +1919,7 @@ const CVTemplates = () => {
           <BackBtn $isDark={isDarkMode} onClick={() => setIsEditing(false)}>
             <ArrowLeft size={16} />
             {vi ? 'Quay lại danh sách' : 'Back to List'}
+            <span style={{ fontSize: '0.68rem', opacity: 0.5, marginLeft: 8, fontWeight: 500 }}>v1.0.4</span>
           </BackBtn>
           
           <StyleSelector $isDark={isDarkMode}>

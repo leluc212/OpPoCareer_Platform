@@ -1307,21 +1307,190 @@ const CVTemplates = () => {
     }
   };
 
+  const getAiSuggestionText = (text) => {
+    if (!text) return null;
+    const regex = /\[(?:AI\s+)?(?:Gợi\s+ý\s+cải\s+thiện|Gợi\s+ý\s+cải\s+thiện\s+từ\s+AI|Improvement\s+Suggestion|Gợi\s+ý|Improvement|Suggestion)(?:\s+từ\s+AI)?\]\s*:\s*([\s\S]*)/i;
+    const match = text.match(regex);
+    if (match) return match[1].trim();
+
+    const simpleRegex = /\[(?:Gợi\s+ý\s+cải\s+thiện|AI\s+Gợi\s+ý|AI\s+Improvement)([\s\S]*?)\]/i;
+    const simpleMatch = text.match(simpleRegex);
+    if (simpleMatch) return simpleMatch[1].replace(/^[:\s]+/, '').trim();
+
+    return null;
+  };
+
+  const renderDescriptionWithSuggestions = (description) => {
+    if (!description) return null;
+    const regex = /\[(?:AI\s+)?(?:Gợi\s+ý\s+cải\s+thiện|Gợi\s+ý\s+cải\s+thiện\s+từ\s+AI|Improvement\s+Suggestion|Gợi\s+ý|Improvement|Suggestion)(?:\s+từ\s+AI)?\]\s*:\s*([\s\S]*)/i;
+    const match = description.match(regex);
+    if (match) {
+      const originalText = description.substring(0, match.index).trim();
+      const suggestionText = match[1].trim();
+      return (
+        <div>
+          {originalText && <div style={{ whiteSpace: 'pre-line', marginBottom: 8 }}>{originalText}</div>}
+          <div style={{
+            background: '#fffbeb',
+            border: '1px dashed #f59e0b',
+            borderRadius: 6,
+            padding: '8px 12px',
+            marginTop: 6,
+            fontSize: '0.72rem',
+            color: '#b45309',
+            lineHeight: 1.4,
+            display: 'flex',
+            gap: 6,
+            alignItems: 'flex-start',
+            textAlign: 'left'
+          }}>
+            <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>💡</span>
+            <div>
+              <strong style={{ display: 'block', marginBottom: 2 }}>
+                {vi ? 'Gợi ý cải thiện từ AI:' : 'AI Improvement Suggestion:'}
+              </strong>
+              {suggestionText}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const simpleRegex = /\[(?:Gợi\s+ý\s+cải\s+thiện|AI\s+Gợi\s+ý|AI\s+Improvement)[\s\S]*?\]/i;
+    const simpleMatch = description.match(simpleRegex);
+    if (simpleMatch) {
+      const originalText = description.substring(0, simpleMatch.index).trim();
+      const suggestionText = description.substring(simpleMatch.index).replace(/[\[\]]/g, '').trim();
+      return (
+        <div>
+          {originalText && <div style={{ whiteSpace: 'pre-line', marginBottom: 8 }}>{originalText}</div>}
+          <div style={{
+            background: '#fffbeb',
+            border: '1px dashed #f59e0b',
+            borderRadius: 6,
+            padding: '8px 12px',
+            marginTop: 6,
+            fontSize: '0.72rem',
+            color: '#b45309',
+            lineHeight: 1.4,
+            display: 'flex',
+            gap: 6,
+            alignItems: 'flex-start',
+            textAlign: 'left'
+          }}>
+            <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>💡</span>
+            <div>
+              <strong style={{ display: 'block', marginBottom: 2 }}>
+                {vi ? 'Gợi ý cải thiện từ AI:' : 'AI Improvement Suggestion:'}
+              </strong>
+              {suggestionText}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return <div style={{ whiteSpace: 'pre-line' }}>{description}</div>;
+  };
+
   const applyAiSuggestions = () => {
     if (!aiAnalysis) return;
     const confirmed = window.confirm(vi
-      ? 'Áp dụng mục tiêu nghề nghiệp và các kỹ năng được AI đề xuất vào CV?'
-      : 'Apply the AI-suggested objective and skills to your CV?');
+      ? 'Áp dụng mục tiêu nghề nghiệp, kỹ năng và các đề xuất cải thiện vào CV?'
+      : 'Apply the AI-suggested objective, skills, and improvement suggestions to your CV?');
     if (!confirmed) return;
 
-    setCvData((current) => ({
-      ...current,
-      objective: aiAnalysis.suggested_objective || current.objective,
-      skills: Array.from(new Set([
-        ...current.skills,
-        ...(aiAnalysis.suggested_skills || []),
-      ])),
-    }));
+    setCvData((current) => {
+      // Apply experience suggestions
+      let newExperiences = [...(current.experiences || [])];
+      const expSuggestions = [
+        ...(aiAnalysis.section_suggestions?.experiences || [])
+      ];
+
+      // Scan general improvements for experience-related points
+      if (aiAnalysis.improvements && Array.isArray(aiAnalysis.improvements)) {
+        aiAnalysis.improvements.forEach(imp => {
+          const lower = imp.toLowerCase();
+          if (lower.includes('kinh nghiệm') || lower.includes('làm việc') || lower.includes('công việc') || lower.includes('experience') || lower.includes('work')) {
+            if (!expSuggestions.includes(imp)) {
+              expSuggestions.push(imp);
+            }
+          }
+        });
+      }
+
+      if (newExperiences.length === 0 && expSuggestions.length > 0) {
+        // Create new experience entries
+        newExperiences = expSuggestions.map(sug => ({
+          company: vi ? 'Tên công ty (Gợi ý)' : 'Company Name (Suggested)',
+          role: vi ? 'Chức danh (Gợi ý)' : 'Job Title (Suggested)',
+          duration: vi ? 'Thời gian' : 'Duration',
+          description: vi ? `[Gợi ý cải thiện từ AI]: ${sug}` : `[AI Improvement Suggestion]: ${sug}`
+        }));
+      } else if (expSuggestions.length > 0) {
+        newExperiences = newExperiences.map((exp, idx) => {
+          const sug = expSuggestions[idx] || expSuggestions[0];
+          if (sug && !exp.description?.includes(sug)) {
+            const prefix = vi ? '\n\n[Gợi ý cải thiện từ AI]: ' : '\n\n[AI Improvement Suggestion]: ';
+            return {
+              ...exp,
+              description: exp.description ? `${exp.description}${prefix}${sug}` : `${prefix.trim()} ${sug}`
+            };
+          }
+          return exp;
+        });
+      }
+
+      // Apply education suggestions
+      let newEducations = [...(current.educations || [])];
+      const eduSuggestions = [
+        ...(aiAnalysis.section_suggestions?.educations || [])
+      ];
+
+      // Scan general improvements for education-related points
+      if (aiAnalysis.improvements && Array.isArray(aiAnalysis.improvements)) {
+        aiAnalysis.improvements.forEach(imp => {
+          const lower = imp.toLowerCase();
+          if (lower.includes('học vấn') || lower.includes('trường') || lower.includes('bằng') || lower.includes('education') || lower.includes('school') || lower.includes('study')) {
+            if (!eduSuggestions.includes(imp)) {
+              eduSuggestions.push(imp);
+            }
+          }
+        });
+      }
+
+      if (newEducations.length === 0 && eduSuggestions.length > 0) {
+        newEducations = eduSuggestions.map(sug => ({
+          school: vi ? 'Trường học (Gợi ý)' : 'School Name (Suggested)',
+          degree: vi ? 'Bằng cấp / Ngành học (Gợi ý)' : 'Degree / Major (Suggested)',
+          duration: vi ? 'Thời gian' : 'Duration',
+          description: vi ? `[Gợi ý cải thiện từ AI]: ${sug}` : `[AI Improvement Suggestion]: ${sug}`
+        }));
+      } else if (eduSuggestions.length > 0) {
+        newEducations = newEducations.map((edu, idx) => {
+          const sug = eduSuggestions[idx] || eduSuggestions[0];
+          if (sug && !edu.description?.includes(sug)) {
+            const prefix = vi ? '\n\n[Gợi ý cải thiện từ AI]: ' : '\n\n[AI Improvement Suggestion]: ';
+            return {
+              ...edu,
+              description: edu.description ? `${edu.description}${prefix}${sug}` : `${prefix.trim()} ${sug}`
+            };
+          }
+          return edu;
+        });
+      }
+
+      return {
+        ...current,
+        objective: aiAnalysis.suggested_objective || current.objective,
+        skills: Array.from(new Set([
+          ...current.skills,
+          ...(aiAnalysis.suggested_skills || []),
+        ])),
+        experiences: newExperiences,
+        educations: newEducations,
+      };
+    });
     setAiAnalysis(null);
   };
 
@@ -1394,7 +1563,9 @@ const CVTemplates = () => {
                     <div style={{ fontSize: '0.78rem', color: '#1a62ff', fontWeight: 600, marginBottom: 3 }}>
                       {item.company} {item.duration && `· ${item.duration}`}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{item.description}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+                      {renderDescriptionWithSuggestions(item.description)}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1416,7 +1587,11 @@ const CVTemplates = () => {
                     <div style={{ fontSize: '0.78rem', color: '#1a62ff', fontWeight: 600, marginBottom: 3 }}>
                       {item.school} {item.duration && `· ${item.duration}`}
                     </div>
-                    {item.description && <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{item.description}</div>}
+                    {item.description && (
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+                        {renderDescriptionWithSuggestions(item.description)}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1541,7 +1716,9 @@ const CVTemplates = () => {
                   <div className="sub" style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 600 }}>
                     {item.company} {item.duration && `· ${item.duration}`}
                   </div>
-                  <div className="desc" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{item.description}</div>
+                  <div className="desc" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+                    {renderDescriptionWithSuggestions(item.description)}
+                  </div>
                 </CVItem>
               ))}
             </CVSection>
@@ -1556,7 +1733,11 @@ const CVTemplates = () => {
                   <div className="sub" style={{ fontSize: '0.78rem', color: '#7c3aed', fontWeight: 600 }}>
                     {item.school} {item.duration && `· ${item.duration}`}
                   </div>
-                  {item.description && <div className="desc" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{item.description}</div>}
+                  {item.description && (
+                    <div className="desc" style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+                      {renderDescriptionWithSuggestions(item.description)}
+                    </div>
+                  )}
                 </CVItem>
               ))}
             </CVSection>
@@ -1638,7 +1819,9 @@ const CVTemplates = () => {
                     <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600, marginBottom: 3 }}>
                       {item.company} {item.duration && `· ${item.duration}`}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{item.description}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+                      {renderDescriptionWithSuggestions(item.description)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1673,7 +1856,11 @@ const CVTemplates = () => {
                     <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>{item.degree}</div>
                     <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>{item.school}</div>
                     <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.duration}</div>
-                    {item.description && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>{item.description}</div>}
+                    {item.description && (
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                        {renderDescriptionWithSuggestions(item.description)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1926,6 +2113,51 @@ const CVTemplates = () => {
                       value={exp.description} 
                       onChange={e => handleExperienceChange(idx, 'description', e.target.value)} 
                     />
+                    {getAiSuggestionText(exp.description) && (
+                      <div style={{
+                        background: isDarkMode ? '#1e293b' : '#fffbeb',
+                        border: '1px solid ' + (isDarkMode ? '#334155' : '#fde68a'),
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        marginTop: 8,
+                        fontSize: '0.78rem',
+                        color: isDarkMode ? '#f59e0b' : '#b45309',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+                          <span>💡</span>
+                          <span>{vi ? 'Gợi ý cải thiện từ AI' : 'AI Improvement Suggestion'}</span>
+                        </div>
+                        <p style={{ margin: 0, lineHeight: 1.4 }}>
+                          {getAiSuggestionText(exp.description)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const regex = /\s*\[(?:AI\s+)?(?:Gợi\s+ý\s+cải\s+thiện|Gợi\s+ý\s+cải\s+thiện\s+từ\s+AI|Improvement\s+Suggestion|Gợi\s+ý|Improvement|Suggestion)(?:\s+từ\s+AI)?\]\s*:\s*[\s\S]*/i;
+                            const simpleRegex = /\s*\[(?:Gợi\s+ý\s+cải\s+thiện|AI\s+Gợi\s+ý|AI\s+Improvement)[\s\S]*?\]/i;
+                            let newDesc = exp.description.replace(regex, '').replace(simpleRegex, '').trim();
+                            handleExperienceChange(idx, 'description', newDesc);
+                          }}
+                          style={{
+                            alignSelf: 'flex-end',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#3b82f6',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            padding: '2px 4px',
+                            marginTop: 4,
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          {vi ? 'Đã hoàn thành (Xóa gợi ý)' : 'Done (Remove suggestion)'}
+                        </button>
+                      </div>
+                    )}
                   </FormField>
                   <DeleteBtn onClick={() => removeExperience(idx)}>
                     <Trash2 size={12} />
@@ -1976,6 +2208,51 @@ const CVTemplates = () => {
                       value={edu.description} 
                       onChange={e => handleEducationChange(idx, 'description', e.target.value)} 
                     />
+                    {getAiSuggestionText(edu.description) && (
+                      <div style={{
+                        background: isDarkMode ? '#1e293b' : '#fffbeb',
+                        border: '1px solid ' + (isDarkMode ? '#334155' : '#fde68a'),
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        marginTop: 8,
+                        fontSize: '0.78rem',
+                        color: isDarkMode ? '#f59e0b' : '#b45309',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+                          <span>💡</span>
+                          <span>{vi ? 'Gợi ý cải thiện từ AI' : 'AI Improvement Suggestion'}</span>
+                        </div>
+                        <p style={{ margin: 0, lineHeight: 1.4 }}>
+                          {getAiSuggestionText(edu.description)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const regex = /\s*\[(?:AI\s+)?(?:Gợi\s+ý\s+cải\s+thiện|Gợi\s+ý\s+cải\s+thiện\s+từ\s+AI|Improvement\s+Suggestion|Gợi\s+ý|Improvement|Suggestion)(?:\s+từ\s+AI)?\]\s*:\s*[\s\S]*/i;
+                            const simpleRegex = /\s*\[(?:Gợi\s+ý\s+cải\s+thiện|AI\s+Gợi\s+ý|AI\s+Improvement)[\s\S]*?\]/i;
+                            let newDesc = edu.description.replace(regex, '').replace(simpleRegex, '').trim();
+                            handleEducationChange(idx, 'description', newDesc);
+                          }}
+                          style={{
+                            alignSelf: 'flex-end',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#3b82f6',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            padding: '2px 4px',
+                            marginTop: 4,
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          {vi ? 'Đã hoàn thành (Xóa gợi ý)' : 'Done (Remove suggestion)'}
+                        </button>
+                      </div>
+                    )}
                   </FormField>
                   <DeleteBtn onClick={() => removeEducation(idx)}>
                     <Trash2 size={12} />

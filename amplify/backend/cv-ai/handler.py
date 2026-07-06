@@ -672,6 +672,9 @@ content_quality and job_relevance must be integers from 0 to 100.
 If there is no target job, judge job_relevance against the candidate's stated title and
 use an empty missing_skills list when missing skills cannot be justified.
 Suggested skills must be grounded in existing CV evidence or clearly relevant to the target job.
+
+For `experience_suggestions`, provide a list of specific, actionable tips to improve each work experience description entry in the CV (e.g. adding specific responsibilities, achievements, or metrics). Ideally, provide one suggestion string corresponding to each experience entry. If experiences are empty, return general tips for this section.
+For `education_suggestions`, provide a list of specific tips to improve each education entry in the CV (e.g. adding GPA, relevant coursework, or certification detail). Ideally, provide one suggestion string corresponding to each education entry. If educations are empty, return general tips for this section.
 """.strip()
 
 

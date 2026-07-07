@@ -1759,9 +1759,9 @@ const CandidateDashboard = () => {
       }
 
       // Bug 6 fix: detect recently-replaced applications để hiện banner thông báo cho candidate
-      // Chỉ hiện nếu chưa dismiss (dùng sessionStorage để avoid spam mỗi poll)
+      // Chỉ hiện nếu chưa dismiss (dùng localStorage để không hiện lại sau khi đã bấm X, kể cả ở phiên sau)
       const dismissedKey = 'dismissed_replaced_notices';
-      const dismissed = JSON.parse(sessionStorage.getItem(dismissedKey) || '[]');
+      const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
       const recentlyReplaced = apps.find(app =>
         (app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') &&
         !dismissed.includes(app.applicationId)
@@ -2275,10 +2275,10 @@ const CandidateDashboard = () => {
                 </div>
                 <button
                   onClick={() => {
-                    // Dismiss: lưu vào sessionStorage để không hiện lại trong cùng phiên
+                    // Dismiss: lưu vào localStorage để không hiện lại nữa, kể cả sau khi đóng và mở lại trình duyệt
                     const dismissedKey = 'dismissed_replaced_notices';
-                    const dismissed = JSON.parse(sessionStorage.getItem(dismissedKey) || '[]');
-                    sessionStorage.setItem(dismissedKey, JSON.stringify([...dismissed, replacedNotice.applicationId]));
+                    const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+                    localStorage.setItem(dismissedKey, JSON.stringify([...dismissed, replacedNotice.applicationId]));
                     setReplacedNotice(null);
                   }}
                   style={{

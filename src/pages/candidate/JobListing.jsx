@@ -3094,6 +3094,56 @@ Giới thiệu bản thân: ${candidateProfile?.bio || 'Chưa cập nhật'}
 `.trim();
   };
 
+  // Background AI CV evaluation for standard jobs WITHOUT the "Phỏng vấn AI" (isAiScreeningEnabled) flag.
+  // Requirement: 100% standard job applications get an AI CV evaluation, even when the employer
+  // did not enable the "AI Interview" toggle. This runs silently AFTER the application has already
+  // been submitted through the normal (unblocked) flow — it never blocks or delays submission, and
+  // it never prevents the application from reaching the employer (no Round-1 gate here).
+  // On success, the result is patched onto the already-created application via updateApplicationStatus
+  // (same status, so no employer email / wallet / other side-effects are triggered — see backend).
+  const runBackgroundCvEvaluation = async (job, applicationId) => {
+    if (!applicationId || !job) return;
+    try {
+      const cvText = getCvText(job);
+      const jdText = `
+Tiêu đề công việc: ${job.title}
+Mô tả công việc: ${job.description}
+Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
+Nhiệm vụ: ${job.responsibilities || "Hoàn thành các công việc được giao."}
+`;
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${CV_AI_API_BASE_URL}/api/v1/cv/screen`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ job_description: jdText, cv_text: cvText })
+      });
+
+      if (!response.ok) {
+        console.warn('⚠️ [Background CV Evaluation] Non-OK response, skipping:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      const applicationServiceModule = await import('../../services/applicationService');
+
+      // Keep current status untouched — only attach AI evaluation fields.
+      // updateApplicationStatus requires a status value; we simply resend 'pending'
+      // (the application is freshly created and still pending employer review).
+      await applicationServiceModule.updateApplicationStatus(applicationId, 'pending', {
+        aiScreeningScore: data.score || 0,
+        aiScreeningResult: data.result || 'review',
+        aiScreeningReason: data.reason || '',
+        aiScreeningStrengths: data.strengths || [],
+        aiScreeningWeaknesses: data.weaknesses || []
+      });
+
+      console.log('✅ [Background CV Evaluation] Attached AI CV score to application:', applicationId);
+    } catch (err) {
+      // Never surface this to the candidate — it's a silent enhancement, not a blocking step.
+      console.warn('⚠️ [Background CV Evaluation] Failed silently:', err);
+    }
+  };
+
   const runAiScreening = async (job, cvFileName, cvUrl = null, cvS3Key = null) => {
     setAiScreeningLoading(true);
     setAiScreeningError('');
@@ -4320,8 +4370,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               : 'You have already completed the AI interview for this job.'
           });
           return;
-        } else if (existingApp.status === 'approved' || existingApp.status === 'accepted') {
-          // CV approved but no interview yet! Start AI interview directly
+        } else if ((existingApp.status === 'approved' || existingApp.status === 'accepted') && job.isAiScreeningEnabled) {
+          // CV approved AND employer enabled AI Interview (Round 2) for this job — start it directly.
+          // Jobs without isAiScreeningEnabled never reach this branch, so clicking "Apply" again
+          // on an approved application for a normal job simply falls through below (no Round 2 UI).
           setPendingApplication({
             jobId,
             finalCVUrl: existingApp.cvUrl,
@@ -4377,6 +4429,16 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             setShowAiRulesModal(true);
           }
           return;
+        } else if (existingApp.status === 'approved' || existingApp.status === 'accepted') {
+          // Approved but the job never had AI Interview (Round 2) enabled — nothing more to do,
+          // just inform the candidate instead of letting them re-open the apply modal.
+          setErrorModal({
+            show: true,
+            message: language === 'vi'
+              ? 'CV của bạn đã được nhà tuyển dụng duyệt cho công việc này.'
+              : 'Your CV has already been approved by the employer for this job.'
+          });
+          return;
         }
       }
     }
@@ -4404,8 +4466,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         // Robust application search with type conversion
         const existingApp = candidateApplications.find(app => String(app.jobId) === String(jobId));
 
-        // Only auto-open if approved and hasn't done interview yet
-        if (existingApp && (existingApp.status === 'approved' || existingApp.status === 'accepted') && !existingApp.aiInterviewAudio && !existingApp.aiInterviewAudioKey) {
+        // Only auto-open if approved, the job has AI Interview (Round 2) enabled, and hasn't done interview yet
+        if (existingApp && (existingApp.status === 'approved' || existingApp.status === 'accepted') && job.isAiScreeningEnabled && !existingApp.aiInterviewAudio && !existingApp.aiInterviewAudioKey) {
           console.log('🎙️ Auto-opening AI interview modal from notification');
 
           // Clear the state first to prevent re-opening
@@ -4727,12 +4789,26 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           cvFileName: selectedCVData.cvFileName || 'CV.pdf'
         });
 
-        await applicationService.submitApplication(
+        const submittedResult = await applicationService.submitApplication(
           jobId,
           finalCVUrl,
           selectedCVData.cvFileName || 'CV.pdf',
           selectedCVData.cvS3Key
         );
+
+        // Requirement: 100% of standard job applications get an AI CV evaluation,
+        // even when the employer did NOT enable "Phỏng vấn AI" (isAiScreeningEnabled).
+        // Fire-and-forget in the background — never blocks or delays this submission flow,
+        // and never affects the "immediate submission" behavior below.
+        try {
+          const isStandardJobForEval = !jobData?.isQuickJob;
+          const newApplicationId = submittedResult?.applicationId || submittedResult?.application?.applicationId;
+          if (isStandardJobForEval && newApplicationId) {
+            runBackgroundCvEvaluation(jobData, newApplicationId);
+          }
+        } catch (bgEvalErr) {
+          console.warn('⚠️ [Background CV Evaluation] Could not start:', bgEvalErr);
+        }
 
         try {
           const { createEmployerApplicationNotification, createCandidateApplicationSubmittedNotification } = await import('../../services/notificationService');

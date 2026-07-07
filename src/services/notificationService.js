@@ -1162,6 +1162,30 @@ export const createJobPendingApprovalNotification = async ({ employerId, company
 };
 
 /**
+ * Notify employer that their job post is pending admin approval
+ */
+export const createJobPendingNotificationForEmployer = async ({ employerId, companyName, jobTitle, jobId, isQuickJob }) => {
+  const notification = {
+    type: 'job_pending_employer',
+    title: isQuickJob ? 'Tin tuyển gấp đang chờ duyệt' : 'Tin tuyển dụng đang chờ duyệt',
+    titleEn: isQuickJob ? 'Urgent job post pending approval' : 'Job post pending approval',
+    message: `Bài đăng "${jobTitle}" của bạn đã được gửi thành công và đang chờ Admin xét duyệt. Bạn sẽ nhận được thông báo khi bài đăng được phê duyệt.`,
+    messageEn: `Your job post "${jobTitle}" has been submitted successfully and is pending admin approval. You will be notified once it is approved.`,
+    recipientId: employerId,
+    recipientRole: 'employer',
+    senderId: 'system',
+    senderName: 'Hệ thống',
+    data: { employerId, companyName, jobTitle, jobId, isQuickJob: !!isQuickJob },
+    icon: 'clock',
+    color: '#f59e0b',
+    actionUrl: '/employer/standard-jobs',
+    actionText: 'Xem bài đăng của tôi',
+    actionTextEn: 'View My Posts'
+  };
+  return await saveNotification(notification);
+};
+
+/**
  * Notify employer when their withdrawal request is approved
  */
 export const createWithdrawalApprovedNotification = async ({ employerId, amount, bankName, accountNumber }) => {

@@ -2082,7 +2082,7 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onApprov
                       </h3>
                       
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-                        {/* Round 1: CV Screening */}
+                        {/* Round 1: CV Screening — now runs for ALL standard job applications */}
                         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
                           <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
                             <FileText size={14} />
@@ -2104,29 +2104,31 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onApprov
                           </div>
                         </div>
 
-                        {/* Round 2: AI Interviewer */}
-                        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
-                          <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
-                            <MessageSquare size={14} />
-                            {language === 'vi' ? 'Vòng 2: Phỏng vấn AI' : 'Round 2: AI Interview'}
-                          </h4>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ fontSize: '28px', fontWeight: '800', color: (candidate.aiInterviewScore && candidate.aiInterviewScore >= 60) ? '#059669' : '#DC2626' }}>
-                              {candidate.aiInterviewScore || '---'}
-                              {candidate.aiInterviewScore && <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>}
+                        {/* Round 2: AI Interviewer — only shown when the employer enabled "Phỏng vấn AI" for this job */}
+                        {candidate.isAiScreeningEnabled && (
+                          <div style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #E9D5FF' }}>
+                            <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#6B21A8', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0' }}>
+                              <MessageSquare size={14} />
+                              {language === 'vi' ? 'Vòng 2: Phỏng vấn AI' : 'Round 2: AI Interview'}
+                            </h4>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{ fontSize: '28px', fontWeight: '800', color: (candidate.aiInterviewScore && candidate.aiInterviewScore >= 60) ? '#059669' : '#DC2626' }}>
+                                {candidate.aiInterviewScore || '---'}
+                                {candidate.aiInterviewScore && <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>/100</span>}
+                              </div>
+                              {candidate.aiInterviewScore && (
+                                <span style={{
+                                  padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
+                                  background: candidate.aiInterviewScore >= 60 ? '#D1FAE5' : '#FEE2E2',
+                                  color: candidate.aiInterviewScore >= 60 ? '#065F46' : '#991B1B',
+                                  border: `1.5px solid ${candidate.aiInterviewScore >= 60 ? '#34D399' : '#F87171'}`
+                                }}>
+                                  {candidate.aiInterviewScore >= 60 ? (language === 'vi' ? 'KHUYÊN DÙNG' : 'RECOMMEND') : (language === 'vi' ? 'CÂN NHẮC' : 'HOLD')}
+                                </span>
+                              )}
                             </div>
-                            {candidate.aiInterviewScore && (
-                              <span style={{
-                                padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                                background: candidate.aiInterviewScore >= 60 ? '#D1FAE5' : '#FEE2E2',
-                                color: candidate.aiInterviewScore >= 60 ? '#065F46' : '#991B1B',
-                                border: `1.5px solid ${candidate.aiInterviewScore >= 60 ? '#34D399' : '#F87171'}`
-                              }}>
-                                {candidate.aiInterviewScore >= 60 ? (language === 'vi' ? 'KHUYÊN DÙNG' : 'RECOMMEND') : (language === 'vi' ? 'CÂN NHẮC' : 'HOLD')}
-                              </span>
-                            )}
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       {/* AI Reason & Analysis */}
@@ -3034,6 +3036,7 @@ const Applications = () => {
           .map((app, index) => {
             const isPass = index % 3 === 0;
             const isReview = index % 3 === 1;
+            const parentJob = jobPosts.find(j => j.idJob === app.jobId);
             
             return {
               id: app.applicationId,
@@ -3043,6 +3046,9 @@ const Applications = () => {
               candidateEmail: app.candidateEmail,
               job: app.jobTitle || 'Unknown Position',
               jobId: app.jobId,
+              // Whether the job employer enabled the optional "Phỏng vấn AI" (Round 2 interview) toggle.
+              // Round 1 CV evaluation now runs for ALL standard jobs regardless of this flag.
+              isAiScreeningEnabled: !!parentJob?.isAiScreeningEnabled,
               applied: new Date(app.appliedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US'),
               appliedAt: app.appliedAt, // keep raw timestamp for date filtering
               status: app.status || 'pending',
@@ -3878,14 +3884,6 @@ const Applications = () => {
               <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tuyển dụng (không bao gồm tuyển gấp)' : 'Manage posts and applications for standard jobs (excluding quick jobs)'}</p>
             </PageTitleText>
           </PageTitleGroup>
-          <CreatePostButton
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/employer/post-job')}
-          >
-            <Plus />
-            {language === 'vi' ? 'Đăng bài mới' : 'Post New Job'}
-          </CreatePostButton>
         </PageHeader>
 
         {/* Standard Jobs Section */}

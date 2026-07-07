@@ -23,6 +23,7 @@ from decimal import Decimal
 # ─── AWS Clients ──────────────────────────────────────────────────────────────
 dynamodb = boto3.resource('dynamodb', region_name='ap-southeast-1')
 s3_client = boto3.client('s3', region_name='ap-southeast-1')
+ses_client = boto3.client('ses', region_name='ap-southeast-1')
 
 EXPERIENCE_TABLE = 'CandidateExperiences'
 CANDIDATE_TABLE  = 'CandidateProfiles'
@@ -30,6 +31,8 @@ NOTIFICATIONS_TABLE = 'Notifications'
 
 S3_BUCKET        = 'opporeview-cv-storage'
 S3_PREFIX        = 'experience-proofs'
+
+SENDER_EMAIL     = 'noreply@oppocareer.com'
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -172,6 +175,121 @@ def create_notification(notification_data):
     except Exception as e:
         print(f"⚠️  Could not write notification: {e}")
         return None
+
+
+# ─── Email helpers (SES) ──────────────────────────────────────────────────────
+def get_candidate_email(candidate_id):
+    """Get candidate email from CandidateProfiles table."""
+    try:
+        table = dynamodb.Table(CANDIDATE_TABLE)
+        result = table.get_item(Key={'userId': candidate_id})
+        item = result.get('Item', {})
+        return item.get('email', '')
+    except Exception as e:
+        print(f"⚠️  Could not get candidate email: {e}")
+        return ''
+
+
+def build_email_html(subject, body_content):
+    """Build a branded HTML email layout matching Ốp Pờ brand."""
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1e293b;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 30px 10px;">
+        <tr>
+            <td align="center">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
+                    <tr>
+                        <td style="background-color: #1e40af; padding: 35px 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700;">Ốp Pờ</h1>
+                            <p style="color: #bfdbfe; margin: 6px 0 0 0; font-size: 14px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;">Hệ thống kết nối cơ hội nghề nghiệp</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 40px 35px; background-color: #ffffff; text-align: left;">
+                            {body_content}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #f1f5f9; border-top: 1px solid #e2e8f0; padding: 26px 30px; text-align: center; color: #64748b; font-size: 12px; line-height: 1.6;">
+                            <p style="margin: 0 0 6px 0;">Email này được gửi tự động từ hệ thống Ốp Pờ.</p>
+                            <p style="margin: 0 0 6px 0;">Mọi thắc mắc vui lòng liên hệ: <a href="mailto:tuyendung.oppo@oppocareer.com" style="color: #1e40af; text-decoration: none; font-weight: 600;">tuyendung.oppo@oppocareer.com</a></p>
+                            <p style="margin: 14px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; 2026 Ốp Pờ. Bảo lưu mọi quyền.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+
+def send_experience_email(candidate_id, approved, company_name, rejected_reason=''):
+    """Send email to candidate about experience approval/rejection via SES."""
+    email = get_candidate_email(candidate_id)
+    if not email:
+        print(f"⚠️  No email found for candidate {candidate_id}, skipping email send")
+        return
+
+    if approved:
+        subject = 'Kinh nghiệm làm việc đã được duyệt - Ốp Pờ'
+        body_content = f"""
+            <h2 style="color: #10b981; font-size: 20px; margin: 0 0 16px 0;">Kinh nghiệm làm việc đã được duyệt</h2>
+            <p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;">
+                Xin chào,
+            </p>
+            <p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;">
+                Kinh nghiệm làm việc tại <strong>{company_name}</strong> của bạn đã được Admin xét duyệt thành công.
+            </p>
+            <p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;">
+                Kinh nghiệm này giờ đây sẽ hiển thị trên hồ sơ của bạn và được nhà tuyển dụng xem khi bạn ứng tuyển.
+            </p>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://oppocareer.com/candidate/profile" style="display: inline-block; padding: 14px 32px; background-color: #1e40af; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Xem hồ sơ của tôi</a>
+            </div>
+        """
+    else:
+        subject = 'Kinh nghiệm làm việc chưa được duyệt - Ốp Pờ'
+        reason_html = f'<p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;"><strong>Lý do:</strong> {rejected_reason}</p>' if rejected_reason else ''
+        body_content = f"""
+            <h2 style="color: #ef4444; font-size: 20px; margin: 0 0 16px 0;">Kinh nghiệm làm việc chưa được duyệt</h2>
+            <p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;">
+                Xin chào,
+            </p>
+            <p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;">
+                Kinh nghiệm làm việc tại <strong>{company_name}</strong> của bạn chưa được duyệt.
+            </p>
+            {reason_html}
+            <p style="font-size: 15px; line-height: 1.7; color: #334155; margin: 0 0 16px 0;">
+                Bạn có thể cập nhật lại thông tin và gửi lại để Admin xét duyệt.
+            </p>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://oppocareer.com/candidate/profile" style="display: inline-block; padding: 14px 32px; background-color: #1e40af; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Xem hồ sơ của tôi</a>
+            </div>
+        """
+
+    html_content = build_email_html(subject, body_content)
+
+    try:
+        response = ses_client.send_email(
+            Source=SENDER_EMAIL,
+            Destination={'ToAddresses': [email]},
+            Message={
+                'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                'Body': {
+                    'Html': {'Data': html_content, 'Charset': 'UTF-8'}
+                }
+            }
+        )
+        print(f"✅ Email sent to {email}, MessageId: {response['MessageId']}")
+    except Exception as e:
+        print(f"⚠️  Failed to send email to {email}: {e}")
 
 
 # ─── DynamoDB scan with optional filter ───────────────────────────────────────
@@ -397,6 +515,13 @@ def handle_approve_experience(event, experience_id):
         'actionTextEn': 'View profile',
     })
 
+    # Send email notification via SES
+    send_experience_email(
+        candidate_id=item['candidateId'],
+        approved=True,
+        company_name=item.get('companyName', ''),
+    )
+
     return resp(200, {'success': True, 'message': 'Đã duyệt kinh nghiệm'})
 
 
@@ -453,6 +578,14 @@ def handle_reject_experience(event, experience_id):
         'actionText': 'Xem hồ sơ',
         'actionTextEn': 'View profile',
     })
+
+    # Send email notification via SES
+    send_experience_email(
+        candidate_id=item['candidateId'],
+        approved=False,
+        company_name=item.get('companyName', ''),
+        rejected_reason=rejected_reason,
+    )
 
     return resp(200, {'success': True, 'message': 'Đã từ chối kinh nghiệm'})
 

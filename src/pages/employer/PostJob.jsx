@@ -12,7 +12,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import cvAiService from '../../services/cvAiService';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
-import { createJobPendingApprovalNotification } from '../../services/notificationService';
+import { createJobPendingApprovalNotification, createJobPendingNotificationForEmployer } from '../../services/notificationService';
 
 // Days of week options for work-hour slots. `key` is the stable token persisted
 // into the workHours string; vi/en are the display labels.
@@ -1353,12 +1353,33 @@ const PostJob = () => {
           } catch (notifErr) {
             console.warn('⚠️ Failed to send notification to admin:', notifErr);
           }
+          try {
+            await createJobPendingNotificationForEmployer({
+              employerId,
+              companyName: employerName,
+              jobTitle: cleanFormData.title,
+              jobId: result.data.idJob || jobId,
+              isQuickJob: false
+            });
+            console.log('✅ Sent pending approval notification to employer');
+          } catch (notifErr) {
+            console.warn('⚠️ Failed to send notification to employer:', notifErr);
+          }
         } else {
           throw new Error('API request failed: ' + response.status);
         }
       }
 
-      // Navigate back to standard jobs page
+      // Show success toast and navigate back to standard jobs page
+      if (!isEditing) {
+        toast.success(language === 'vi'
+          ? 'Đăng bài thành công! Bài đăng đang chờ Admin xét duyệt.'
+          : 'Job posted successfully! Your post is pending admin approval.');
+      } else {
+        toast.success(language === 'vi'
+          ? 'Cập nhật bài đăng thành công!'
+          : 'Job post updated successfully!');
+      }
       navigate('/employer/standard-jobs');
     } catch (error) {
       console.error('❌ Error saving job post:', error);
@@ -1411,6 +1432,7 @@ const PostJob = () => {
                 $active={showJdParser}
                 onClick={() => {
                   setShowJdParser(true);
+                  setShowStandardForm(false);
                 }}
               >
                 <div className="icon-wrapper">
@@ -1440,7 +1462,8 @@ const PostJob = () => {
                 $variant="manual"
                 $active={showStandardForm}
                 onClick={() => {
-                  setShowStandardForm(prev => !prev);
+                  setShowStandardForm(true);
+                  setShowJdParser(false);
                 }}
               >
                 <div className="icon-wrapper">

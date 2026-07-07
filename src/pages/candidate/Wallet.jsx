@@ -1279,10 +1279,12 @@ const Wallet = () => {
                 <FormGroup>
                   <Label>{language === 'vi' ? 'Số Tiền Rút (VND)' : 'Withdraw Amount (VND)'}</Label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     placeholder={language === 'vi' ? 'Nhập số tiền cần rút' : 'Enter amount to withdraw'}
-                    value={withdrawAmount}
-                    onChange={e => setWithdrawAmount(e.target.value)}
+                    // Store raw digits in state, display with thousand separators for readability
+                    value={withdrawAmount ? Number(withdrawAmount).toLocaleString('vi-VN') : ''}
+                    onChange={e => setWithdrawAmount(e.target.value.replace(/\D/g, ''))}
                     disabled={withdrawLoading}
                   />
                   <span style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', display: 'block' }}>

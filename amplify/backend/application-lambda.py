@@ -516,7 +516,7 @@ def reject_replacement_worker(event, application_id, user_id, create_response):
         job_salary = Decimal('0')
         qj = {}
         try:
-            qj_resp = quick_jobs_table.get_item(Key={'idJob': str(job_id)})
+            qj_resp = quick_jobs_table.get_item(Key={'jobID': str(job_id)})
             if 'Item' in qj_resp:
                 qj = qj_resp['Item']
                 total_salary = Decimal(str(qj.get('totalSalary') or 0))
@@ -742,7 +742,7 @@ def update_application_status(event, application_id, user_id, create_response):
                     # Fetch job to get salary — try both standard and quick jobs tables
                     job_salary = Decimal('0')
                     try:
-                        qj_resp = quick_jobs_table.get_item(Key={'idJob': str(job_id_to_credit)})
+                        qj_resp = quick_jobs_table.get_item(Key={'jobID': str(job_id_to_credit)})
                         if 'Item' in qj_resp:
                             ji = qj_resp['Item']
                             total_salary = Decimal(str(ji.get('totalSalary') or 0))
@@ -801,7 +801,7 @@ def update_application_status(event, application_id, user_id, create_response):
                             job_title = job_item.get('title', '---')
                             company_name = job_item.get('employerName') or job_item.get('companyName', '---')
                         else:
-                            job_resp = quick_jobs_table.get_item(Key={'idJob': str(job_id)})
+                            job_resp = quick_jobs_table.get_item(Key={'jobID': str(job_id)})
                             if 'Item' in job_resp:
                                 job_item = job_resp['Item']
                                 job_title = job_item.get('title', '---')
@@ -921,7 +921,7 @@ def list_change_requests(create_response):
             job_id = app.get('jobId')
             if job_id:
                 try:
-                    qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
+                    qj = quick_jobs_table.get_item(Key={'jobID': str(job_id)}).get('Item', {})
                     if qj:
                         app['_jobStartTime'] = qj.get('startTime', '')
                         app['_jobEndTime'] = qj.get('endTime', '')
@@ -1058,7 +1058,7 @@ def get_available_workers(job_id, create_response):
         # Fetch target job details to get workDate, startTime, endTime
         target_job = None
         try:
-            qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item')
+            qj = quick_jobs_table.get_item(Key={'jobID': str(job_id)}).get('Item')
             if qj:
                 target_job = qj
         except Exception as je:
@@ -1104,7 +1104,7 @@ def get_available_workers(job_id, create_response):
                     if not active_job_id:
                         continue
                     try:
-                        aqj = quick_jobs_table.get_item(Key={'idJob': str(active_job_id)}).get('Item', {})
+                        aqj = quick_jobs_table.get_item(Key={'jobID': str(active_job_id)}).get('Item', {})
                         if aqj.get('workDate') != target_work_date:
                             continue
                         # Check time overlap
@@ -1241,7 +1241,7 @@ def approve_change_request(event, application_id, create_response):
 
         if job_id:
             try:
-                qj = quick_jobs_table.get_item(Key={'idJob': str(job_id)}).get('Item', {})
+                qj = quick_jobs_table.get_item(Key={'jobID': str(job_id)}).get('Item', {})
                 if qj:
                     job_location = job_location or qj.get('location', '')
                     job_title    = job_title    or qj.get('title', '')

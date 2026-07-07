@@ -1062,12 +1062,16 @@ const CVTemplates = () => {
   };
 
   const [cvData, setCvData] = useState(defaultCVData);
+  // Header avatar = the user's PROFILE avatar (profileImage). It is kept separate from
+  // the CV photo (cvData.avatar) so changing the CV photo never affects this header avatar.
+  const [profileAvatar, setProfileAvatar] = useState(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const profile = await candidateProfileService.getMyProfile();
         if (profile) {
+          setProfileAvatar(profile.profileImage || null);
           setCvData(prev => ({
             ...prev,
             fullName: profile.fullName || prev.fullName,
@@ -1076,7 +1080,11 @@ const CVTemplates = () => {
             address: profile.location || prev.address,
             title: profile.title || prev.title,
             objective: profile.bio || prev.objective,
-            avatar: profile.profileImage || prev.avatar,
+            // CV photo defaults to the profile avatar (profileImage) so the CV is
+            // pre-filled with the user's profile picture. If the user has set a
+            // custom CV photo, that (cvAvatar) takes precedence. Changing the CV photo
+            // only writes to cvAvatar, so it never changes the profile avatar.
+            avatar: profile.cvAvatar || profile.profileImage || prev.avatar,
             skills: (profile.skills && profile.skills.length > 0) ? profile.skills : prev.skills
           }));
         }
@@ -1091,12 +1099,21 @@ const CVTemplates = () => {
     setCvData(prev => ({ ...prev, [field]: val }));
   };
 
+  // Persist ONLY the CV photo (cvAvatar) to the profile record — never profileImage.
+  // This keeps the CV photo and the profile avatar completely independent.
+  const persistCvAvatar = (value) => {
+    candidateProfileService
+      .updateProfile({ cvAvatar: value })
+      .catch(err => console.warn('Could not persist CV avatar:', err));
+  };
+
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setCvData(prev => ({ ...prev, avatar: reader.result }));
+        persistCvAvatar(reader.result);
       };
       reader.readAsDataURL(file);
     }
@@ -1104,6 +1121,7 @@ const CVTemplates = () => {
 
   const removeAvatar = () => {
     setCvData(prev => ({ ...prev, avatar: null }));
+    persistCvAvatar(null);
   };
 
   const handleExperienceChange = (index, field, val) => {
@@ -2966,9 +2984,9 @@ const CVTemplates = () => {
           </BackToProfileBtn>
         </NavLeft>
         <UserProfile>
-          {cvData.avatar ? (
+          {profileAvatar ? (
             <img 
-              src={cvData.avatar} 
+              src={profileAvatar} 
               alt="Avatar" 
               style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #1a62ff' }} 
             />

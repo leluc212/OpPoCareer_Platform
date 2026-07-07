@@ -3,9 +3,13 @@
 
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-// Prefer the direct API Gateway URL to avoid Vite proxy auth/header quirks.
-// This HTTP API does not use the /prod stage prefix for profile routes.
-const API_BASE_URL = import.meta.env.VITE_CANDIDATE_API_URL || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+// In DEV, route through the same-origin Vite proxy ('/api-profile') to bypass the
+// API Gateway's missing CORS headers (authenticated GET/PUT/POST otherwise fail the
+// browser preflight). In production, use the direct API Gateway URL — the API Gateway
+// CORS must be enabled there for this to work.
+const API_BASE_URL = import.meta.env.DEV
+  ? '/api-profile'
+  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod');
 // Switch to xyp4wkszi7 for listing as well, as sd7ds72m8g is IAM-locked and xyp4wkszi7's Lambda returns the full list
 const CANDIDATE_LIST_API_URL = import.meta.env.DEV ? '/api' : 'https://xyp4wkszi7.execute-api.ap-southeast-1.amazonaws.com/prod';
 
@@ -321,11 +325,21 @@ class CandidateProfileService {
         console.warn('Email cannot be changed. Using Cognito verified email:', cognitoEmail);
       }
 
-      // Add profile completion calculation
-      const payload = {
-        ...allowedUpdates,
-        profileCompletion: this.calculateCompletion(updates)
-      };
+      // Only recompute profileCompletion when this update actually touches a
+      // completion-relevant field. Partial updates such as { savedJobs },
+      // { isActive }, { withdrawals }, { notificationSettings }, { privacySettings },
+      // { verificationStatus } must NOT reset the stored completion % — recomputing
+      // from a partial payload would wrongly drop it (e.g. to 7%) on the profile page.
+      const completionFields = [
+        'fullName', 'email', 'phone', 'cccd', 'dateOfBirth',
+        'location', 'title', 'bio', 'profileImage', 'skills'
+      ];
+      const touchesCompletion = completionFields.some(f => Object.prototype.hasOwnProperty.call(updates, f));
+
+      const payload = { ...allowedUpdates };
+      if (touchesCompletion) {
+        payload.profileCompletion = this.calculateCompletion(updates);
+      }
 
       const result = await this.makeRequest(`/profile/${userId}`, {
         method: 'PUT',

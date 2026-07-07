@@ -293,12 +293,24 @@ export const AuthProvider = ({ children }) => {
             };
             console.log('✅ [AuthContext] Created user from Cognito:', userData.email, 'Role:', userData.role, 'UserId:', userData.userId);
 
-            // Auto-create profile if candidate and no profile exists
+            // Auto-create profile ONLY when we have CONFIRMED the candidate has no profile yet.
+            // getMyProfile() returns null only for a genuine 404 (new user) and throws for
+            // transient errors (network/5xx). Previously we did `.catch(() => null)`, so a
+            // transient failure looked like "no profile" and triggered a blank createProfile
+            // that could overwrite/blank an existing profile on login. Now we skip auto-create
+            // whenever the existence check fails, to never risk overwriting real data.
             if (userRole === 'candidate' && userData.userId) {
               try {
                 const { default: candidateProfileService } = await import('../services/candidateProfileService');
-                const existing = await candidateProfileService.getMyProfile().catch(() => null);
-                if (!existing) {
+                let existing = null;
+                let profileCheckFailed = false;
+                try {
+                  existing = await candidateProfileService.getMyProfile();
+                } catch (checkErr) {
+                  profileCheckFailed = true;
+                  console.warn('[AuthContext] Profile existence check failed on login — skipping auto-create to avoid overwriting existing data:', checkErr);
+                }
+                if (!existing && !profileCheckFailed) {
                   await candidateProfileService.createProfile({
                     userId: userData.userId,
                     fullName: session.tokens.idToken.payload.name || '',

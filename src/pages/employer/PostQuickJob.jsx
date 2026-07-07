@@ -1876,11 +1876,11 @@ const PostQuickJob = () => {
                     <SalaryInputWrap>
                       <Input
                         name="hourlyRate"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={formData.hourlyRate}
-                        onChange={handleChange}
+                        type="text"
+                        inputMode="numeric"
+                        // Store raw digits, display with thousand separators
+                        value={formData.hourlyRate ? Number(String(formData.hourlyRate).replace(/[.,\s]/g, '')).toLocaleString('vi-VN') : ''}
+                        onChange={e => handleChange({ target: { name: 'hourlyRate', value: e.target.value.replace(/\D/g, '') } })}
                         placeholder={t.hourlyRatePlaceholder}
                         required
                         style={{

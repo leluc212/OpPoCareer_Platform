@@ -1860,11 +1860,12 @@ const PostJob = () => {
                       <div style={{ flex: 1 }}>
                         <Input
                           name="salary"
-                          type="number"
-                          min="0"
-                          placeholder={language === 'vi' ? 'Ví dụ: 25000' : 'e.g., 25000'}
-                          value={formData.salary}
-                          onChange={handleChange}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder={language === 'vi' ? 'Ví dụ: 25.000' : 'e.g., 25,000'}
+                          // Store raw digits, display with thousand separators
+                          value={formData.salary ? Number(String(formData.salary).replace(/[.,\s]/g, '')).toLocaleString('vi-VN') : ''}
+                          onChange={e => handleChange({ target: { name: 'salary', value: e.target.value.replace(/\D/g, '') } })}
                           required
                         />
                       </div>

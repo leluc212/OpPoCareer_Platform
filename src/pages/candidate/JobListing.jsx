@@ -1757,6 +1757,7 @@ const JobTitle = styled.h3`
   align-items: center;
   gap: 6px;
   letter-spacing: 0.2px;
+  text-transform: uppercase;
   
   &:hover {
     color: ${props => props.theme.colors.primary};
@@ -5244,6 +5245,14 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
     // Sorting
     result = [...result].sort((a, b) => {
+      // When sorting by newest, time always wins — ignore boost/hotSearch order
+      if (sortBy === 'newest') {
+        if (a.postedDate && b.postedDate) {
+          return new Date(b.postedDate) - new Date(a.postedDate);
+        }
+        return parseTimeToHours(a.postedAt) - parseTimeToHours(b.postedAt);
+      }
+
       const aHotSearch = hotSearchEmployerIds.has(a.employerId);
       const bHotSearch = hotSearchEmployerIds.has(b.employerId);
       if (aHotSearch && !bHotSearch) return -1;
@@ -5261,15 +5270,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           return getSalaryValue(a) - getSalaryValue(b);
         case 'views':
           return b.views - a.views;
-        case 'newest':
-          // Sort by posted time (newer jobs first)
-          if (a.createdAt && b.createdAt) {
-            return new Date(b.createdAt) - new Date(a.createdAt);
-          }
-          return parseTimeToHours(a.postedAt) - parseTimeToHours(b.postedAt);
         case 'relevant':
         default:
-          return 0;
+          // Default: newest first
+          if (a.postedDate && b.postedDate) {
+            return new Date(b.postedDate) - new Date(a.postedDate);
+          }
+          return parseTimeToHours(a.postedAt) - parseTimeToHours(b.postedAt);
       }
     });
 

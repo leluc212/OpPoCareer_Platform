@@ -3090,7 +3090,8 @@ const Applications = () => {
               aiInterviewScore: (app.aiInterviewScore !== undefined && app.aiInterviewScore !== null) ? app.aiInterviewScore : null,
               aiInterviewReport: app.aiInterviewReport || null,
               aiInterviewAudio: app.aiInterviewAudio || '',
-              aiInterviewAudioKey: app.aiInterviewAudioKey || ''
+              aiInterviewAudioKey: app.aiInterviewAudioKey || '',
+              isAiScreeningEnabled: !!app.isAiScreeningEnabled
             };
           });
 
@@ -3317,7 +3318,8 @@ const Applications = () => {
             jobTitle: app.job,
             companyName: app.companyName || 'Nhà tuyển dụng',
             jobId: app.jobId,
-            employerId: user?.userId
+            employerId: user?.userId,
+            isAiScreeningEnabled: app.isAiScreeningEnabled
           });
         } catch (notifErr) {
           console.error('Error sending approval notification:', notifErr);

@@ -1,0 +1,10 @@
+{
+  "name": "pre-signup-link-accounts",
+  "version": "1.0.0",
+  "description": "Cognito Pre Sign-Up trigger: auto-links Google accounts to existing email/password accounts",
+  "main": "index.js",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.515.0"
+  }
+}

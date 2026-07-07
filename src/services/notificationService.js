@@ -398,7 +398,8 @@ export const createCandidateCvApprovedNotification = async (payload) => {
     jobTitle,
     companyName,
     jobId,
-    employerId
+    employerId,
+    isAiScreeningEnabled
   } = payload;
 
   if (!candidateId) {
@@ -413,12 +414,22 @@ export const createCandidateCvApprovedNotification = async (payload) => {
   // Tính deadline phỏng vấn AI: now + 2 ngày
   const interviewDeadline = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
 
+  const hasAi = !!isAiScreeningEnabled;
+
   const notification = {
     type: 'employer_cv_approved',
-    title: 'CV của bạn đã được NTD duyệt và tiến hành vòng phỏng vấn',
-    titleEn: 'Your CV has been approved — proceed to AI Interview',
-    message: `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã được thông qua. Hãy đăng nhập vào hệ thống trong vòng 2 ngày để tiến hành bước phỏng vấn với AI.`,
-    messageEn: `Your CV for the ${safeJobTitle} position at ${safeCompanyName} has been approved. Please log in within 2 days to proceed with the AI interview.`,
+    title: hasAi
+      ? 'CV của bạn đã được NTD duyệt và tiến hành vòng phỏng vấn'
+      : 'CV của bạn đã được NTD duyệt',
+    titleEn: hasAi
+      ? 'Your CV has been approved — proceed to AI Interview'
+      : 'Your CV has been approved by the employer',
+    message: hasAi
+      ? `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã được thông qua. Hãy đăng nhập vào hệ thống trong vòng 2 ngày để tiến hành bước phỏng vấn với AI.`
+      : `CV của bạn cho vị trí ${safeJobTitle} tại ${safeCompanyName} đã được thông qua. Nhà tuyển dụng sẽ liên hệ với bạn sớm để thông báo các bước tiếp theo.`,
+    messageEn: hasAi
+      ? `Your CV for the ${safeJobTitle} position at ${safeCompanyName} has been approved. Please log in within 2 days to proceed with the AI interview.`
+      : `Your CV for the ${safeJobTitle} position at ${safeCompanyName} has been approved. The employer will contact you soon with next steps.`,
     recipientId: candidateId,
     recipientRole: 'candidate',
     senderId: employerId || 'employer',
@@ -429,14 +440,14 @@ export const createCandidateCvApprovedNotification = async (payload) => {
       companyName: safeCompanyName,
       employerId: employerId || null,
       isQuickJob: false,
-      interviewDeadline,
+      interviewDeadline: hasAi ? interviewDeadline : null,
       stage: 'employer_approved'
     },
     icon: 'check-circle',
     color: '#10b981',
     actionUrl: '/candidate/jobs?tab=standard',
-    actionText: 'Phỏng vấn với AI ngay',
-    actionTextEn: 'Start AI Interview'
+    actionText: hasAi ? 'Phỏng vấn với AI ngay' : 'Xem việc làm của bạn',
+    actionTextEn: hasAi ? 'Start AI Interview' : 'View your applications'
   };
 
   return await saveNotification(notification);

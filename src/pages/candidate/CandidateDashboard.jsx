@@ -1759,12 +1759,10 @@ const CandidateDashboard = () => {
       }
 
       // Bug 6 fix: detect recently-replaced applications để hiện banner thông báo cho candidate
-      // Chỉ hiện nếu chưa dismiss (dùng localStorage để không hiện lại sau khi đã bấm X, kể cả ở phiên sau)
-      const dismissedKey = 'dismissed_replaced_notices';
-      const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+      // Dùng field replacedNoticeDismissed trong DB để dismissed state tồn tại vĩnh viễn
       const recentlyReplaced = apps.find(app =>
         (app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') &&
-        !dismissed.includes(app.applicationId)
+        !app.replacedNoticeDismissed
       );
       if (recentlyReplaced) {
         const replacedJob = finalAllJobs.find(j =>
@@ -1774,6 +1772,7 @@ const CandidateDashboard = () => {
           applicationId: recentlyReplaced.applicationId,
           jobTitle: replacedJob?.title || recentlyReplaced.jobTitle || 'Ca làm',
           replacedAt: recentlyReplaced.replacedAt || recentlyReplaced.updatedAt,
+          rawStatus: recentlyReplaced.status,
         });
       } else {
         setReplacedNotice(null);
@@ -2274,12 +2273,18 @@ const CandidateDashboard = () => {
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    // Dismiss: lưu vào localStorage để không hiện lại nữa, kể cả sau khi đóng và mở lại trình duyệt
-                    const dismissedKey = 'dismissed_replaced_notices';
-                    const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
-                    localStorage.setItem(dismissedKey, JSON.stringify([...dismissed, replacedNotice.applicationId]));
-                    setReplacedNotice(null);
+                  onClick={async () => {
+                    // Dismiss: lưu replacedNoticeDismissed=true vào DB
+                    setReplacedNotice(null); // ẩn ngay lập tức cho UX tốt
+                    try {
+                      await applicationService.updateApplicationStatus(
+                        replacedNotice.applicationId,
+                        replacedNotice.rawStatus || 'ĐÃ_BỊ_THAY_THẾ',
+                        { replacedNoticeDismissed: true }
+                      );
+                    } catch (err) {
+                      console.error('Could not save notice dismissed state:', err);
+                    }
                   }}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',

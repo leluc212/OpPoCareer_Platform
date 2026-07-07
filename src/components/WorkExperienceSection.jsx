@@ -453,6 +453,27 @@ const WorkExperienceSection = ({ readOnly = false }) => {
       toast.error(language === 'vi' ? 'Vui lòng điền đủ thông tin bắt buộc' : 'Please fill all required fields');
       return;
     }
+    if (!form.isCurrent && (!form.endMonth || !form.endYear)) {
+      toast.error(language === 'vi' ? 'Vui lòng chọn tháng và năm kết thúc' : 'Please select end month and year');
+      return;
+    }
+    // Validate minimum 2 months duration
+    if (!form.isCurrent && form.startMonth && form.startYear && form.endMonth && form.endYear) {
+      const startTotal = Number(form.startYear) * 12 + Number(form.startMonth);
+      const endTotal   = Number(form.endYear)   * 12 + Number(form.endMonth);
+      if (endTotal < startTotal) {
+        toast.error(language === 'vi' ? 'Tháng kết thúc phải sau tháng bắt đầu' : 'End date must be after start date');
+        return;
+      }
+      if (endTotal - startTotal < 2) {
+        toast.error(language === 'vi' ? 'Công việc phải làm ít nhất 2 tháng mới được ghi nhận' : 'Job duration must be at least 2 months');
+        return;
+      }
+    }
+    if (!form.description.trim()) {
+      toast.error(language === 'vi' ? 'Vui lòng nhập mô tả công việc' : 'Please enter a job description');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -667,7 +688,7 @@ const WorkExperienceSection = ({ readOnly = false }) => {
                 {!form.isCurrent && (
                   <>
                     <FormGroup>
-                      <label>{language === 'vi' ? 'Tháng kết thúc' : 'End month'}</label>
+                      <label>{language === 'vi' ? 'Tháng kết thúc' : 'End month'} <span style={{ color: '#ef4444' }}>*</span></label>
                       <select value={form.endMonth} onChange={e => setForm(p => ({ ...p, endMonth: e.target.value }))}>
                         <option value="">{language === 'vi' ? 'Chọn tháng' : 'Select month'}</option>
                         {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
@@ -676,7 +697,7 @@ const WorkExperienceSection = ({ readOnly = false }) => {
                       </select>
                     </FormGroup>
                     <FormGroup>
-                      <label>{language === 'vi' ? 'Năm kết thúc' : 'End year'}</label>
+                      <label>{language === 'vi' ? 'Năm kết thúc' : 'End year'} <span style={{ color: '#ef4444' }}>*</span></label>
                       <select value={form.endYear} onChange={e => setForm(p => ({ ...p, endYear: e.target.value }))}>
                         <option value="">{language === 'vi' ? 'Chọn năm' : 'Select year'}</option>
                         {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -684,16 +705,29 @@ const WorkExperienceSection = ({ readOnly = false }) => {
                     </FormGroup>
                   </>
                 )}
+                {/* Duration hint */}
+                <FormGroup className="full" style={{ marginTop: -8 }}>
+                  <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+                    {language === 'vi'
+                      ? 'Công việc phải làm ít nhất 2 tháng mới được ghi nhận.'
+                      : 'The job must last at least 2 months to be accepted.'}
+                  </p>
+                </FormGroup>
 
                 {/* Description */}
                 <FormGroup className="full">
-                  <label>{language === 'vi' ? 'Mô tả công việc' : 'Job description'}</label>
+                  <label>{language === 'vi' ? 'Mô tả công việc' : 'Job description'} <span style={{ color: '#ef4444' }}>*</span></label>
                   <textarea
                     value={form.description}
                     onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                    placeholder={language === 'vi' ? 'Mô tả công việc, nhiệm vụ, thành tích...' : 'Describe your role, responsibilities, achievements...'}
+                    placeholder={language === 'vi' ? 'Mô tả chi tiết công việc, nhiệm vụ và thành tích của bạn tại vị trí này...' : 'Describe your role, responsibilities and achievements in detail...'}
                     rows={4}
                   />
+                  <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0' }}>
+                    {language === 'vi'
+                      ? 'Mô tả chi tiết công việc, nhiệm vụ và thành tích của bạn tại vị trí này. Yêu cầu trình bày đầy đủ và rõ ràng.'
+                      : 'Describe your tasks, responsibilities and achievements at this position in detail. Clear and thorough descriptions are required.'}
+                  </p>
                 </FormGroup>
 
                 {/* Proof images */}

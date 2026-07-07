@@ -631,7 +631,8 @@ def update_application_status(event, application_id, user_id, create_response):
             'aiInterviewScore',
             'aiInterviewReport',
             'aiInterviewAudio',
-            'aiInterviewAudioKey'
+            'aiInterviewAudioKey',
+            'replacedNoticeDismissed',  # candidate dismissed the "bị thay thế" banner
         ]
 
         for field in optional_fields:

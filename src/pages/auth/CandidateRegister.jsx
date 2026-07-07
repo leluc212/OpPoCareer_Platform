@@ -541,6 +541,25 @@ const FErr = styled.p`
   font-weight: 500;
 `;
 
+/* ─ Email check status hint ─ */
+const EmailHint = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-top: 4px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+  color: ${p => p.$variant === 'error' ? '#ef4444' : p.$variant === 'success' ? '#16a34a' : '#64748b'};
+  a {
+    color: #0E3995;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+`;
+
 /* ─ Password requirements checklist ─ */
 const PwChecklist = styled.div`
   margin: -4px 0 12px;
@@ -728,6 +747,9 @@ const CandidateRegister = () => {
   const [errors, setErrors] = useState({});
   const [googleError, setGoogleError] = useState(null);
 
+  // ─ Email check on submit (không check real-time) ─
+  const [emailCheckStatus, setEmailCheckStatus] = useState(null); // null | 'google' | 'native'
+
   useEffect(() => {
     const err = localStorage.getItem('googleLoginError');
     if (err) {
@@ -766,6 +788,8 @@ const CandidateRegister = () => {
     } else if (name === 'email') {
       // Clear error khi user đang nhập
       if (errors[name]) setErrors(p => ({ ...p, [name]: '' }));
+      // Reset email check status khi user thay đổi email
+      if (emailCheckStatus) setEmailCheckStatus(null);
     } else {
       if (errors[name]) setErrors(p => ({ ...p, [name]: '' }));
     }
@@ -798,6 +822,27 @@ const CandidateRegister = () => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
+
+    // ── Kiểm tra email tồn tại trước khi gọi signUp ──
+    try {
+      const API_BASE = import.meta.env.VITE_CHECK_EMAIL_API
+        || import.meta.env.VITE_CANDIDATE_API_URL
+        || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+      const res = await fetch(
+        `${API_BASE}/auth/check-email?email=${encodeURIComponent(form.email.trim().toLowerCase())}`,
+        { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.exists) {
+          setEmailCheckStatus(data.provider === 'google' ? 'google' : 'native');
+          return; // dừng — không gọi signUp
+        }
+      }
+      // Nếu API lỗi → bỏ qua, để Cognito Pre Sign-up Lambda xử lý (defense in depth)
+    } catch (_) { /* network error — tiếp tục */ }
+    setEmailCheckStatus(null);
+
     try {
       // Import Auth functions from amplifyClient (v6 compatible)
       const { Auth } = await import('../../utils/amplifyClient');
@@ -847,7 +892,13 @@ const CandidateRegister = () => {
       console.error('SignUp error:', err);
 
       let errorMessage = '';
-      if (err.name === 'UsernameExistsException' || err.message?.includes('User already') || err.message?.includes('already exists')) {
+      // Ưu tiên kiểm tra message từ Cognito Pre Sign-up Lambda trigger
+      if (err.message?.includes('Email đã tồn tại')) {
+        // Cognito bọc message dạng: "PreSignUp failed with error Email đã tồn tại..."
+        // Tách lấy phần message thuần từ Lambda
+        const lambdaMsg = err.message.replace(/^PreSignUp failed with error\s*/i, '').replace(/\.$/, '');
+        errorMessage = lambdaMsg || err.message;
+      } else if (err.name === 'UsernameExistsException' || err.message?.includes('User already') || err.message?.includes('already exists')) {
         // Try to resend OTP — if user is unconfirmed, redirect to OTP page
         try {
           const { Auth } = await import('../../utils/amplifyClient');
@@ -1041,6 +1092,19 @@ const CandidateRegister = () => {
             <FloatInput id="email" name="email" type="email" label="Email *"
               value={form.email} onChange={onChange} error={errors.email}
               iconL={<IcoMail />} />
+
+            {/* Email status hint — chỉ hiện sau khi bấm submit */}
+            {emailCheckStatus === 'google' && (
+              <EmailHint $variant="error">
+                ✕ Email đã tồn tại, vui lòng sử dụng gmail khác.
+              </EmailHint>
+            )}
+            {emailCheckStatus === 'native' && (
+              <EmailHint $variant="error">
+                ✕ Email này đã được đăng ký.{' '}
+                <Link to="/login">Đăng nhập ngay?</Link>
+              </EmailHint>
+            )}
 
             <FloatInput id="password" name="password"
               type={showPw ? 'text' : 'password'} label="Mật khẩu *"

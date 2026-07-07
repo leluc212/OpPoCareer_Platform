@@ -432,6 +432,23 @@ const FErr = styled.p`
   font-size: 11.5px; color: #ef4444; margin-top: 4px; font-weight: 500;
 `;
 
+/* Thông báo lỗi provider — màu đỏ, hiện sau khi bấm submit */
+const EmailProviderHint = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 9px;
+  margin-top: -4px;
+  margin-bottom: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  line-height: 1.45;
+`;
+
 /* Error Alert Box */
 const ErrorAlert = styled(motion.div)`
   background: linear-gradient(135deg, #fef2f2, #fee2e2);
@@ -575,6 +592,9 @@ const LoginPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [googleErrorModal, setGoogleErrorModal] = useState(null);
 
+  // Email check on submit — chỉ để chặn đăng nhập bằng password nếu là tài khoản Google
+  const [emailProviderStatus, setEmailProviderStatus] = useState(null); // null | 'google'
+
   /* Sync i18n labels */
   ROLES.candidate.label = t.login.roleCandidate;
   ROLES.employer.label = t.login.roleEmployer;
@@ -610,6 +630,8 @@ const LoginPage = () => {
     const { name, value } = e.target;
     setForm(p => ({ ...p, [name]: value }));
     if (errors[name]) setErrors(p => ({ ...p, [name]: '' }));
+    // Reset provider status khi user sửa email
+    if (name === 'email' && emailProviderStatus) setEmailProviderStatus(null);
   };
 
   const validate = () => {
@@ -627,6 +649,27 @@ const LoginPage = () => {
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     setLoading(true);
+
+    // ── Kiểm tra email có phải tài khoản Google không (chặn đăng nhập password) ──
+    try {
+      const API_BASE = import.meta.env.VITE_CHECK_EMAIL_API
+        || import.meta.env.VITE_CANDIDATE_API_URL
+        || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+      const res = await fetch(
+        `${API_BASE}/auth/check-email?email=${encodeURIComponent(form.email.trim().toLowerCase())}`,
+        { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.exists && data.provider === 'google') {
+          setEmailProviderStatus('google');
+          setLoading(false);
+          return; // dừng — không gọi signIn với password
+        }
+      }
+    } catch (_) { /* network error — tiếp tục đăng nhập */ }
+    setEmailProviderStatus(null);
+
     try {
       // Import Auth functions from amplifyClient (v6 compatible)
       const { Auth } = await import('../../utils/amplifyClient');
@@ -1013,6 +1056,15 @@ const LoginPage = () => {
                     accent={rc.color}
                   />
 
+                  {/* Thông báo lỗi provider — chỉ hiện sau khi bấm Đăng nhập */}
+                  {emailProviderStatus === 'google' && (
+                    <EmailProviderHint>
+                      ✕ {language === 'vi'
+                        ? 'Tài khoản này đăng ký qua Google. Vui lòng dùng nút "Đăng nhập với Google" bên dưới.'
+                        : 'This account was registered via Google. Please use the "Sign in with Google" button below.'}
+                    </EmailProviderHint>
+                  )}
+
                   <FI
                     id="password" name="password"
                     type={showPw ? 'text' : 'password'}
@@ -1126,6 +1178,15 @@ const LoginPage = () => {
                     accent={rc.color}
                   />
 
+                  {/* Thông báo lỗi provider — chỉ hiện sau khi bấm Đăng nhập */}
+                  {emailProviderStatus === 'google' && (
+                    <EmailProviderHint>
+                      ✕ {language === 'vi'
+                        ? 'Tài khoản này đăng ký qua Google. Vui lòng dùng nút "Đăng nhập với Google" bên dưới.'
+                        : 'This account was registered via Google. Please use the "Sign in with Google" button below.'}
+                    </EmailProviderHint>
+                  )}
+
                   <FI
                     id="password" name="password"
                     type={showPw ? 'text' : 'password'}
@@ -1185,4 +1246,3 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
-

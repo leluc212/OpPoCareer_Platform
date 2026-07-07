@@ -11,6 +11,37 @@ if (!window[AUTH_CONTEXT_KEY]) {
 }
 const AuthContext = window[AUTH_CONTEXT_KEY];
 
+// ─── One-time fix: correct any wrongly-locked Google role mappings ────────────
+// If a Google account already has a candidate profile in the DB but was
+// accidentally locked to 'employer' in localStorage, reset the mapping so the
+// next login re-detects the correct role.
+try {
+  const googleRoleMap = JSON.parse(localStorage.getItem('googleRoleMapping') || '{}');
+  // Hard-coded corrections for known mis-mapped accounts
+  const corrections = { 'duypl2310@gmail.com': 'candidate' };
+  let changed = false;
+  for (const [email, correctRole] of Object.entries(corrections)) {
+    if (googleRoleMap[email] && googleRoleMap[email] !== correctRole) {
+      console.warn(`🔧 [AuthContext] Fixing wrong role mapping for ${email}: ${googleRoleMap[email]} → ${correctRole}`);
+      googleRoleMap[email] = correctRole;
+      changed = true;
+    }
+  }
+  // Also fix the cached user object in localStorage if it's affected
+  if (changed) {
+    localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
+    try {
+      const savedUser = JSON.parse(localStorage.getItem('user') || 'null');
+      if (savedUser && corrections[savedUser.email] && savedUser.role !== corrections[savedUser.email]) {
+        savedUser.role = corrections[savedUser.email];
+        localStorage.setItem('user', JSON.stringify(savedUser));
+        console.warn(`🔧 [AuthContext] Fixed cached user role for ${savedUser.email} → ${savedUser.role}`);
+      }
+    } catch (_) {}
+  }
+} catch (_) {}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -144,11 +175,23 @@ export const AuthProvider = ({ children }) => {
               console.log('🔒 [AuthContext] Google account locked to role:', userData.role);
               if (pendingRole) localStorage.removeItem('pendingGoogleRole');
             } else if (pendingRole && ['candidate', 'employer'].includes(pendingRole)) {
-              // Lần đầu đăng nhập Google → gán role và lưu vĩnh viễn
-              userData.role = pendingRole;
-              googleRoleMap[emailFromToken] = pendingRole;
+              // Lần đầu đăng nhập Google → kiểm tra profile tồn tại trước khi lock
+              let detectedRole = null;
+              try {
+                const { default: candidateProfileService } = await import('../services/candidateProfileService');
+                const candidateProfile = await candidateProfileService.getMyProfile().catch(() => null);
+                if (candidateProfile) {
+                  detectedRole = 'candidate';
+                  console.log('🔍 [AuthContext] Found existing candidate profile → role: candidate');
+                }
+              } catch (e) {
+                console.log('[AuthContext] Could not detect existing profile:', e.message);
+              }
+              const roleToLock = detectedRole || pendingRole;
+              userData.role = roleToLock;
+              googleRoleMap[emailFromToken] = roleToLock;
               localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
-              console.log('📋 [AuthContext] Locking Google account to role:', pendingRole);
+              console.log('📋 [AuthContext] Locking Google account to role:', roleToLock);
               localStorage.removeItem('pendingGoogleRole');
             }
             
@@ -204,10 +247,30 @@ export const AuthProvider = ({ children }) => {
                 console.log('🔒 [AuthContext] Google account locked to role:', userRole);
               } else {
                 if (pendingRole && ['candidate', 'employer'].includes(pendingRole)) {
-                  userRole = pendingRole;
-                  googleRoleMap[emailForMapping] = pendingRole;
-                  localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
-                  console.log('📋 [AuthContext] Locking NEW Google account to role:', userRole);
+                  // Before trusting pendingRole for a new user, check if candidate profile exists
+                  let detectedRole = null;
+                  try {
+                    const { default: candidateProfileService } = await import('../services/candidateProfileService');
+                    const candidateProfile = await candidateProfileService.getMyProfile().catch(() => null);
+                    if (candidateProfile) {
+                      detectedRole = 'candidate';
+                      console.log('🔍 [AuthContext] Found existing candidate profile → role: candidate');
+                    }
+                  } catch (e) {
+                    console.log('[AuthContext] Could not detect existing profile:', e.message);
+                  }
+
+                  if (detectedRole) {
+                    userRole = detectedRole;
+                    googleRoleMap[emailForMapping] = detectedRole;
+                    localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
+                    console.log('📋 [AuthContext] Locking to DETECTED role (existing profile):', userRole);
+                  } else {
+                    userRole = pendingRole;
+                    googleRoleMap[emailForMapping] = pendingRole;
+                    localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
+                    console.log('📋 [AuthContext] Locking NEW Google account to role:', userRole);
+                  }
                 } else {
                   userRole = null;
                 }
@@ -273,7 +336,7 @@ export const AuthProvider = ({ children }) => {
           }
         }
       } catch (error) {
-        console.log('❌ [AuthContext] No authenticated user:', error.name, error.message);
+        console.log('ℹ️ [AuthContext] No authenticated user (expected for guests):', error.name);
         
         // Fallback: Check if we have user in localStorage to keep them logged in
         const savedUser = localStorage.getItem('user');
@@ -308,6 +371,60 @@ export const AuthProvider = ({ children }) => {
     const tryHandleCode = async () => {
       try {
         const params = new URLSearchParams(window.location.search || '');
+
+        // ── Bắt lỗi từ Cognito Pre Sign-up trigger (Google flow) ──
+        // Cognito redirect về với ?error=access_denied hoặc ?error=invalid_request
+        // kèm ?error_description=<message từ Lambda>
+        const oauthError = params.get('error');
+        const oauthErrorDesc = params.get('error_description');
+        if (oauthError && oauthErrorDesc) {
+          console.warn('🚫 [AuthContext] OAuth error from Cognito:', oauthError, oauthErrorDesc);
+          // Decode URL-encoded message (e.g. "Email+đã+tồn+tại..." → proper string)
+          const decoded = decodeURIComponent(oauthErrorDesc.replace(/\+/g, ' '));
+          console.warn('🚫 [AuthContext] Decoded error_description:', decoded);
+
+          // Xoá params khỏi URL ngay lập tức để tránh re-trigger
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('error');
+            url.searchParams.delete('error_description');
+            url.searchParams.delete('state');
+            window.history.replaceState({}, document.title, url.pathname + url.search);
+          } catch (_) {}
+
+          // Lưu vào localStorage để trang login/register hiển thị modal
+          if (decoded.includes('Email đã tồn tại')) {
+            localStorage.setItem('googleLoginError', JSON.stringify({
+              title: 'Đăng nhập Google thất bại',
+              message: decoded
+            }));
+          } else {
+            localStorage.setItem('googleLoginError', JSON.stringify({
+              title: 'Đăng nhập Google thất bại',
+              message: decoded || 'Đã xảy ra lỗi khi đăng nhập bằng Google. Vui lòng thử lại.'
+            }));
+          }
+
+          sessionStorage.removeItem('pkce_code_verifier');
+
+          // Điều hướng về trang login (không để user kẹt loading)
+          if (isMounted) {
+            setUser(null);
+            setIsAuthenticated(false);
+            setIsLoading(false);
+          }
+          const pendingRole = localStorage.getItem('pendingGoogleRole') || '';
+          localStorage.removeItem('pendingGoogleRole');
+          // Điều hướng về trang phù hợp
+          const redirectPath = pendingRole === 'employer'
+            ? '/register/employer'
+            : pendingRole === 'candidate'
+              ? '/register/candidate'
+              : '/login';
+          window.location.replace(redirectPath);
+          return;
+        }
+
         const code = params.get('code');
         if (!code) { await checkAuth(); return; }
         const verifier = sessionStorage.getItem('pkce_code_verifier');
@@ -367,13 +484,46 @@ export const AuthProvider = ({ children }) => {
 
         if (!finalRole && isSocialUser) {
           if (googleRoleMap[idPayload.email]) {
+            // Already locked — always respect existing mapping, ignore pendingRole
             finalRole = googleRoleMap[idPayload.email];
             console.log('🔒 [AuthContext-PKCE] Locked to role:', finalRole);
-          } else if (pendingRole && ['candidate', 'employer'].includes(pendingRole)) {
-            finalRole = pendingRole;
-            googleRoleMap[idPayload.email] = pendingRole;
-            localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
-            console.log('📋 [AuthContext-PKCE] Locking NEW Google account to:', finalRole);
+          } else {
+            // No mapping yet — try to detect existing profile in DB before trusting pendingRole
+            let detectedRole = null;
+            try {
+              const userId = idPayload.sub;
+              // Check candidate profile first
+              const { default: candidateProfileService } = await import('../services/candidateProfileService');
+              // Temporarily store tokens so services can auth
+              const tempClientId = '2mv7qt4gpmq03dmlm0or9724n8';
+              const tempUsername = idPayload['cognito:username'] || idPayload.email?.split('@')[0] || idPayload.sub;
+              const tempBase = `CognitoIdentityServiceProvider.${tempClientId}.${tempUsername}`;
+              localStorage.setItem(`${tempBase}.idToken`, tokens.id_token || '');
+              localStorage.setItem(`${tempBase}.accessToken`, tokens.access_token || '');
+              localStorage.setItem(`CognitoIdentityServiceProvider.${tempClientId}.LastAuthUser`, tempUsername);
+
+              const candidateProfile = await candidateProfileService.getMyProfile().catch(() => null);
+              if (candidateProfile) {
+                detectedRole = 'candidate';
+                console.log('🔍 [AuthContext-PKCE] Found existing candidate profile → role: candidate');
+              }
+            } catch (e) {
+              console.log('[AuthContext-PKCE] Could not detect existing profile:', e.message);
+            }
+
+            if (detectedRole) {
+              // Existing profile found → lock to detected role, ignore pendingRole
+              finalRole = detectedRole;
+              googleRoleMap[idPayload.email] = detectedRole;
+              localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
+              console.log('📋 [AuthContext-PKCE] Locking to DETECTED role (existing profile):', finalRole);
+            } else if (pendingRole && ['candidate', 'employer'].includes(pendingRole)) {
+              // Truly new user — safe to use pendingRole
+              finalRole = pendingRole;
+              googleRoleMap[idPayload.email] = pendingRole;
+              localStorage.setItem('googleRoleMapping', JSON.stringify(googleRoleMap));
+              console.log('📋 [AuthContext-PKCE] Locking NEW Google account to:', finalRole);
+            }
           }
           localStorage.removeItem('pendingGoogleRole');
         }

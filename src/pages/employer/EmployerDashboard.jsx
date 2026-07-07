@@ -10,6 +10,7 @@ import StatusBadge from '../../components/StatusBadge';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import employerProfileService from '../../services/employerProfileService';
+import { useCompanyProfileCompletion } from '../../hooks/useCompanyProfileCompletion';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import applicationService, { getJobApplications } from '../../services/applicationService';
@@ -19,6 +20,7 @@ import { getNotifications } from '../../services/notificationService';
 import { formatRelativeTime } from '../../hooks/useRelativeTime';
 import DynamicTranslate from '../../components/DynamicTranslate';
 import Modal from '../../components/Modal';
+import CompanyProfileSetupModal from '../../components/CompanyProfileSetupModal';
 import { ProfileDetailModal } from './Applications';
 import {
   Briefcase,
@@ -42,7 +44,8 @@ import {
   Sparkles,
   UserPlus,
   Settings,
-  Bell
+  Bell,
+  Building2
 } from 'lucide-react';
 
 const fadeIn = keyframes`
@@ -467,8 +470,30 @@ const EmployerDashboard = () => {
     loadProfile();
   }, [user]);
 
-  // Profile setup modal is intentionally NOT shown on the dashboard.
-  // It will be shown on JobManagement and HRManagement pages instead.
+  const { isProfileComplete, isLoading: isLoadingProfileCompletion } = useCompanyProfileCompletion();
+
+  // Company profile setup modal — show once per login session if profile is incomplete
+  const [showSetupModal, setShowSetupModal] = useState(false);
+
+  useEffect(() => {
+    if (isLoadingProfileCompletion) return;
+    if (isProfileComplete) return; // profile đủ rồi → không hiện
+
+    // Dùng sessionStorage: chỉ hiện 1 lần/session (mất khi đóng tab hoặc logout)
+    const sessionKey = `profileModalShown_${user?.email}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    const t = setTimeout(() => setShowSetupModal(true), 600);
+    return () => clearTimeout(t);
+  }, [isLoadingProfileCompletion, isProfileComplete, user?.email]);
+
+  const handleCloseSetupModal = () => {
+    setShowSetupModal(false);
+    // Đánh dấu đã hiện trong session này
+    if (user?.email) {
+      sessionStorage.setItem(`profileModalShown_${user.email}`, '1');
+    }
+  };
 
   const [dashboardStats, setDashboardStats] = useState({
     totalJobs: 0,
@@ -476,6 +501,11 @@ const EmployerDashboard = () => {
     totalViews: 0,
     quickJobs: 0,
     applicationsList: []
+  });
+  const [monthComparisons, setMonthComparisons] = useState({
+    jobsDiff: null,       // e.g. +3 or -1
+    appsPct: null,        // e.g. +12% or -5%
+    quickJobsThisMonth: null  // count this month
   });
   const [recentApplications, setRecentApplications] = useState([]);
   const [previewApp, setPreviewApp] = useState(null);
@@ -682,6 +712,42 @@ const EmployerDashboard = () => {
           applicationsList: allApplications
         });
 
+        // ── Month-over-month comparisons ──────────────────────────────
+        const now = new Date();
+        const thisYear = now.getFullYear();
+        const thisMonth = now.getMonth(); // 0-indexed
+        const lastYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+        const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+
+        const jobsThisMonth = allJobs.filter(j => {
+          const d = new Date(j.createdAt || j.postedAt || 0);
+          return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
+        }).length;
+        const jobsLastMonth = allJobs.filter(j => {
+          const d = new Date(j.createdAt || j.postedAt || 0);
+          return d.getFullYear() === lastYear && d.getMonth() === lastMonth;
+        }).length;
+        const jobsDiff = jobsThisMonth - jobsLastMonth;
+
+        const appsThisMonth = rawAllApplications.filter(a => {
+          const d = new Date(a.createdAt || 0);
+          return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
+        }).length;
+        const appsLastMonth = rawAllApplications.filter(a => {
+          const d = new Date(a.createdAt || 0);
+          return d.getFullYear() === lastYear && d.getMonth() === lastMonth;
+        }).length;
+        const appsPct = appsLastMonth > 0
+          ? Math.round(((appsThisMonth - appsLastMonth) / appsLastMonth) * 100)
+          : (appsThisMonth > 0 ? 100 : 0);
+
+        const quickJobsThisMonth = allQuick.filter(j => {
+          const d = new Date(j.createdAt || j.postedAt || 0);
+          return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
+        }).length;
+
+        setMonthComparisons({ jobsDiff, appsPct, quickJobsThisMonth });
+
         const sortedApps = [...allApplications].sort((a, b) => new Date(b.createdAt || Date.now()) - new Date(a.createdAt || Date.now()));
         const recentAppsList = sortedApps.slice(0, 3).map(app => {
           const jobMatch = allStandard.find(j => (j.idJob || j.id) === app.jobId);
@@ -712,41 +778,116 @@ const EmployerDashboard = () => {
         // Fetch Recent Activities from Notifications
         try {
           const notifications = await getNotifications(user.userId || user.id, 'employer');
-          const mappedActivities = notifications.slice(0, 5).map(notif => {
+          const mappedActivities = notifications.slice(0, 10).map(notif => {
             let IconComp = Bell; // Fallback icon
             let iconColor = '#3b82f6'; // Fallback color
+            const d = notif.data || {};
 
+            // Build a rich, contextual title for each notification type
+            let richTitle = '';
             switch (notif.type) {
               case 'application':
                 IconComp = UserPlus;
                 iconColor = '#3b82f6';
+                if (language === 'vi') {
+                  richTitle = d.candidateName
+                    ? `${d.candidateName} ứng tuyển${d.jobTitle ? ` vào "${d.jobTitle}"` : ''}`
+                    : notif.title;
+                } else {
+                  richTitle = d.candidateName
+                    ? `${d.candidateName} applied${d.jobTitle ? ` to "${d.jobTitle}"` : ''}`
+                    : notif.titleEn || notif.title;
+                }
+                break;
+              case 'job_approved':
+                IconComp = CheckCircle;
+                iconColor = '#10b981';
+                if (language === 'vi') {
+                  richTitle = d.jobTitle ? `Bài đăng "${d.jobTitle}" đã được phê duyệt` : notif.title;
+                } else {
+                  richTitle = d.jobTitle ? `Post "${d.jobTitle}" was approved` : (notif.titleEn || notif.title);
+                }
+                break;
+              case 'job_rejected':
+                IconComp = Bell;
+                iconColor = '#ef4444';
+                if (language === 'vi') {
+                  richTitle = d.jobTitle ? `Bài đăng "${d.jobTitle}" bị từ chối` : notif.title;
+                } else {
+                  richTitle = d.jobTitle ? `Post "${d.jobTitle}" was rejected` : (notif.titleEn || notif.title);
+                }
+                break;
+              case 'ai_interview_complete':
+                IconComp = Sparkles;
+                iconColor = '#8B5CF6';
+                if (language === 'vi') {
+                  richTitle = d.candidateName
+                    ? `${d.candidateName} đã hoàn thành phỏng vấn AI${d.jobTitle ? ` (${d.jobTitle})` : ''}`
+                    : `Ứng viên hoàn thành phỏng vấn AI${d.jobTitle ? ` — ${d.jobTitle}` : ''}`;
+                } else {
+                  richTitle = d.candidateName
+                    ? `${d.candidateName} completed AI interview${d.jobTitle ? ` (${d.jobTitle})` : ''}`
+                    : `Candidate completed AI interview${d.jobTitle ? ` — ${d.jobTitle}` : ''}`;
+                }
+                break;
+              case 'employer_cv_approved':
+                IconComp = CheckCircle;
+                iconColor = '#10b981';
+                if (language === 'vi') {
+                  richTitle = d.candidateName
+                    ? `Hồ sơ của ${d.candidateName} đã được chấp nhận${d.jobTitle ? ` — ${d.jobTitle}` : ''}`
+                    : notif.title;
+                } else {
+                  richTitle = d.candidateName
+                    ? `${d.candidateName}'s CV accepted${d.jobTitle ? ` — ${d.jobTitle}` : ''}`
+                    : (notif.titleEn || notif.title);
+                }
+                break;
+              case 'employer_cv_rejected':
+                IconComp = Bell;
+                iconColor = '#ef4444';
+                if (language === 'vi') {
+                  richTitle = d.candidateName
+                    ? `Hồ sơ của ${d.candidateName} bị từ chối${d.jobTitle ? ` — ${d.jobTitle}` : ''}`
+                    : notif.title;
+                } else {
+                  richTitle = d.candidateName
+                    ? `${d.candidateName}'s CV rejected${d.jobTitle ? ` — ${d.jobTitle}` : ''}`
+                    : (notif.titleEn || notif.title);
+                }
                 break;
               case 'package_approved':
                 IconComp = CheckCircle;
                 iconColor = '#10b981';
+                richTitle = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
                 break;
               case 'package_purchase_request':
                 IconComp = Briefcase;
                 iconColor = '#8B5CF6';
+                richTitle = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
                 break;
               case 'success':
                 IconComp = CheckCircle;
                 iconColor = '#10b981';
+                richTitle = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
                 break;
               case 'system':
                 IconComp = Settings;
                 iconColor = '#6b7280';
+                richTitle = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
                 break;
               default:
                 IconComp = Bell;
                 iconColor = '#3b82f6';
+                richTitle = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
             }
 
             return {
-              title: language === 'vi' ? notif.title : notif.titleEn,
+              title: richTitle,
               time: formatRelativeTime(notif.createdAt, language),
               icon: IconComp,
-              color: iconColor
+              color: iconColor,
+              actionUrl: notif.actionUrl || null
             };
           });
           setRecentActivities(mappedActivities);
@@ -834,6 +975,10 @@ const EmployerDashboard = () => {
 
   return (
     <DashboardLayout role="employer" key={language}>
+      <CompanyProfileSetupModal
+        isOpen={showSetupModal}
+        onClose={handleCloseSetupModal}
+      />
       <DashboardContainer>
         {/* Welcome Banner */}
         <WelcomeBanner
@@ -848,7 +993,27 @@ const EmployerDashboard = () => {
         >
           <WelcomeContent>
             <h1>{getGreeting()}, {getCompanyName()}! 👋</h1>
-            <p>{language === 'vi' ? `Hôm nay bạn có ${dashboardStats.applicationsList ? dashboardStats.applicationsList.filter(app => new Date(app.createdAt || Date.now()).toDateString() === new Date().toDateString()).length : 0} ứng viên mới` : `You have ${dashboardStats.applicationsList ? dashboardStats.applicationsList.filter(app => new Date(app.createdAt || Date.now()).toDateString() === new Date().toDateString()).length : 0} new candidates today`}</p>
+            <p style={{ fontStyle: 'italic' }}>
+              {language === 'vi' ? (
+                <>
+                  Hôm nay bạn có{' '}
+                  <strong style={{ fontStyle: 'italic' }}>
+                    {dashboardStats.applicationsList
+                      ? dashboardStats.applicationsList.filter(app => new Date(app.createdAt || Date.now()).toDateString() === new Date().toDateString()).length
+                      : 0} hồ sơ mới
+                  </strong>{' '}đang chờ bạn xử lý
+                </>
+              ) : (
+                <>
+                  You have{' '}
+                  <strong style={{ fontStyle: 'italic' }}>
+                    {dashboardStats.applicationsList
+                      ? dashboardStats.applicationsList.filter(app => new Date(app.createdAt || Date.now()).toDateString() === new Date().toDateString()).length
+                      : 0} new applications
+                  </strong>{' '}waiting for you
+                </>
+              )}
+            </p>
             <QuickActions>
               <ActionButton
                 $variant="primary"
@@ -905,33 +1070,57 @@ const EmployerDashboard = () => {
         {/* Stats Overview */}
         <StatsGrid>
           <StatsCard
-            title={language === 'vi' ? 'Tổng các tin tuyển dụng' : 'Total Job Posts'}
+            title={language === 'vi' ? 'TỔNG TIN ĐĂNG' : 'TOTAL POSTS'}
             value={isLoadingStats ? "..." : dashboardStats.totalJobs.toString()}
-            change=""
+            change={!isLoadingStats && monthComparisons.jobsDiff !== null
+              ? `${monthComparisons.jobsDiff >= 0 ? '+' : ''}${monthComparisons.jobsDiff}`
+              : undefined}
             changeText={language === 'vi' ? 'so với tháng trước' : 'vs last month'}
             icon={Briefcase}
             color="#1e40af"
+            positive={!isLoadingStats && (monthComparisons.jobsDiff ?? 0) >= 0}
+            onClick={() => navigate('/employer/standard-jobs', { state: { section: 'posts' } })}
+          />
+          <StatsCard
+            title={language === 'vi' ? 'TỔNG HỔ SƠ ĐÃ NHẬN' : 'TOTAL APPLICATIONS RECEIVED'}
+            value={isLoadingStats ? "..." : dashboardStats.totalApplications.toString()}
+            change={!isLoadingStats && monthComparisons.appsPct !== null
+              ? `${monthComparisons.appsPct >= 0 ? '+' : ''}${monthComparisons.appsPct}%`
+              : undefined}
+            changeText={language === 'vi' ? 'so với tháng trước' : 'vs last month'}
+            icon={Users}
+            color="#F59E0B"
+            positive={!isLoadingStats && (monthComparisons.appsPct ?? 0) >= 0}
+            onClick={() => navigate('/employer/standard-jobs', { state: { section: 'applications' } })}
+          />
+          <StatsCard
+            title={language === 'vi' ? 'TỔNG TIN TUYỂN GẤP' : 'URGENT JOB POSTS'}
+            value={isLoadingStats ? "..." : dashboardStats.quickJobs.toString()}
+            change={!isLoadingStats && monthComparisons.quickJobsThisMonth !== null
+              ? `+${monthComparisons.quickJobsThisMonth}`
+              : undefined}
+            changeText={language === 'vi' ? 'Trong tháng này' : 'This month'}
+            icon={TrendingUp}
+            color="#1e40af"
+            positive
+          />
+          <StatsCard
+            title={language === 'vi' ? 'LƯỢT XEM BÀI ĐĂNG' : 'JOB POST VIEWS'}
+            value={isLoadingStats ? "..." : dashboardStats.totalViews.toString()}
+            changeText={language === 'vi' ? 'Tổng lượt xem tất cả bài đăng' : 'Total views across all posts'}
+            icon={Eye}
+            color="#0ea5e9"
             positive
             onClick={() => navigate('/employer/standard-jobs', { state: { section: 'posts' } })}
           />
           <StatsCard
-            title={language === 'vi' ? 'Tổng hồ sơ ứng tuyển' : 'Total Applications'}
-            value={isLoadingStats ? "..." : dashboardStats.totalApplications.toString()}
-            change=""
-            changeText={language === 'vi' ? 'so với tháng trước' : 'vs last month'}
-            icon={Users}
-            color="#F59E0B"
+            title={language === 'vi' ? 'LƯỢT XEM HỒ SƠ CÔNG TY' : 'COMPANY PROFILE VIEWS'}
+            value={isLoadingStats ? "..." : (employerProfile?.profileViews ?? 0).toString()}
+            changeText={language === 'vi' ? 'Ứng viên đã xem hồ sơ của bạn' : 'Candidates viewed your profile'}
+            icon={Building2}
+            color="#8B5CF6"
             positive
-            onClick={() => navigate('/employer/standard-jobs', { state: { section: 'applications' } })}
-          />
-          <StatsCard
-            title={language === 'vi' ? 'Tổng tin tuyển dụng gấp' : 'Quick Job Posts'}
-            value={isLoadingStats ? "..." : dashboardStats.quickJobs.toString()}
-            change=""
-            changeText={language === 'vi' ? 'tháng này' : 'this month'}
-            icon={TrendingUp}
-            color="#1e40af"
-            positive
+            onClick={() => navigate('/employer/profile')}
           />
         </StatsGrid>
 
@@ -1043,6 +1232,8 @@ const EmployerDashboard = () => {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.4 + index * 0.1 }}
+                    onClick={() => activity.actionUrl && navigate(activity.actionUrl)}
+                    style={{ cursor: activity.actionUrl ? 'pointer' : 'default' }}
                   >
                     <ActivityIcon $color={activity.color}>
                       <IconComponent />

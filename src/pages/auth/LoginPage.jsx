@@ -1101,31 +1101,31 @@ const LoginPage = () => {
                 </motion.form>
               </AnimatePresence>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18 }}>
-                <OrDiv><span>{language === 'vi' ? 'hoặc' : 'or'}</span></OrDiv>
-                <SocialBtn type="button" $c="#EA4335"
-                  style={{
-                    width: '100%',
-                    fontSize: 16,
-                    fontWeight: 700,
-                    padding: '13px 0',
-                    borderRadius: 12,
-                    boxShadow: '0 2px 8px #0001',
-                    margin: '0 auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                  }}
-                  onClick={() => handleSocial('Google')}
-                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                  <GoogleSVG style={{ width: 22, height: 22 }} /> Google
-                </SocialBtn>
-              </div>
+              {role !== 'employer' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18 }}>
+                  <OrDiv><span>{language === 'vi' ? 'hoặc' : 'or'}</span></OrDiv>
+                  <SocialBtn type="button" $c="#EA4335"
+                    style={{
+                      width: '100%',
+                      fontSize: 16,
+                      fontWeight: 700,
+                      padding: '13px 0',
+                      borderRadius: 12,
+                      boxShadow: '0 2px 8px #0001',
+                      margin: '0 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 10,
+                    }}
+                    onClick={() => handleSocial('Google')}
+                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                    <GoogleSVG style={{ width: 22, height: 22 }} /> Google
+                  </SocialBtn>
+                </div>
+              )}
             </>
           )}
-
-          {/* Admin notice */}
           {role === 'admin' && (
             <>
               <div style={{

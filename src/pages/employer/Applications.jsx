@@ -3877,7 +3877,7 @@ const Applications = () => {
             <PageIconBox><Briefcase /></PageIconBox>
             <PageTitleText>
               <h1>{language === 'vi' ? 'Công việc tuyển dụng' : 'Standard Jobs'}</h1>
-              <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tuyển dụng (không bao gồm tuyển gấp)' : 'Manage posts and applications for standard jobs (excluding quick jobs)'}</p>
+              <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tuyển dụng ' : 'Manage posts and applications for standard jobs '}</p>
             </PageTitleText>
           </PageTitleGroup>
           <CreatePostButton
@@ -3951,7 +3951,7 @@ const Applications = () => {
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
               <input
                 type="text"
-                placeholder={language === 'vi' ? 'Tìm theo tên việc, địa điểm...' : 'Search by title, location...'}
+                placeholder={language === 'vi' ? 'Tìm theo tên việc' : 'Search by title'}
                 value={postSearchTerm}
                 onChange={e => setPostSearchTerm(e.target.value)}
                 style={{

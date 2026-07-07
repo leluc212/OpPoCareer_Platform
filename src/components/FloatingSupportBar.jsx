@@ -982,7 +982,7 @@ export default function FloatingSupportBar() {
             <MessageSquare />
             <span>{language === 'vi' ? 'Góp ý' : 'Feedback'}</span>
             <Tooltip>
-              {language === 'vi' ? 'Góp ý ý tưởng' : 'Send Feedback'}
+              {language === 'vi' ? 'Góp ý ' : 'Send Feedback'}
             </Tooltip>
           </CapsuleBtn>
 

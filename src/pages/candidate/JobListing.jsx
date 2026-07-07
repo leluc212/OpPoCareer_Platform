@@ -2507,6 +2507,7 @@ const JobListing = () => {
   const [interviewInputText, setInterviewInputText] = useState('');
   const [interviewQuestionCount, setInterviewQuestionCount] = useState(0);
   const [interviewMediaByTurn, setInterviewMediaByTurn] = useState({});
+  const [mockQuestions, setMockQuestions] = useState([]);
 
   const currentInterviewMedia = interviewMediaByTurn[interviewQuestionCount] || null;
   const hasReadyInterviewVideo = currentInterviewMedia?.status === 'ready' && Boolean(currentInterviewMedia?.videoUrl);
@@ -2518,6 +2519,10 @@ const JobListing = () => {
   const [hasReplayedCurrent, setHasReplayedCurrent] = useState(false);
   const recognitionRef = useRef(null);
   const autoSendTimerRef = useRef(null);
+  const candidateHasSpokenRef = useRef(false);
+  const lastSpeechActivityRef = useRef(0);
+  const silenceCheckIntervalRef = useRef(null);
+  const candidateTurnStartRef = useRef(0);
   const isExitingFullscreenRef = useRef(false);
   const shouldBeListeningRef = useRef(false);
   const handleSendInterviewAnswerRef = useRef(null);
@@ -2573,7 +2578,7 @@ const JobListing = () => {
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'vi-VN';
 
     recognition.onstart = () => {
@@ -2581,6 +2586,11 @@ const JobListing = () => {
     };
 
     recognition.onresult = (event) => {
+      // Track voice activity on ANY result (interim or final)
+      lastSpeechActivityRef.current = Date.now();
+      candidateHasSpokenRef.current = true;
+
+      // Only use final results for the answer text
       let accumulatedText = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -2832,9 +2842,11 @@ const JobListing = () => {
     }
   }, [showAiScreeningModal]);
 
-  // Reset replay status when question changes
+  // Reset replay status and candidate-spoken flag when question changes
   useEffect(() => {
     setHasReplayedCurrent(false);
+    candidateHasSpokenRef.current = false;
+    lastSpeechActivityRef.current = 0;
   }, [interviewQuestionCount]);
 
   // Update ref for handleSendInterviewAnswer to avoid stale closure issues in useEffect timer
@@ -2842,9 +2854,12 @@ const JobListing = () => {
     handleSendInterviewAnswerRef.current = handleSendInterviewAnswer;
   }, [handleSendInterviewAnswer]);
 
-  // Auto transition to next question after 5 seconds of silence (candidate not speaking)
+  // Silence detection using interval-based voice activity tracking.
+  // - Checks every 500ms if the candidate has been silent too long.
+  // - 10s with no voice at all after AI finishes speaking → skip to next question.
+  // - 5s of silence after the candidate has started speaking → auto-submit their answer.
+  // - While the candidate IS speaking (voice activity detected), the timer never fires.
   useEffect(() => {
-    // Check if we are in the active interview and candidate's turn to speak
     const isCandidateTurn =
       showAiScreeningModal &&
       aiScreeningStep === 'interview' &&
@@ -2854,28 +2869,57 @@ const JobListing = () => {
       !isPreparingInterviewMedia;
 
     if (!isCandidateTurn) {
-      if (autoSendTimerRef.current) {
-        clearTimeout(autoSendTimerRef.current);
-        autoSendTimerRef.current = null;
+      if (silenceCheckIntervalRef.current) {
+        clearInterval(silenceCheckIntervalRef.current);
+        silenceCheckIntervalRef.current = null;
       }
       return;
     }
 
-    if (autoSendTimerRef.current) {
-      clearTimeout(autoSendTimerRef.current);
-    }
+    // Mark the start of candidate's turn
+    candidateTurnStartRef.current = Date.now();
 
-    autoSendTimerRef.current = setTimeout(() => {
-      console.log('⏰ 5 seconds of silence, auto-submitting answer...');
-      const textToSend = interviewInputText.trim() || (language === 'vi' ? '(Không trả lời)' : '(No answer)');
-      if (handleSendInterviewAnswerRef.current) {
-        handleSendInterviewAnswerRef.current(textToSend);
+    silenceCheckIntervalRef.current = setInterval(() => {
+      const now = Date.now();
+      const hasSpoken = candidateHasSpokenRef.current;
+      const lastActivity = lastSpeechActivityRef.current;
+
+      if (!hasSpoken) {
+        // Candidate hasn't said anything yet — check 10s no-response timeout
+        const elapsed = now - candidateTurnStartRef.current;
+        if (elapsed >= 10000) {
+          clearInterval(silenceCheckIntervalRef.current);
+          silenceCheckIntervalRef.current = null;
+          console.log('⏰ 10s no response from candidate, prompting and moving on...');
+          const promptMsg = language === 'vi'
+            ? 'Bạn trả lời hơi lâu rồi, mình sẽ chuyển sang câu tiếp theo nhé.'
+            : 'You\'re taking a bit long to respond. Let\'s move to the next question.';
+          const timeStr = new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+          setInterviewMessages(prev => [...prev, { text: promptMsg, isMe: false, time: timeStr }]);
+          if (handleSendInterviewAnswerRef.current) {
+            handleSendInterviewAnswerRef.current(language === 'vi' ? '(Không trả lời)' : '(No answer)');
+          }
+        }
+      } else {
+        // Candidate has spoken — check 5s silence after last voice activity
+        const silenceDuration = now - lastActivity;
+        if (silenceDuration >= 5000) {
+          clearInterval(silenceCheckIntervalRef.current);
+          silenceCheckIntervalRef.current = null;
+          console.log('⏰ 5s silence after candidate spoke, auto-submitting answer...');
+          const currentText = interviewInputText.trim();
+          const textToSend = currentText || (language === 'vi' ? '(Không trả lời)' : '(No answer)');
+          if (handleSendInterviewAnswerRef.current) {
+            handleSendInterviewAnswerRef.current(textToSend);
+          }
+        }
       }
-    }, 5000);
+    }, 500);
 
     return () => {
-      if (autoSendTimerRef.current) {
-        clearTimeout(autoSendTimerRef.current);
+      if (silenceCheckIntervalRef.current) {
+        clearInterval(silenceCheckIntervalRef.current);
+        silenceCheckIntervalRef.current = null;
       }
     };
   }, [
@@ -2885,7 +2929,6 @@ const JobListing = () => {
     interviewSending,
     isSpeaking,
     isPreparingInterviewMedia,
-    interviewInputText,
     language
   ]);
 
@@ -3303,10 +3346,46 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setInterviewSessionId("mock-session-id");
-      const initialQuestion = language === 'vi'
-        ? `Chào bạn, tôi là AI Interviewer. Cảm ơn bạn đã ứng tuyển vào vị trí ${job.title}. Bạn có thể tự giới thiệu ngắn gọn về bản thân và kinh nghiệm làm việc liên quan được không?`
-        : `Hello, I'm the AI Interviewer. Thank you for applying for the ${job.title} role. Could you briefly introduce yourself and share your relevant work experience?`;
 
+      const isVi = language === 'vi';
+      const customQ = job.customQuestions || [];
+      const questionsList = [];
+
+      // Q0 (initial): Greeting & Self-Introduction
+      questionsList.push(isVi
+        ? `Chào bạn, tôi là AI Interviewer. Cảm ơn bạn đã ứng tuyển vào vị trí ${job.title}. Bạn có thể tự giới thiệu ngắn gọn về bản thân và kinh nghiệm làm việc liên quan được không?`
+        : `Hello, I'm the AI Interviewer. Thank you for applying for the ${job.title} role. Could you briefly introduce yourself and share your relevant work experience?`);
+
+      // Q1: Simple Experience
+      questionsList.push(isVi
+        ? "Cảm ơn phần giới thiệu của bạn. Trước khi đi vào các câu hỏi chuyên sâu, bạn có thể chia sẻ một chút về nhiệm vụ hàng ngày bạn thích làm nhất ở công việc cũ không?"
+        : "Thank you for the introduction. Before we go deeper, could you share a bit about what daily task you enjoyed doing the most at your previous job?");
+
+      // Q2: Technical / CV-based
+      questionsList.push(isVi
+        ? "Dựa vào kinh nghiệm bạn đã chia sẻ, bạn có thể kể thêm về một kỹ năng chuyên môn hoặc quy trình vận hành nào bạn tự tin nhất và đã áp dụng hiệu quả trong công việc trước đây không?"
+        : "Based on the experience you shared, could you tell me more about a professional skill or operational process you're most confident in and have applied effectively in your previous work?");
+
+      // Q3: Situation Handling (Xử lý tình huống khó)
+      questionsList.push(isVi
+        ? "Bạn có thể chia sẻ về một tình huống khó khăn hoặc sự cố thực tế bạn từng gặp trong công việc — ví dụ khách hàng khó tính phàn nàn, thiếu người trong giờ cao điểm, hoặc bất đồng với đồng nghiệp — và cách bạn đã giải quyết nó không?"
+        : "Could you share about a difficult situation or real problem you encountered at work — for example a difficult customer complaint, being short-staffed during peak hours, or a disagreement with a colleague — and how you resolved it?");
+
+      // Custom questions from Employer
+      customQ.forEach(q => {
+        questionsList.push(isVi
+          ? `Đây là câu hỏi từ phía Nhà tuyển dụng: ${q}`
+          : `This is a question from the Employer: ${q}`);
+      });
+
+      // Last real question: Salary & Work Expectations
+      questionsList.push(isVi
+        ? "Tuyệt vời. Cuối cùng, bạn có mong muốn gì về mức lương hoặc chế độ đãi ngộ, và bạn có thể bắt đầu đi làm từ khi nào?"
+        : "Great. Lastly, what are your expectations regarding salary or benefits, and when would you be available to start?");
+
+      setMockQuestions(questionsList);
+
+      const initialQuestion = questionsList[0];
       setInterviewMessages([{
         text: initialQuestion,
         isMe: false,
@@ -3366,44 +3445,20 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         const nextTimeStr = new Date().toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
 
         const isVi = language === 'vi';
+        const questionIndex = interviewQuestionCount; // 1-indexed current, maps to next question in array
 
-        if (interviewQuestionCount === 1) {
-          const nextQuestion = isVi
-            ? "Cảm ơn phần giới thiệu của bạn. Trước khi đi vào các câu hỏi chuyên sâu, bạn có thể chia sẻ một chút về nhiệm vụ hàng ngày bạn thích làm nhất ở công việc cũ không?"
-            : "Thank you for the introduction. Before we go deeper, could you share a bit about what daily task you enjoyed doing the most at your previous job?";
-
+        if (questionIndex < mockQuestions.length) {
+          // There are more questions to ask
+          const nextQuestion = mockQuestions[questionIndex];
           setInterviewMessages(prev => [...prev, {
             text: nextQuestion,
             isMe: false,
             time: nextTimeStr
           }]);
-          setInterviewQuestionCount(2);
-          speakVietnamese(nextQuestion);
-        } else if (interviewQuestionCount === 2) {
-          const nextQuestion = isVi
-            ? "Cảm ơn câu trả lời của bạn. Bây giờ, bạn có thể chia sẻ thêm về cách bạn giải quyết một tình huống khách hàng phàn nàn hoặc gặp khó khăn khi làm việc nhóm không?"
-            : "Thank you for your answer. Now, could you share how you handle a customer complaint or a difficult situation when working in a team?";
-
-          setInterviewMessages(prev => [...prev, {
-            text: nextQuestion,
-            isMe: false,
-            time: nextTimeStr
-          }]);
-          setInterviewQuestionCount(3);
-          speakVietnamese(nextQuestion);
-        } else if (interviewQuestionCount === 3) {
-          const nextQuestion = isVi
-            ? "Tuyệt vời. Cuối cùng, bạn có mong muốn gì về mức lương hoặc chế độ đãi ngộ, và bạn có thể bắt đầu đi làm từ khi nào?"
-            : "Great. Lastly, what are your expectations regarding salary or benefits, and when would you be available to start?";
-
-          setInterviewMessages(prev => [...prev, {
-            text: nextQuestion,
-            isMe: false,
-            time: nextTimeStr
-          }]);
-          setInterviewQuestionCount(4);
+          setInterviewQuestionCount(questionIndex + 1);
           speakVietnamese(nextQuestion);
         } else {
+          // All questions answered — finish interview
           setInterviewFinished(true);
           exitFullscreenMode();
           const score = Math.floor(Math.random() * 15) + 75; // Score 75-89

@@ -50,7 +50,7 @@ INTERVIEW_REPORT_SCHEMA = {
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
-MAX_BODY_BYTES = 100_000
+MAX_BODY_BYTES = 3_500_000
 MAX_TEXT_LENGTH = 8_000
 
 
@@ -388,8 +388,13 @@ def _candidate_claims(event):
             ]
 
     normalized = {str(group).lower() for group in groups}
-    profile_role = str(claims.get("profile") or "").lower()
-    if "candidate" not in normalized and profile_role != "candidate":
+    roles = set()
+    for key in ["custom:role", "role", "profile", "userRole"]:
+        val = claims.get(key)
+        if val:
+            roles.add(str(val).lower())
+
+    if "candidate" not in normalized and not roles.intersection({"candidate"}):
         raise RequestError(403, "FORBIDDEN", "Only candidates can analyze a CV.")
     return claims
 
@@ -412,8 +417,13 @@ def _employer_claims(event):
             ]
 
     normalized = {str(group).lower() for group in groups}
-    profile_role = str(claims.get("profile") or "").lower()
-    if "employer" not in normalized and profile_role != "employer" and "admin" not in normalized:
+    roles = set()
+    for key in ["custom:role", "role", "profile", "userRole"]:
+        val = claims.get(key)
+        if val:
+            roles.add(str(val).lower())
+
+    if "employer" not in normalized and not roles.intersection({"employer", "admin"}) and "admin" not in normalized:
         raise RequestError(403, "FORBIDDEN", "Only employers can request candidate recommendations.")
     return claims
 
@@ -423,7 +433,7 @@ def _parse_body(event):
     if event.get("isBase64Encoded"):
         raise RequestError(400, "INVALID_BODY", "Base64 request bodies are not supported.")
     if len(raw_body.encode("utf-8")) > MAX_BODY_BYTES:
-        raise RequestError(413, "PAYLOAD_TOO_LARGE", "The CV payload is too large.")
+        raise RequestError(413, "PAYLOAD_TOO_LARGE", "The request payload is too large.")
     try:
         body = json.loads(raw_body)
     except (TypeError, json.JSONDecodeError):
@@ -662,6 +672,9 @@ content_quality and job_relevance must be integers from 0 to 100.
 If there is no target job, judge job_relevance against the candidate's stated title and
 use an empty missing_skills list when missing skills cannot be justified.
 Suggested skills must be grounded in existing CV evidence or clearly relevant to the target job.
+
+For `experience_suggestions`, provide a list of specific, actionable tips to improve each work experience description entry in the CV (e.g. adding specific responsibilities, achievements, or metrics). Ideally, provide one suggestion string corresponding to each experience entry. If experiences are empty, return general tips for this section.
+For `education_suggestions`, provide a list of specific tips to improve each education entry in the CV (e.g. adding GPA, relevant coursework, or certification detail). Ideally, provide one suggestion string corresponding to each education entry. If educations are empty, return general tips for this section.
 """.strip()
 
 
@@ -1230,6 +1243,13 @@ Lưu ý: Không được tự tiện thay đổi hoặc bỏ qua câu hỏi này
 
 [Nội dung câu hỏi cho lượt này]:
 Ở bước (3), dựa vào CV của ứng viên và bản mô tả công việc (JD), hãy đặt MỘT câu hỏi phỏng vấn kỹ thuật hoặc tình huống chuyên môn thực tế và sâu sắc để thử thách năng lực của ứng viên.
+"""
+        elif question == "Situation Handling Question":
+            return f"""
+{preamble}
+
+[Nội dung câu hỏi cho lượt này]:
+Ở bước (3), hãy đặt MỘT câu hỏi về kinh nghiệm xử lý tình huống khó hoặc giải quyết sự cố thực tế trong công việc F&B (ví dụ: đối phó với khách hàng giận dữ/khó tính, xử lý sai sót khi phục vụ/pha chế, thiếu người trong giờ cao điểm, hoặc giải quyết xung đột với đồng nghiệp/cấp trên). Hãy yêu cầu ứng viên kể lại cách họ đã giải quyết tình huống đó và bài học rút ra.
 """
         elif question == "Salary and Work Expectations":
             return f"""
@@ -1976,7 +1996,11 @@ def lambda_handler(event, context):
             }))
             return _response(event, 200, ai_result)
 
-        claims = _candidate_claims(event)
+        # CV analyze/generate: only require authentication (valid sub), not role
+        # These endpoints operate on user-provided data and don't need role-based access control
+        claims = _claims(event)
+        if not claims.get("sub"):
+            raise RequestError(401, "UNAUTHORIZED", "Missing or invalid authentication token.")
         if path == "/cv/analyze":
             validated = validate_payload(_parse_body(event))
             result = analyze(validated, request_id)
@@ -2037,12 +2061,11 @@ def lambda_handler(event, context):
                 job_title, job_description, cv_text, custom_questions
             )
             
-            turns = ["Greeting and Self-Introduction", "Simple Experience Question", "Technical Question based on CV/JD"]
+            turns = ["Greeting and Self-Introduction", "Simple Experience Question", "Technical Question based on CV/JD", "Situation Handling Question"]
             if custom_questions:
                 for q in custom_questions:
                     turns.append(f"Custom Question: {q}")
-            else:
-                turns.append("Salary and Work Expectations")
+            turns.append("Salary and Work Expectations")
             turns.append("Candidate Questions & Wrap up")
             
             session = {

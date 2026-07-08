@@ -1499,6 +1499,8 @@ const CVTemplates = () => {
       const file = new File([pdf.output('blob')], fileName, { type: 'application/pdf' });
       await uploadCV(userId, file);
       toast.success(vi ? 'Đã tạo và lưu CV vào hồ sơ thành công!' : 'CV created and saved to your profile.');
+      // Route to the candidate profile page and scroll straight to the CV / Hồ sơ section
+      setTimeout(() => navigate('/candidate/profile', { state: { focusCv: true } }), 1200);
     } catch (error) {
       console.error('Error saving CV to profile:', error);
       const errMsg = error.message || '';

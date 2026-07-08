@@ -272,7 +272,8 @@ def submit_application(event, candidate_id, candidate_email, create_response):
             'candidateEmail': candidate_email,
             'employerId': employer_id,
             'employerEmail': employer_email,
-            'employerName': job.get('employerName') if job else employer_name,
+            # Quick jobs store the company name under 'companyName'; standard jobs under 'employerName'.
+            'employerName': (job.get('employerName') or job.get('companyName')) if job else employer_name,
             'cvUrl': cv_url,
             'cvFilename': cv_filename or 'CV.pdf',
             'status': 'pending',
@@ -618,6 +619,7 @@ def update_application_status(event, application_id, user_id, create_response):
         optional_fields = [
             'employerRating',
             'employerConfirmedAt',
+            'employerName',
             'candidateRating',
             'candidateConfirmed',
             'candidateConfirmedAt',

@@ -951,6 +951,49 @@ const PublicJobListing = () => {
     return date.toLocaleDateString('vi-VN');
   };
 
+  // Salary: dot-separated thousands + VNĐ unit (falls back to raw text like "Thỏa thuận")
+  const formatSalaryDisplay = (val) => {
+    if (val == null || val === '') return '';
+    const digits = String(val).replace(/[^\d]/g, '');
+    if (!digits) return String(val);
+    return Number(digits).toLocaleString('vi-VN') + ' VNĐ';
+  };
+
+  // Job type: show Vietnamese labels (e.g. "Bán thời gian" instead of "part-time")
+  const formatJobType = (val) => {
+    if (!val) return '';
+    const key = String(val).toLowerCase().replace(/\s+/g, '-').trim();
+    const mapVi = {
+      'part-time': 'Bán thời gian',
+      'parttime': 'Bán thời gian',
+      'full-time': 'Toàn thời gian',
+      'fulltime': 'Toàn thời gian',
+      'freelance': 'Tự do',
+      'internship': 'Thực tập',
+      'contract': 'Hợp đồng',
+      'temporary': 'Thời vụ',
+      'seasonal': 'Thời vụ'
+    };
+    const mapEn = {
+      'part-time': 'Part-time',
+      'parttime': 'Part-time',
+      'full-time': 'Full-time',
+      'fulltime': 'Full-time'
+    };
+    return (language === 'vi' ? mapVi : mapEn)[key] || val;
+  };
+
+  // Work date: format ISO "YYYY-MM-DD" to "DD/MM/YYYY"; leave day-of-week lists untouched
+  const formatWorkDate = (val) => {
+    if (!val) return '';
+    const s = String(val).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+    const d = new Date(s);
+    if (!isNaN(d.getTime()) && /\d{4}/.test(s)) return d.toLocaleDateString('vi-VN');
+    return val;
+  };
+
   return (
     <PageWrapper>
       <Hero>
@@ -1286,16 +1329,16 @@ const PublicJobListing = () => {
                     <InfoItem $isDark={isDarkMode}><MapPin size={15} /><span>{selectedJob.location}</span></InfoItem>
                   )}
                   {selectedJob.salary && (
-                    <InfoItem $isDark={isDarkMode}><DollarSign size={15} /><span>{typeof selectedJob.salary === 'number' ? selectedJob.salary.toLocaleString('vi-VN') + ' VNĐ' : selectedJob.salary}</span></InfoItem>
+                    <InfoItem $isDark={isDarkMode}><DollarSign size={15} /><span>{formatSalaryDisplay(selectedJob.salary)}</span></InfoItem>
                   )}
                   {selectedJob.workHours && (
                     <InfoItem $isDark={isDarkMode}><Clock size={15} /><span>{selectedJob.workHours}</span></InfoItem>
                   )}
                   {selectedJob.workDays && (
-                    <InfoItem $isDark={isDarkMode}><Calendar size={15} /><span>{selectedJob.workDays}</span></InfoItem>
+                    <InfoItem $isDark={isDarkMode}><Calendar size={15} /><span>{formatWorkDate(selectedJob.workDays)}</span></InfoItem>
                   )}
                   {selectedJob.jobType && (
-                    <InfoItem $isDark={isDarkMode}><Briefcase size={15} /><span>{selectedJob.jobType}</span></InfoItem>
+                    <InfoItem $isDark={isDarkMode}><Briefcase size={15} /><span>{formatJobType(selectedJob.jobType)}</span></InfoItem>
                   )}
                   {selectedJob._type === 'urgent' && (
                     <InfoItem $isDark={isDarkMode}><Zap size={15} /><span style={{ color: '#f59e0b' }}>{language === 'vi' ? 'Tuyển gấp' : 'Urgent Hiring'}</span></InfoItem>

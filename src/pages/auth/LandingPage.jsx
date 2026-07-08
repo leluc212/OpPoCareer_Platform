@@ -2953,6 +2953,17 @@ const LandingPage = ({ children }) => {
     }
   };
 
+  // "Tạo CV bằng AI" items: go straight to the CV builder. If not a logged-in candidate,
+  // send to candidate login with a redirect back to the CV creation page.
+  const handleCreateCVAction = (e) => {
+    if (e) e.preventDefault();
+    if (isAuthenticated && user?.role === 'candidate') {
+      navigate('/candidate/cv-templates');
+    } else {
+      navigate('/login?redirect=/candidate/cv-templates&role=candidate');
+    }
+  };
+
   // Employer actions require login as employer
   const handleEmployerAction = (e) => {
     e.preventDefault();
@@ -3215,10 +3226,6 @@ const LandingPage = ({ children }) => {
                       <Building2 />
                       {language === 'vi' ? 'Danh sách nhà tuyển dụng' : 'Employer Directory'}
                     </CVTemplateItem>
-                    <CVTemplateItem to="/companies/top-companies" $isDark={isDarkMode}>
-                      <Star />
-                      {language === 'vi' ? 'Nhà tuyển dụng' : 'Top Employers'}
-                    </CVTemplateItem>
                   </DropdownSection>
                 </DropdownMenu>
               )}
@@ -3264,19 +3271,19 @@ const LandingPage = ({ children }) => {
                         {language === 'vi' ? 'Tạo CV bằng AI' : 'Create CV with AI'}
                         <ArrowRight />
                       </GreenSectionTitle>
-                      <CVTemplateItem onClick={handleCVAction}>
+                      <CVTemplateItem onClick={handleCreateCVAction}>
                         <Briefcase />
                         {language === 'vi' ? 'Nhân viên pha chế' : 'Barista'}
                       </CVTemplateItem>
-                      <CVTemplateItem onClick={handleCVAction}>
+                      <CVTemplateItem onClick={handleCreateCVAction}>
                         <Briefcase />
                         {language === 'vi' ? 'Lập trình viên' : 'Developer'}
                       </CVTemplateItem>
-                      <CVTemplateItem onClick={handleCVAction}>
+                      <CVTemplateItem onClick={handleCreateCVAction}>
                         <Briefcase />
                         {language === 'vi' ? 'Nhân viên kế toán' : 'Accountant'}
                       </CVTemplateItem>
-                      <CVTemplateItem onClick={handleCVAction}>
+                      <CVTemplateItem onClick={handleCreateCVAction}>
                         <Briefcase />
                         {language === 'vi' ? 'Chuyên viên marketing' : 'Marketing Specialist'}
                       </CVTemplateItem>

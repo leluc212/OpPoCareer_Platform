@@ -4,7 +4,7 @@ import styled, { keyframes } from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import Modal from '../../components/Modal';
 import { Button, Input, TextArea, Select, FormGroup, Label } from '../../components/FormElements';
-import { Save, ArrowLeft, AlertCircle, Briefcase, Clock, ClipboardList, Plus, Trash2, Sparkles, Loader2, UploadCloud, CheckCircle2, AlertTriangle, FileText, X } from 'lucide-react';
+import { Save, ArrowLeft, AlertCircle, Briefcase, Clock, ClipboardList, Plus, Trash2, Sparkles, Loader2, UploadCloud, CheckCircle2, AlertTriangle, FileText, X, Info } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import jobPostService from '../../services/jobPostService';
 import employerProfileService from '../../services/employerProfileService';
@@ -929,6 +929,7 @@ const PostJob = () => {
     .join(' | ');
 
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showAiInfoModal, setShowAiInfoModal] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState('');
   const [workHoursList, setWorkHoursList] = useState([createWorkHourSlot(false)]);
   const [loadingAi, setLoadingAi] = useState(false);
@@ -1574,8 +1575,8 @@ const PostJob = () => {
             <GuidelinesHeader>
               <h2>
                 {language === 'vi'
-                  ? '💡 Hướng dẫn & Tính năng hỗ trợ tuyển dụng thông minh'
-                  : '💡 Guides & Smart Recruiting Support Features'}
+                  ? 'Hướng dẫn & Tính năng hỗ trợ tuyển dụng thông minh'
+                  : 'Guides & Smart Recruiting Support Features'}
               </h2>
               <p>
                 {language === 'vi'
@@ -1917,12 +1918,23 @@ const PostJob = () => {
                       <label htmlFor="isAiScreeningEnabled" style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer', flex: 1 }}>
                         <span style={{ fontWeight: '700', fontSize: '15px', color: '#4C1D95', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Sparkles size={16} color="#8b5cf6" />
-                          {language === 'vi' ? 'Chọn lọc ứng viên qua AI (Vòng 1 Sàng lọc CV & Vòng 2 Phỏng vấn)' : 'Screen Candidates with AI (Round 1 CV & Round 2 Interview)'}
+                          {language === 'vi' ? 'Chọn lọc ứng viên qua AI (Phỏng vấn)' : 'Screen Candidates with AI (Interview)'}
+                          <button
+                            type="button"
+                            aria-label={language === 'vi' ? 'Xem mô tả chức năng AI' : 'View AI feature description'}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowAiInfoModal(true); }}
+                            style={{
+                              background: 'none', border: 'none', padding: 0, margin: 0,
+                              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', flexShrink: 0
+                            }}
+                          >
+                            <Info size={16} color="#8b5cf6" />
+                          </button>
                         </span>
                         <span style={{ fontSize: '12px', color: '#6D28D9', marginTop: '4px', fontWeight: '500' }}>
                           {language === 'vi'
-                            ? 'Kích hoạt tự động phân tích CV khi ứng tuyển và mở khóa phòng phỏng vấn chat trực tuyến với AI.'
-                            : 'Enable auto-analysis of candidate CVs and unlock the live chat interview simulator with AI.'}
+                            ? 'Kích hoạt phòng phỏng vấn ứng viên trực tuyến qua AI'
+                            : 'Enable interview candidate with AI'}
                         </span>
                       </label>
                     </div>
@@ -2221,6 +2233,51 @@ const PostJob = () => {
           </div>
         </VerificationModalContent>
       </Modal>
+
+      {/* AI Interview feature description modal */}
+      <Modal isOpen={showAiInfoModal} onClose={() => setShowAiInfoModal(false)}>
+        <div style={{ padding: '8px 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Sparkles size={22} color="#8b5cf6" />
+            </div>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#4C1D95', margin: 0 }}>
+              {language === 'vi' ? 'Chọn lọc ứng viên qua AI' : 'AI Candidate Screening'}
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', padding: '14px 16px' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
+                {language === 'vi' ? 'Vòng 1 — Chấm điểm CV (luôn bật)' : 'Round 1 — CV Scoring (always on)'}
+              </div>
+              <p style={{ fontSize: '13.5px', color: '#3F6212', lineHeight: 1.6, margin: 0 }}>
+                {language === 'vi'
+                  ? 'Mọi CV ứng tuyển vào tin tuyển dụng tiêu chuẩn đều được AI tự động phân tích và chấm điểm mức độ phù hợp — dù bạn có bật tùy chọn bên dưới hay không.'
+                  : 'Every CV submitted to a standard job is automatically analyzed and scored by AI for fit — whether or not you enable the option below.'}
+              </p>
+            </div>
+
+            <div style={{ background: '#F5F3FF', border: '1px solid #DDD6FE', borderRadius: '12px', padding: '14px 16px' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#5B21B6', marginBottom: '4px' }}>
+                {language === 'vi' ? 'Vòng 2 — Phỏng vấn AI (tùy chọn này)' : 'Round 2 — AI Interview (this option)'}
+              </div>
+              <p style={{ fontSize: '13.5px', color: '#6D28D9', lineHeight: 1.6, margin: 0 }}>
+                {language === 'vi'
+                  ? 'Khi bật, ứng viên có CV được bạn duyệt sẽ tham gia thêm một buổi phỏng vấn chat trực tuyến với AI. Bạn có thể thêm câu hỏi riêng để AI hỏi ứng viên. Điểm phỏng vấn sẽ hiển thị trong hồ sơ ứng viên để bạn tham khảo khi ra quyết định.'
+                  : 'When enabled, candidates whose CV you approve take an additional live AI chat interview. You can add custom questions for the AI to ask. Interview scores appear in the candidate profile to support your decision.'}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+            <Button $variant="primary" onClick={() => setShowAiInfoModal(false)}>
+              {language === 'vi' ? 'Đã hiểu' : 'Got it'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
     </DashboardLayout>
   );

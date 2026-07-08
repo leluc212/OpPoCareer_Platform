@@ -3407,9 +3407,12 @@ const Applications = () => {
           }
         }
 
-        // Detailed work history (completed applications)
+        // Detailed work history — only completed applications that actually have an employer review
+        // (consistent with the candidate profile view). Uses Number() because the backend serializes
+        // DynamoDB Decimal ratings as strings.
         const workHistory = candidateApps
-          .filter(a => a.status === 'completed' || a.status === 'completed_pending_candidate')
+          .filter(a => (a.status === 'completed' || a.status === 'completed_pending_candidate')
+            && a.employerRating && Number.isFinite(Number(a.employerRating.overall)))
           .map(a => {
             const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
             return {
@@ -3424,11 +3427,11 @@ const Applications = () => {
 
         // Reviews list
         const reviews = candidateApps
-          .filter(a => a.employerRating && typeof a.employerRating.overall === 'number')
+          .filter(a => a.employerRating && Number.isFinite(Number(a.employerRating.overall)))
           .map(a => {
             const job = finalAllJobs.find(j => (j.idJob || j.id || j.jobID) === a.jobId);
             return {
-              rating: a.employerRating.overall,
+              rating: Number(a.employerRating.overall),
               comment: a.employerRating.comment || '',
               employerName: job?.employerName || job?.companyName || a.employerName || a.companyName || '---',
               position: job?.title || a.jobTitle || '---',

@@ -707,6 +707,38 @@ const ErrorMsg = styled.p`
   font-weight: 500;
 `;
 
+const ConfirmDetailsTable = styled.div`
+  width: 100%;
+  background: #fffbeb;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1.5px solid #fde68a;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+`;
+
+const ConfirmRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13.5px;
+  padding: 4px 0;
+  
+  .label {
+    color: #64748b;
+    font-weight: 500;
+  }
+  
+  .value {
+    font-weight: 700;
+    color: #1e293b;
+  }
+`;
+
 const Wallet = () => {
   const { language } = useLanguage();
   const [balance, setBalance] = useState(0);
@@ -725,6 +757,7 @@ const Wallet = () => {
 
   // Withdraw Modal States
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawStep, setWithdrawStep] = useState(1); // 1: Fill form, 2: Review details
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawBankName, setWithdrawBankName] = useState('');
   const [withdrawAccountNumber, setWithdrawAccountNumber] = useState('');
@@ -1054,7 +1087,7 @@ const Wallet = () => {
                 <ActionButton
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowWithdrawModal(true)}
+                  onClick={() => { setWithdrawStep(1); setShowWithdrawModal(true); }}
                 >
                   <ArrowUpRight />
                   {language === 'vi' ? 'Rút Tiền' : 'Withdraw'}
@@ -1225,7 +1258,9 @@ const Wallet = () => {
             onClick={e => e.stopPropagation()}
           >
             <ModalHeader>
-              <h3>{language === 'vi' ? 'Yêu cầu Rút tiền' : 'Withdraw Funds'}</h3>
+              <h3>{withdrawStep === 1 
+                ? (language === 'vi' ? 'Yêu cầu Rút tiền' : 'Withdraw Funds')
+                : (language === 'vi' ? 'Xác nhận thông tin' : 'Confirm Details')}</h3>
               <button onClick={() => !withdrawLoading && setShowWithdrawModal(false)}>&times;</button>
             </ModalHeader>
 
@@ -1243,68 +1278,121 @@ const Wallet = () => {
               </div>
             ) : (
               <ModalBody>
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Chọn Ngân Hàng' : 'Select Bank'}</Label>
-                  <Input
-                    type="text"
-                    placeholder={language === 'vi' ? 'Nhập tên ngân hàng (Ví dụ: Vietcombank, MB Bank...)' : 'Enter bank name (e.g. Vietcombank, MB Bank...)'}
-                    value={withdrawBankName}
-                    onChange={e => setWithdrawBankName(e.target.value)}
-                    disabled={withdrawLoading}
-                  />
-                </FormGroup>
+                {withdrawStep === 1 ? (
+                  <>
+                    <FormGroup>
+                      <Label>{language === 'vi' ? 'Chọn Ngân Hàng' : 'Select Bank'}</Label>
+                      <Input
+                        type="text"
+                        placeholder={language === 'vi' ? 'Nhập tên ngân hàng (Ví dụ: Vietcombank, MB Bank...)' : 'Enter bank name (e.g. Vietcombank, MB Bank...)'}
+                        value={withdrawBankName}
+                        onChange={e => setWithdrawBankName(e.target.value)}
+                        disabled={withdrawLoading}
+                      />
+                    </FormGroup>
 
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Số Tài Khoản' : 'Account Number'}</Label>
-                  <Input
-                    type="text"
-                    placeholder={language === 'vi' ? 'Nhập số tài khoản thụ hưởng' : 'Enter account number'}
-                    value={withdrawAccountNumber}
-                    onChange={e => setWithdrawAccountNumber(e.target.value.replace(/\D/g, ''))}
-                    disabled={withdrawLoading}
-                  />
-                </FormGroup>
+                    <FormGroup>
+                      <Label>{language === 'vi' ? 'Số Tài Khoản' : 'Account Number'}</Label>
+                      <Input
+                        type="text"
+                        placeholder={language === 'vi' ? 'Nhập số tài khoản thụ hưởng' : 'Enter account number'}
+                        value={withdrawAccountNumber}
+                        onChange={e => setWithdrawAccountNumber(e.target.value.replace(/\D/g, ''))}
+                        disabled={withdrawLoading}
+                      />
+                    </FormGroup>
 
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Tên Tài Khoản (viết hoa không dấu)' : 'Account Name (uppercase, no accent)'}</Label>
-                  <Input
-                    type="text"
-                    placeholder="E.g. NGUYEN VAN A"
-                    value={withdrawAccountName}
-                    onChange={e => setWithdrawAccountName(e.target.value.toUpperCase())}
-                    disabled={withdrawLoading}
-                  />
-                </FormGroup>
+                    <FormGroup>
+                      <Label>{language === 'vi' ? 'Tên Tài Khoản (viết hoa không dấu)' : 'Account Name (uppercase, no accent)'}</Label>
+                      <Input
+                        type="text"
+                        placeholder="E.g. NGUYEN VAN A"
+                        value={withdrawAccountName}
+                        onChange={e => setWithdrawAccountName(e.target.value.toUpperCase())}
+                        disabled={withdrawLoading}
+                      />
+                    </FormGroup>
 
-                <FormGroup>
-                  <Label>{language === 'vi' ? 'Số Tiền Rút (VND)' : 'Withdraw Amount (VND)'}</Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder={language === 'vi' ? 'Nhập số tiền cần rút' : 'Enter amount to withdraw'}
-                    // Store raw digits in state, display with thousand separators for readability
-                    value={withdrawAmount ? Number(withdrawAmount).toLocaleString('vi-VN') : ''}
-                    onChange={e => setWithdrawAmount(e.target.value.replace(/\D/g, ''))}
-                    disabled={withdrawLoading}
-                  />
-                  <span style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', display: 'block' }}>
-                    {language === 'vi' ? `Số dư khả dụng: ${balance.toLocaleString('vi-VN')} VND` : `Available balance: ${balance.toLocaleString('vi-VN')} VND`}
-                  </span>
-                  {Number(withdrawAmount) > balance && (
-                    <ErrorMsg>{language === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!'}</ErrorMsg>
-                  )}
-                </FormGroup>
+                    <FormGroup>
+                      <Label>{language === 'vi' ? 'Số Tiền Rút (VND)' : 'Withdraw Amount (VND)'}</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder={language === 'vi' ? 'Nhập số tiền cần rút' : 'Enter amount to withdraw'}
+                        // Store raw digits in state, display with thousand separators for readability
+                        value={withdrawAmount ? Number(withdrawAmount).toLocaleString('vi-VN') : ''}
+                        onChange={e => setWithdrawAmount(e.target.value.replace(/\D/g, ''))}
+                        disabled={withdrawLoading}
+                      />
+                      <span style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', display: 'block' }}>
+                        {language === 'vi' ? `Số dư khả dụng: ${balance.toLocaleString('vi-VN')} VND` : `Available balance: ${balance.toLocaleString('vi-VN')} VND`}
+                      </span>
+                      {Number(withdrawAmount) > balance && (
+                        <ErrorMsg>{language === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!'}</ErrorMsg>
+                      )}
+                    </FormGroup>
 
-                <Button
-                  $variant="primary"
-                  style={{ width: '100%', marginTop: '8px' }}
-                  onClick={handleConfirmWithdraw}
-                  disabled={withdrawLoading || !withdrawBankName || !withdrawAccountNumber || !withdrawAccountName || !withdrawAmount || Number(withdrawAmount) > balance || Number(withdrawAmount) <= 0}
-                >
-                  {withdrawLoading
-                    ? (language === 'vi' ? 'Đang gửi...' : 'Submitting...')
-                    : (language === 'vi' ? 'Xác Nhận Rút Tiền' : 'Confirm Withdrawal')}
-                </Button>
+                    <Button
+                      $variant="primary"
+                      style={{ width: '100%', marginTop: '8px' }}
+                      onClick={() => setWithdrawStep(2)}
+                      disabled={!withdrawBankName || !withdrawAccountNumber || !withdrawAccountName || !withdrawAmount || Number(withdrawAmount) > balance || Number(withdrawAmount) <= 0}
+                    >
+                      {language === 'vi' ? 'Xác Nhận Rút Tiền' : 'Confirm Withdrawal'}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                      <p style={{ fontSize: '13.5px', color: '#6B7280', fontWeight: '500', lineHeight: '1.5' }}>
+                        {language === 'vi' 
+                          ? 'Vui lòng kiểm tra lại tất cả thông tin giao dịch dưới đây trước khi gửi yêu cầu lên Admin.' 
+                          : 'Please check all the transaction details below before sending the request to Admin.'}
+                      </p>
+                    </div>
+                    <ConfirmDetailsTable>
+                      <ConfirmRow>
+                        <span className="label">{language === 'vi' ? 'Số tiền rút' : 'Withdraw Amount'}</span>
+                        <span className="value" style={{ color: '#059669', fontSize: '15px', fontWeight: '800' }}>
+                          {Number(withdrawAmount).toLocaleString('vi-VN')} VND
+                        </span>
+                      </ConfirmRow>
+                      <ConfirmRow>
+                        <span className="label">{language === 'vi' ? 'Ngân hàng thụ hưởng' : 'Recipient Bank'}</span>
+                        <span className="value" style={{ fontWeight: '600' }}>{withdrawBankName}</span>
+                      </ConfirmRow>
+                      <ConfirmRow>
+                        <span className="label">{language === 'vi' ? 'Số tài khoản' : 'Account Number'}</span>
+                        <span className="value" style={{ fontWeight: '600' }}>{withdrawAccountNumber}</span>
+                      </ConfirmRow>
+                      <ConfirmRow>
+                        <span className="label">{language === 'vi' ? 'Tên chủ tài khoản' : 'Account Holder'}</span>
+                        <span className="value" style={{ fontWeight: '700', textTransform: 'uppercase' }}>{withdrawAccountName}</span>
+                      </ConfirmRow>
+                    </ConfirmDetailsTable>
+
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                      <Button
+                        $variant="secondary"
+                        style={{ flex: 1 }}
+                        onClick={() => setWithdrawStep(1)}
+                        disabled={withdrawLoading}
+                      >
+                        {language === 'vi' ? 'Quay lại' : 'Back'}
+                      </Button>
+                      <Button
+                        $variant="primary"
+                        style={{ flex: 2 }}
+                        onClick={handleConfirmWithdraw}
+                        disabled={withdrawLoading || !withdrawBankName || !withdrawAccountNumber || !withdrawAccountName || !withdrawAmount || Number(withdrawAmount) > balance || Number(withdrawAmount) <= 0}
+                      >
+                        {withdrawLoading
+                          ? (language === 'vi' ? 'Đang gửi...' : 'Submitting...')
+                          : (language === 'vi' ? 'Gửi yêu cầu cho Admin' : 'Send Request to Admin')}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </ModalBody>
             )}
           </ModalContent>

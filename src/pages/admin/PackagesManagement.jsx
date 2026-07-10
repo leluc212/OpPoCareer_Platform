@@ -30,6 +30,9 @@ import {
   Save,
   Sparkles
 } from 'lucide-react';
+import {
+  ChartCard,
+} from '../../components/UnifiedChart';
 
 const PageContainer = styled.div``;
 
@@ -96,13 +99,7 @@ const ChartsContainer = styled.div`
   }
 `;
 
-const ChartCard = styled.div`
-  background: ${props => props.theme.colors.bgLight};
-  padding: 24px;
-  border-radius: ${props => props.theme.borderRadius.lg};
-  box-shadow: ${props => props.theme.shadows.sm};
-  border: 1px solid ${props => props.theme.colors.border};
-`;
+// ─── Chart local helpers (PackagesManagement only) ─────────────
 
 const ChartTitle = styled.h3`
   font-size: 18px;

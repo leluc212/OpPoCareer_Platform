@@ -434,8 +434,6 @@ const ExperienceManagement = ({ embedded = false }) => {
                 <Th>{vi ? 'Ứng viên' : 'Candidate'}</Th>
                 <Th>{vi ? 'Công ty' : 'Company'}</Th>
                 <Th>{vi ? 'Vị trí' : 'Position'}</Th>
-                <Th>{vi ? 'Thời gian' : 'Period'}</Th>
-                <Th>{vi ? 'Ảnh' : 'Images'}</Th>
                 <Th>{vi ? 'Ngày gửi' : 'Submitted'}</Th>
                 <Th>{vi ? 'Trạng thái' : 'Status'}</Th>
                 <Th>{vi ? 'Thao tác' : 'Actions'}</Th>
@@ -445,7 +443,12 @@ const ExperienceManagement = ({ embedded = false }) => {
               {filtered.map(it => (
                 <Tr key={it.experienceId}>
                   <Td>
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>{it.candidateId?.slice(0, 8)}…</span>
+                    <div>
+                      <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace' }}>{it.candidateId?.slice(0, 8)}…</span>
+                      {it.candidateName && (
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginTop: 2 }}>{it.candidateName}</div>
+                      )}
+                    </div>
                   </Td>
                   <Td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -454,20 +457,6 @@ const ExperienceManagement = ({ embedded = false }) => {
                     </div>
                   </Td>
                   <Td>{it.jobTitle}</Td>
-                  <Td>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#475569' }}>
-                      <Calendar size={13} />
-                      {fmtPeriod(it)}
-                    </span>
-                  </Td>
-                  <Td>
-                    {(it.proofImages?.length || 0) > 0 ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-                        <Image size={14} color="#3b82f6" />
-                        {it.proofImages.length}
-                      </span>
-                    ) : '—'}
-                  </Td>
                   <Td style={{ fontSize: 13, color: '#64748b' }}>{fmtDate(it.createdAt)}</Td>
                   <Td>
                     <StatusBadge $s={it.status}>
@@ -514,6 +503,12 @@ const ExperienceManagement = ({ embedded = false }) => {
                 <span className="lbl">{vi ? 'Ứng viên ID' : 'Candidate ID'}</span>
                 <span className="val" style={{ fontFamily: 'monospace', fontSize: 13 }}>{selected.candidateId}</span>
               </DetailRow>
+              {selected.candidateName && (
+                <DetailRow>
+                  <span className="lbl">{vi ? 'Tên ứng viên' : 'Candidate Name'}</span>
+                  <span className="val"><strong>{selected.candidateName}</strong></span>
+                </DetailRow>
+              )}
               <DetailRow>
                 <span className="lbl">{vi ? 'Công ty' : 'Company'}</span>
                 <span className="val"><strong>{selected.companyName}</strong></span>

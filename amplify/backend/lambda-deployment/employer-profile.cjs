@@ -21,6 +21,8 @@ const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
  * - foundedYear: String - Year company was founded
  * - description: String - Company description/about
  * - companyLogo: String - Base64 encoded logo image or S3 URL
+ * - companyVideo: String - YouTube or video URL for company intro (optional)
+ * - companyImages: List - Array of base64/S3 URL images showcasing the company (optional, max 5)
  * - taxCode: String - Business tax code (locked after first set)
  * - businessLicense: String - Business license number (locked after first set)
  * - createdAt: String - ISO timestamp when profile was created
@@ -159,6 +161,174 @@ class EmployerProfileService {
   }
 
   /**
+   * Submit pending profile changes (for admin review)
+   * This DOES NOT update the main profile immediately
+   */
+  async submitPendingChanges(userId, changes) {
+    const crypto = require('crypto');
+    const timestamp = new Date().toISOString();
+    
+    const pendingChanges = {
+      requestId: crypto.randomUUID(),
+      employerId: userId,
+      changes: changes,
+      status: 'PENDING_REVIEW',
+      submittedAt: timestamp
+    };
+
+    // Store pending changes in the profile
+    await dynamoDb.update({
+      TableName: tableName,
+      Key: { userId },
+      UpdateExpression: 'SET pendingProfileChanges = :pending',
+      ExpressionAttributeValues: {
+        ':pending': pendingChanges
+      },
+      ReturnValues: 'ALL_NEW'
+    });
+
+    return pendingChanges;
+  }
+
+  /**
+   * Get all pending profile change requests (Admin only)
+   */
+  async getAllPendingChanges() {
+    const params = {
+      TableName: tableName,
+      FilterExpression: 'attribute_exists(pendingProfileChanges) AND pendingProfileChanges.#status = :status',
+      ExpressionAttributeNames: {
+        '#status': 'status'
+      },
+      ExpressionAttributeValues: {
+        ':status': 'PENDING_REVIEW'
+      }
+    };
+
+    const result = await dynamoDb.scan(params);
+    
+    return {
+      requests: result.Items || []
+    };
+  }
+
+  /**
+   * Approve pending profile changes (Admin only)
+   * Applies the pending changes to the main profile
+   */
+  async approvePendingChanges(userId) {
+    // Get current profile with pending changes
+    const profile = await this.getProfile(userId);
+    
+    if (!profile.pendingProfileChanges || profile.pendingProfileChanges.status !== 'PENDING_REVIEW') {
+      throw new Error('No pending changes to approve');
+    }
+
+    const timestamp = new Date().toISOString();
+    const changes = profile.pendingProfileChanges.changes;
+    
+    console.log('Approving changes for userId:', userId);
+    console.log('Changes keys:', Object.keys(changes || {}));
+    
+    // Build update expression to apply changes and mark as approved
+    const updateExpressions = [];
+    const expressionAttributeNames = {};
+    const expressionAttributeValues = {};
+    
+    let index = 0;
+    for (const [key, value] of Object.entries(changes)) {
+      // Skip internal fields that shouldn't be overwritten directly
+      if (key === 'userId' || key === 'createdAt' || key === 'pendingProfileChanges') {
+        console.log(`Skipping protected field: ${key}`);
+        continue;
+      }
+      
+      updateExpressions.push(`#field${index} = :value${index}`);
+      expressionAttributeNames[`#field${index}`] = key;
+      expressionAttributeValues[`:value${index}`] = value;
+      index++;
+    }
+
+    // Update pendingProfileChanges status to APPROVED
+    const pendingIndex = index;
+    updateExpressions.push(`#field${pendingIndex}.#status = :approved`);
+    updateExpressions.push(`#field${pendingIndex}.#approvedAt = :timestamp`);
+    expressionAttributeNames[`#field${pendingIndex}`] = 'pendingProfileChanges';
+    expressionAttributeNames['#status'] = 'status';
+    expressionAttributeNames['#approvedAt'] = 'approvedAt';
+    expressionAttributeValues[':approved'] = 'APPROVED';
+    expressionAttributeValues[':timestamp'] = timestamp;
+
+    // Add updatedAt
+    const updatedAtIndex = pendingIndex + 1;
+    updateExpressions.push(`#field${updatedAtIndex} = :updatedAt`);
+    expressionAttributeNames[`#field${updatedAtIndex}`] = 'updatedAt';
+    expressionAttributeValues[':updatedAt'] = timestamp;
+
+    // Recalculate profile completion with new values
+    const completionIndex = updatedAtIndex + 1;
+    updateExpressions.push(`#field${completionIndex} = :completion`);
+    expressionAttributeNames[`#field${completionIndex}`] = 'profileCompletion';
+    expressionAttributeValues[':completion'] = this.calculateCompletion({
+      ...profile,
+      ...changes
+    });
+
+    const params = {
+      TableName: tableName,
+      Key: { userId },
+      UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: 'ALL_NEW'
+    };
+
+    try {
+      const result = await dynamoDb.update(params);
+      console.log('✅ Changes approved successfully');
+      return result.Attributes;
+    } catch (error) {
+      console.error('❌ DynamoDB update failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reject pending profile changes (Admin only)
+   * Marks the pending changes as rejected without applying them
+   */
+  async rejectPendingChanges(userId, rejectionReason = '') {
+    // Get current profile
+    const profile = await this.getProfile(userId);
+    
+    if (!profile.pendingProfileChanges || profile.pendingProfileChanges.status !== 'PENDING_REVIEW') {
+      throw new Error('No pending changes to reject');
+    }
+
+    const timestamp = new Date().toISOString();
+
+    // Update pendingProfileChanges status to REJECTED
+    await dynamoDb.update({
+      TableName: tableName,
+      Key: { userId },
+      UpdateExpression: 'SET pendingProfileChanges.#status = :rejected, pendingProfileChanges.#rejectedAt = :timestamp, pendingProfileChanges.#reason = :reason',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+        '#rejectedAt': 'rejectedAt',
+        '#reason': 'rejectionReason'
+      },
+      ExpressionAttributeValues: {
+        ':rejected': 'REJECTED',
+        ':timestamp': timestamp,
+        ':reason': rejectionReason
+      },
+      ReturnValues: 'ALL_NEW'
+    });
+
+    return { success: true, message: 'Changes rejected' };
+  }
+
+  /**
    * Delete employer profile (soft delete)
    */
   async deleteProfile(userId) {
@@ -206,14 +376,6 @@ class EmployerProfileService {
   }
 
   /**
-   * List ALL employer profiles (Admin only - no filters)
-   */
-  async listAllProfiles() {
-    const result = await dynamoDb.scan({ TableName: tableName });
-    return { profiles: result.Items || [] };
-  }
-
-  /**
    * List all active employer profiles
    */
   async listProfiles(limit = 50, lastEvaluatedKey = null) {
@@ -235,6 +397,21 @@ class EmployerProfileService {
     return {
       profiles: result.Items || [],
       lastEvaluatedKey: result.LastEvaluatedKey
+    };
+  }
+
+  /**
+   * List ALL employer profiles (Admin only - no filters)
+   */
+  async listAllProfiles() {
+    const params = {
+      TableName: tableName
+    };
+
+    const result = await dynamoDb.scan(params);
+    
+    return {
+      profiles: result.Items || []
     };
   }
 
@@ -303,149 +480,6 @@ class EmployerProfileService {
     const result = await dynamoDb.update(params);
     return result.Attributes;
   }
-
-  /**
-   * Submit pending profile changes (for admin review)
-   * This DOES NOT update the main profile immediately
-   */
-  async submitPendingChanges(userId, changes) {
-    const { v4: uuidv4 } = require('uuid');
-    const timestamp = new Date().toISOString();
-
-    const pendingChanges = {
-      requestId: uuidv4(),
-      employerId: userId,
-      changes: changes,
-      status: 'PENDING_REVIEW',
-      submittedAt: timestamp
-    };
-
-    await dynamoDb.update({
-      TableName: tableName,
-      Key: { userId },
-      UpdateExpression: 'SET pendingProfileChanges = :pending',
-      ExpressionAttributeValues: {
-        ':pending': pendingChanges
-      },
-      ReturnValues: 'ALL_NEW'
-    });
-
-    return pendingChanges;
-  }
-
-  /**
-   * Get all pending profile change requests (Admin only)
-   */
-  async getAllPendingChanges() {
-    const params = {
-      TableName: tableName,
-      FilterExpression: 'attribute_exists(pendingProfileChanges) AND pendingProfileChanges.#status = :status',
-      ExpressionAttributeNames: {
-        '#status': 'status'
-      },
-      ExpressionAttributeValues: {
-        ':status': 'PENDING_REVIEW'
-      }
-    };
-
-    const result = await dynamoDb.scan(params);
-
-    return {
-      requests: result.Items || []
-    };
-  }
-
-  /**
-   * Approve pending profile changes (Admin only)
-   * Applies the pending changes to the main profile
-   */
-  async approvePendingChanges(userId) {
-    const profile = await this.getProfile(userId);
-
-    if (!profile.pendingProfileChanges || profile.pendingProfileChanges.status !== 'PENDING_REVIEW') {
-      throw new Error('No pending changes to approve');
-    }
-
-    const timestamp = new Date().toISOString();
-    const changes = profile.pendingProfileChanges.changes;
-
-    const updateExpressions = [];
-    const expressionAttributeNames = {};
-    const expressionAttributeValues = {};
-
-    let index = 0;
-    for (const [key, value] of Object.entries(changes)) {
-      updateExpressions.push(`#field${index} = :value${index}`);
-      expressionAttributeNames[`#field${index}`] = key;
-      expressionAttributeValues[`:value${index}`] = value;
-      index++;
-    }
-
-    // Mark pendingProfileChanges as APPROVED
-    const pendingIndex = index;
-    updateExpressions.push(`#field${pendingIndex}.#status = :approved`);
-    updateExpressions.push(`#field${pendingIndex}.#approvedAt = :timestamp`);
-    expressionAttributeNames[`#field${pendingIndex}`] = 'pendingProfileChanges';
-    expressionAttributeNames['#status'] = 'status';
-    expressionAttributeNames['#approvedAt'] = 'approvedAt';
-    expressionAttributeValues[':approved'] = 'APPROVED';
-    expressionAttributeValues[':timestamp'] = timestamp;
-
-    const updatedAtIndex = pendingIndex + 1;
-    updateExpressions.push(`#field${updatedAtIndex} = :updatedAt`);
-    expressionAttributeNames[`#field${updatedAtIndex}`] = 'updatedAt';
-    expressionAttributeValues[':updatedAt'] = timestamp;
-
-    const completionIndex = updatedAtIndex + 1;
-    updateExpressions.push(`#field${completionIndex} = :completion`);
-    expressionAttributeNames[`#field${completionIndex}`] = 'profileCompletion';
-    expressionAttributeValues[':completion'] = this.calculateCompletion({ ...profile, ...changes });
-
-    const params = {
-      TableName: tableName,
-      Key: { userId },
-      UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-      ExpressionAttributeNames: expressionAttributeNames,
-      ExpressionAttributeValues: expressionAttributeValues,
-      ReturnValues: 'ALL_NEW'
-    };
-
-    const result = await dynamoDb.update(params);
-    return result.Attributes;
-  }
-
-  /**
-   * Reject pending profile changes (Admin only)
-   */
-  async rejectPendingChanges(userId, rejectionReason = '') {
-    const profile = await this.getProfile(userId);
-
-    if (!profile.pendingProfileChanges || profile.pendingProfileChanges.status !== 'PENDING_REVIEW') {
-      throw new Error('No pending changes to reject');
-    }
-
-    const timestamp = new Date().toISOString();
-
-    await dynamoDb.update({
-      TableName: tableName,
-      Key: { userId },
-      UpdateExpression: 'SET pendingProfileChanges.#status = :rejected, pendingProfileChanges.#rejectedAt = :timestamp, pendingProfileChanges.#reason = :reason',
-      ExpressionAttributeNames: {
-        '#status': 'status',
-        '#rejectedAt': 'rejectedAt',
-        '#reason': 'rejectionReason'
-      },
-      ExpressionAttributeValues: {
-        ':rejected': 'REJECTED',
-        ':timestamp': timestamp,
-        ':reason': rejectionReason
-      },
-      ReturnValues: 'ALL_NEW'
-    });
-
-    return { success: true, message: 'Changes rejected' };
-  }
 }
 
 module.exports = new EmployerProfileService();
-

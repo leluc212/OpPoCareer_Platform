@@ -762,6 +762,28 @@ function CandidateNotifications() {
         ? (() => { try { return JSON.parse(notif.data); } catch { return {}; } })()
         : (notif.data || {});
 
+      // Xử lý thông báo EMPLOYER_APPROVED (NTD duyệt CV, ứng viên vào phỏng vấn AI)
+      if (notif.type === 'employer_cv_approved' && notifData?.jobId) {
+        // Kiểm tra hạn phỏng vấn 2 ngày
+        if (notifData.interviewDeadline) {
+          const deadline = new Date(notifData.interviewDeadline);
+          if (new Date() > deadline) {
+            // Đã quá hạn — không cho vào trang phỏng vấn
+            alert('Rất tiếc, thời gian phỏng vấn đã hết hạn. Vui lòng liên hệ nhà tuyển dụng hoặc tìm cơ hội khác.');
+            return;
+          }
+        }
+        // Còn hạn — điều hướng vào trang phỏng vấn AI
+        navigate('/candidate/jobs?tab=standard', {
+          state: {
+            selectedJobId: notifData.jobId,
+            applicationId: notifData.applicationId || null,
+            openInterview: true
+          }
+        });
+        return;
+      }
+
       // Handle CV-approved notification (type: 'success') — redirect to AI interview
       // Also catches old notifications that still have '/candidate/dashboard' or '/candidate/jobs' as actionUrl
       const isCvApproved = (notif.type === 'success' || notif.type === 'CV_ACCEPTED') && notifData?.jobId;
@@ -959,12 +981,18 @@ function CandidateNotifications() {
                 style={{ textAlign: 'center', padding: '60px 20px' }}
               >
                 <Bell size={48} style={{ color: '#CBD5E1', marginBottom: '16px' }} />
-                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: '#E2E8F0' }}>
-                  {language === 'vi' ? 'Không có thông báo' : 'No notifications'}
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: '#334155' }}>
+                  {filter === 'unread'
+                    ? (language === 'vi' ? 'Bạn đã đọc hết các thông báo' : 'You have read all notifications')
+                    : filter === 'system'
+                    ? (language === 'vi' ? 'Bạn đã đọc hết các thông báo hệ thống' : 'You have read all system notifications')
+                    : (language === 'vi' ? 'Không có thông báo' : 'No notifications')}
                 </h3>
                 <p style={{ color: '#94A3B8', fontSize: '14px' }}>
                   {filter === 'unread'
-                    ? (language === 'vi' ? 'Bạn đã đọc tất cả thông báo' : 'You have read all notifications')
+                    ? (language === 'vi' ? 'Không có thông báo chưa đọc nào cần xử lý.' : 'There are no unread notifications.')
+                    : filter === 'system'
+                    ? (language === 'vi' ? 'Không có thông báo hệ thống nào.' : 'There are no system notifications.')
                     : (language === 'vi' ? 'Không có thông báo nào trong mục này' : 'No notifications in this category')}
                 </p>
               </Card>

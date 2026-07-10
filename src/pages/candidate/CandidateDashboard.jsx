@@ -2711,7 +2711,7 @@ const CandidateDashboard = () => {
                       </button>
                     </KycPromptCard>
                   ) : realRecommendedJobs.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignItems: 'stretch' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignItems: 'start' }}>
                       {realRecommendedJobs.map((job, index) => {
                         // Helpers
                         const formatDate = (d) => {
@@ -2730,7 +2730,10 @@ const CandidateDashboard = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4 + index * 0.1 }}
                             whileHover={{ scale: 1.02 }}
-                            onClick={() => navigate({ pathname: '/candidate/jobs', search: `?tab=${job.isQuick ? 'shift' : 'standard'}` }, { state: { selectedJobId: job.id } })}
+                            onClick={() => job.isQuick
+                              ? navigate({ pathname: '/candidate/jobs', search: '?tab=shift' }, { state: { selectedJobId: job.id } })
+                              : navigate(`/candidate/jobs/${job.id}`)
+                            }
                           >
                             {/* Header: logo + title + company + urgent badge */}
                             <JobHeader>

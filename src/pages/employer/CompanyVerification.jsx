@@ -529,10 +529,10 @@ const CompanyVerification = () => {
         }
         break;
       case 1:
-        if (!step2Data.companyName || !step2Data.taxCode || !step2Data.industry) {
+        if (!step2Data.companyName || !step2Data.taxCode || !step2Data.industry || !step2Data.description?.trim()) {
           alert(language === 'vi'
-            ? 'Vui lòng điền đầy đủ thông tin doanh nghiệp'
-            : 'Please fill in all required company information');
+            ? 'Vui lòng điền đầy đủ thông tin doanh nghiệp (bao gồm Mô tả công ty)'
+            : 'Please fill in all required company information (including Company Description)');
           return false;
         }
         break;
@@ -710,7 +710,7 @@ const CompanyVerification = () => {
               </InfoBox>
 
               <FormGroup>
-                <Label>{language === 'vi' ? 'Tải lên Giấy phép kinh doanh' : 'Upload Business License'} *</Label>
+                <Label>{language === 'vi' ? 'Tải lên Giấy phép kinh doanh' : 'Upload Business License'} <span className="req">*</span></Label>
                 <FileUploadArea
                   $hasFile={!!step1Data.businessLicense}
                   onClick={() => document.getElementById('businessLicenseFile').click()}
@@ -776,7 +776,7 @@ const CompanyVerification = () => {
 
               <FormGrid>
                 <FormGroup style={{ gridColumn: '1 / -1' }}>
-                  <Label>{language === 'vi' ? 'Tên công ty' : 'Company Name'} *</Label>
+                  <Label>{language === 'vi' ? 'Tên công ty' : 'Company Name'} <span className="req">*</span></Label>
                   <Input
                     type="text"
                     value={step2Data.companyName}
@@ -787,7 +787,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Mã số thuế' : 'Tax Code'} *</Label>
+                  <Label>{language === 'vi' ? 'Mã số thuế' : 'Tax Code'} <span className="req">*</span></Label>
                   <Input
                     type="text"
                     value={step2Data.taxCode}
@@ -810,7 +810,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Lĩnh vực' : 'Industry'} *</Label>
+                  <Label>{language === 'vi' ? 'Lĩnh vực' : 'Industry'} <span className="req">*</span></Label>
                   <Select
                     value={step2Data.industry}
                     onChange={(e) => setStep2Data({ ...step2Data, industry: e.target.value })}
@@ -840,7 +840,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Quy mô công ty' : 'Company Size'} *</Label>
+                  <Label>{language === 'vi' ? 'Quy mô công ty' : 'Company Size'} <span className="req">*</span></Label>
                   <Select
                     value={step2Data.companySize}
                     onChange={(e) => setStep2Data({ ...step2Data, companySize: e.target.value })}
@@ -875,7 +875,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup style={{ gridColumn: '1 / -1' }}>
-                  <Label>{language === 'vi' ? 'Mô tả công ty' : 'Company Description'}</Label>
+                  <Label>{language === 'vi' ? 'Mô tả công ty' : 'Company Description'} <span className="req">*</span></Label>
                   <TextArea
                     value={step2Data.description}
                     onChange={(e) => setStep2Data({ ...step2Data, description: e.target.value })}
@@ -883,6 +883,7 @@ const CompanyVerification = () => {
                       ? 'Mô tả ngắn gọn về công ty, lĩnh vực hoạt động, sản phẩm/dịch vụ chính...'
                       : 'Brief description about your company, business field, main products/services...'}
                     rows={5}
+                    required
                   />
                 </FormGroup>
               </FormGrid>
@@ -917,7 +918,7 @@ const CompanyVerification = () => {
               </FormTitle>
 
               <FormGroup style={{ gridColumn: '1 / -1' }}>
-                <Label>{language === 'vi' ? 'Địa chỉ trụ sở chính' : 'Head Office Address'} *</Label>
+                <Label>{language === 'vi' ? 'Địa chỉ trụ sở chính' : 'Head Office Address'} <span className="req">*</span></Label>
                 <TextArea
                   value={step4Data.address}
                   onChange={(e) => setStep4Data({ ...step4Data, address: e.target.value })}
@@ -931,7 +932,7 @@ const CompanyVerification = () => {
 
               <FormGrid>
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Số điện thoại' : 'Phone Number'} *</Label>
+                  <Label>{language === 'vi' ? 'Số điện thoại' : 'Phone Number'} <span className="req">*</span></Label>
                   <Input
                     type="tel"
                     value={step4Data.phone}
@@ -942,7 +943,7 @@ const CompanyVerification = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Email liên hệ' : 'Contact Email'} * <span style={{ fontWeight: 400, color: 'var(--color-text-light, #888)', fontSize: '0.85em' }}>({language === 'vi' ? 'tối đa 3 email' : 'max 3 emails'})</span></Label>
+                  <Label>{language === 'vi' ? 'Email liên hệ' : 'Contact Email'} <span className="req">*</span> <span style={{ fontWeight: 400, color: 'var(--color-text-light, #888)', fontSize: '0.85em', textTransform: 'none' }}>({language === 'vi' ? 'tối đa 3 email' : 'max 3 emails'})</span></Label>
                   {step4Data.emails.map((email, index) => (
                     <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: index < step4Data.emails.length - 1 ? '8px' : 0 }}>
                       <Input

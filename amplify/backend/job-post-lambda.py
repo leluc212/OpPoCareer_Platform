@@ -235,6 +235,89 @@ def lambda_handler(event, context):
                     # Fail open only if DynamoDB lookup itself errors — still create the job
             # ─────────────────────────────────────────────────────────────────
 
+            # ── Backend validation: required fields ───────────────────────────
+            missing = [f for f in ['title', 'location', 'workDays', 'workHours', 'description'] if not str(body.get(f, '')).strip()]
+            if missing:
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'message': f'Thiếu thông tin bắt buộc: {", ".join(missing)}'
+                    })
+                }
+
+            if not str(body.get('requirements', '')).strip():
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'message': 'Vui lòng nhập yêu cầu công việc.'
+                    })
+                }
+            # ─────────────────────────────────────────────────────────────────
+
+            # ── Backend validation: shift duration >= 60 min ──────────────────
+            work_hours_str = str(body.get('workHours', ''))
+            if work_hours_str:
+                import re as _re
+                slots = [s.strip() for s in _re.split(r'\s*\|\s*', work_hours_str) if s.strip()]
+                for slot_idx, slot in enumerate(slots):
+                    # Extract time portion (after '@' if present)
+                    time_part = slot.split('@')[-1].strip() if '@' in slot else slot.strip()
+                    times = [t.strip() for t in time_part.split('-')]
+                    if len(times) == 2:
+                        try:
+                            sh, sm = map(int, times[0].split(':'))
+                            eh, em = map(int, times[1].split(':'))
+                            start_min = sh * 60 + sm
+                            end_min = eh * 60 + em
+                            # Handle overnight: end <= start means next day
+                            duration = end_min - start_min if end_min > start_min else (end_min + 1440) - start_min
+                            if duration < 60:
+                                return {
+                                    'statusCode': 400,
+                                    'headers': headers,
+                                    'body': json.dumps({
+                                        'success': False,
+                                        'message': f'Ca làm việc {slot_idx + 1}: Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.'
+                                    })
+                                }
+                        except Exception:
+                            pass  # Skip unparseable time formats
+            # ─────────────────────────────────────────────────────────────────
+
+            # ── Backend validation: post must be created >= 3h before first shift ──
+            work_days = str(body.get('workDays', ''))
+            if work_days and work_hours_str:
+                import re as _re
+                from datetime import timezone
+                now_utc = datetime.now(timezone.utc)
+                # Extract first startTime from workHours string
+                first_time_match = _re.search(r'(\d{1,2}:\d{2})\s*-', work_hours_str)
+                if first_time_match:
+                    first_start = first_time_match.group(1)
+                    try:
+                        shift_dt_str = f"{work_days}T{first_start}:00+07:00"  # Vietnam timezone (UTC+7)
+                        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                        vn_offset = _td(hours=7)
+                        vn_tz = _tz(_td(hours=7))
+                        shift_dt = _dt.fromisoformat(shift_dt_str)
+                        hours_until = (shift_dt - now_utc) / _td(hours=1)
+                        if hours_until < 3:
+                            return {
+                                'statusCode': 400,
+                                'headers': headers,
+                                'body': json.dumps({
+                                    'success': False,
+                                    'message': 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
+                                })
+                            }
+                    except Exception as dt_err:
+                        print(f"Warning: could not parse shift datetime for 3h check: {dt_err}")
+            # ─────────────────────────────────────────────────────────────────
+
             # Simple fallback for missing fields in demo
             item = {
                 'idJob': body.get('idJob', f"JOB-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"),

@@ -119,8 +119,8 @@ const BrandRow = styled.div`
 `;
 const BrandLogoBox = styled.div`
   background: #fff;
-  border-radius: 14px;
-  padding: 12px 18px;
+  border-radius: 16px;
+  padding: 10px 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -128,8 +128,8 @@ const BrandLogoBox = styled.div`
   margin-bottom: 0;
 `;
 const LogoImg = styled.img`
-  height: 36px;
-  width: 36px;
+  height: 48px;
+  width: 48px;
   object-fit: contain;
   display: block;
 `;
@@ -147,11 +147,12 @@ const Headline = styled.h1`
   font-size: clamp(26px, 2.8vw, 38px);
   font-weight: 900;
   line-height: 1.28;
-  letter-spacing: -1.2px;
+  letter-spacing: 0px;
   color: #fff;
   margin-bottom: 14px;
   position: relative;
   z-index: 2;
+  text-transform: uppercase;
 
   .highlight {
     display: inline-block;
@@ -167,13 +168,14 @@ const Headline = styled.h1`
 `;
 
 const Sub = styled.p`
-  font-size: 14px;
-  color: rgba(255,255,255,0.68);
-  line-height: 1.65;
-  max-width: 380px;
+  font-size: 15px;
+  color: rgba(255,255,255,0.80);
+  line-height: 1.7;
+  max-width: 100%;
   margin-bottom: 24px;
   position: relative;
   z-index: 2;
+  text-align: center;
 `;
 
 /* Feature card — floating glassmorphism card */
@@ -1150,14 +1152,12 @@ const EmployerRegister = () => {
         </BrandRow>
 
         <Headline>
-          Tuyển dụng<br />
-          <span className="highlight">part-time</span><br />
-          chưa bao giờ dễ hơn
+          Tuyển dụng <span className="highlight">part-time</span> chưa bao giờ dễ hơn
         </Headline>
 
         <Sub>
-          Kết nối với hàng ngàn ứng viên năng động — đăng tin trong 2 phút,
-          nhận hồ sơ ngay hôm nay. Miễn phí, không giới hạn.
+          Kết nối với hàng ngàn ứng viên năng động.<br />
+          Đăng tin trong 2 phút, nhận hồ sơ ngay hôm nay. Miễn phí không giới hạn.
         </Sub>
 
         {/* Feature glass card */}

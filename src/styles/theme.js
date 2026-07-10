@@ -49,6 +49,10 @@ export const GlobalStyles = createGlobalStyle`
     color: inherit;
   }
 
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
   ul {
     list-style: none;
   }

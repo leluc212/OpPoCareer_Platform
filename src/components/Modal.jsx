@@ -24,7 +24,7 @@ const ModalContainer = styled(motion.div)`
   background: ${props => props.theme.colors.bgLight};
   border-radius: 24px;
   width: 100%;
-  max-width: ${props => props.$size === 'large' ? '780px' : '560px'};
+  max-width: ${props => props.$size === 'large' ? '1000px' : props.$size === 'xlarge' ? '1200px' : '560px'};
   max-height: 90vh;
   overflow: hidden;
   display: flex;

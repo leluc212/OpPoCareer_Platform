@@ -340,6 +340,24 @@ def handle_get_all_experiences(event):
     status_filter = qs.get('status', 'all')
     items = scan_all_experiences(status_filter)
     items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+
+    # Enrich each item with candidateName from CandidateProfiles
+    candidate_ids = list({item.get('candidateId') for item in items if item.get('candidateId')})
+    name_map = {}
+    if candidate_ids:
+        cand_table = dynamodb.Table(CANDIDATE_TABLE)
+        for cid in candidate_ids:
+            try:
+                result = cand_table.get_item(Key={'userId': cid})
+                profile = result.get('Item', {})
+                name_map[cid] = profile.get('fullName') or profile.get('username') or 'Ứng viên'
+            except Exception:
+                name_map[cid] = 'Ứng viên'
+
+    for item in items:
+        cid = item.get('candidateId', '')
+        item['candidateName'] = name_map.get(cid, 'Ứng viên')
+
     return resp(200, {'success': True, 'data': items, 'total': len(items)})
 
 

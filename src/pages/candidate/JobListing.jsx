@@ -1219,24 +1219,25 @@ const ConfirmationContent = styled.div`
 `;
 
 const MainLayout = styled.div`
-  display: grid;
-  grid-template-columns: 280px 1fr;
+  /* Flexbox stretch: 2 cột tự động cao bằng nhau theo cột cao hơn */
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   gap: 24px;
-  align-items: start;
-  
-  @media (max-width: 1280px) {
-    grid-template-columns: 260px 1fr;
-  }
 
   @media (max-width: 1024px) {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 `;
 
-/* ── Cột trái chứa VerticalAdBanner ── */
+/* ── Cột trái chứa VerticalAdBanner — flex-stretch mode ── */
 const SideVerticalBanner = styled(motion.aside)`
   width: 280px;
-  align-self: flex-start;
+  flex-shrink: 0;
+  /* Không dùng align-self: start nữa — để stretch hoạt động */
+  /* Truyền chiều cao xuống VerticalAdBanner */
+  display: flex;
+  flex-direction: column;
 
   @media (max-width: 1280px) {
     width: 260px;
@@ -1315,6 +1316,7 @@ const HorizontalFilterBar = styled(motion.div)`
 
 const FilterDropdown = styled.div`
   position: relative;
+  padding-bottom: 4px; /* lấp gap để chuột không rời wrapper khi di xuống menu */
 `;
 
 const FilterDropdownTrigger = styled.button`
@@ -1346,7 +1348,7 @@ const FilterDropdownTrigger = styled.button`
 
 const FilterDropdownMenu = styled.div`
   position: absolute;
-  top: calc(100% + 4px);
+  top: 100%;
   left: 0;
   min-width: 200px;
   background: ${props => props.theme.colors.bgLight};
@@ -1413,7 +1415,11 @@ const ClearButton = styled.button`
   }
 `;
 
-const MainContent = styled.div``;
+const MainContent = styled.div`
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+`;
 
 /* Banner ngang trên mobile — chỉ hiện khi SideVerticalBanner bị ẩn */
 const MobileBannerSection = styled.div`
@@ -1551,6 +1557,7 @@ const JobsGrid = styled.div`
   grid-template-columns: ${props => props.$viewMode === 'list' ? '1fr' : 'repeat(2, 1fr)'};
   gap: 12px;
   align-items: stretch;
+  width: 100%;
   
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
@@ -1655,6 +1662,8 @@ const JobCardWrapper = styled(motion.div)`
   display: flex;
   flex-direction: column;
   box-shadow: ${props => props.$quickBoosted ? '0 4px 20px rgba(16, 185, 129, 0.15)' : (props.$highlighted ? `0 0 20px ${props.theme.colors.primary}30` : 'none')};
+  width: 100%;
+  box-sizing: border-box;
   
   &::before {
     content: '';
@@ -4275,9 +4284,12 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
   const handleJobClick = (jobId) => {
     const job = allJobs.find(j => j.id === jobId);
-    if (job) {
-      recordJobView(job);
-    }
+    if (!job) return;
+    recordJobView(job);
+    // Quick/shift jobs không có trang chi tiết riêng — giữ nguyên flow cũ (open modal)
+    if (job.isQuickJob || job.category === 'shift') return;
+    // Standard jobs → navigate sang trang chi tiết
+    navigate(`/candidate/jobs/${job.idJob}`);
   };
 
   const getJobApplicationStatus = (jobId) => {
@@ -4319,6 +4331,16 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
             message: language === 'vi'
               ? 'Bạn đã hoàn thành phỏng vấn AI cho công việc này.'
               : 'You have already completed the AI interview for this job.'
+          });
+          return;
+        } else if ((existingApp.status === 'approved' || existingApp.status === 'accepted') && !job.isAiScreeningEnabled) {
+          // CV approved but job has no AI screening — show success info modal
+          setErrorModal({
+            show: true,
+            type: 'success',
+            message: language === 'vi'
+              ? 'CV của bạn đã được nhà tuyển dụng duyệt cho công việc này.'
+              : 'Your CV has been approved by the employer for this job.'
           });
           return;
         } else if ((existingApp.status === 'approved' || existingApp.status === 'accepted') && job.isAiScreeningEnabled) {
@@ -4405,17 +4427,27 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         // Robust application search with type conversion
         const existingApp = candidateApplications.find(app => String(app.jobId) === String(jobId));
 
-        // Only auto-open if approved, has AI screening enabled, and hasn't done interview yet
-        if (existingApp && (existingApp.status === 'approved' || existingApp.status === 'accepted') && job.isAiScreeningEnabled && !existingApp.aiInterviewAudio && !existingApp.aiInterviewAudioKey) {
-          console.log('🎙️ Auto-opening AI interview modal from notification');
+        if (existingApp) {
+          // Nếu đã hoàn thành phỏng vấn AI → điều hướng đến trang tổng quan ứng tuyển
+          if (existingApp.aiInterviewAudio || existingApp.aiInterviewAudioKey) {
+            console.log('🎙️ Interview already done — redirecting to dashboard');
+            window.history.replaceState({}, document.title);
+            navigate('/candidate/dashboard', { replace: true });
+            return;
+          }
 
-          // Clear the state first to prevent re-opening
-          window.history.replaceState({}, document.title);
+          // Only auto-open if approved, has AI screening enabled, and hasn't done interview yet
+          if ((existingApp.status === 'approved' || existingApp.status === 'accepted') && job.isAiScreeningEnabled) {
+            console.log('🎙️ Auto-opening AI interview modal from notification');
 
-          // Trigger interview modal after brief delay so page is ready
-          setTimeout(() => {
-            handleApplyJob(job, true);
-          }, 800);
+            // Clear the state first to prevent re-opening
+            window.history.replaceState({}, document.title);
+
+            // Trigger interview modal after brief delay so page is ready
+            setTimeout(() => {
+              handleApplyJob(job, true);
+            }, 800);
+          }
         }
       }
     }
@@ -5153,11 +5185,23 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     }
 
     // Filter by F&B model
+    const fbModelAliases = {
+      'cafe': ['cafe', 'cà phê', 'ca phe', 'café', 'coffee', 'cf'],
+      'trà sữa': ['trà sữa', 'tra sua', 'milk tea', 'bubble tea', 'trà chanh'],
+      'bakery': ['bakery', 'bánh', 'tiệm bánh', 'banh', 'pastry'],
+      'nhà hàng': ['nhà hàng', 'nha hang', 'restaurant'],
+      'quán ăn': ['quán ăn', 'quan an', 'bình dân', 'binh dan', 'ăn uống'],
+      'bar': ['bar', 'pub', 'lounge', 'club', 'nightclub'],
+      'fast food': ['fast food', 'thức ăn nhanh', 'thuc an nhanh', 'fastfood'],
+      'buffet': ['buffet', 'tự chọn', 'tu chon'],
+      'khách sạn': ['khách sạn', 'khach san', 'hotel', 'resort'],
+    };
     if (selectedFbModels.length > 0) {
       result = result.filter(job =>
         selectedFbModels.some(model => {
           const haystack = `${job.title || ''} ${job.company || ''} ${(job.tags || []).join(' ')} ${job.description || ''}`.toLowerCase();
-          return haystack.includes(model.toLowerCase());
+          const aliases = fbModelAliases[model] || [model];
+          return aliases.some(alias => haystack.includes(alias.toLowerCase()));
         })
       );
     }
@@ -7286,15 +7330,20 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               <div style={{
                 width: '80px',
                 height: '80px',
-                background: 'linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%)',
+                background: errorModal.type === 'success'
+                  ? 'linear-gradient(135deg, #d1fae5 0%, #10b981 100%)'
+                  : 'linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%)',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 margin: '0 auto 24px',
-                fontSize: '40px'
+                fontSize: errorModal.type === 'success' ? '44px' : '40px',
+                color: errorModal.type === 'success' ? 'white' : 'inherit',
+                fontWeight: errorModal.type === 'success' ? '700' : 'normal',
+                lineHeight: 1
               }}>
-                ⚠️
+                {errorModal.type === 'success' ? '✓' : '⚠️'}
               </div>
               <h3 style={{
                 fontSize: '22px',

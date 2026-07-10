@@ -33,7 +33,8 @@ import {
   Bookmark,
   Building2,
   Clock,
-  Image
+  Image,
+  ArrowLeftRight
 } from 'lucide-react';
 
 const SidebarContainer = styled.aside`
@@ -352,7 +353,8 @@ const Sidebar = ({ role, onHoverChange }) => {
     posts: 0,
     wallet: 0,
     notifications: 0,
-    reports: 0
+    reports: 0,
+    changeRequests: 0
   });
 
   useEffect(() => {
@@ -383,15 +385,8 @@ const Sidebar = ({ role, onHoverChange }) => {
           const pendingVerificationCount = employers.filter(e => e.verificationStatus === 'pending' && !e.isVerified).length;
           const pendingQuickJobCount = employers.filter(e => e.quickJobStatus === 'pending').length;
           
-          const pendingChanges = (changeRequestsRaw || []).filter(app => {
-            const crStatus = app.changeRequestStatus || app.change_request_status ||
-              (app.changeRequest && app.changeRequest.status) ||
-              (app.change_request && app.change_request.status) ||
-              (app.extraFields && (app.extraFields.changeRequestStatus || app.extraFields.change_request_status));
-            const isCancelled = crStatus && String(crStatus).toLowerCase() === 'cancelled';
-            return !isCancelled;
-          });
-          const pendingChangeCount = pendingChanges.filter(r => !r.changeRequestStatus || r.changeRequestStatus === 'pending').length;
+          // pendingChangeCount = đúng theo server: chỉ status === 'pending_change'
+          const pendingChangeCount = (changeRequestsRaw || []).filter(r => r.status === 'pending_change').length;
           
           const employersCount = pendingVerificationCount + pendingChangeCount + pendingQuickJobCount;
           const candidatesCount = unreadNotifs.filter(n => n.actionUrl === '/admin/candidates' && n.type !== 'candidate_withdrawal_request').length;
@@ -438,7 +433,8 @@ const Sidebar = ({ role, onHoverChange }) => {
               posts: postsCount,
               wallet: walletCount,
               notifications: totalUnreadCount,
-              reports: reportsCount
+              reports: reportsCount,
+              changeRequests: pendingChangeCount
             });
             setUnreadNotifications(totalUnreadCount);
           }
@@ -504,14 +500,25 @@ const Sidebar = ({ role, onHoverChange }) => {
 
         // 3. Fetch applications counts for employer
         if (role === 'employer') {
-          // Standard Job Applications Count (status === 'pending')
+          // Helper to check if application has been viewed by employer
+          const isViewedByEmployer = (applicationId) => {
+            const userId = user?.userId || user?.id || user?.email;
+            if (!userId || !applicationId) return false;
+            const viewedKey = `employer_viewed_apps_${userId}`;
+            const viewedApps = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+            return viewedApps.includes(applicationId);
+          };
+
+          // Standard Job Applications Count (status === 'pending' AND not viewed)
           const stdJobs = await jobPostService.getMyJobPosts();
           if (stdJobs && stdJobs.length > 0) {
             const stdPromises = stdJobs.map(job =>
               applicationService.getJobApplications(job.idJob).catch(() => [])
             );
             const stdAppsList = await Promise.all(stdPromises);
-            const pendingStdCount = stdAppsList.flat().filter(app => app.status === 'pending').length;
+            const pendingStdCount = stdAppsList.flat().filter(app => 
+              app.status === 'pending' && !isViewedByEmployer(app.applicationId)
+            ).length;
             if (active) setStandardPendingCount(pendingStdCount);
           } else {
             if (active) setStandardPendingCount(0);
@@ -549,12 +556,14 @@ const Sidebar = ({ role, onHoverChange }) => {
 
     window.addEventListener('newFeedbackSubmitted', handleUpdate);
     window.addEventListener('feedbackStatusChanged', handleUpdate);
+    window.addEventListener('applicationsViewed', handleUpdate);
 
     return () => {
       active = false;
       clearInterval(intervalId);
       window.removeEventListener('newFeedbackSubmitted', handleUpdate);
       window.removeEventListener('feedbackStatusChanged', handleUpdate);
+      window.removeEventListener('applicationsViewed', handleUpdate);
     };
   }, [user, role]);
 
@@ -680,6 +689,7 @@ const Sidebar = ({ role, onHoverChange }) => {
     { section: t.sidebar.platform || 'Management', items: [
       { to: '/admin/posts', icon: FileText, label: language === 'vi' ? 'Quản lý bài đăng' : 'Posts Management' },
       { to: '/admin/banners', icon: Image, label: language === 'vi' ? 'Quản lý Banner' : 'Banner Management' },
+      { to: '/admin/change-requests', icon: ArrowLeftRight, label: language === 'vi' ? 'Yêu cầu thay đổi' : 'Change Requests' },
       { to: '/admin/packages', icon: Package, label: t.sidebar.packages },
       { to: '/admin/reports', icon: BarChart3, label: t.sidebar.reports },
     ]},
@@ -726,6 +736,8 @@ const Sidebar = ({ role, onHoverChange }) => {
                   badgeCount = adminBadges.notifications;
                 } else if (link.to === '/admin/reports') {
                   badgeCount = adminBadges.reports;
+                } else if (link.to === '/admin/change-requests') {
+                  badgeCount = adminBadges.changeRequests || 0;
                 }
               } else {
                 if (link.to.endsWith('/notifications')) {

@@ -894,39 +894,21 @@ const CVTemplates = () => {
 
 
   const defaultCVData = {
-    fullName: vi ? 'Nguyễn Văn An' : 'John Doe',
-    title: vi ? 'Nhân viên kinh doanh' : 'Sales Executive',
-    email: 'nguyenvanan@email.com',
-    phone: '0901 234 567',
-    address: vi ? 'Quận 1, TP. Hồ Chí Minh' : 'District 1, HCMC',
-    website: 'linkedin.com/in/nguyenvanan',
+    fullName: '',
+    title: '',
+    email: '',
+    phone: '',
+    address: '',
+    website: '',
     avatar: null,
-    objective: vi 
-      ? 'Tìm kiếm vị trí kinh doanh để phát huy kỹ năng giao tiếp và đóng góp vào sự phát triển bền vững của công ty.'
-      : 'Seeking a sales position to leverage communication skills and contribute to sustainable company growth.',
-    skills: ['Microsoft Office', 'CRM Software', vi ? 'Đàm phán' : 'Negotiation', vi ? 'Thuyết trình' : 'Presentation', 'English B2', vi ? 'Làm việc nhóm' : 'Teamwork'],
-    languages: [vi ? 'Tiếng Việt (Bản ngữ)' : 'Vietnamese (Native)', vi ? 'Tiếng Anh (B2)' : 'English (B2)'],
+    objective: '',
+    skills: [],
+    languages: [],
     experiences: [
-      {
-        company: 'ABC Corp',
-        role: vi ? 'Nhân viên kinh doanh' : 'Sales Executive',
-        duration: vi ? '2022 – Hiện tại' : '2022 - Present',
-        description: vi ? 'Phát triển khách hàng mới, đạt 120% KPI hàng quý.' : 'Developed new clients, achieved 120% quarterly KPI.'
-      },
-      {
-        company: 'XYZ Ltd',
-        role: vi ? 'Thực tập sinh kinh doanh' : 'Sales Intern',
-        duration: '2021 – 2022',
-        description: vi ? 'Hỗ trợ đội ngũ kinh doanh, xử lý đơn hàng và chăm sóc khách hàng.' : 'Supported sales team, processed orders and handled customer care.'
-      }
+      { company: '', role: '', duration: '', description: '' }
     ],
     educations: [
-      {
-        school: vi ? 'Đại học Kinh tế TP.HCM' : 'University of Economics HCMC',
-        degree: vi ? 'Cử nhân Quản trị Kinh doanh' : 'Bachelor of Business Administration',
-        duration: '2018 – 2022',
-        description: vi ? 'GPA: 3.2/4.0. Đạt học bổng sinh viên giỏi năm 2020.' : 'GPA: 3.2/4.0. Earned merit scholarship in 2020.'
-      }
+      { school: '', degree: '', duration: '', description: '' }
     ],
     customSections: []
   };
@@ -940,14 +922,11 @@ const CVTemplates = () => {
         if (profile) {
           setCvData(prev => ({
             ...prev,
-            fullName: profile.fullName || prev.fullName,
-            email: profile.email || prev.email,
-            phone: profile.phone || prev.phone,
-            address: profile.location || prev.address,
-            title: profile.title || prev.title,
-            objective: profile.bio || prev.objective,
-            avatar: profile.profileImage || prev.avatar,
-            skills: (profile.skills && profile.skills.length > 0) ? profile.skills : prev.skills
+            fullName: profile.fullName || '',
+            email: profile.email || '',
+            phone: profile.phone || '',
+            address: profile.location || '',
+            avatar: profile.profileImage || null,
           }));
         }
       } catch (err) {
@@ -1918,7 +1897,7 @@ const CVTemplates = () => {
         <EditorHeader className="editor-header">
           <BackBtn $isDark={isDarkMode} onClick={() => setIsEditing(false)}>
             <ArrowLeft size={16} />
-            {vi ? 'Quay lại danh sách' : 'Back to List'}
+            {vi ? 'Quay lại ' : 'Back to List'}
             <span style={{ fontSize: '0.68rem', opacity: 0.5, marginLeft: 8, fontWeight: 500 }}>v1.0.4</span>
           </BackBtn>
           

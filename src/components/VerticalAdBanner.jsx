@@ -41,18 +41,21 @@ const gradientMove = keyframes`
 
 // ─── Styled Components ────────────────────────────────────────────────────────
 
+/* Wrapper: lấp đầy chiều cao SideVerticalBanner (stretch từ layout cha) */
 const Wrapper = styled.div`
-  position: sticky;
-  top: 100px;
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* Không dùng sticky — banner giờ tự cao bằng cột job */
 `;
 
-/* Outer card — bo góc, shadow nhẹ, không viền cam đậm */
+/* Outer card — kéo giãn flex:1 để lấp đầy chiều cao Wrapper */
 const CardOuter = styled.div`
   position: relative;
+  flex: 1;                  /* chiếm hết chiều cao còn lại trong Wrapper */
+  display: flex;
+  flex-direction: column;
   border-radius: 14px;
   overflow: hidden;
   background: #0f172a;
@@ -67,18 +70,18 @@ const CardOuter = styled.div`
   }
 `;
 
-/* Khung ảnh — LUÔN tỉ lệ 3:4 (dọc), bất kể ảnh gốc ngang hay dọc */
+/* Khung ảnh — flex:1 để lấp đầy chiều cao CardOuter còn lại sau InfoBar */
 const ImageFrame = styled.div`
   position: relative;
   width: 100%;
-  aspect-ratio: 3 / 4;
+  flex: 1;                  /* co giãn chiếm hết phần còn lại trong CardOuter */
+  min-height: 200px;        /* tối thiểu để badge/dots không bị xung đột */
   overflow: hidden;
   background: #0f172a;
 
-  /* Trên mobile (full-width), giới hạn chiều cao để không chiếm quá nhiều màn hình */
   @media (max-width: 1024px) {
-    aspect-ratio: unset;
-    height: 220px;
+    height: 280px;
+    flex: none;
   }
 `;
 
@@ -273,7 +276,8 @@ const NavBtn = styled.button`
 const PlaceholderCard = styled.div`
   border-radius: 14px;
   overflow: hidden;
-  aspect-ratio: 3 / 4;
+  flex: 1;                  /* lấp đầy chiều cao Wrapper, không cố định */
+  min-height: 300px;
   background: linear-gradient(160deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
   background-size: 200% 200%;
   animation: ${gradientMove} 6s ease infinite;
@@ -334,6 +338,17 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
   const [paused, setPaused] = useState(false);
   const timer = useRef(null);
 
+  // ── [DEBUG] Đo kích thước thực tế sau khi mount (stretch mode) ──
+  useEffect(() => {
+    const frame = document.querySelector('.banner-ad-image-frame');
+    const wrapper = document.querySelector('.banner-ad-wrapper');
+    if (frame && wrapper) {
+      console.log('[VERIFY-STRETCH] Banner kích thước thực tế:',
+        { wrapperH: wrapper.getBoundingClientRect().height,
+          imageFrameH: frame.getBoundingClientRect().height });
+    }
+  }, []);
+
   // Nếu không có jobs → dùng banners ảnh
   const useImageMode = jobs.length === 0 && banners.length > 0;
   const total = useImageMode ? banners.length : jobs.length;
@@ -354,6 +369,7 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
     const banner = banners[idx];
     return (
       <Wrapper
+        className="banner-ad-wrapper"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
@@ -368,9 +384,10 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.45 }}
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}
             >
-              {/* Khung dọc cố định 3:4 — ảnh ngang sẽ bị crop để fill đúng khung */}
-              <ImageFrame>
+              {/* Khung dọc — lấp đầy chiều cao card (stretch từ SideVerticalBanner) */}
+              <ImageFrame className="banner-ad-image-frame">
                 <BgImg
                   src={banner.src}
                   alt={banner.alt || 'Banner quảng cáo'}
@@ -401,7 +418,7 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
   // ── Placeholder nếu không có gì ──
   if (total === 0) {
     return (
-      <Wrapper>
+      <Wrapper className="banner-ad-wrapper">
         <PlaceholderCard>
           <PlaceholderIcon>📢</PlaceholderIcon>
           <PlaceholderTitle>Quảng cáo<br />tuyển dụng dọc</PlaceholderTitle>
@@ -420,10 +437,11 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
 
   return (
     <Wrapper
+      className="banner-ad-wrapper"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {/* Nút lên */}
+      {/* Nút lên — chỉ hiện khi có nhiều job */}
       {total > 1 && (
         <NavBtn onClick={prev} title="Job trước">
           <ChevronUp />
@@ -438,9 +456,10 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}
           >
-            {/* Khung ảnh dọc cố định 3:4 */}
-            <ImageFrame>
+            {/* Khung ảnh dọc — stretch theo chiều cao CardOuter */}
+            <ImageFrame className="banner-ad-image-frame">
               {bg ? (
                 <BgImg src={bg} alt={job.company} />
               ) : (
@@ -462,7 +481,7 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
 
               <BottomGradient />
 
-              {/* Badge "QUẢNG CÁO" / "Top Spotlight" góc trên trái */}
+              {/* Badge "Top Spotlight" góc trên trái */}
               <Badge>
                 <Sparkles />
                 Top Spotlight

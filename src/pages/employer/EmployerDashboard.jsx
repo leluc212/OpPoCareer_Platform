@@ -21,6 +21,7 @@ import { formatRelativeTime } from '../../hooks/useRelativeTime';
 import DynamicTranslate from '../../components/DynamicTranslate';
 import Modal from '../../components/Modal';
 import CompanyProfileSetupModal from '../../components/CompanyProfileSetupModal';
+import PackageExpiryModal from '../../components/PackageExpiryModal';
 import { ProfileDetailModal } from './Applications';
 import {
   Briefcase,
@@ -174,6 +175,7 @@ const ContentGrid = styled.div`
   grid-template-columns: 2fr 1fr;
   gap: 24px;
   margin-bottom: 32px;
+  align-items: stretch;
 `;
 
 const Section = styled(motion.section)`
@@ -339,7 +341,10 @@ const ApplicationMeta = styled.div`
 // ─── Quick Profile Preview Modal ──────────────────────────
 // (removed — using full ProfileDetailModal from Applications)
 
-const ActivityFeed = styled.div``;
+const ActivityFeed = styled.div`
+  overflow-y: auto;
+  max-height: 520px;
+`;
 
 const ActivityItem = styled(motion.div)`
   display: flex;
@@ -493,6 +498,61 @@ const EmployerDashboard = () => {
     if (user?.email) {
       sessionStorage.setItem(`profileModalShown_${user.email}`, '1');
     }
+  };
+
+  // ── Package Expiry Modal ───────────────────────────────────────────────────
+  const [expiryNotification, setExpiryNotification] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.userId || user.sub || user.email;
+    if (!userId) return;
+
+    // Chỉ hiện 1 lần / session để không làm phiền employer
+    const sessionKey = `pkgExpiryModalShown_${userId}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    const NOTIF_API = import.meta.env.VITE_NOTIFICATIONS_API?.replace(/\/$/, '');
+    if (!NOTIF_API) return;
+
+    let cancelled = false;
+    const fetchExpiryNotif = async () => {
+      try {
+        const res = await fetch(`${NOTIF_API}/notifications/user/${userId}?role=employer`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+
+        // Lấy notification package_expiring chưa đọc, mới nhất
+        const expiring = list
+          .filter(
+            n =>
+              n.type === 'package_expiring' &&
+              !n.read &&
+              !n.deleted &&
+              n.data?.subscriptionId
+          )
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+        if (cancelled || expiring.length === 0) return;
+
+        // Trì hoãn 1.2s sau khi dashboard load xong
+        setTimeout(() => {
+          if (!cancelled) setExpiryNotification(expiring[0]);
+        }, 1200);
+      } catch {
+        // silent
+      }
+    };
+
+    fetchExpiryNotif();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const handleCloseExpiryModal = () => {
+    const userId = user?.userId || user?.sub || user?.email;
+    if (userId) sessionStorage.setItem(`pkgExpiryModalShown_${userId}`, '1');
+    setExpiryNotification(null);
   };
 
   const [dashboardStats, setDashboardStats] = useState({
@@ -684,7 +744,10 @@ const EmployerDashboard = () => {
           totalViewsCount += (job.views || 0);
         });
 
-        // Fetch applications for ALL standard jobs - batched to avoid Lambda throttling
+        // Tổng ứng viên: dùng field applicants tích lũy từ mỗi job (giống Profile)
+        const totalApplicationsCount = allStandard.reduce((sum, j) => sum + (j.applicants || 0), 0);
+
+        // Fetch applications for ALL standard jobs - batched (dùng cho recent list và month comparison)
         const batchSize = 5;
         const appsResults = [];
         for (let i = 0; i < allStandard.length; i += batchSize) {
@@ -706,7 +769,7 @@ const EmployerDashboard = () => {
         
         setDashboardStats({
           totalJobs: allJobs.length,
-          totalApplications: allApplications.length,
+          totalApplications: totalApplicationsCount,
           totalViews: totalViewsCount,
           quickJobs: allQuick.length,
           applicationsList: allApplications
@@ -774,6 +837,23 @@ const EmployerDashboard = () => {
         });
         
         setRecentApplications(recentAppsList);
+
+        // Fetch tên thực của ứng viên (nếu chỉ có email)
+        const enriched = await Promise.all(
+          recentAppsList.map(async (app) => {
+            // Nếu candidate field trông như email → thử fetch profile
+            if (app.candidateId && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.candidate)) {
+              try {
+                const profile = await candidateProfileService.getProfile(app.candidateId);
+                if (profile?.fullName) {
+                  return { ...app, candidate: profile.fullName };
+                }
+              } catch (_) { /* ignore */ }
+            }
+            return app;
+          })
+        );
+        setRecentApplications(enriched);
 
         // Fetch Recent Activities from Notifications
         try {
@@ -979,6 +1059,13 @@ const EmployerDashboard = () => {
         isOpen={showSetupModal}
         onClose={handleCloseSetupModal}
       />
+      {expiryNotification && (
+        <PackageExpiryModal
+          notification={expiryNotification}
+          onClose={handleCloseExpiryModal}
+          onRenewed={handleCloseExpiryModal}
+        />
+      )}
       <DashboardContainer>
         {/* Welcome Banner */}
         <WelcomeBanner
@@ -1104,24 +1191,7 @@ const EmployerDashboard = () => {
             color="#1e40af"
             positive
           />
-          <StatsCard
-            title={language === 'vi' ? 'LƯỢT XEM BÀI ĐĂNG' : 'JOB POST VIEWS'}
-            value={isLoadingStats ? "..." : dashboardStats.totalViews.toString()}
-            changeText={language === 'vi' ? 'Tổng lượt xem tất cả bài đăng' : 'Total views across all posts'}
-            icon={Eye}
-            color="#0ea5e9"
-            positive
-            onClick={() => navigate('/employer/standard-jobs', { state: { section: 'posts' } })}
-          />
-          <StatsCard
-            title={language === 'vi' ? 'LƯỢT XEM HỒ SƠ CÔNG TY' : 'COMPANY PROFILE VIEWS'}
-            value={isLoadingStats ? "..." : (employerProfile?.profileViews ?? 0).toString()}
-            changeText={language === 'vi' ? 'Ứng viên đã xem hồ sơ của bạn' : 'Candidates viewed your profile'}
-            icon={Building2}
-            color="#8B5CF6"
-            positive
-            onClick={() => navigate('/employer/profile')}
-          />
+
         </StatsGrid>
 
         {/* Main Content Grid */}
@@ -1154,8 +1224,16 @@ const EmployerDashboard = () => {
                 >
                   <ApplicationHeader>
                     <CandidateInfo>
-                      <h4>{app.candidate === 'Ứng viên' ? (language === 'vi' ? 'Ứng viên' : 'Candidate') : app.candidate}</h4>
-                      <p><DynamicTranslate text={app.job} showIndicator={false} /></p>
+                      {/* Tên job (vị trí tuyển) — nổi bật trên cùng */}
+                      <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
+                        <DynamicTranslate text={app.job} showIndicator={false} />
+                      </h4>
+                      {/* Tên ứng viên — dưới job title */}
+                      <p style={{ fontSize: '13px', color: '#64748b', marginBottom: 0 }}>
+                        {app.candidate && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.candidate)
+                          ? app.candidate
+                          : (app.candidateEmail || app.candidate || (language === 'vi' ? 'Ứng viên' : 'Candidate'))}
+                      </p>
                     </CandidateInfo>
                     <ViewProfileButton onClick={() => handleViewProfile(app)}>
                       <Eye />

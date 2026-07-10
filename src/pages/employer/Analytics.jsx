@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
-import { TrendingUp, TrendingDown, Users, Eye, DollarSign, Calendar, BarChart3, PieChart, Briefcase, Download, Filter } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Eye, DollarSign, Calendar, BarChart3, PieChart, Briefcase, Download, Filter, CheckCircle } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import jobPostService from '../../services/jobPostService';
@@ -10,6 +11,25 @@ import { getJobApplications } from '../../services/applicationService';
 import applicationService from '../../services/applicationService';
 import quickJobService from '../../services/quickJobService';
 import { getWallet } from '../../services/packageCatalogService';
+import JobEfficiencyCard from '../../components/JobEfficiencyCard';
+import CvAiAnalysisCard from '../../components/CvAiAnalysisCard';
+import TopHotJobsCard from '../../components/TopHotJobsCard';
+import {
+  ChartCard,
+  ChartHeader,
+  ChartFilters,
+  ChartLegend,
+  ChartSvg,
+  ChartScrollWrapper,
+  ChartsGrid2 as ChartsGrid,
+  ChartsGrid3,
+  ProgressBar,
+  ProgressFill,
+  PieChartSvg as PieChartSVG,
+  ChartTooltip as Tooltip,
+  ChartSummaryRow,
+  ChartSummaryPill,
+} from '../../components/UnifiedChart';
 
 // ─── Page wrapper ────────────────────────────────────────────
 const PageContainer = styled(motion.div)``;
@@ -39,13 +59,13 @@ const PageIconBox = styled.div`
   width: 52px;
   height: 52px;
   border-radius: 15px;
-  background: #EFF6FF;
-  border: 1.5px solid #BFDBFE;
+  background: ${props => props.theme.colors.bgDark};
+  border: 1.5px solid ${props => props.theme.colors.border};
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  svg { width: 22px; height: 22px; color: #1e40af; }
+  svg { width: 22px; height: 22px; color: #3B82F6; }
 `;
 
 const PageTitleText = styled.div`
@@ -159,8 +179,8 @@ const StatsGrid = styled.div`
 `;
 
 const StatCard = styled(motion.div)`
-  background: #ffffff;
-  border: 1.5px solid #E8EFFF;
+  background: ${props => props.theme.colors.bgLight};
+  border: 1.5px solid ${props => props.theme.colors.border};
   border-radius: 16px;
   padding: 20px 22px;
   box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
@@ -190,7 +210,7 @@ const StatCard = styled(motion.div)`
   }
 
   &:hover {
-    border-color: ${props => props.$accent || '#BFDBFE'};
+    border-color: ${props => props.$accent || props.theme.colors.border};
     box-shadow: 0 8px 24px rgba(30, 64, 175, 0.12);
 
     &::before {
@@ -217,9 +237,9 @@ const StatHeader = styled.div`
 `;
 
 const StatIcon = styled.div`
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   background: ${props => props.$bg || '#EFF6FF'};
   border: 1.5px solid ${props => props.$border || '#BFDBFE'};
   display: flex;
@@ -279,125 +299,14 @@ const StatLabel = styled.div`
   font-weight: 500;
 `;
 
-// ─── Charts ───────────────────────────────────────────────────
-const ChartsGrid = styled.div`
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
-
-  @media (max-width: 1024px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const ChartCard = styled.div`
-  background: #ffffff;
-  border: 1.5px solid #E8EFFF;
-  border-radius: 16px;
-  padding: 22px 24px;
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
-  transition: all 0.3s ease;
-  position: relative;
-
-  &:hover {
-    box-shadow: 0 8px 24px rgba(30, 64, 175, 0.12);
-    border-color: #BFDBFE;
-  }
-`;
-
-const ChartHeader = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid #F1F5F9;
-
-  .title-group {
-    h3 {
-      font-size: 16px;
-      font-weight: 700;
-      color: ${props => props.theme.colors.text};
-      margin-bottom: 4px;
-    }
-    p {
-      font-size: 12px;
-      color: #94A3B8;
-      font-weight: 500;
-    }
-  }
-
-  svg {
-    color: #94A3B8;
-    flex-shrink: 0;
-  }
-`;
-
-const ChartSvg = styled.svg`
-  width: 100%;
-  height: 260px;
-  overflow: visible;
-
-  @media (max-width: 640px) {
-    height: 200px;
-  }
-`;
-
-const ChartLegend = styled.div`
-  display: flex;
-  gap: 20px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-`;
-
-const LegendItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #64748B;
-  font-weight: 600;
-
-  &::before {
-    content: '';
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: ${props => props.$color};
-  }
-`;
-
-const Tooltip = styled.div`
-  position: absolute;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(8px);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 8px;
+const StatSubLabel = styled.div`
+  margin-top: 6px;
   font-size: 12px;
-  font-weight: 600;
-  pointer-events: none;
-  white-space: nowrap;
-  z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transform: translate(-50%, -100%);
-  margin-top: -8px;
-
-  &::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 4px solid rgba(15, 23, 42, 0.95);
-  }
+  font-weight: 500;
+  color: ${props => props.theme.colors.textLight};
 `;
 
+// ─── Local-only chart layout helpers ─────────────────────────
 const SectionDivider = styled.div`
   width: 100%;
   height: 1px;
@@ -406,8 +315,8 @@ const SectionDivider = styled.div`
 `;
 
 const PipelineCard = styled.div`
-  background: #ffffff;
-  border: 1.5px solid #E8EFFF;
+  background: ${props => props.theme.colors.bgLight};
+  border: 1.5px solid ${props => props.theme.colors.border};
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
@@ -466,20 +375,21 @@ const StageValue = styled.div`
   }
 `;
 
-const ProgressBar = styled.div`
-  width: 100%;
-  height: 8px;
-  background: #F1F5F9;
-  border-radius: 4px;
-  overflow: hidden;
-`;
+const LegendItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748B;
+  font-weight: 600;
 
-const ProgressFill = styled.div`
-  height: 100%;
-  width: ${props => props.$width}%;
-  background: ${props => props.$color};
-  border-radius: 4px;
-  transition: width 0.5s ease;
+  &::before {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: ${props => props.$color};
+  }
 `;
 
 const TotalRow = styled.div`
@@ -503,99 +413,9 @@ const TotalValue = styled.div`
   color: #1e40af;
 `;
 
-// ─── Top jobs table ───────────────────────────────────────────
-const TableContainer = styled(motion.div)`
-  background: #ffffff;
-  border: 1.5px solid #E8EFFF;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
-  transition: all 0.3s ease;
-
-  &:hover {
-    box-shadow: 0 8px 24px rgba(30, 64, 175, 0.12);
-    border-color: #BFDBFE;
-  }
-`;
-
-const TableHeader = styled.div`
-  padding: 18px 22px;
-  border-bottom: 1px solid #F1F5F9;
-  h3 { font-size: 15px; font-weight: 700; color: ${props => props.theme.colors.text}; }
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-
-  th {
-    text-align: left;
-    padding: 14px 22px;
-    background: #F8FAFC;
-    color: #94A3B8;
-    font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    border-bottom: 1px solid #F1F5F9;
-  }
-
-  td {
-    padding: 16px 22px;
-    font-size: 13.5px;
-    color: ${props => props.theme.colors.text};
-    font-weight: 500;
-    border-bottom: 1px solid #F1F5F9;
-  }
-
-  tbody tr {
-    transition: all 0.2s ease;
-
-    &:hover {
-      background: #FAFBFF;
-      transform: scale(1.01);
-    }
-
-    &:last-child td {
-      border-bottom: none;
-    }
-  }
-
-  @media (max-width: 768px) {
-    th, td {
-      padding: 12px 16px;
-      font-size: 12px;
-    }
-  }
-`;
-
-const StatusBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 100px;
-  font-size: 12px;
-  font-weight: 700;
-  background: ${props =>
-    props.$status === 'active' ? '#ECFDF5' :
-    props.$status === 'closed' ? '#FEF2F2' : '#FFFBEB'};
-  color: ${props =>
-    props.$status === 'active' ? '#10B981' :
-    props.$status === 'closed' ? '#EF4444' : '#F59E0B'};
-  border: 1px solid ${props =>
-    props.$status === 'active' ? '#A7F3D0' :
-    props.$status === 'closed' ? '#FECACA' : '#FDE68A'};
-  &::before {
-    content: '';
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-`;
-
 // ─── Component ────────────────────────────────────────────────
 const Analytics = () => {
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const { user } = useAuth();
   const [timeFilter, setTimeFilter] = useState('month');
@@ -649,6 +469,10 @@ const Analytics = () => {
           }
         } catch (_) {}
         setApplications(allApps);
+        // Debug: log first few applications to check aiScreeningScore field
+        if (allApps.length > 0) {
+          console.log('[Analytics] Sample applications aiScreeningScore:', allApps.slice(0, 5).map(a => ({ id: a.applicationId, aiScreeningScore: a.aiScreeningScore, keys: Object.keys(a) })));
+        }
 
         // Fetch wallet for spending data
         if (user?.userId) {
@@ -732,9 +556,17 @@ const Analytics = () => {
     }).length;
   }, [jobPosts, quickJobs, timeFilter]);
 
-  // Ứng viên từ applications thực tế
-  const totalApplications = filteredApps.length;
-  const prevApplications  = prevApps.length;
+  // Ứng viên: ưu tiên dùng field applicants từ jobs (tích lũy, nhất quán với Dashboard/Profile)
+  const totalApplications = useMemo(() => {
+    // Nếu fetch được applications thực tế thì dùng
+    if (filteredApps.length > 0) return filteredApps.length;
+    // Fallback: dùng field applicants từ standard jobs (quick jobs không có field này)
+    return filteredJobs.reduce((sum, j) => sum + (Number(j.applicants) || 0), 0);
+  }, [filteredApps, filteredJobs]);
+  const prevApplications  = useMemo(() => {
+    if (prevApps.length > 0) return prevApps.length;
+    return 0;
+  }, [prevApps]);
 
   // Views từ field views trong job
   const totalViews = useMemo(() =>
@@ -749,6 +581,15 @@ const Analytics = () => {
       return !isNaN(d) && d >= c && d < cu;
     }).reduce((sum, j) => sum + (Number(j.views) || 0), 0);
   }, [jobPosts, quickJobs, timeFilter]);
+
+  // AI-matched CVs: applications with aiScreeningScore >= 70
+  const cvMatch = useMemo(() =>
+    applications.filter(app => Number(app.aiScreeningScore ?? 0) >= 70).length,
+  [applications]);
+
+  const prevCvMatch = useMemo(() =>
+    prevApps.filter(app => Number(app.aiScreeningScore ?? 0) >= 70).length,
+  [prevApps]);
 
   // Xu hướng ứng tuyển theo tháng — dùng applications.createdAt thực tế
   const applicationData = useMemo(() => {
@@ -937,7 +778,8 @@ const Analytics = () => {
       value: loading ? '...' : String(totalJobs),
       trend: calcTrend(totalJobs, prevJobs),
       positive: totalJobs >= prevJobs,
-      accent: '#1e40af', bg: '#EFF6FF', border: '#BFDBFE', iconColor: '#1e40af'
+      accent: '#3B82F6', bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)', iconColor: '#60A5FA',
+      subLabel: null,
     },
     {
       icon: <Users />,
@@ -945,7 +787,18 @@ const Analytics = () => {
       value: loading ? '...' : totalApplications.toLocaleString('vi-VN'),
       trend: calcTrend(totalApplications, prevApplications),
       positive: totalApplications >= prevApplications,
-      accent: '#EC4899', bg: '#FDF2F8', border: '#FBCFE8', iconColor: '#EC4899'
+      accent: '#EC4899', bg: 'rgba(236,72,153,0.15)', border: 'rgba(236,72,153,0.3)', iconColor: '#F472B6',
+      subLabel: null,
+    },
+    {
+      icon: <CheckCircle />,
+      label: language === 'vi' ? 'CV phù hợp' : 'Matched CVs',
+      value: loading ? '...' : String(cvMatch),
+      trend: calcTrend(cvMatch, prevCvMatch),
+      positive: cvMatch >= prevCvMatch,
+      accent: '#8B5CF6', bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.3)', iconColor: '#A78BFA',
+      subLabel: language === 'vi' ? 'Điểm AI từ 70% trở lên' : 'AI score 70% and above',
+      hideTrend: true,
     },
     {
       icon: <Eye />,
@@ -953,17 +806,8 @@ const Analytics = () => {
       value: loading ? '...' : totalViews.toLocaleString('vi-VN'),
       trend: calcTrend(totalViews, prevViews),
       positive: totalViews >= prevViews,
-      accent: '#06B6D4', bg: '#ECFEFF', border: '#A5F3FC', iconColor: '#06B6D4'
-    },
-    {
-      icon: <DollarSign />,
-      label: language === 'vi' ? 'Chi phí tuyển dụng' : 'Hiring cost',
-      value: loading ? '...' : totalSpent != null
-        ? totalSpent.toLocaleString('vi-VN') + '₫'
-        : '—',
-      trend: '—',
-      positive: true,
-      accent: '#10B981', bg: '#ECFDF5', border: '#A7F3D0', iconColor: '#10B981'
+      accent: '#10B981', bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.3)', iconColor: '#34D399',
+      subLabel: null,
     },
   ];
 
@@ -1025,383 +869,45 @@ const Analytics = () => {
                 <StatIcon $bg={stat.bg} $border={stat.border} $iconColor={stat.iconColor}>
                   {stat.icon}
                 </StatIcon>
-                <StatTrend $positive={stat.positive}>
-                  {stat.positive ? <TrendingUp /> : <TrendingDown />}
-                  {stat.trend}
-                </StatTrend>
+                {!stat.hideTrend && (
+                  <StatTrend $positive={stat.positive}>
+                    {stat.positive ? <TrendingUp /> : <TrendingDown />}
+                    {stat.trend}
+                  </StatTrend>
+                )}
               </StatHeader>
               <StatValue $accent={stat.accent}>{stat.value}</StatValue>
               <StatLabel>{stat.label}</StatLabel>
+              {stat.subLabel ? (
+                <StatSubLabel>{stat.subLabel}</StatSubLabel>
+              ) : (
+                <StatSubLabel style={{ color: stat.positive ? '#10B981' : '#EF4444' }}>
+                  {stat.trend !== '0%' && (
+                    <>
+                      {stat.positive ? '↗' : '↘'} {stat.trend}{' '}
+                      {language === 'vi' ? 'so với kỳ trước' : 'vs last period'}
+                    </>
+                  )}
+                </StatSubLabel>
+              )}
             </StatCard>
           ))}
         </StatsGrid>
 
-        {/* ── Charts ── */}
-        <ChartsGrid>
-          <ChartCard>
-            <ChartHeader>
-              <div className="title-group">
-                <h3>{language === 'vi' ? 'Xu hướng ứng tuyển' : 'Application Trend'}</h3>
-                <p>{language === 'vi' ? 'Theo dõi số lượng ứng tuyển theo thời gian' : 'Track application count over time'}</p>
-              </div>
-              <Calendar size={18} />
-            </ChartHeader>
-            <ChartLegend>
-              <LegendItem $color="#1e40af">{language === 'vi' ? 'Số lượng ứng tuyển' : 'Applications'}</LegendItem>
-            </ChartLegend>
-            {!hasChartData ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '260px', color: '#94A3B8', gap: '8px' }}>
-                <BarChart3 size={40} strokeWidth={1.5} />
-                <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                  {language === 'vi' ? 'Chưa có dữ liệu ứng tuyển' : 'No application data yet'}
-                </div>
-                <div style={{ fontSize: '12px' }}>
-                  {language === 'vi' ? 'Dữ liệu sẽ xuất hiện khi có ứng viên apply' : 'Data will appear when candidates apply'}
-                </div>
-              </div>
-            ) : (
-            <ChartSvg viewBox="0 0 660 260">
-              <defs>
-                <linearGradient id="applicationGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#1e40af" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="#1e40af" stopOpacity="0" />
-                </linearGradient>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
 
-              {/* Grid lines */}
-              {[0, 1, 2, 3, 4].map((i) => (
-                <line
-                  key={i}
-                  x1="40"
-                  y1={40 + i * 45}
-                  x2="640"
-                  y2={40 + i * 45}
-                  stroke="#E2E8F0"
-                  strokeWidth="1"
-                />
-              ))}
-
-              {/* Y-axis labels */}
-              {[4, 3, 2, 1, 0].map((i) => {
-                const yVal = Math.round((maxValue / 4) * i);
-                return (
-                  <text
-                    key={i}
-                    x="30"
-                    y={45 + (4 - i) * 45}
-                    textAnchor="end"
-                    fontSize="11"
-                    fill="#94A3B8"
-                    fontWeight="500"
-                  >
-                    {yVal}
-                  </text>
-                );
-              })}
-
-              {/* Area under curve */}
-              <path
-                d={`${applicationPath} L 660 220 L 60 220 Z`}
-                fill="url(#applicationGradient)"
-              />
-
-              {/* Line */}
-              <path
-                d={applicationPath}
-                fill="none"
-                stroke="#1e40af"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              {/* Data points with hover */}
-              {applicationData.map((d, i) => {
-                const cx = 60 + i * 50;
-                const cy = 220 - (d.value / maxValue) * 180;
-                const isHovered = hoveredPoint === i;
-
-                return (
-                  <g key={i}>
-                    {/* Hover area */}
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r="15"
-                      fill="transparent"
-                      style={{ cursor: 'pointer' }}
-                      onMouseEnter={() => setHoveredPoint(i)}
-                      onMouseLeave={() => setHoveredPoint(null)}
-                    />
-
-                    {/* Glow when hovered */}
-                    {isHovered && (
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r="8"
-                        fill="#1e40af"
-                        opacity="0.3"
-                        filter="url(#glow)"
-                      />
-                    )}
-
-                    {/* Data point */}
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={isHovered ? "6" : "4"}
-                      fill="#1e40af"
-                      stroke="#ffffff"
-                      strokeWidth="2"
-                      style={{
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer'
-                      }}
-                    />
-
-                    {/* Tooltip */}
-                    {isHovered && (
-                      <>
-                        <rect
-                          x={cx - 35}
-                          y={cy - 50}
-                          width="70"
-                          height="36"
-                          rx="6"
-                          fill="rgba(15, 23, 42, 0.95)"
-                        />
-                        <text
-                          x={cx}
-                          y={cy - 34}
-                          textAnchor="middle"
-                          fontSize="11"
-                          fill="white"
-                          fontWeight="600"
-                        >
-                          {d.month}
-                        </text>
-                        <text
-                          x={cx}
-                          y={cy - 20}
-                          textAnchor="middle"
-                          fontSize="14"
-                          fill="white"
-                          fontWeight="800"
-                        >
-                          {d.value}
-                        </text>
-                        <path
-                          d={`M ${cx - 4} ${cy - 14} L ${cx + 4} ${cy - 14} L ${cx} ${cy - 8} Z`}
-                          fill="rgba(15, 23, 42, 0.95)"
-                        />
-                      </>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* X-axis labels */}
-              {applicationData.map((d, i) => (
-                <text
-                  key={i}
-                  x={60 + i * 50}
-                  y="245"
-                  textAnchor="middle"
-                  fontSize="11"
-                  fill="#94A3B8"
-                  fontWeight="500"
-                >
-                  {d.month}
-                </text>
-              ))}
-            </ChartSvg>
-            )}
-          </ChartCard>
-
-          <ChartCard>
-            <ChartHeader>
-              <div className="title-group">
-                <h3>{language === 'vi' ? 'Phân bố ứng viên' : 'Candidate Distribution'}</h3>
-                <p>{language === 'vi' ? 'Theo ngành nghề và vị trí' : 'By industry and position'}</p>
-              </div>
-              <PieChart size={18} />
-            </ChartHeader>
-            <ChartLegend>
-              {candidateDistribution.map((item, i) => (
-                <LegendItem key={i} $color={item.color}>
-                  {item.label} ({item.value}%)
-                </LegendItem>
-              ))}
-            </ChartLegend>
-            <ChartSvg viewBox="0 0 300 220">
-              {(() => {
-                let currentAngle = -90;
-                const centerX = 150;
-                const centerY = 110;
-                const radius = 80;
-                const innerRadius = 50;
-
-                return candidateDistribution.map((item, i) => {
-                  const angle = (item.value / 100) * 360;
-                  const startAngle = currentAngle;
-                  const endAngle = currentAngle + angle;
-                  const isHovered = hoveredSegment === i;
-
-                  // Calculate outer radius with hover effect
-                  const outerRadius = isHovered ? radius + 8 : radius;
-
-                  const x1 = centerX + outerRadius * Math.cos((Math.PI * startAngle) / 180);
-                  const y1 = centerY + outerRadius * Math.sin((Math.PI * startAngle) / 180);
-                  const x2 = centerX + outerRadius * Math.cos((Math.PI * endAngle) / 180);
-                  const y2 = centerY + outerRadius * Math.sin((Math.PI * endAngle) / 180);
-
-                  const x3 = centerX + innerRadius * Math.cos((Math.PI * endAngle) / 180);
-                  const y3 = centerY + innerRadius * Math.sin((Math.PI * endAngle) / 180);
-                  const x4 = centerX + innerRadius * Math.cos((Math.PI * startAngle) / 180);
-                  const y4 = centerY + innerRadius * Math.sin((Math.PI * startAngle) / 180);
-
-                  const largeArcFlag = angle > 180 ? 1 : 0;
-
-                  const pathData = [
-                    `M ${x1} ${y1}`,
-                    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-                    `L ${x3} ${y3}`,
-                    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${x4} ${y4}`,
-                    'Z'
-                  ].join(' ');
-
-                  currentAngle = endAngle;
-
-                  // Calculate percentage label position
-                  const midAngle = startAngle + angle / 2;
-                  const labelRadius = (outerRadius + innerRadius) / 2;
-                  const labelX = centerX + labelRadius * Math.cos((Math.PI * midAngle) / 180);
-                  const labelY = centerY + labelRadius * Math.sin((Math.PI * midAngle) / 180);
-
-                  return (
-                    <g key={i}>
-                      {/* Shadow when hovered */}
-                      {isHovered && (
-                        <path
-                          d={pathData}
-                          fill={item.color}
-                          opacity="0.2"
-                          filter="url(#glow)"
-                        />
-                      )}
-
-                      {/* Main segment */}
-                      <path
-                        d={pathData}
-                        fill={item.color}
-                        stroke="#ffffff"
-                        strokeWidth="2"
-                        style={{
-                          cursor: 'pointer',
-                          transition: 'all 0.3s ease',
-                          opacity: hoveredSegment !== null && !isHovered ? 0.5 : 1
-                        }}
-                        onMouseEnter={() => setHoveredSegment(i)}
-                        onMouseLeave={() => setHoveredSegment(null)}
-                      />
-                    </g>
-                  );
-                });
-              })()}
-
-              {/* Center circle */}
-              <circle cx="150" cy="110" r="45" fill="#ffffff" />
-            </ChartSvg>
-          </ChartCard>
-        </ChartsGrid>
+        {/* ── 2 Dashboard Cards: Job Efficiency + AI CV Analysis ── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 16,
+          marginBottom: 20,
+        }}>
+          <JobEfficiencyCard />
+          <CvAiAnalysisCard />
+        </div>
 
         {/* ── Top jobs ── */}
-        <TableContainer
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.3 }}
-        >
-          <TableHeader>
-            <h3>{language === 'vi' ? 'Top công việc hot nhất' : 'Top Performing Jobs'}</h3>
-          </TableHeader>
-          <Table>
-            <thead>
-              <tr>
-                <th>{language === 'vi' ? 'Tiêu đề công việc' : 'Job title'}</th>
-                <th>{language === 'vi' ? 'Ứng viên' : 'Candidates'}</th>
-                <th>{language === 'vi' ? 'Lượt xem' : 'Views'}</th>
-                <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topJobs.length === 0 ? (
-                <tr>
-                  <td colSpan="4" style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                      <Briefcase size={36} strokeWidth={1.5} />
-                      <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                        {language === 'vi' ? 'Chưa có tin tuyển dụng nào' : 'No job posts yet'}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : topJobs.map((job, i) => (
-                <tr key={i}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '6px',
-                        background: i === 0 ? '#FEF3C7' : i === 1 ? '#DBEAFE' : '#F3F4F6',
-                        color: i === 0 ? '#F59E0B' : i === 1 ? '#3B82F6' : '#6B7280',
-                        fontSize: '12px',
-                        fontWeight: '800'
-                      }}>
-                        {i + 1}
-                      </span>
-                      <span style={{ fontWeight: '600' }}>{job.title}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      background: '#EFF6FF',
-                      color: '#1e40af',
-                      fontWeight: '700',
-                      fontSize: '13px'
-                    }}>
-                      {job.applications}
-                    </span>
-                  </td>
-                  <td style={{ color: '#64748B' }}>{job.views.toLocaleString()}</td>
-                  <td>
-                    <StatusBadge $status={job.status}>
-                      {job.status === 'active' && (language === 'vi' ? 'Đang tuyển' : 'Active')}
-                      {job.status === 'closed' && (language === 'vi' ? 'Đã đóng' : 'Closed')}
-                      {job.status === 'draft'  && (language === 'vi' ? 'Nháp' : 'Draft')}
-                    </StatusBadge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </TableContainer>
+        <TopHotJobsCard />
       </PageContainer>
     </DashboardLayout>
   );

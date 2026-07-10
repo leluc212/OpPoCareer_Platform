@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,9 +52,9 @@ const ROLES = {
     bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
     hero: {
       eyebrow: { vi: 'Chào mừng ứng viên', en: 'Welcome Candidate' },
-      h1: { vi: ['Tìm việc', 'part-time', 'lý tưởng'], en: ['Find your', 'ideal', 'part-time job'] },
+      h1: { vi: ['Tìm việc', 'part-time lý tưởng', ''], en: ['Find your', 'ideal', 'part-time job'] },
       grad: ['#93c5fd', '#c4b5fd', '#fbcfe8'],
-      sub: { vi: 'Đăng nhập để nhận gợi ý việc làm cá nhân hoá, theo dõi đơn ứng tuyển và kết nối với nhà tuyển dụng.', en: 'Sign in to get personalized job recommendations, track your applications and connect with employers.' },
+      sub: { vi: <>Đăng nhập để nhận gợi ý việc làm cá nhân hoá,<br />theo dõi đơn ứng tuyển và kết nối với nhà tuyển dụng.</>, en: 'Sign in to get personalized job recommendations, track your applications and connect with employers.' },
       features: {
         vi: ['Hàng ngàn việc làm part-time đang chờ', 'Ứng tuyển 1-click — không cần CV rườm rà', 'Theo dõi tiến trình ứng tuyển dễ dàng'],
         en: ['Thousands of part-time jobs waiting', 'Apply with 1-click — no lengthy CV needed', 'Track your application progress easily'],

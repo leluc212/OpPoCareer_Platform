@@ -52,7 +52,7 @@ const AddressInputField = styled.textarea`
   font-size: 14px;
   line-height: 1.4;
   transition: all 0.2s ease;
-  background: ${props => props.$loading ? '#F0F9FF' : 'white'};
+  background: ${props => props.disabled ? '#F8FAFC' : (props.$loading ? '#F0F9FF' : 'white')};
   resize: vertical;
   font-family: inherit;
   overflow-y: auto;
@@ -65,6 +65,13 @@ const AddressInputField = styled.textarea`
     box-shadow: 0 0 0 3px ${props => 
       props.$error ? 'rgba(239, 68, 68, 0.1)' : 
       props.$success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)'};
+  }
+  
+  &:disabled {
+    background-color: #F8FAFC;
+    color: #64748B;
+    cursor: not-allowed;
+    border-color: #E2E8F0;
   }
   
   &::placeholder {

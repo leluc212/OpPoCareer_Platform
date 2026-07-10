@@ -165,11 +165,11 @@ class EmployerProfileService {
    * This DOES NOT update the main profile immediately
    */
   async submitPendingChanges(userId, changes) {
-    const { v4: uuidv4 } = require('uuid');
+    const crypto = require('crypto');
     const timestamp = new Date().toISOString();
     
     const pendingChanges = {
-      requestId: uuidv4(),
+      requestId: crypto.randomUUID(),
       employerId: userId,
       changes: changes,
       status: 'PENDING_REVIEW',
@@ -227,6 +227,9 @@ class EmployerProfileService {
     const timestamp = new Date().toISOString();
     const changes = profile.pendingProfileChanges.changes;
     
+    console.log('Approving changes for userId:', userId);
+    console.log('Changes keys:', Object.keys(changes || {}));
+    
     // Build update expression to apply changes and mark as approved
     const updateExpressions = [];
     const expressionAttributeNames = {};
@@ -234,6 +237,12 @@ class EmployerProfileService {
     
     let index = 0;
     for (const [key, value] of Object.entries(changes)) {
+      // Skip internal fields that shouldn't be overwritten directly
+      if (key === 'userId' || key === 'createdAt' || key === 'pendingProfileChanges') {
+        console.log(`Skipping protected field: ${key}`);
+        continue;
+      }
+      
       updateExpressions.push(`#field${index} = :value${index}`);
       expressionAttributeNames[`#field${index}`] = key;
       expressionAttributeValues[`:value${index}`] = value;
@@ -274,8 +283,14 @@ class EmployerProfileService {
       ReturnValues: 'ALL_NEW'
     };
 
-    const result = await dynamoDb.update(params);
-    return result.Attributes;
+    try {
+      const result = await dynamoDb.update(params);
+      console.log('✅ Changes approved successfully');
+      return result.Attributes;
+    } catch (error) {
+      console.error('❌ DynamoDB update failed:', error);
+      throw error;
+    }
   }
 
   /**

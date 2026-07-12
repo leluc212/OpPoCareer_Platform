@@ -253,6 +253,11 @@ def update_kyc_verified(user_id: str, session_id: str, status: str, decision: di
     application-lambda.py gate kiểm tra kycCompleted == True.
     Thêm field mới provider='DIDIT' để phân biệt record cũ VNPT / mới Didit.
 
+    Khi status == "Approved", extract thông tin cá nhân từ decision payload:
+      - document_number → cccd (Số CCCD)
+      - date_of_birth  → dateOfBirth
+      - full_name      → fullName (nếu chưa có)
+
     Didit status values (title case, case-sensitive):
       "Approved"     → kycCompleted=True, kycStatus="VERIFIED"
       "Declined"     → kycCompleted=False, kycStatus="FAILED"
@@ -277,28 +282,62 @@ def update_kyc_verified(user_id: str, session_id: str, status: str, decision: di
     }
     kyc_status_value = kyc_status_map.get(status, 'PENDING')
 
+    # Extract thông tin cá nhân từ decision payload khi Approved
+    # Didit trả id_verifications[] — có thể nằm trong decision hoặc top-level webhook payload
+    cccd_number = ''
+    date_of_birth = ''
+    full_name = ''
+    if is_verified and decision:
+        id_verifications = decision.get('id_verifications') or []
+        # Fallback: id_verifications có thể nằm trực tiếp trong decision (nếu decision IS top-level)
+        if not id_verifications and isinstance(decision, dict):
+            # Trường hợp decision chính là object chứa document_number trực tiếp
+            if decision.get('document_number'):
+                id_verifications = [decision]
+        if id_verifications and isinstance(id_verifications, list):
+            id_doc = id_verifications[0]
+            cccd_number   = id_doc.get('document_number') or id_doc.get('personal_number') or ''
+            date_of_birth = id_doc.get('date_of_birth') or ''
+            full_name     = id_doc.get('full_name') or ''
+            print(f'[Didit] Extracted from decision: cccd={cccd_number}, dob={date_of_birth}, name={full_name}')
+
+    # Build update expression dynamically
+    update_parts = [
+        'kycStatus = :s',
+        'kycCompleted = :d',
+        'kycVerifiedAt = :t',
+        'updatedAt = :t',
+        'diditSessionId = :sid',
+        'diditRawStatus = :rs',
+        'provider = :pv',
+    ]
+    expr_values = {
+        ':s':   kyc_status_value,
+        ':d':   is_verified,
+        ':t':   now_iso,
+        ':sid': session_id,
+        ':rs':  status,           # giữ nguyên status gốc từ Didit
+        ':pv':  'DIDIT',
+    }
+
+    # Chỉ cập nhật cccd/dateOfBirth khi có dữ liệu (Approved + OCR thành công)
+    if cccd_number:
+        update_parts.append('cccd = :cccd')
+        expr_values[':cccd'] = cccd_number
+    if date_of_birth:
+        update_parts.append('dateOfBirth = :dob')
+        expr_values[':dob'] = date_of_birth
+    if full_name:
+        update_parts.append('kycFullName = :fn')
+        expr_values[':fn'] = full_name
+
     try:
         table.update_item(
             Key={'userId': user_id},
-            UpdateExpression=(
-                'SET kycStatus = :s, '
-                'kycCompleted = :d, '
-                'kycVerifiedAt = :t, '
-                'updatedAt = :t, '
-                'diditSessionId = :sid, '
-                'diditRawStatus = :rs, '
-                'provider = :pv'
-            ),
-            ExpressionAttributeValues={
-                ':s':   kyc_status_value,
-                ':d':   is_verified,
-                ':t':   now_iso,
-                ':sid': session_id,
-                ':rs':  status,           # giữ nguyên status gốc từ Didit
-                ':pv':  'DIDIT',
-            },
+            UpdateExpression='SET ' + ', '.join(update_parts),
+            ExpressionAttributeValues=expr_values,
         )
-        print(f'[Didit] DynamoDB updated: userId={user_id} kycStatus={kyc_status_value} diditStatus={status}')
+        print(f'[Didit] DynamoDB updated: userId={user_id} kycStatus={kyc_status_value} diditStatus={status} cccd={cccd_number or "N/A"}')
     except Exception as e:
         print(f'[Didit] DynamoDB error: {e}')
         raise
@@ -475,6 +514,9 @@ def handle_webhook(event):
             return resp(200, {'received': True})
 
         decision = body_dict.get('decision') or {}
+        # Nếu decision trống nhưng id_verifications nằm ở top level payload
+        if not decision and body_dict.get('id_verifications'):
+            decision = body_dict
         try:
             # GIỮ NGUYÊN logic nghiệp vụ cũ — chỉ đổi nguồn field từ payload Didit
             # Status Didit: "Approved"/"Declined"/"In Review"/"In Progress"/... (title case)

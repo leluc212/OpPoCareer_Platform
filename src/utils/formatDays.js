@@ -103,8 +103,8 @@ export function formatDaysRange(daysInput, language = 'vi') {
 /**
  * Format serialized shift strings containing days and time.
  * Examples:
- *   'T2,T3,T4,T5,T6 @ 07:00 - 11:30' -> 'Thứ 2 - Thứ 6 @ 07:00 - 11:30'
- *   'T2,T3,T4 @ 07:00 - 11:30 | T7 @ 08:00 - 12:00' -> 'Thứ 2 - Thứ 4 @ 07:00 - 11:30 | Thứ 7 @ 08:00 - 12:00'
+ *   'T2,T3,T4,T5,T6 @ 07:00 - 11:30' -> 'Thứ 2 - Thứ 6 | 07:00 - 11:30'
+ *   'T2,T3,T4 @ 07:00 - 11:30 | T7 @ 08:00 - 12:00' -> 'Thứ 2 - Thứ 4 | 07:00 - 11:30 | Thứ 7 | 08:00 - 12:00'
  *
  * @param {string} shiftStr - The raw shift string
  * @param {string} language - 'vi' or 'en'
@@ -122,7 +122,7 @@ export function formatShiftString(shiftStr, language = 'vi') {
         const daysPart = trimmedSlot.slice(0, atIdx).trim();
         const timePart = trimmedSlot.slice(atIdx + 1).trim();
         const formattedDays = formatDaysRange(daysPart, language);
-        return `${formattedDays} @ ${timePart}`;
+        return `${formattedDays} | ${timePart}`;
       }
       return trimmedSlot;
     })

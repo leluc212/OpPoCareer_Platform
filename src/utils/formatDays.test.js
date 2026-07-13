@@ -50,14 +50,14 @@ describe('formatShiftString', () => {
   });
 
   it('should format simple shift string', () => {
-    expect(formatShiftString('T2,T3,T4,T5,T6 @ 07:00 - 11:30', 'vi')).toBe('Thứ 2 - Thứ 6 @ 07:00 - 11:30');
-    expect(formatShiftString('T2,T3,T4,T5,T6 @ 07:00 - 11:30', 'en')).toBe('Mon - Fri @ 07:00 - 11:30');
+    expect(formatShiftString('T2,T3,T4,T5,T6 @ 07:00 - 11:30', 'vi')).toBe('Thứ 2 - Thứ 6 | 07:00 - 11:30');
+    expect(formatShiftString('T2,T3,T4,T5,T6 @ 07:00 - 11:30', 'en')).toBe('Mon - Fri | 07:00 - 11:30');
   });
 
   it('should format multiple shifts separated by pipes', () => {
     const raw = 'T2,T3,T4,T5 @ 07:00 - 11:30 | T6,T7 @ 08:00 - 12:00';
-    expect(formatShiftString(raw, 'vi')).toBe('Thứ 2 - Thứ 5 @ 07:00 - 11:30 | Thứ 6 - Thứ 7 @ 08:00 - 12:00');
-    expect(formatShiftString(raw, 'en')).toBe('Mon - Thu @ 07:00 - 11:30 | Fri - Sat @ 08:00 - 12:00');
+    expect(formatShiftString(raw, 'vi')).toBe('Thứ 2 - Thứ 5 | 07:00 - 11:30 | Thứ 6 - Thứ 7 | 08:00 - 12:00');
+    expect(formatShiftString(raw, 'en')).toBe('Mon - Thu | 07:00 - 11:30 | Fri - Sat | 08:00 - 12:00');
   });
 
   it('should preserve formatting if no @ matches', () => {

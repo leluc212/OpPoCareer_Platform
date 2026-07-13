@@ -6069,7 +6069,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Thời gian' : 'Time'}:</span>
                 <span className="info-value">
-                  {applyModal.job.workHours || applyModal.job.shiftDetails?.time || applyModal.job.type?.match(/\((.*?)\)/)?.[1] || '-'}
+                  {(applyModal.job.workHours || applyModal.job.shiftDetails?.time || applyModal.job.type?.match(/\((.*?)\)/)?.[1] || '-').replace(/ @ /g, ' | ')}
                 </span>
               </div>
             </div>
@@ -7594,7 +7594,7 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
             <span>
               {language === 'vi' ? 'Thời gian:' : 'Hours:'}
               {' '}
-              {job.workHours}
+              {job.workHours.replace(/ @ /g, ' | ')}
             </span>
           </div>
         )}

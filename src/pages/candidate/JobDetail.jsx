@@ -13,6 +13,7 @@ import jobPostService from '../../services/jobPostService';
 import adminEmployerService from '../../services/adminEmployerService';
 import candidateProfileService from '../../services/candidateProfileService';
 import { getMyCandidateApplications } from '../../services/applicationService';
+import { formatShiftString } from '../../utils/formatDays';
 import { useAuth } from '../../context/AuthContext';
 
 // ─── Animations ───────────────────────────────────────────────────────────────
@@ -261,66 +262,10 @@ const fmtDate = d => {
   return `${String(vnDate.getDate()).padStart(2,'0')}/${String(vnDate.getMonth()+1).padStart(2,'0')}/${vnDate.getFullYear()}`;
 };
 
-// Format workHours: "T2,T3,T4,T5,T6,T7,CN @ 07:00 - 12:00" → "Thứ 2 - CN | 07:00 - 12:00"
+// Format workHours using shared utility
 const fmtWorkHours = raw => {
   if (!raw) return '';
-  const DAY_ORDER = ['T2','T3','T4','T5','T6','T7','CN'];
-  const DAY_LABEL = { T2: 'Thứ 2', T3: 'Thứ 3', T4: 'Thứ 4', T5: 'Thứ 5', T6: 'Thứ 6', T7: 'Thứ 7', CN: 'CN' };
-
-  // Replace @ with | for old data
-  const str = raw.replace(/ @ /g, ' | ');
-
-  // Split multiple slots by " | " but keep day|time pairs together
-  // Format: "T2,T3,T4,T5,T6,T7,CN | 07:00 - 12:00"
-  // Could also be just "07:00 - 12:00" without days
-  const parts = str.split(' | ');
-
-  // Try to detect if first part is days list
-  const condenseDays = (daysStr) => {
-    const days = daysStr.split(',').map(d => d.trim());
-    if (days.length <= 1) return DAY_LABEL[days[0]] || days[0];
-
-    // Check if days are consecutive in DAY_ORDER
-    const indices = days.map(d => DAY_ORDER.indexOf(d)).filter(i => i >= 0).sort((a, b) => a - b);
-    if (indices.length < 2) return days.map(d => DAY_LABEL[d] || d).join(', ');
-
-    // Find consecutive ranges
-    const ranges = [];
-    let start = indices[0], end = indices[0];
-    for (let i = 1; i < indices.length; i++) {
-      if (indices[i] === end + 1) {
-        end = indices[i];
-      } else {
-        ranges.push([start, end]);
-        start = end = indices[i];
-      }
-    }
-    ranges.push([start, end]);
-
-    return ranges.map(([s, e]) => {
-      if (s === e) return DAY_LABEL[DAY_ORDER[s]];
-      return `${DAY_LABEL[DAY_ORDER[s]]} - ${DAY_LABEL[DAY_ORDER[e]]}`;
-    }).join(', ');
-  };
-
-  // Check if first part looks like days (contains T2-T7 or CN)
-  if (parts.length >= 2 && /^[T2-7CN,\s]+$/i.test(parts[0].replace(/T[2-7]/g, '').replace(/CN/g, '').replace(/[,\s]/g, '') === '' ? parts[0] : '___')) {
-    // Simple check: first part has day codes
-    const hasDays = /\b(T[2-7]|CN)\b/.test(parts[0]);
-    if (hasDays) {
-      const daysFormatted = condenseDays(parts[0]);
-      const time = parts.slice(1).join(' | ');
-      return `${daysFormatted} | ${time}`;
-    }
-  }
-
-  // Fallback: try matching the pattern directly
-  const match = str.match(/^([T2-7CN,\s]+)\s*\|\s*(.+)$/);
-  if (match) {
-    return `${condenseDays(match[1].trim())} | ${match[2].trim()}`;
-  }
-
-  return str;
+  return formatShiftString(raw, 'vi');
 };
 const daysLeft = d => {
   if (!d) return null;

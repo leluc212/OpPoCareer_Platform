@@ -671,15 +671,6 @@ const JobDetail = ({ standalone = true }) => {
             </Card>
 
 
-            {/* 10. Báo cáo tin */}
-            <ReportBox>
-              <AlertCircle size={15} />
-              <span>
-                <strong>Báo cáo tin tuyển dụng:</strong> Nếu bạn thấy tin này không đúng hoặc có dấu hiệu lừa đảo,
-                hãy <a href="/contact">phản ánh với chúng tôi</a>.
-              </span>
-            </ReportBox>
-
             {/* Nút hành động — cuối trang */}
             <Card><Buttons /></Card>
 

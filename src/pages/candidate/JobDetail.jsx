@@ -6,7 +6,7 @@ import {
   MapPin, DollarSign, Clock, Calendar, ChevronRight, ChevronLeft,
   Send, Users, Briefcase, Globe,
   Check, X,
-  AlertCircle, Award, Heart, ExternalLink
+  AlertCircle, Award, Bookmark, ExternalLink
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import jobPostService from '../../services/jobPostService';
@@ -412,7 +412,7 @@ const JobDetail = ({ standalone = true }) => {
     employer?.companyBanner,
     ...(Array.isArray(employer?.companyImages) ? employer.companyImages : []),
     employer?.companyImage,
-  ].filter(Boolean).slice(0, 10);
+  ].filter(url => url && typeof url === 'string' && (url.startsWith('http') || url.startsWith('data:'))).slice(0, 10);
 
   const industries  = employer?.industry
     ? (Array.isArray(employer.industry) ? employer.industry : [employer.industry])
@@ -436,7 +436,7 @@ const JobDetail = ({ standalone = true }) => {
         {alreadyApplied ? 'Đã ứng tuyển' : 'Ứng tuyển ngay'}
       </ApplyBtn>
       <SaveBtn onClick={toggleSave} $saved={saved} whileTap={{ scale: .95 }}>
-        <Heart size={16} fill={saved ? 'currentColor' : 'none'} />
+        <Bookmark size={16} fill={saved ? 'currentColor' : 'none'} />
         {saved ? 'Đã lưu' : 'Lưu tin'}
       </SaveBtn>
     </BtnRow>
@@ -577,7 +577,7 @@ const JobDetail = ({ standalone = true }) => {
                   <GalleryRow>
                     {gallery.slice(0, 3).map((src, i) => (
                       <GThumb key={i} onClick={() => openLb(i)}>
-                        <img src={src} alt={`Ảnh ${i + 1}`} />
+                        <img src={src} alt={`Ảnh ${i + 1}`} onError={e => { e.target.parentElement.style.display = 'none'; }} />
                         {i === 2 && gallery.length > 3 && <GOverlay>+{gallery.length - 3}</GOverlay>}
                       </GThumb>
                     ))}

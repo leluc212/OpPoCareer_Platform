@@ -166,8 +166,8 @@ class AdminReportService {
         quickJobs: calculateGrowth(currQuickJobs, prevQuickJobs),
         revenue: calculateGrowth(currRevenue, prevRevenue),
         applications: applications.length > 0 ? calculateGrowth(
-          applications.filter(a => isCurrentPeriod(a.createdAt)).length,
-          applications.filter(a => isPreviousPeriod(a.createdAt)).length
+          applications.filter(a => isCurrentPeriod(a.appliedAt || a.createdAt || a.applied_at)).length,
+          applications.filter(a => isPreviousPeriod(a.appliedAt || a.createdAt || a.applied_at)).length
         ) : '0%'
       }
     };
@@ -369,7 +369,14 @@ class AdminReportService {
       const postsCount = standardJobs.filter(j => (j.createdAt || '').startsWith(dateStr)).length +
         quickJobs.filter(j => (j.createdAt || '').startsWith(dateStr)).length;
 
-      const appsCount = applications.filter(a => (a.createdAt || '').startsWith(dateStr)).length;
+      const appsCount = applications.filter(a => {
+        const raw = a.appliedAt || a.createdAt || a.applied_at || '';
+        const num = Number(raw);
+        const appDateStr = !isNaN(num) && num > 0
+          ? new Date(num < 1e12 ? num * 1000 : num).toISOString().split('T')[0]
+          : String(raw).slice(0, 10);
+        return appDateStr === dateStr;
+      }).length;
 
       days.push({ day: label, posts: postsCount, applications: appsCount });
     }

@@ -34,6 +34,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import employerProfileService from '../../services/employerProfileService';
 import jobPostService from '../../services/jobPostService';
+import quickJobService from '../../services/quickJobService';
 import { getJobApplications } from '../../services/applicationService';
 import { createProfileChangeRequestNotification } from '../../services/notificationService';
 
@@ -260,63 +261,77 @@ const VerifyActionCard = styled(motion.div)`
   background: #ffffff;
   border: 1.5px solid #E8EFFF;
   border-radius: 16px;
-  padding: 24px;
+  padding: 24px 20px;
   box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
   transition: all 0.22s ease;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   text-align: center;
-  
+
   &:hover {
     box-shadow: 0 8px 24px rgba(30, 64, 175, 0.13);
     border-color: #BFDBFE;
   }
 
   .icon-wrapper {
-    width: 48px;
-    height: 48px;
-    background: #EFF6FF;
-    color: #1e40af;
-    border-radius: 12px;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto;
-    
-    svg {
-      width: 24px;
-      height: 24px;
-    }
+    margin-bottom: 4px;
+
+    &.verified   { background: #DCFCE7; color: #16a34a; }
+    &.pending    { background: #FEF9C3; color: #ca8a04; }
+    &.unverified { background: #EFF6FF; color: #1e40af; }
+
+    svg { width: 26px; height: 26px; }
   }
-  
+
   h4 {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: #1E293B;
     margin: 0;
   }
-  
+
   p {
-    font-size: 13.5px;
+    font-size: 13px;
     color: #64748B;
     margin: 0;
-    line-height: 1.5;
+    line-height: 1.55;
   }
-  
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-top: 2px;
+
+    &.verified   { background: #DCFCE7; color: #15803d; }
+    &.pending    { background: #FEF9C3; color: #a16207; }
+  }
+
   button {
     width: 100%;
-    padding: 12px;
+    padding: 11px;
     background: #EFF6FF;
     color: #1e40af;
     border: 1.5px solid #BFDBFE;
     border-radius: 10px;
     font-weight: 700;
-    font-size: 14px;
+    font-size: 13.5px;
     cursor: pointer;
     transition: all 0.2s ease;
-    margin-top: 4px;
-    
+    margin-top: 6px;
+
     &:hover {
       background: #1e40af;
       color: white;
@@ -458,20 +473,21 @@ const InputWrapper = styled.div`
 `;
 
 const SaveButton = styled(motion.button)`
-  padding: 14px 32px;
+  padding: 16px 48px;
   border-radius: 12px;
   background: linear-gradient(135deg, #1e40af 0%, #1e40af 100%);
   color: white;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 17px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   border: none;
   box-shadow: 0 8px 24px rgba(30, 64, 175, 0.35);
   transition: all 0.3s ease;
   cursor: pointer;
-  margin-top: 24px;
+  min-width: 250px;
   
   &:hover {
     transform: translateY(-2px);
@@ -479,8 +495,8 @@ const SaveButton = styled(motion.button)`
   }
   
   svg {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
 `;
 
@@ -808,7 +824,8 @@ const EmployerProfile = () => {
     foundedYear: '',
     description: '',
     taxCode: '',
-    businessLicense: ''
+    businessLicense: '',
+    branches: []
   });
   
   const [originalFormData, setOriginalFormData] = useState({});
@@ -832,6 +849,8 @@ const EmployerProfile = () => {
   const [verificationDocuments, setVerificationDocuments] = useState([]);
   const [hasPendingChanges, setHasPendingChanges] = useState(false); // Track if there are pending profile changes waiting for admin approval
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [employerIsVerified, setEmployerIsVerified] = useState(false); // true khi đã được admin approve
+  const [verificationPending, setVerificationPending] = useState(false); // true khi đã nộp hồ sơ, đang chờ duyệt
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [profileStats, setProfileStats] = useState({
     totalJobs: 0,
@@ -886,7 +905,8 @@ const EmployerProfile = () => {
             foundedYear: profile.foundedYear || '',
             description: profile.description || '',
             taxCode: profile.taxCode || '',
-            businessLicense: profile.businessLicense || ''
+            businessLicense: profile.businessLicense || '',
+            branches: Array.isArray(profile.branches) ? profile.branches : []
           };
           
           setFormData(profileData);
@@ -913,6 +933,10 @@ const EmployerProfile = () => {
           } else {
             setHasPendingChanges(false);
           }
+
+          // Lưu trạng thái xác thực
+          setEmployerIsVerified(profile.isVerified === true);
+          setVerificationPending(profile.isVerified !== true && profile.verificationStatus === 'pending');
           
           console.log('✅ Employer profile loaded successfully');
         } else {
@@ -1050,17 +1074,22 @@ const EmployerProfile = () => {
     const loadStats = async () => {
       try {
         setIsLoadingStats(true);
-        const jobs = await jobPostService.getMyJobPosts();
-        const totalJobs = jobs.length;
+        // Lấy cả standard jobs và quick jobs (giống Dashboard)
+        const [jobs, quickJobs] = await Promise.all([
+          jobPostService.getMyJobPosts().catch(() => []),
+          quickJobService.getMyQuickJobs().catch(() => [])
+        ]);
+        const totalJobs = jobs.length + quickJobs.length;
+        // Tổng ứng viên từ field applicants (tích lũy toàn bộ, kể cả đã xử lý)
         const totalApplicants = jobs.reduce((sum, j) => sum + (j.applicants || 0), 0);
 
-        // Count accepted applications across all jobs
+        // Count approved applications across all jobs (status = 'approved' khi employer duyệt hồ sơ)
         let totalHired = 0;
         await Promise.all(
           jobs.map(async (job) => {
             try {
               const apps = await getJobApplications(job.idJob);
-              totalHired += apps.filter(a => a.status === 'accepted').length;
+              totalHired += apps.filter(a => a.status === 'approved').length;
             } catch {
               // ignore per-job errors
             }
@@ -1082,9 +1111,66 @@ const EmployerProfile = () => {
     try {
       setIsLoadingProfile(true);
       
-      // Validate required field: description
+      // Validate required fields
+      if (!formData.companyName?.trim()) {
+        toast.error(language === 'vi' ? 'Tên công ty là bắt buộc' : 'Company name is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.email?.trim()) {
+        toast.error(language === 'vi' ? 'Email là bắt buộc' : 'Email is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        toast.error(language === 'vi' ? 'Email không hợp lệ' : 'Invalid email format');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.phone?.trim()) {
+        toast.error(language === 'vi' ? 'Số điện thoại là bắt buộc' : 'Phone number is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.address?.trim()) {
+        toast.error(language === 'vi' ? 'Địa chỉ là bắt buộc' : 'Address is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.latitude || !formData.longitude) {
+        toast.error(language === 'vi' ? 'Vui lòng xác định vị trí GPS công ty' : 'Please determine company GPS location');
+        setIsLoadingProfile(false);
+        return;
+      }
+      // Website is now optional
+      // if (!formData.website?.trim()) {
+      //   toast.error(language === 'vi' ? 'Website là bắt buộc' : 'Website is required');
+      //   setIsLoadingProfile(false);
+      //   return;
+      // }
+      if (!formData.industry?.trim()) {
+        toast.error(language === 'vi' ? 'Lĩnh vực là bắt buộc' : 'Industry is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.companySize?.trim()) {
+        toast.error(language === 'vi' ? 'Quy mô là bắt buộc' : 'Company size is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.foundedYear || !String(formData.foundedYear).trim()) {
+        toast.error(language === 'vi' ? 'Năm thành lập là bắt buộc' : 'Founded year is required');
+        setIsLoadingProfile(false);
+        return;
+      }
+      if (!formData.taxCode?.trim()) {
+        toast.error(language === 'vi' ? 'Mã số thuế là bắt buộc' : 'Tax code is required');
+        setIsLoadingProfile(false);
+        return;
+      }
       if (!formData.description?.trim()) {
-        toast.error(language === 'vi' ? 'Vui lòng nhập mô tả công ty (bắt buộc)' : 'Please enter company description (required)');
+        toast.error(language === 'vi' ? 'Mô tả công ty là bắt buộc' : 'Company description is required');
         setIsLoadingProfile(false);
         return;
       }
@@ -1136,7 +1222,8 @@ const EmployerProfile = () => {
             foundedYear: savedProfile.foundedYear || '',
             description: savedProfile.description || '',
             taxCode: savedProfile.taxCode || '',
-            businessLicense: savedProfile.businessLicense || ''
+            businessLicense: savedProfile.businessLicense || '',
+            branches: Array.isArray(savedProfile.branches) ? savedProfile.branches : []
           });
           setCompanyVideo(savedProfile.companyVideo || '');
           setCompanyImages(savedProfile.companyImages || []);
@@ -1150,11 +1237,17 @@ const EmployerProfile = () => {
 
           // Diff text fields
           for (const key of Object.keys(formData)) {
+            if (key === 'branches') continue; // handled separately below
             const current = formData[key] ?? '';
             const original = originalFormData[key] ?? '';
             if (String(current) !== String(original)) {
               changedFields[key] = formData[key];
             }
+          }
+
+          // Diff branches array
+          if (JSON.stringify(formData.branches || []) !== JSON.stringify(originalFormData.branches || [])) {
+            changedFields.branches = formData.branches || [];
           }
 
           // Diff media fields
@@ -1778,14 +1871,35 @@ const EmployerProfile = () => {
             </StatsCard>
 
             <VerifyActionCard>
-              <div className="icon-wrapper">
-                <ShieldCheck />
-              </div>
-              <h4>{language === 'vi' ? 'Xác Thực Doanh Nghiệp' : 'Verify Company'}</h4>
-              <p>{language === 'vi' ? 'Xác thực hồ sơ để tăng mức độ uy tín và thu hút ứng viên.' : 'Verify your profile to increase trust and attract more candidates.'}</p>
-              <button type="button" onClick={() => navigate('/employer/verification')}>
-                {language === 'vi' ? 'Đi tới Xác thực ngay' : 'Go to Verify Now'}
-              </button>
+              {employerIsVerified ? (
+                <>
+                  <div className="icon-wrapper verified">
+                    <ShieldCheck />
+                  </div>
+                  <h4>{language === 'vi' ? 'Đã Xác Thực' : 'Business Verified'}</h4>
+                  <span className="status-badge verified">✓ {language === 'vi' ? 'Hồ sơ đã được xác thực' : 'Profile verified'}</span>
+                </>
+              ) : verificationPending ? (
+                <>
+                  <div className="icon-wrapper pending">
+                    <ShieldCheck />
+                  </div>
+                  <h4>{language === 'vi' ? 'Đang Chờ Xác Thực' : 'Verification Pending'}</h4>
+                  <p>{language === 'vi' ? 'Hồ sơ đã được gửi và đang được admin xem xét.' : 'Your profile has been submitted and is under review.'}</p>
+                  <span className="status-badge pending">⏳ {language === 'vi' ? 'Đang xử lý...' : 'Processing...'}</span>
+                </>
+              ) : (
+                <>
+                  <div className="icon-wrapper unverified">
+                    <ShieldCheck />
+                  </div>
+                  <h4>{language === 'vi' ? 'Xác Thực Doanh Nghiệp' : 'Verify Company'}</h4>
+                  <p>{language === 'vi' ? 'Xác thực hồ sơ để tăng uy tín và thu hút ứng viên.' : 'Verify your profile to increase trust and attract more candidates.'}</p>
+                  <button type="button" onClick={() => navigate('/employer/verification')}>
+                    {language === 'vi' ? 'Đi tới Xác thực ngay' : 'Go to Verify Now'}
+                  </button>
+                </>
+              )}
             </VerifyActionCard>
           </SidePanel>
 
@@ -1802,7 +1916,10 @@ const EmployerProfile = () => {
 
               <FormRow $columns="1fr">
                 <FormGroup>
-                  <Label htmlFor="companyName">{language === 'vi' ? 'Tên công ty' : 'Company name'}</Label>
+                  <Label htmlFor="companyName">
+                    {language === 'vi' ? 'Tên công ty' : 'Company name'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <Building2 className="input-icon" />
                     <Input
@@ -1812,14 +1929,26 @@ const EmployerProfile = () => {
                       onChange={handleChange}
                       placeholder={language === 'vi' ? 'Ví dụ: Công ty TNHH ABC' : 'e.g., ABC Company Ltd'}
                       disabled={!isEditing}
+                      style={{
+                        borderColor: isEditing && !formData.companyName?.trim() ? '#FCA5A5' : undefined
+                      }}
                     />
                   </InputWrapper>
+                  {isEditing && !formData.companyName?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Tên công ty là bắt buộc' : 'Company name is required'}
+                    </p>
+                  )}
                 </FormGroup>
               </FormRow>
 
               <FormRow $columns="1fr 1fr">
                 <FormGroup>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">
+                    Email
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <Mail className="input-icon" />
                     <Input
@@ -1830,12 +1959,30 @@ const EmployerProfile = () => {
                       onChange={handleChange}
                       placeholder="contact@company.com"
                       disabled={!isEditing}
+                      style={{
+                        borderColor: isEditing && !formData.email?.trim() ? '#FCA5A5' : undefined
+                      }}
                     />
                   </InputWrapper>
+                  {isEditing && !formData.email?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Email là bắt buộc' : 'Email is required'}
+                    </p>
+                  )}
+                  {isEditing && formData.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim()) && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Email không hợp lệ' : 'Invalid email'}
+                    </p>
+                  )}
                 </FormGroup>
 
                 <FormGroup>
-                  <Label htmlFor="phone">{language === 'vi' ? 'Số điện thoại' : 'Phone number'}</Label>
+                  <Label htmlFor="phone">
+                    {language === 'vi' ? 'Số điện thoại' : 'Phone number'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <Phone className="input-icon" />
                     <Input
@@ -1845,13 +1992,25 @@ const EmployerProfile = () => {
                       onChange={handleChange}
                       placeholder={language === 'vi' ? 'Ví dụ: 028 1234 5678' : 'e.g., 028 1234 5678'}
                       disabled={!isEditing}
+                      style={{
+                        borderColor: isEditing && !formData.phone?.trim() ? '#FCA5A5' : undefined
+                      }}
                     />
                   </InputWrapper>
+                  {isEditing && !formData.phone?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Số điện thoại là bắt buộc' : 'Phone number is required'}
+                    </p>
+                  )}
                 </FormGroup>
               </FormRow>
               <FormRow $columns="1fr">
                 <FormGroup>
-                  <Label htmlFor="address">{language === 'vi' ? 'Địa chỉ' : 'Address'}</Label>
+                  <Label htmlFor="address">
+                    {language === 'vi' ? 'Địa chỉ' : 'Address'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <AddressInput
                     value={formData.address}
                     onChange={handleAddressChange}
@@ -1859,13 +2018,25 @@ const EmployerProfile = () => {
                     placeholder={language === 'vi' ? 'Ví dụ: số 47 đường 5B, Long Bình, Thủ Đức' : 'e.g., 47 5B Street, Long Binh, Thu Duc'}
                     disabled={!isEditing}
                     showCoordinates={true}
+                    style={{
+                      borderColor: isEditing && !formData.address?.trim() ? '#FCA5A5' : undefined
+                    }}
                   />
+                  {isEditing && !formData.address?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Địa chỉ là bắt buộc' : 'Address is required'}
+                    </p>
+                  )}
                 </FormGroup>
               </FormRow>
 
               <FormRow $columns="1fr">
                 <FormGroup>
-                  <Label>{language === 'vi' ? 'Vị trí GPS công ty' : 'Company GPS Location'}</Label>
+                  <Label>
+                    {language === 'vi' ? 'Vị trí GPS công ty' : 'Company GPS Location'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', alignItems: 'start' }}>
                     {/* Left side - Button and info */}
                     <div>
@@ -1914,17 +2085,19 @@ const EmployerProfile = () => {
                           </div>
                         </div>
                       )}
-                      {isEditing && !formData.latitude && (
+                      {isEditing && (!formData.latitude || !formData.longitude) && (
                         <div style={{ 
                           marginTop: '12px', 
                           fontSize: '12px', 
-                          color: '#6b7280',
-                          fontStyle: 'italic',
-                          lineHeight: '1.5'
+                          color: '#EF4444',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
                         }}>
-                          💡 {language === 'vi' 
-                            ? 'Click nút trên để tự động lấy vị trí GPS của bạn' 
-                            : 'Click the button above to automatically get your GPS location'}
+                          <AlertCircle size={12} />
+                          {language === 'vi' 
+                            ? 'Vị trí GPS công ty là bắt buộc (vui lòng chọn địa chỉ hoặc lấy vị trí hiện tại)' 
+                            : 'GPS Location is required (please select address or get current location)'}
                         </div>
                       )}
                     </div>
@@ -1969,9 +2142,88 @@ const EmployerProfile = () => {
                 </FormGroup>
               </FormRow>
 
+              {/* ── Địa điểm làm việc ── */}
               <FormRow $columns="1fr">
                 <FormGroup>
-                  <Label htmlFor="website">Website</Label>
+                  <Label>
+                    {language === 'vi' ? 'Địa điểm làm việc' : 'Work Locations'}
+                  </Label>
+                  <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px', marginTop: '2px' }}>
+                    {language === 'vi'
+                      ? 'Thêm các địa điểm làm việc của công ty. Khi đăng tin tuyển dụng, bạn sẽ chọn địa điểm cần tuyển từ danh sách này. Địa chỉ trên (trụ sở chính) sẽ là địa điểm mặc định nếu không thêm địa điểm nào.'
+                      : 'Add your company work locations. When posting a job, you will select the location from this list. The main address above is the default if no locations are added.'}
+                  </p>
+                  {(formData.branches || []).map((branch, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={branch}
+                        disabled={!isEditing}
+                        onChange={(e) => {
+                          const next = [...(formData.branches || [])];
+                          next[idx] = e.target.value;
+                          setFormData(prev => ({ ...prev, branches: next }));
+                        }}
+                        placeholder={language === 'vi' ? `Địa điểm ${idx + 1}` : `Location ${idx + 1}`}
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: '#1e293b',
+                          background: isEditing ? '#fff' : '#f8fafc',
+                          outline: 'none'
+                        }}
+                      />
+                      {isEditing && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = (formData.branches || []).filter((_, i) => i !== idx);
+                            setFormData(prev => ({ ...prev, branches: next }));
+                          }}
+                          style={{
+                            width: '36px', height: '36px', flexShrink: 0,
+                            background: '#fef2f2', border: '1px solid #fecaca',
+                            borderRadius: '8px', color: '#dc2626',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}
+                          title={language === 'vi' ? 'Xóa địa điểm' : 'Remove location'}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, branches: [...(prev.branches || []), ''] }))}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 14px', background: '#eff6ff', color: '#1e40af',
+                        border: '1px dashed #93c5fd', borderRadius: '8px',
+                        fontSize: '13px', fontWeight: 600, cursor: 'pointer', marginTop: '4px'
+                      }}
+                    >
+                      <Plus size={15} />
+                      {language === 'vi' ? 'Thêm địa điểm' : 'Add location'}
+                    </button>
+                  )}
+                  {!isEditing && (!formData.branches || formData.branches.length === 0) && (
+                    <p style={{ fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>
+                      {language === 'vi' ? 'Chưa có địa điểm nào được thêm.' : 'No locations added yet.'}
+                    </p>
+                  )}
+                </FormGroup>
+              </FormRow>
+
+              <FormRow $columns="1fr">
+                <FormGroup>
+                  <Label htmlFor="website">
+                    Website
+                  </Label>
                   <InputWrapper>
                     <Globe className="input-icon" />
                     <Input
@@ -1988,7 +2240,10 @@ const EmployerProfile = () => {
 
               <FormRow $columns="1fr 1fr 1fr">
                 <FormGroup>
-                  <Label htmlFor="industry">{language === 'vi' ? 'Lĩnh vực' : 'Industry'}</Label>
+                  <Label htmlFor="industry">
+                    {language === 'vi' ? 'Lĩnh vực' : 'Industry'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <FileText className="input-icon" />
                     <Select
@@ -1997,7 +2252,10 @@ const EmployerProfile = () => {
                       value={formData.industry}
                       onChange={handleChange}
                       disabled={!isEditing}
-                      style={{ paddingLeft: '46px' }}
+                      style={{ 
+                        paddingLeft: '46px',
+                        borderColor: isEditing && !formData.industry?.trim() ? '#FCA5A5' : undefined
+                      }}
                     >
                       <option value="">{language === 'vi' ? '-- Chọn lĩnh vực --' : '-- Select industry --'}</option>
                       {[
@@ -2021,10 +2279,19 @@ const EmployerProfile = () => {
                       ))}
                     </Select>
                   </InputWrapper>
+                  {isEditing && !formData.industry?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Lĩnh vực là bắt buộc' : 'Industry is required'}
+                    </p>
+                  )}
                 </FormGroup>
 
                 <FormGroup>
-                  <Label htmlFor="companySize">{language === 'vi' ? 'Quy mô' : 'Company size'}</Label>
+                  <Label htmlFor="companySize">
+                    {language === 'vi' ? 'Quy mô' : 'Company size'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <Users className="input-icon" />
                     <Select
@@ -2033,6 +2300,9 @@ const EmployerProfile = () => {
                       value={formData.companySize}
                       onChange={handleChange}
                       disabled={!isEditing}
+                      style={{ 
+                        borderColor: isEditing && !formData.companySize?.trim() ? '#FCA5A5' : undefined
+                      }}
                     >
                       <option value="">{language === 'vi' ? '-- Chọn quy mô --' : '-- Select size --'}</option>
                       <option value="1-50">{language === 'vi' ? '1 - 50 nhân viên' : '1 - 50 employees'}</option>
@@ -2041,10 +2311,19 @@ const EmployerProfile = () => {
                       <option value="500+">{language === 'vi' ? '500+ nhân viên' : '500+ employees'}</option>
                     </Select>
                   </InputWrapper>
+                  {isEditing && !formData.companySize?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Quy mô là bắt buộc' : 'Company size is required'}
+                    </p>
+                  )}
                 </FormGroup>
                 
                 <FormGroup>
-                  <Label htmlFor="foundedYear">{language === 'vi' ? 'Năm thành lập' : 'Founded Year'}</Label>
+                  <Label htmlFor="foundedYear">
+                    {language === 'vi' ? 'Năm thành lập' : 'Founded Year'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <FileText className="input-icon" />
                     <Input
@@ -2054,13 +2333,25 @@ const EmployerProfile = () => {
                       onChange={handleChange}
                       placeholder={language === 'vi' ? 'Ví dụ: 2020' : 'e.g., 2020'}
                       disabled={!isEditing}
+                      style={{ 
+                        borderColor: isEditing && !String(formData.foundedYear || '').trim() ? '#FCA5A5' : undefined
+                      }}
                     />
                   </InputWrapper>
+                  {isEditing && !String(formData.foundedYear || '').trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Năm thành lập là bắt buộc' : 'Founded year is required'}
+                    </p>
+                  )}
                 </FormGroup>
               </FormRow>
               <FormRow $columns="1fr">
                 <FormGroup>
-                  <Label htmlFor="taxCode">{language === 'vi' ? 'Mã số thuế' : 'Tax Code'}</Label>
+                  <Label htmlFor="taxCode">
+                    {language === 'vi' ? 'Mã số thuế' : 'Tax Code'}
+                    <span style={{ color: '#EF4444', marginLeft: '4px' }}>*</span>
+                  </Label>
                   <InputWrapper>
                     <FileText className="input-icon" />
                     <Input
@@ -2079,6 +2370,12 @@ const EmployerProfile = () => {
                   {isLockedFields.taxCode && (
                     <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
                       {language === 'vi' ? 'Mã số thuế đã được khóa sau lần đầu thiết lập' : 'Tax code is locked after first setup'}
+                    </p>
+                  )}
+                  {isEditing && !isLockedFields.taxCode && !formData.taxCode?.trim() && (
+                    <p style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertCircle size={12} />
+                      {language === 'vi' ? 'Mã số thuế là bắt buộc' : 'Tax code is required'}
                     </p>
                   )}
                 </FormGroup>
@@ -2212,18 +2509,7 @@ const EmployerProfile = () => {
                 </FormGroup>
               </FormRow>
 
-              {isEditing && (
-                <SaveButton
-                  type="button"
-                  onClick={handleSave}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                  disabled={isLoadingProfile}
-                >
-                  <Save />
-                  {isLoadingProfile ? (language === 'vi' ? 'Đang lưu...' : 'Saving...') : (language === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes')}
-                </SaveButton>
-              )}
+
               {/* Documents Section - Combined Verification & Regular Documents */}
               <DocumentsSection>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -2354,6 +2640,21 @@ const EmployerProfile = () => {
                   </>
                 )}
               </DocumentsSection>
+
+              {isEditing && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '32px', width: '100%' }}>
+                  <SaveButton
+                    type="button"
+                    onClick={handleSave}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={isLoadingProfile}
+                  >
+                    <Save />
+                    {isLoadingProfile ? (language === 'vi' ? 'Đang lưu...' : 'Saving...') : (language === 'vi' ? 'Lưu Thay Đổi' : 'Save Changes')}
+                  </SaveButton>
+                </div>
+              )}
             </form>
           </MainPanel>
         </ProfileContent>
@@ -2402,6 +2703,7 @@ const EmployerProfile = () => {
           />
         </div>
       )}
+      <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
     </DashboardLayout>
   );
 };

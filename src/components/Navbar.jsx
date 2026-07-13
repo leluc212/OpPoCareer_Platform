@@ -1872,7 +1872,7 @@ const Navbar = ({ showSearch = true }) => {
           )}
 
           <div style={{ position: 'relative' }} ref={notificationRef}>
-            <IconButton onClick={toggleNotifications}>
+            <IconButton onClick={toggleNotifications} title={language === 'vi' ? 'Thông báo' : 'Notifications'}>
               <Bell />
               {(unreadCount + Math.max(0, unreadChatCount - acknowledgedChatCountBell)) > 0 && (
                 <Badge>
@@ -2046,7 +2046,7 @@ const Navbar = ({ showSearch = true }) => {
             )}
           </div>
 
-          <IconButton onClick={handleSettingsClick}>
+          <IconButton onClick={handleSettingsClick} title={language === 'vi' ? 'Cài đặt' : 'Settings'}>
             <Settings />
           </IconButton>
 
@@ -2070,7 +2070,7 @@ const Navbar = ({ showSearch = true }) => {
             </UserInfo>
           </UserMenu>
 
-          <IconButton onClick={() => navigate('/')}>
+          <IconButton onClick={() => navigate('/')} title={language === 'vi' ? 'Trang chủ' : 'Home'}>
             <Home />
           </IconButton>
         </NavRight>

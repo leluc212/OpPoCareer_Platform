@@ -3867,7 +3867,7 @@ const LandingPage = ({ children }) => {
                     bg: 'linear-gradient(135deg, #fdf4ff, #ede9fe)',
                     color: '#7c3aed',
                     title: language === 'vi' ? 'Hồ sơ công ty' : 'Company Profiles',
-                    desc: language === 'vi' ? 'Khám phá hồ sơ nhà tuyển dụng uy tín. Xem văn hóa công ty, phúc lợi trước khi ứng tuyển.' : 'Explore trusted employer profiles. View company culture and benefits before applying.',
+                    desc: language === 'vi' ? <>Khám phá hồ sơ nhà tuyển dụng uy tín.<br />Xem văn hóa công ty, phúc lợi trước khi ứng tuyển.</> : 'Explore trusted employer profiles. View company culture and benefits before applying.',
                     to: '/companies'
                   },
                   {
@@ -3928,7 +3928,7 @@ const LandingPage = ({ children }) => {
                     transition={{ duration: 0.5, delay: 0.1 }}
                   >
                     {language === 'vi'
-                      ? <>Nền tảng tìm kiếm nhân sự <span>F&B</span></>
+                      ? <>Nền tảng tìm kiếm nhân&nbsp;sự <span>F&B</span></>
                       : <>OpPo — <span>F&B</span> Staffing Platform</>}
                   </AboutInlineTitle>
                   <AboutInlineDesc
@@ -3938,7 +3938,7 @@ const LandingPage = ({ children }) => {
                     transition={{ duration: 0.5, delay: 0.2 }}
                   >
                     {language === 'vi'
-                      ? 'Ốp Pờ hỗ trợ các chủ doanh nghiệp F&B tiêu chuẩn hóa hoạt động kinh doanh bằng cách giải quyết tình trạng biến động nhân sự và rủi ro tuyển dụng. Nền tảng kết nối doanh nghiệp với đội ngũ nhân sự bán thời gian đã được xác thực và có kỹ năng.'
+                      ? 'Ốp Pờ hỗ trợ các chủ doanh nghiệp F&B tiêu chuẩn hóa hoạt động kinh\u00a0doanh bằng cách giải quyết tình trạng biến động nhân\u00a0sự và rủi ro tuyển\u00a0dụng. Nền tảng kết nối doanh nghiệp với đội ngũ nhân\u00a0sự bán thời gian đã\u00a0được xác thực và có kỹ năng.'
                       : 'OpPo helps F&B business owners standardize operations by solving staff turnover and hiring risks. The platform connects businesses with verified, skilled part-time staff.'}
                   </AboutInlineDesc>
                   <AboutInlineStats>
@@ -3963,12 +3963,12 @@ const LandingPage = ({ children }) => {
                     <AboutVMLabel>{language === 'vi' ? 'Tầm nhìn' : 'Vision'}</AboutVMLabel>
                     <AboutVMTitle>
                       {language === 'vi'
-                        ? 'Nền tảng hàng đầu kết nối nhân sự F&B đã xác thực tại Việt Nam'
+                        ? 'Nền tảng hàng đầu kết nối nhân\u00a0sự F&B đã xác thực tại Việt\u00a0Nam'
                         : 'Leading platform connecting verified F&B staff in Vietnam'}
                     </AboutVMTitle>
                     <AboutVMDesc>
                       {language === 'vi'
-                        ? 'Trở thành nền tảng hàng đầu dành cho việc cung cấp và kết nối nhân sự F&B đã được xác thực tại Việt Nam.'
+                        ? 'Trở thành nền tảng hàng đầu dành cho việc cung cấp và kết nối nhân\u00a0sự F&B đã\u00a0được xác thực tại Việt\u00a0Nam.'
                         : 'Become the leading platform for providing and connecting verified F&B staff in Vietnam.'}
                     </AboutVMDesc>
                   </AboutVMCard>
@@ -3981,14 +3981,20 @@ const LandingPage = ({ children }) => {
                   >
                     <AboutVMLabel>{language === 'vi' ? 'Sứ mệnh' : 'Mission'}</AboutVMLabel>
                     <AboutVMTitle>
-                      {language === 'vi'
-                        ? 'Xây dựng thị trường lao động "sạch" — minh bạch & an toàn'
-                        : 'Build a "clean" labor market — transparent & safe'}
+                      {language === 'vi' ? (
+                        <>Xây dựng thị trường lao&nbsp;động "sạch" — minh bạch & an toàn</>
+                      ) : (
+                        'Build a "clean" labor market — transparent & safe'
+                      )}
                     </AboutVMTitle>
                     <AboutVMDesc>
-                      {language === 'vi'
-                        ? 'Loại bỏ các rủi ro trong tuyển dụng và xây dựng một thị trường lao động "sạch" — nơi công việc ít rủi ro, minh bạch, an toàn và tôn trọng người lao động.'
-                        : 'Eliminate hiring risks and build a "clean" labor market — where work is low-risk, transparent, safe, and respects workers.'}
+                      {language === 'vi' ? (
+                        <>
+                          Loại bỏ các rủi ro trong tuyển&nbsp;dụng và xây dựng một thị trường lao&nbsp;động "sạch" — nơi công việc ít rủi ro, minh bạch, an toàn và tôn&nbsp;trọng người lao&nbsp;động.
+                        </>
+                      ) : (
+                        'Eliminate hiring risks and build a "clean" labor market — where work is low-risk, transparent, safe, and respects workers.'
+                      )}
                     </AboutVMDesc>
                   </AboutVMCard>
 

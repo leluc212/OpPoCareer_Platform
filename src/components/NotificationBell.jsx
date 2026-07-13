@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Bell, Package, CheckCircle, CheckCircle2, AlertCircle, Briefcase, Zap, Star, X } from 'lucide-react';
+import { Bell, Package, CheckCircle, CheckCircle2, AlertCircle, XCircle, Briefcase, Zap, Star, X, MessageSquare, UserPlus, UserCheck, Volume2, Banknote, Edit } from 'lucide-react';
 import { getNotifications, getUnreadCount, markAsRead, markAllAsRead } from '../services/notificationService';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -229,9 +229,31 @@ const NotificationBell = ({ userId, role }) => {
         ? (() => { try { return JSON.parse(notification.data); } catch { return {}; } })()
         : (notification.data || {});
 
+      // Xử lý thông báo EMPLOYER_APPROVED (NTD duyệt CV, ứng viên vào phỏng vấn AI)
+      if (notification.type === 'employer_cv_approved' && notifData?.jobId) {
+        // Kiểm tra hạn phỏng vấn 2 ngày
+        if (notifData.interviewDeadline) {
+          const deadline = new Date(notifData.interviewDeadline);
+          if (new Date() > deadline) {
+            // Đã quá hạn — không cho vào trang phỏng vấn
+            alert('Rất tiếc, thời gian phỏng vấn đã hết hạn. Vui lòng liên hệ nhà tuyển dụng hoặc tìm cơ hội khác.');
+            return;
+          }
+        }
+        // Còn hạn — điều hướng vào trang phỏng vấn AI
+        navigate('/candidate/jobs?tab=standard', {
+          state: {
+            selectedJobId: notifData.jobId,
+            applicationId: notifData.applicationId || null,
+            openInterview: true
+          }
+        });
+        return;
+      }
+
       // Handle CV-approved notification (type: 'success') — redirect to AI interview
       // Also catches old notifications that still have '/candidate/dashboard' or '/candidate/jobs' as actionUrl
-      const isCvApproved = (notification.type === 'success' || notification.type === 'CV_ACCEPTED' || notification.type === 'employer_cv_approved') && notifData?.jobId;
+      const isCvApproved = (notification.type === 'success' || notification.type === 'CV_ACCEPTED') && notifData?.jobId;
       const isDashboardUrl = url === '/candidate/dashboard' || url === '/candidate/jobs';
       
       if (isCvApproved || (isDashboardUrl && (notification.type === 'success' || notification.type === 'employer_cv_approved'))) {
@@ -267,8 +289,10 @@ const NotificationBell = ({ userId, role }) => {
 
     const isSuccess = title.includes('thành công') || title.includes('success') || title.includes('chấp nhận') || title.includes('accepted');
     const isUrgent = title.includes('tuyển gấp') || title.includes('urgent') || message.includes('tuyển gấp');
+    const isRejected = title.includes('chưa được duyệt') || title.includes('không phù hợp') || title.includes('not approved') || title.includes('rejected') || type === 'employer_cv_rejected' || type === 'ai_screening_rejected';
 
     // Ưu tiên detect từ nội dung trước
+    if (isRejected) return <XCircle style={{ color: '#ef4444' }} />;
     if (isSuccess) return <CheckCircle2 style={{ color: '#10B981' }} />;
     if (isUrgent) return <Zap style={{ color: '#ef4444' }} />;
 
@@ -280,17 +304,43 @@ const NotificationBell = ({ userId, role }) => {
       case 'cv_approved':
       case 'ai_screening_passed':
       case 'employer_cv_approved':
+      case 'package_approved':
+      case 'job_approved':
+      case 'quick_job_activation_approved':
+      case 'withdrawal_approved':
+      case 'change_request_approved':
+      case 'profile_change_approved':
         return <CheckCircle2 style={{ color: '#10B981' }} />;
       case 'application':
+      case 'job_pending_approval':
         return <Briefcase />;
       case 'job_urgent':
       case 'urgent':
+      case 'new_worker_assigned_shift':
         return <Zap style={{ color: '#ef4444' }} />;
       case 'employer_review':
         return <Star style={{ color: '#F59E0B' }} />;
       case 'ai_screening_rejected':
       case 'employer_cv_rejected':
-        return <AlertCircle style={{ color: '#ef4444' }} />;
+      case 'job_rejected':
+      case 'quick_job_activation_rejected':
+      case 'quick_job_activation_deactivated':
+      case 'withdrawal_rejected':
+      case 'change_request_rejected':
+      case 'profile_change_rejected':
+      case 'worker_replaced_shift_cancelled':
+        return <XCircle style={{ color: '#ef4444' }} />;
+      case 'chat_message':
+        return <MessageSquare style={{ color: '#3b82f6' }} />;
+      case 'ai_interview_complete':
+        return <Volume2 style={{ color: '#8b5cf6' }} />;
+      case 'withdrawal_request':
+      case 'candidate_withdrawal_request':
+        return <Banknote style={{ color: '#10B981' }} />;
+      case 'candidate_verification_request':
+        return <UserCheck style={{ color: '#10B981' }} />;
+      case 'profile_change_request':
+        return <Edit style={{ color: '#F59E0B' }} />;
       default:
         break;
     }
@@ -301,8 +351,29 @@ const NotificationBell = ({ userId, role }) => {
         return <Package />;
       case 'check-circle':
         return <CheckCircle2 style={{ color: '#10B981' }} />;
+      case 'x-circle':
+      case 'alert-circle':
+      case 'circle-x':
+        return <XCircle style={{ color: '#ef4444' }} />;
       case 'briefcase':
         return <Briefcase />;
+      case 'zap':
+        return <Zap style={{ color: '#ef4444' }} />;
+      case 'star':
+        return <Star style={{ color: '#F59E0B' }} />;
+      case 'message-square':
+        return <MessageSquare style={{ color: '#3b82f6' }} />;
+      case 'user-plus':
+        return <UserPlus style={{ color: '#3b82f6' }} />;
+      case 'user-check':
+        return <UserCheck style={{ color: '#10B981' }} />;
+      case 'volume-2':
+        return <Volume2 style={{ color: '#8b5cf6' }} />;
+      case 'banknote':
+      case 'dollar-sign':
+        return <Banknote style={{ color: '#10B981' }} />;
+      case 'edit':
+        return <Edit style={{ color: '#F59E0B' }} />;
       default:
         return <Bell />;
     }
@@ -315,7 +386,9 @@ const NotificationBell = ({ userId, role }) => {
 
     const isSuccess = title.includes('thành công') || title.includes('success') || title.includes('chấp nhận') || title.includes('accepted');
     const isUrgent = title.includes('tuyển gấp') || title.includes('urgent') || message.includes('tuyển gấp');
+    const isRejected = title.includes('chưa được duyệt') || title.includes('không phù hợp') || title.includes('not approved') || title.includes('rejected') || type === 'employer_cv_rejected' || type === 'ai_screening_rejected';
 
+    if (isRejected) return '#ef4444';
     if (isSuccess) return '#10B981';
     if (isUrgent) return '#ef4444';
 
@@ -326,16 +399,40 @@ const NotificationBell = ({ userId, role }) => {
       case 'cv_approved':
       case 'ai_screening_passed':
       case 'employer_cv_approved':
+      case 'package_approved':
+      case 'job_approved':
+      case 'quick_job_activation_approved':
+      case 'withdrawal_approved':
+      case 'change_request_approved':
+      case 'profile_change_approved':
         return '#10B981';
       case 'job_urgent':
       case 'urgent':
+      case 'ai_screening_rejected':
+      case 'employer_cv_rejected':
+      case 'job_rejected':
+      case 'quick_job_activation_rejected':
+      case 'quick_job_activation_deactivated':
+      case 'withdrawal_rejected':
+      case 'change_request_rejected':
+      case 'profile_change_rejected':
         return '#ef4444';
       case 'employer_review':
         return '#F59E0B';
       case 'application':
+      case 'chat_message':
+      case 'package_purchase_request':
+      case 'job_pending_approval':
+      case 'candidate_verification_request':
+      case 'profile_change_request':
         return '#1e40af';
-      case 'ai_screening_rejected':
-      case 'employer_cv_rejected':
+      case 'ai_interview_complete':
+        return '#8b5cf6';
+      case 'withdrawal_request':
+      case 'candidate_withdrawal_request':
+      case 'new_worker_assigned_shift':
+        return '#10B981';
+      case 'worker_replaced_shift_cancelled':
         return '#ef4444';
       default:
         return notification.color || '#1e40af';

@@ -38,6 +38,9 @@ import {
   ArrowRight,
   MapPin
 } from 'lucide-react';
+import {
+  ChartCard,
+} from '../../components/UnifiedChart';
 
 // ─── Change Request Styles ───────────────────────────────
 const ChangeRequestGrid = styled.div`
@@ -309,13 +312,7 @@ const ChartsContainer = styled.div`
   }
 `;
 
-const ChartCard = styled.div`
-  background: ${props => props.theme.colors.bgLight};
-  padding: 24px;
-  border-radius: ${props => props.theme.borderRadius.lg};
-  box-shadow: ${props => props.theme.shadows.sm};
-  border: 1px solid ${props => props.theme.colors.border};
-`;
+// ─── Chart local helpers (PostsManagement only) ─────────────────
 
 const ChartTitle = styled.h3`
   font-size: 18px;
@@ -1068,8 +1065,8 @@ const PostsManagement = () => {
 
     const msg = action === 'approve'
       ? (language === 'vi'
-        ? 'Bạn có chắc muốn duyệt bài này? Sau khi duyệt, bài sẽ hiển thị cho người tìm việc. Bạn vẫn có thể từ chối/xóa sau này.'
-        : 'Are you sure you want to approve this post? It will be visible to candidates. You can still reject/delete later.')
+        ? 'Xác nhận duyệt bài tuyển dụng này. LƯU Ý: Bạn vẫn có thể xóa bài đăng này nếu không phù hợp.'
+        : 'Confirm approving this job post. NOTE: You can still delete this post if it is not suitable.')
       : (language === 'vi'
         ? 'Bạn có chắc muốn từ chối bài này? Sau khi từ chối, trạng thái sẽ là "Đã từ chối".'
         : 'Are you sure you want to reject this post? It will be marked as rejected.');
@@ -1827,6 +1824,7 @@ const PostsManagement = () => {
             isOpen={showDetailModal}
             onClose={() => setShowDetailModal(false)}
             title={language === 'vi' ? 'Chi Tiết Bài Đăng' : 'Post Details'}
+            size="large"
           >
             <DetailModal>
               <DetailSection>
@@ -2021,11 +2019,20 @@ const PostsManagement = () => {
           <div style={{ textAlign: 'center' }}>
             <p style={{ marginBottom: 16 }}>{confirmMessage}</p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+              <Button
+                variant={confirmAction === 'approve' ? 'primary' : 'danger'}
+                onClick={performModerationAction}
+                style={confirmAction === 'approve' ? {
+                  background: 'linear-gradient(135deg, #10B981, #059669)',
+                  border: 'none',
+                  color: '#fff',
+                  fontWeight: 700
+                } : {}}
+              >
+                {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+              </Button>
               <Button variant="secondary" onClick={() => setConfirmModalOpen(false)}>
                 {language === 'vi' ? 'Hủy' : 'Cancel'}
-              </Button>
-              <Button variant="danger" onClick={performModerationAction}>
-                {language === 'vi' ? 'Xác nhận' : 'Confirm'}
               </Button>
             </div>
           </div>

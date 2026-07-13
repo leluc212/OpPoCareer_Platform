@@ -278,6 +278,28 @@ const NotificationsSidebar = () => {
           ? (() => { try { return JSON.parse(notification.data); } catch { return {}; } })()
           : (notification.data || {});
 
+        // Xử lý thông báo EMPLOYER_APPROVED (NTD duyệt CV, ứng viên vào phỏng vấn AI)
+        if (notification.type === 'employer_cv_approved' && notifData?.jobId) {
+          // Kiểm tra hạn phỏng vấn 2 ngày
+          if (notifData.interviewDeadline) {
+            const deadline = new Date(notifData.interviewDeadline);
+            if (new Date() > deadline) {
+              // Đã quá hạn — không cho vào trang phỏng vấn
+              alert('Rất tiếc, thời gian phỏng vấn đã hết hạn. Vui lòng liên hệ nhà tuyển dụng hoặc tìm cơ hội khác.');
+              return;
+            }
+          }
+          // Còn hạn — điều hướng vào trang phỏng vấn AI
+          navigate('/candidate/jobs?tab=standard', {
+            state: {
+              selectedJobId: notifData.jobId,
+              applicationId: notifData.applicationId || null,
+              openInterview: true
+            }
+          });
+          return;
+        }
+
         // Handle CV-approved notification (type: 'success') — redirect to AI interview
         // Also catches old notifications that still have '/candidate/dashboard' or '/candidate/jobs' as actionUrl
         const isCvApproved = (notification.type === 'success' || notification.type === 'CV_ACCEPTED') && notifData?.jobId;

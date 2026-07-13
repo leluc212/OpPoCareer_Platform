@@ -1067,8 +1067,20 @@ const EmployerNotifications = () => {
             transition={{ duration: 0.4 }}
           >
             <BellOff />
-            <h3>{language === 'vi' ? 'Không có thông báo' : 'No notifications'}</h3>
-            <p>{language === 'vi' ? 'Bạn chưa có thông báo nào trong danh mục này' : 'There are no notifications in this category yet'}</p>
+            <h3>
+              {activeTab === 'unread'
+                ? (language === 'vi' ? 'Bạn đã đọc hết các thông báo' : 'You have read all notifications')
+                : activeTab === 'system'
+                ? (language === 'vi' ? 'Bạn đã đọc hết các thông báo hệ thống' : 'You have read all system notifications')
+                : (language === 'vi' ? 'Không có thông báo' : 'No notifications')}
+            </h3>
+            <p>
+              {activeTab === 'unread'
+                ? (language === 'vi' ? 'Không có thông báo chưa đọc nào cần xử lý.' : 'There are no unread notifications.')
+                : activeTab === 'system'
+                ? (language === 'vi' ? 'Không có thông báo hệ thống nào.' : 'There are no system notifications.')
+                : (language === 'vi' ? 'Bạn chưa có thông báo nào trong danh mục này' : 'There are no notifications in this category yet')}
+            </p>
           </EmptyState>
         )}
       </NotificationsContainer>

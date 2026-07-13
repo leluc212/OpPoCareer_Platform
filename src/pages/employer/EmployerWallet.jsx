@@ -956,6 +956,17 @@ const WithdrawSuccessState = styled(SuccessState)`
   .amount-text { color: #b45309; }
 `;
 
+const PaymentDetailsTable = styled.div`
+  width: 100%;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
 const ConfirmDetailsTable = styled(PaymentDetailsTable)`
   background: #fffbeb;
   border: 1.5px solid #fde68a;
@@ -977,17 +988,6 @@ const QRCodeImage = styled.img`
   border-radius: 16px;
   border: 4px solid #f1f5f9;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-`;
-
-const PaymentDetailsTable = styled.div`
-  width: 100%;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 `;
 
 const DetailRow = styled.div`

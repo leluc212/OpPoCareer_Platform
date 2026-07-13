@@ -1238,7 +1238,10 @@ const PublicJobListing = () => {
                   $isDark={isDarkMode}
                   $quickBoosted={job.quickBoost}
                   style={{ animationDelay: `${Math.min(i * 0.04, 0.3)}s` }}
-                  onClick={() => setSelectedJob(job)}
+                  onClick={() => job._type === 'standard'
+                    ? navigate(`/jobs/${job.idJob}`)
+                    : setSelectedJob(job)
+                  }
                 >
                   <LogoBox style={{ fontSize: '20px', fontWeight: 'bold', color: '#1a62ff' }}>
                     {job.companyLogo

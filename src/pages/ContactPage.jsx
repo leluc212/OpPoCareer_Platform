@@ -537,7 +537,7 @@ const ContactPage = () => {
               <ContactLabel $isDark={isDarkMode}>{vi ? 'Trụ sở chính' : 'Headquarters'}</ContactLabel>
               <ContactValue $isDark={isDarkMode}>
                 {vi
-                  ? 'Đại học FPT, Khu Công nghệ cao, Quận 9, TP Thủ Đức, TP HCM'
+                  ? 'Lô E2a, Đường D1, Khu Công nghệ cao, Quận 9, TP Thủ Đức, TP HCM'
                   : 'FPT University, Hi-Tech Park, District 9, Thu Duc City, HCMC'}
               </ContactValue>
             </div>

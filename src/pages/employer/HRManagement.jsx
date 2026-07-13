@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -20,6 +20,8 @@ import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotific
 import DynamicTranslate from '../../components/DynamicTranslate';
 import ProfileSetupPrompt from '../../components/ProfileSetupPrompt';
 import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
+import { formatShiftString } from '../../utils/formatDays';
+import { useAlert } from '../../components/AlertModal';
 
 // Helper: tính số giờ từ chuỗi shift "HH:MM - HH:MM"
 const calcShiftHours = (shift) => {
@@ -139,86 +141,56 @@ const EmptyState = styled(motion.div)`
 
 // ─── Quick Jobs Section ────────────────────────────────────
 const QuickJobsSection = styled.div`
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1.5px solid #E8EFFF;
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
-  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
 `;
 
 const QuickJobsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 `;
 
 const QuickJobCard = styled(motion.button)`
-  padding: 28px 24px;
-  background: ${props => {
-    const alpha = props.$active ? '20' : '08';
-    return `linear-gradient(135deg, ${props.$color}${alpha} 0%, ${props.$color}05 100%)`;
-  }};
-  border: 2px solid ${props => props.$active ? props.$color : props.$color + '30'};
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1.5px solid ${props => props.$active ? props.$color : '#E2E8F0'};
+  background: ${props => props.$active ? `${props.$color}15` : '#ffffff'};
+  color: ${props => props.$active ? props.$color : '#64748b'};
+  font-size: 14px;
+  font-weight: ${props => props.$active ? '700' : '500'};
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  white-space: nowrap;
   
   &:hover {
     border-color: ${props => props.$color};
-    transform: translateY(-4px);
-    box-shadow: ${props => `0 12px 40px ${props.$color}25`};
-    background: ${props => `linear-gradient(135deg, ${props.$color}25 0%, ${props.$color}10 100%)`};
+    color: ${props => props.$color};
+    background: ${props => `${props.$color}10`};
   }
 `;
 
 const QuickJobIcon = styled.div`
-  width: 64px;
-  height: 64px;
-  background: ${props => props.$color}20;
-  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
-  
-  ${QuickJobCard}:hover & {
-    background: ${props => props.$color};
-    
-    svg {
-      color: white;
-    }
-  }
   
   svg {
-    width: 32px;
-    height: 32px;
-    color: ${props => props.$color};
-    transition: color 0.3s ease;
+    width: 18px;
+    height: 18px;
+    color: inherit;
   }
 `;
 
-const QuickJobLabel = styled.div`
-  font-size: 16px;
-  font-weight: 700;
-  color: ${props => props.theme.colors.text};
-  text-align: center;
-`;
+const QuickJobLabel = styled.div``;
 
 const QuickJobDescription = styled.div`
-  font-size: 13px;
-  font-weight: 500;
-  color: ${props => props.theme.colors.textLight};
-  text-align: center;
-  line-height: 1.5;
+  display: none;
 `;
 
 // ─── HR Staff Styles ───────────────────────────────────────
@@ -3324,6 +3296,7 @@ const HRManagement = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { warning: alertWarning } = useAlert();
   const [activeSection, setActiveSection] = useState(() => {
     const saved = sessionStorage.getItem('employer_hr_active_section');
     return saved !== null ? saved : 'posts';
@@ -5667,7 +5640,7 @@ const HRManagement = () => {
                                     <Calendar />{language === 'vi' ? 'Ngày làm:' : 'Work date:'} {staff.startDate}
                                   </div>
                                   <div className="meta-row">
-                                    <Clock />{language === 'vi' ? 'Giờ làm:' : 'Work hours:'} {staff.shift}
+                                    <Clock />{language === 'vi' ? 'Giờ làm:' : 'Work hours:'} {formatShiftString(staff.shift, language)}
                                   </div>
                                   <div className="meta-row">
                                     <CheckCircle />{language === 'vi' ? 'Xác nhận:' : 'Confirmed:'} {staff.confirmedAt}
@@ -5816,7 +5789,7 @@ const HRManagement = () => {
                             <Calendar />{language === 'vi' ? 'Ngày làm:' : 'Work date:'} {staff.startDate}
                           </div>
                           <div className="meta-row">
-                            <Clock />{language === 'vi' ? 'Giờ làm:' : 'Work hours:'} {staff.shift}
+                            <Clock />{language === 'vi' ? 'Giờ làm:' : 'Work hours:'} {formatShiftString(staff.shift, language)}
                           </div>
                           <div className="meta-row">
                             <CheckCircle />{language === 'vi' ? 'Xác nhận:' : 'Confirmed:'} {staff.confirmedAt}
@@ -6306,7 +6279,9 @@ const HRManagement = () => {
                       <QuickJobPostHeader>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                            <QuickJobPostTitle style={{ margin: 0, flex: 1 }}><DynamicTranslate text={post.title} showIndicator={false} /></QuickJobPostTitle>
+                            <QuickJobPostTitle style={{ margin: 0, flex: 1, textTransform: 'uppercase' }}>
+                              <DynamicTranslate text={post.title} showIndicator={false} />
+                            </QuickJobPostTitle>
                             <div style={{
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -6346,8 +6321,12 @@ const HRManagement = () => {
                             })()}
                           </div>
                           <QuickJobPostMeta>
-                            <div className="meta-item">
-                              <MapPin /><DynamicTranslate text={post.location} showIndicator={false} />
+                            <div className="meta-item" title={post.location}>
+                              <MapPin />
+                              <DynamicTranslate 
+                                text={post.location?.length > 50 ? post.location.slice(0, 50) + '...' : post.location} 
+                                showIndicator={false} 
+                              />
                             </div>
                             <div className="meta-item">
                               <Wallet size={15} style={{ strokeWidth: 1.5 }} />{post.salary}
@@ -6356,7 +6335,7 @@ const HRManagement = () => {
                           <QuickJobPostMeta>
                             {post.shift && (
                               <div className="meta-item">
-                                <Clock />{post.shift}
+                                <Clock />{formatShiftString(post.shift, language)}
                               </div>
                             )}
                             <div className="meta-item">
@@ -6399,8 +6378,31 @@ const HRManagement = () => {
                             $variant="primary"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => handleEditJob(post.id)}
-                            style={{ flex: 1 }}
+                            onClick={() => {
+                              const now = Date.now();
+                              const createdAt = new Date(post.createdAt).getTime();
+                              const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
+                              
+                              if (hoursSinceCreated > 24) {
+                                alertWarning(
+                                  language === 'vi'
+                                    ? 'Bài đăng chỉ có thể chỉnh sửa trong vòng 24 giờ sau khi tạo.'
+                                    : 'Job posts can only be edited within 24 hours of creation.',
+                                  { title: language === 'vi' ? 'Không thể chỉnh sửa' : 'Cannot Edit' }
+                                );
+                                return;
+                              }
+                              handleEditJob(post.id);
+                            }}
+                            style={{ 
+                              flex: 1,
+                              opacity: (() => {
+                                const now = Date.now();
+                                const createdAt = new Date(post.createdAt).getTime();
+                                const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
+                                return hoursSinceCreated > 24 ? 0.5 : 1;
+                              })()
+                            }}
                           >
                             <Edit />{language === 'vi' ? 'Sửa' : 'Edit'}
                           </QuickJobPostButton>
@@ -6868,7 +6870,7 @@ const HRManagement = () => {
                         <span>{changeRequestStaff.applicationId ? `#${String(changeRequestStaff.applicationId).slice(-6)}` : changeRequestStaff.position}</span>
                         <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#CBD5E1', flexShrink: 0 }} />
                         <Clock size={11} style={{ flexShrink: 0 }} />
-                        <span>{changeRequestStaff.shift}</span>
+                        <span>{formatShiftString(changeRequestStaff.shift, language)}</span>
                       </div>
                     </div>
                   </div>
@@ -7652,7 +7654,7 @@ const HRManagement = () => {
                         <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '600', marginBottom: '2px' }}>
                           {language === 'vi' ? 'Giờ làm' : 'Working Hours'}
                         </div>
-                        <div style={{ fontWeight: '600', color: '#334155' }}>{selectedJobView.shift}</div>
+                        <div style={{ fontWeight: '600', color: '#334155' }}>{formatShiftString(selectedJobView.shift, language)}</div>
                       </div>
                     </div>
                   )}

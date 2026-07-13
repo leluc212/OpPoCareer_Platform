@@ -31,6 +31,11 @@ import notificationService from '../../services/notificationService';
 import ExperienceManagement from './ExperienceManagement';
 import { getAllExperiences } from '../../services/experienceService';
 import ConfirmModal from '../../components/ConfirmModal';
+import {
+  ChartCard,
+  ChartHeader,
+  ChartLegend,
+} from '../../components/UnifiedChart';
 
 const API_URL = import.meta.env.VITE_CANDIDATE_API_URL;
 
@@ -351,44 +356,7 @@ const TimeTab = styled.button`
   }
 `;
 
-const ChartCard = styled.div`
-  background: ${props => props.theme.colors.bgLight};
-  padding: 24px;
-  border-radius: ${props => props.theme.borderRadius.lg};
-  border: 2px solid ${props => props.theme.colors.border};
-  box-shadow: ${props => props.theme.shadows.card};
-`;
-
-const ChartHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid ${props => props.theme.colors.border};
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
-  }
-  
-  h3 {
-    font-size: 18px;
-    font-weight: 700;
-    color: ${props => props.theme.colors.text};
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    
-    svg {
-      width: 20px;
-      height: 20px;
-      color: ${props => props.theme.colors.primary};
-    }
-  }
-`;
-
+// ─── Chart local helpers ────────────────────────────────────────
 const ChartContainer = styled.div`
   height: 350px;
   position: relative;
@@ -397,18 +365,6 @@ const ChartContainer = styled.div`
 const ChartSVG = styled.svg`
   width: 100%;
   height: 100%;
-`;
-
-const ChartLegend = styled.div`
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-  
-  @media (max-width: 768px) {
-    gap: 16px;
-  }
 `;
 
 const LegendItem = styled.div`

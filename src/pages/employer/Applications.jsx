@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -19,6 +19,8 @@ import cvAiService from '../../services/cvAiService';
 import CVPreviewModal from '../../components/CVPreviewModal';
 import DynamicTranslate from '../../components/DynamicTranslate';
 import employerProfileService from '../../services/employerProfileService';
+import { useAlert } from '../../components/AlertModal';
+import { formatShiftString } from '../../utils/formatDays';
 
 /**
  * Format salary from DynamoDB — prevents double-appending VNĐ/h.
@@ -113,86 +115,55 @@ const CountBadge = styled.div`
 
 // --- Standard Jobs Section ---
 const StandardJobsSection = styled.div`
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1.5px solid #E8EFFF;
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.06);
-  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
 `;
 
 const StandardJobsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 `;
 
 const StandardJobCard = styled(motion.button)`
-  padding: 28px 24px;
-  background: ${props => {
-    const alpha = props.$active ? '20' : '08';
-    return `linear-gradient(135deg, ${props.$color}${alpha} 0%, ${props.$color}05 100%)`;
-  }};
-  border: 2px solid ${props => props.$active ? props.$color : props.$color + '30'};
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1.5px solid ${props => props.$active ? props.$color : '#E2E8F0'};
+  background: ${props => props.$active ? `${props.$color}15` : '#ffffff'};
+  color: ${props => props.$active ? props.$color : '#64748b'};
+  font-size: 14px;
+  font-weight: ${props => props.$active ? '700' : '500'};
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  white-space: nowrap;
   
   &:hover {
     border-color: ${props => props.$color};
-    transform: translateY(-4px);
-    box-shadow: ${props => `0 12px 40px ${props.$color}25`};
-    background: ${props => `linear-gradient(135deg, ${props.$color}25 0%, ${props.$color}10 100%)`};
+    color: ${props => props.$color};
+    background: ${props => `${props.$color}10`};
   }
 `;
 
 const StandardJobIcon = styled.div`
-  width: 64px;
-  height: 64px;
-  background: ${props => props.$color}20;
-  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
-  
-  ${StandardJobCard}:hover & {
-    background: ${props => props.$color};
-    
-    svg {
-      color: white;
-    }
-  }
   
   svg {
-    width: 32px;
-    height: 32px;
-    color: ${props => props.$color};
-    transition: color 0.3s ease;
+    width: 18px;
+    height: 18px;
   }
 `;
 
-const StandardJobLabel = styled.div`
-  font-size: 16px;
-  font-weight: 700;
-  color: ${props => props.theme.colors.text};
-  text-align: center;
-`;
+const StandardJobLabel = styled.div``;
 
 const StandardJobDescription = styled.div`
-  font-size: 13px;
-  font-weight: 500;
-  color: ${props => props.theme.colors.textLight};
-  text-align: center;
-  line-height: 1.5;
+  display: none;
 `;
 
 const RecommendationModalHeader = styled.div`
@@ -583,9 +554,21 @@ const JobStatusBadge = styled.div`
   border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
-  background: ${props => props.$status === 'active' ? '#D1FAE5' : '#F1F5F9'};
-  color: ${props => props.$status === 'active' ? '#047857' : '#64748B'};
-  border: 1.5px solid ${props => props.$status === 'active' ? '#10B981' : '#CBD5E1'};
+  background: ${props =>
+    props.$status === 'active'  ? '#D1FAE5' :
+    props.$status === 'pending' ? '#FEF3C7' :
+    props.$status === 'draft'   ? '#F5F3FF' :
+    '#F1F5F9'};
+  color: ${props =>
+    props.$status === 'active'  ? '#047857' :
+    props.$status === 'pending' ? '#92400E' :
+    props.$status === 'draft'   ? '#6D28D9' :
+    '#64748B'};
+  border: 1.5px solid ${props =>
+    props.$status === 'active'  ? '#10B981' :
+    props.$status === 'pending' ? '#FCD34D' :
+    props.$status === 'draft'   ? '#C4B5FD' :
+    '#CBD5E1'};
   white-space: nowrap;
   letter-spacing: 0.3px;
 `;
@@ -1960,18 +1943,33 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onApprov
                   <ProfileSection>
                     <h3><FileText /> {language === 'vi' ? 'Hồ sơ CV' : 'CV Document'}</h3>
                     {candidate.cvUrl ? (
-                      <CVCard>
+                      <CVCard
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => {
+                          const params = new URLSearchParams({
+                            url: candidate.cvUrl,
+                            name: candidate.cvFileName || 'CV.pdf',
+                            candidate: candidate.candidate || candidate.fullName || '',
+                            job: candidate.job || '',
+                          });
+                          window.open(`/cv-viewer?${params.toString()}`, '_blank');
+                        }}
+                      >
                         <CVIconBox>
                           <FileText />
                         </CVIconBox>
                         <CVInfo>
                           <div className="cv-name">{candidate.cvFileName || (language === 'vi' ? 'Tài liệu CV' : 'CV Document')}</div>
-                          <div className="cv-meta">PDF • {language === 'vi' ? 'Tải trực tiếp từ hệ thống' : 'Direct download'}</div>
+                          <div className="cv-meta">{(candidate.cvFileName || 'file').split('.').pop().toUpperCase()} • {language === 'vi' ? 'Nhấn để xem' : 'Click to view'}</div>
                         </CVInfo>
+                        {/* Nút Tải CV — stopPropagation để không trigger onClick card */}
                         <CVDownloadButton
                           whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => window.open(candidate.cvUrl, '_blank')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(candidate.cvUrl, '_blank');
+                          }}
                         >
                           <Download /> {language === 'vi' ? 'Tải CV' : 'Download'}
                         </CVDownloadButton>
@@ -2760,6 +2758,9 @@ const Applications = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { warning: alertWarning } = useAlert();
+  const alertWarningRef = React.useRef(alertWarning);
+  React.useEffect(() => { alertWarningRef.current = alertWarning; }, [alertWarning]);
   const [activeSection, setActiveSection] = useState(() => {
     if (location.state?.section) {
       return location.state.section;
@@ -2790,7 +2791,9 @@ const Applications = () => {
   const [editJobData, setEditJobData] = useState(null);
   const [showCVModal, setShowCVModal] = useState(false);
   const [selectedCV, setSelectedCV] = useState(null);
-  const [postTimeFilter, setPostTimeFilter] = useState('all'); // 'all' | 'today' | 'week' | 'month'
+  const [postTimeFilter, setPostTimeFilter] = useState('all'); // 'all' | 'today' | 'week' | 'custom'
+  const [postDateFrom, setPostDateFrom] = useState('');
+  const [postDateTo, setPostDateTo] = useState('');
   const [postSearchTerm, setPostSearchTerm] = useState('');
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
   const [recommendations, setRecommendations] = useState([]);
@@ -3048,7 +3051,7 @@ const Applications = () => {
               jobId: app.jobId,
               // Whether the job employer enabled the optional "Phỏng vấn AI" (Round 2 interview) toggle.
               // Round 1 CV evaluation now runs for ALL standard jobs regardless of this flag.
-              isAiScreeningEnabled: !!parentJob?.isAiScreeningEnabled,
+              isAiScreeningEnabled: !!parentJob?.isAiScreeningEnabled || !!app.isAiScreeningEnabled,
               applied: new Date(app.appliedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US'),
               appliedAt: app.appliedAt, // keep raw timestamp for date filtering
               status: app.status || 'pending',
@@ -3090,12 +3093,67 @@ const Applications = () => {
               aiInterviewScore: (app.aiInterviewScore !== undefined && app.aiInterviewScore !== null) ? app.aiInterviewScore : null,
               aiInterviewReport: app.aiInterviewReport || null,
               aiInterviewAudio: app.aiInterviewAudio || '',
-              aiInterviewAudioKey: app.aiInterviewAudioKey || '',
-              isAiScreeningEnabled: !!app.isAiScreeningEnabled
+              aiInterviewAudioKey: app.aiInterviewAudioKey || ''
             };
           });
 
         setRealApplications(transformedApplications);
+
+        // Mark all loaded applications as viewed so sidebar badge resets
+        const userId = user?.userId || user?.id || user?.email;
+        if (userId && transformedApplications.length > 0) {
+          const viewedKey = `employer_viewed_apps_${userId}`;
+          const viewedApps = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+          const viewedSet = new Set(viewedApps);
+          transformedApplications.forEach(app => {
+            if (app.applicationId) viewedSet.add(app.applicationId);
+          });
+          localStorage.setItem(viewedKey, JSON.stringify([...viewedSet]));
+          // Notify sidebar to refresh badge count
+          window.dispatchEvent(new Event('applicationsViewed'));
+        }
+
+        // Enrich: fetch tên thực của ứng viên nếu candidate field là email
+        const needsEnrich = transformedApplications.filter(
+          a => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.candidate)
+        );
+        console.log(`🔍 Enrich needed for ${needsEnrich.length} applications`);
+        if (needsEnrich.length > 0) {
+          const chunkSize = 5;
+          const enrichMap = {};
+          for (let i = 0; i < needsEnrich.length; i += chunkSize) {
+            const chunk = needsEnrich.slice(i, i + chunkSize);
+            await Promise.all(chunk.map(async a => {
+              try {
+                // Tìm raw data để lấy tất cả ID có thể
+                const rawApp = allApplications.find(r => r.applicationId === a.applicationId);
+                const ids = [...new Set([
+                  a.candidateId,
+                  rawApp?.candidateId,
+                  rawApp?.userId,
+                  rawApp?.candidateUserId,
+                ].filter(Boolean))];
+                console.log(`🔍 App ${a.applicationId} (${a.candidate}) → ids:`, ids);
+
+                let fullName = null;
+                for (const id of ids) {
+                  const profile = await candidateProfileService.getProfile(id);
+                  console.log(`  Profile for ${id}:`, profile?.fullName);
+                  if (profile?.fullName) { fullName = profile.fullName; break; }
+                }
+                if (fullName) enrichMap[a.id] = fullName;
+              } catch (err) {
+                console.warn('Enrich error:', err);
+              }
+            }));
+          }
+          console.log('✅ Enrich map:', enrichMap);
+          if (Object.keys(enrichMap).length > 0) {
+            setRealApplications(prev =>
+              prev.map(a => enrichMap[a.id] ? { ...a, candidate: enrichMap[a.id] } : a)
+            );
+          }
+        }
 
         console.log('✅ Transformed applications:', transformedApplications);
       } catch (error) {
@@ -3142,9 +3200,12 @@ const Applications = () => {
       if (shouldBlock) {
         e.preventDefault();
         handleBlur();
-        alert(language === 'vi'
-          ? '🚫 Chụp màn hình bị vô hiệu hóa vì lý do bảo mật!'
-          : '🚫 Screenshots are disabled for security reasons!');
+        alertWarningRef.current(
+          language === 'vi'
+            ? 'Chụp màn hình bị vô hiệu hóa vì lý do bảo mật!'
+            : 'Screenshots are disabled for security reasons.',
+          { title: language === 'vi' ? '🚫 Bảo mật' : '🚫 Security' }
+        );
         setTimeout(handleFocus, 2000);
       }
     };
@@ -3318,6 +3379,7 @@ const Applications = () => {
             jobTitle: app.job,
             companyName: app.companyName || 'Nhà tuyển dụng',
             jobId: app.jobId,
+            applicationId: app.id || app.applicationId,
             employerId: user?.userId,
             isAiScreeningEnabled: app.isAiScreeningEnabled
           });
@@ -3372,6 +3434,20 @@ const Applications = () => {
     setInitialModalTab(tab);
     // Set basic info from application immediately
     setSelectedCandidate(app);
+
+    // Mark application as viewed by this employer (for badge counting)
+    if (app.applicationId) {
+      const userId = user?.userId || user?.id || user?.email;
+      if (userId) {
+        const viewedKey = `employer_viewed_apps_${userId}`;
+        const viewedApps = JSON.parse(localStorage.getItem(viewedKey) || '[]');
+        if (!viewedApps.includes(app.applicationId)) {
+          viewedApps.push(app.applicationId);
+          localStorage.setItem(viewedKey, JSON.stringify(viewedApps));
+          console.log('✅ Marked application as viewed:', app.applicationId);
+        }
+      }
+    }
 
     // Then try to fetch full profile
     if (app.candidateId) {
@@ -3496,7 +3572,7 @@ const Applications = () => {
         setIsFetchingProfile(false);
       }
     }
-  }, []);
+  }, [user]);
 
   const handleCloseProfile = useCallback(() => {
     setSelectedCandidate(null);
@@ -3602,14 +3678,30 @@ const Applications = () => {
         const term = postSearchTerm.toLowerCase();
         if (!post.title?.toLowerCase().includes(term) && !post.location?.toLowerCase().includes(term)) return false;
       }
-      if (postTimeFilter === 'all') return true;
-      const diffDays = (now - toDate(post)) / (1000 * 60 * 60 * 24);
-      if (postTimeFilter === 'today') return diffDays < 1;
-      if (postTimeFilter === 'week') return diffDays < 7;
-      if (postTimeFilter === 'month') return diffDays < 30;
+      if (postTimeFilter === 'today') {
+        const diffDays = (now - toDate(post)) / (1000 * 60 * 60 * 24);
+        return diffDays < 1;
+      }
+      if (postTimeFilter === 'week') {
+        const diffDays = (now - toDate(post)) / (1000 * 60 * 60 * 24);
+        return diffDays < 7;
+      }
+      if (postTimeFilter === 'custom' && (postDateFrom || postDateTo)) {
+        const postDate = toDate(post);
+        if (postDateFrom) {
+          const from = new Date(postDateFrom);
+          from.setHours(0, 0, 0, 0);
+          if (postDate < from) return false;
+        }
+        if (postDateTo) {
+          const to = new Date(postDateTo);
+          to.setHours(23, 59, 59, 999);
+          if (postDate > to) return false;
+        }
+      }
       return true;
     });
-  }, [jobPosts, postTimeFilter, postSearchTerm]);
+  }, [jobPosts, postTimeFilter, postDateFrom, postDateTo, postSearchTerm]);
 
   // Fetch candidate recommendations
   const handleRecommendCandidates = async (job) => {
@@ -3886,7 +3978,7 @@ const Applications = () => {
             <PageIconBox><Briefcase /></PageIconBox>
             <PageTitleText>
               <h1>{language === 'vi' ? 'Công việc tuyển dụng' : 'Standard Jobs'}</h1>
-              <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tuyển dụng (không bao gồm tuyển gấp)' : 'Manage posts and applications for standard jobs (excluding quick jobs)'}</p>
+              <p>{language === 'vi' ? 'Quản lý bài đăng và hồ sơ cho công việc tuyển dụng ' : 'Manage posts and applications for standard jobs '}</p>
             </PageTitleText>
           </PageTitleGroup>
         </PageHeader>
@@ -3952,7 +4044,7 @@ const Applications = () => {
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
               <input
                 type="text"
-                placeholder={language === 'vi' ? 'Tìm theo tên việc, địa điểm...' : 'Search by title, location...'}
+                placeholder={language === 'vi' ? 'Tìm theo tên việc' : 'Search by title'}
                 value={postSearchTerm}
                 onChange={e => setPostSearchTerm(e.target.value)}
                 style={{
@@ -3961,10 +4053,10 @@ const Applications = () => {
                   background: '#f8fafc', color: '#1e293b'
                 }}
               />
-              {['all', 'today', 'week', 'month'].map(f => (
+              {['all', 'today', 'week'].map(f => (
                 <button
                   key={f}
-                  onClick={() => setPostTimeFilter(f)}
+                  onClick={() => { setPostTimeFilter(f); setPostDateFrom(''); setPostDateTo(''); }}
                   style={{
                     padding: '7px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
                     border: '1.5px solid',
@@ -3976,10 +4068,51 @@ const Applications = () => {
                 >
                   {f === 'all' ? (language === 'vi' ? 'Tất cả' : 'All')
                     : f === 'today' ? (language === 'vi' ? 'Hôm nay' : 'Today')
-                      : f === 'week' ? (language === 'vi' ? 'Tuần này' : 'This week')
-                        : (language === 'vi' ? 'Tháng này' : 'This month')}
+                      : (language === 'vi' ? 'Tuần này' : 'This week')}
                 </button>
               ))}
+              {/* Custom date range */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input
+                  type="date"
+                  value={postDateFrom}
+                  onChange={e => { setPostDateFrom(e.target.value); setPostTimeFilter('custom'); }}
+                  style={{
+                    padding: '7px 10px', borderRadius: '8px', fontSize: '13px', fontWeight: '500',
+                    border: '1.5px solid ' + (postTimeFilter === 'custom' && postDateFrom ? '#1e40af' : '#e2e8f0'),
+                    background: postTimeFilter === 'custom' && postDateFrom ? '#eff6ff' : '#f8fafc',
+                    color: '#1e293b', outline: 'none', cursor: 'pointer'
+                  }}
+                  title={language === 'vi' ? 'Từ ngày' : 'From date'}
+                />
+                <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600' }}>—</span>
+                <input
+                  type="date"
+                  value={postDateTo}
+                  min={postDateFrom || undefined}
+                  onChange={e => { setPostDateTo(e.target.value); setPostTimeFilter('custom'); }}
+                  style={{
+                    padding: '7px 10px', borderRadius: '8px', fontSize: '13px', fontWeight: '500',
+                    border: '1.5px solid ' + (postTimeFilter === 'custom' && postDateTo ? '#1e40af' : '#e2e8f0'),
+                    background: postTimeFilter === 'custom' && postDateTo ? '#eff6ff' : '#f8fafc',
+                    color: '#1e293b', outline: 'none', cursor: 'pointer'
+                  }}
+                  title={language === 'vi' ? 'Đến ngày' : 'To date'}
+                />
+                {postTimeFilter === 'custom' && (postDateFrom || postDateTo) && (
+                  <button
+                    onClick={() => { setPostDateFrom(''); setPostDateTo(''); setPostTimeFilter('all'); }}
+                    style={{
+                      padding: '6px 8px', borderRadius: '8px', fontSize: '12px',
+                      border: '1.5px solid #fecaca', background: '#fef2f2', color: '#dc2626',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center'
+                    }}
+                    title={language === 'vi' ? 'Xóa bộ lọc ngày' : 'Clear date filter'}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {isLoadingJobs ? (
@@ -4019,28 +4152,38 @@ const Applications = () => {
                       <JobPostHeader>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                            <JobPostTitle><DynamicTranslate text={post.title} showIndicator={false} /></JobPostTitle>
+                            <JobPostTitle style={{ textTransform: 'uppercase' }}>
+                              <DynamicTranslate text={post.title} showIndicator={false} />
+                            </JobPostTitle>
                             <JobStatusBadge $status={post.status}>
                               {post.status === 'active'
                                 ? (language === 'vi' ? 'Đang tuyển' : 'Active')
+                                : post.status === 'pending'
+                                ? (language === 'vi' ? 'Chờ duyệt' : 'Pending')
+                                : post.status === 'draft'
+                                ? (language === 'vi' ? 'Nháp' : 'Draft')
                                 : (language === 'vi' ? 'Đã đóng' : 'Closed')}
                             </JobStatusBadge>
                           </div>
                           <JobPostMeta>
-                            <div className="meta-item">
-                              <MapPin /> <DynamicTranslate text={post.location} showIndicator={false} />
+                            <div className="meta-item" title={post.location}>
+                              <MapPin /> 
+                              <DynamicTranslate 
+                                text={post.location?.length > 50 ? post.location.slice(0, 50) + '...' : post.location} 
+                                showIndicator={false} 
+                              />
                             </div>
                             <div className="meta-item">
                               <Wallet size={15} style={{ strokeWidth: 1.5 }} />{post.salary}
                             </div>
                             {post.shift && (
                               <div className="meta-item">
-                                <Clock />{post.shift}
+                                <Clock />{formatShiftString(post.shift, language)}
                               </div>
                             )}
                             {post.workDays && (
                               <div className="meta-item">
-                                <Calendar />{language === 'vi' ? 'Ngày làm: ' : 'Work date: '}{post.workDays}
+                                <Calendar />{language === 'vi' ? 'Thời hạn nhận hồ sơ: ' : 'Application deadline: '}{post.workDays}
                               </div>
                             )}
                           </JobPostMeta>
@@ -4096,8 +4239,31 @@ const Applications = () => {
                             $variant="edit"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => handleEditJob(post.id)}
-                            style={{ flex: 1 }}
+                            onClick={() => {
+                              const now = Date.now();
+                              const createdAt = new Date(post._createdAt).getTime();
+                              const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
+                              
+                              if (hoursSinceCreated > 24) {
+                                alertWarning(
+                                  language === 'vi'
+                                    ? 'Bài đăng chỉ có thể chỉnh sửa trong vòng 24 giờ sau khi tạo.'
+                                    : 'Job posts can only be edited within 24 hours of creation.',
+                                  { title: language === 'vi' ? 'Không thể chỉnh sửa' : 'Cannot Edit' }
+                                );
+                                return;
+                              }
+                              handleEditJob(post.id);
+                            }}
+                            style={{ 
+                              flex: 1,
+                              opacity: (() => {
+                                const now = Date.now();
+                                const createdAt = new Date(post._createdAt).getTime();
+                                const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
+                                return hoursSinceCreated > 24 ? 0.5 : 1;
+                              })()
+                            }}
                           >
                             <Edit />{language === 'vi' ? 'Sửa' : 'Edit'}
                           </JobPostButton>
@@ -4253,9 +4419,6 @@ const Applications = () => {
                   ? 'Bạn có chắc chắn muốn xóa bài đăng này? Hành động này không thể hoàn tác.'
                   : 'Are you sure you want to delete this post? This action cannot be undone.'}
               </DeleteModalMessage>
-              <DeleteModalJobTitle>
-                {jobToDelete.title}
-              </DeleteModalJobTitle>
               <DeleteModalActions>
                 <DeleteModalButton
                   whileHover={{ scale: 1.02 }}
@@ -4373,7 +4536,7 @@ const Applications = () => {
                   <FileText size={18} />
                   {language === 'vi' ? 'Mô tả công việc' : 'Job Description'}
                 </h4>
-                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', whiteSpace: 'pre-line', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', whiteSpace: 'pre-line', background: '#f8fafc', padding: '20px 24px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                   {selectedJobView.description}
                 </div>
               </div>
@@ -4385,7 +4548,7 @@ const Applications = () => {
                   <Briefcase size={18} />
                   {language === 'vi' ? 'Trách nhiệm công việc' : 'Job Responsibilities'}
                 </h4>
-                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', whiteSpace: 'pre-line', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', whiteSpace: 'pre-line', background: '#f8fafc', padding: '20px 24px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                   {selectedJobView.responsibilities}
                 </div>
               </div>
@@ -4397,7 +4560,7 @@ const Applications = () => {
                   <CheckCircle size={18} />
                   {language === 'vi' ? 'Yêu cầu ứng viên' : 'Requirements'}
                 </h4>
-                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', whiteSpace: 'pre-line', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', whiteSpace: 'pre-line', background: '#f8fafc', padding: '20px 24px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                   {selectedJobView.requirements}
                 </div>
               </div>
@@ -4409,7 +4572,7 @@ const Applications = () => {
                   <Star size={18} />
                   {language === 'vi' ? 'Quyền lợi' : 'Benefits'}
                 </h4>
-                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', whiteSpace: 'pre-line', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', whiteSpace: 'pre-line', background: '#f8fafc', padding: '20px 24px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                   {selectedJobView.benefits}
                 </div>
               </div>
@@ -4423,7 +4586,7 @@ const Applications = () => {
                     <FileText size={18} />
                     {field.label}
                   </h4>
-                  <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', whiteSpace: 'pre-line', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.8', whiteSpace: 'pre-line', background: '#f8fafc', padding: '20px 24px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                     {field.value}
                   </div>
                 </div>

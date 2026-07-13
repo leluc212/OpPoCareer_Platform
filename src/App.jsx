@@ -7,6 +7,7 @@ import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider as CustomThemeProvider, useTheme } from './context/ThemeContext';
 import ScrollToTop from './components/ScrollToTop';
 import FloatingSupportBar from './components/FloatingSupportBar';
+import { AlertProvider } from './components/AlertModal';
 
 // Auth Pages
 import LandingPage from './pages/auth/LandingPage';
@@ -47,6 +48,7 @@ import AIRecommendationsPage from './pages/AIRecommendationsPage';
 import Wallet from './pages/candidate/Wallet';
 import Availability from './pages/candidate/Availability';
 import CandidatePosts from './pages/candidate/CandidatePosts';
+import JobDetail from './pages/candidate/JobDetail';
 import ChangePassword from './pages/candidate/ChangePassword';
 import DeleteAccount from './pages/candidate/DeleteAccount';
 import CandidateKYC from './pages/candidate/CandidateKYC';
@@ -64,6 +66,7 @@ import CompanyVerification from './pages/employer/CompanyVerification';
 import JobManagement from './pages/employer/JobManagement';
 import Applications from './pages/employer/Applications';
 import EmployerProfile from './pages/employer/EmployerProfile';
+import CVViewer from './pages/employer/CVViewer';
 import EmployerNotifications from './pages/employer/EmployerNotifications';
 import Subscription from './pages/employer/Subscription';
 import HRManagement from './pages/employer/HRManagement';
@@ -87,6 +90,7 @@ import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminProfile from './pages/admin/AdminProfile';
 import AdminManagement from './pages/admin/AdminManagement';
 import BannersManagement from './pages/admin/BannersManagement';
+import AdminChangeRequests from './pages/admin/AdminChangeRequests';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -192,6 +196,7 @@ function AppRoutes() {
       <Route path="/companies" element={<LandingPage><EmployerDirectory /></LandingPage>} />
       <Route path="/companies/:employerId" element={<LandingPage><EmployerProfileView /></LandingPage>} />
       <Route path="/jobs" element={<LandingPage><PublicJobListing /></LandingPage>} />
+      <Route path="/jobs/:jobId" element={<LandingPage><JobDetail standalone={false} /></LandingPage>} />
       <Route path="/about" element={<LandingPage><AboutPage /></LandingPage>} />
       <Route path="/terms-of-service" element={<TermsOfServicePage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
@@ -199,6 +204,7 @@ function AppRoutes() {
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/policy" element={<TermsOfServicePage />} />
       <Route path="/policyregister" element={<RegisterPolicyPage />} />
+      <Route path="/cv-viewer" element={<CVViewer />} />
       <Route path="/policy/candidate" element={<CandidatePolicyPage />} />
       <Route path="/policy/employer" element={<EmployerPolicyPage />} />
       <Route path="/cv-templates" element={<Navigate to="/candidate/cv-templates" replace />} />
@@ -218,6 +224,11 @@ function AppRoutes() {
       <Route path="/candidate/jobs" element={
         <ProtectedRoute allowedRoles={['candidate']}>
           <JobListing />
+        </ProtectedRoute>
+      } />
+      <Route path="/candidate/jobs/:jobId" element={
+        <ProtectedRoute allowedRoles={['candidate']}>
+          <JobDetail />
         </ProtectedRoute>
       } />
       <Route path="/candidate/saved-jobs" element={<Navigate to="/candidate/jobs?tab=saved" replace />} />
@@ -445,6 +456,11 @@ function AppRoutes() {
           <BannersManagement />
         </ProtectedRoute>
       } />
+      <Route path="/admin/change-requests" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <AdminChangeRequests />
+        </ProtectedRoute>
+      } />
       {/* Catch-all: redirect mọi URL không khớp về trang chủ */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -471,11 +487,13 @@ function ThemedApp() {
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : theme}>
       <GlobalStyles />
-      <Router basename="/">
-        <ScrollToTop />
-        <AppRoutes />
-        <FloatingSupportBar />
-      </Router>
+      <AlertProvider>
+        <Router basename="/">
+          <ScrollToTop />
+          <AppRoutes />
+          <FloatingSupportBar />
+        </Router>
+      </AlertProvider>
     </ThemeProvider>
   );
 }

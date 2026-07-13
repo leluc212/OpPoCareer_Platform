@@ -26,6 +26,13 @@ import {
   X as XIcon,
   ZoomIn
 } from 'lucide-react';
+import {
+  ChartCard,
+  ChartHeader,
+  ChartFilters,
+  ChartLegend,
+  ChartsGrid2 as ChartsGrid,
+} from '../../components/UnifiedChart';
 
 const parseDateTime = (str) => {
   if (!str) return new Date();
@@ -294,57 +301,7 @@ const StatChange = styled.div`
   }
 `;
 
-const ChartsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  margin-bottom: 32px;
-  
-  @media (max-width: 1024px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const ChartCard = styled.div`
-  background: ${props => props.theme.colors.bgLight};
-  padding: 24px;
-  border-radius: ${props => props.theme.borderRadius.lg};
-  border: 2px solid ${props => props.theme.colors.border};
-  box-shadow: ${props => props.theme.shadows.card};
-  
-  @media (max-width: 768px) {
-    padding: 20px;
-  }
-`;
-
-const ChartHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid ${props => props.theme.colors.border};
-  
-  h3 {
-    font-size: 18px;
-    font-weight: 700;
-    color: ${props => props.theme.colors.text};
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    
-    @media (max-width: 768px) {
-      font-size: 16px;
-    }
-    
-    svg {
-      width: 20px;
-      height: 20px;
-      color: ${props => props.theme.colors.primary};
-    }
-  }
-`;
-
+// ─── Chart local helpers ───────────────────────────────────────
 const ChartContainer = styled.div`
   height: 300px;
   position: relative;
@@ -362,14 +319,6 @@ const ChartSVG = styled.svg`
   @media (max-width: 768px) {
     min-width: 500px;
   }
-`;
-
-const ChartLegend = styled.div`
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  margin-top: 16px;
-  flex-wrap: wrap;
 `;
 
 const LegendItem = styled.div`

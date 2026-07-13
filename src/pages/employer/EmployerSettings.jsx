@@ -469,7 +469,6 @@ const EmployerSettings = () => {
           </SettingCard>
 
           {/* ── Notifications ── */}
-          <ComingSoonWrapper>
           <SettingCard
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -517,13 +516,6 @@ const EmployerSettings = () => {
               </SettingRow>
             ))}
           </SettingCard>
-          <ComingSoonOverlay>
-            <ComingSoonBadge>
-              <span className="badge-icon">🚧</span>
-              {language === 'vi' ? 'Tính năng đang phát triển' : 'Coming soon'}
-            </ComingSoonBadge>
-          </ComingSoonOverlay>
-          </ComingSoonWrapper>
 
           {/* ── Policy & Terms ── */}
           <SettingCard

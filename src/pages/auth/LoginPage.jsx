@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,9 +52,9 @@ const ROLES = {
     bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
     hero: {
       eyebrow: { vi: 'Chào mừng ứng viên', en: 'Welcome Candidate' },
-      h1: { vi: ['Tìm việc', 'part-time', 'lý tưởng'], en: ['Find your', 'ideal', 'part-time job'] },
+      h1: { vi: ['Tìm việc', 'part-time lý tưởng', ''], en: ['Find your', 'ideal', 'part-time job'] },
       grad: ['#93c5fd', '#c4b5fd', '#fbcfe8'],
-      sub: { vi: 'Đăng nhập để nhận gợi ý việc làm cá nhân hoá, theo dõi đơn ứng tuyển và kết nối với nhà tuyển dụng.', en: 'Sign in to get personalized job recommendations, track your applications and connect with employers.' },
+      sub: { vi: <>Đăng nhập để nhận gợi ý việc làm cá nhân hoá,<br />theo dõi đơn ứng tuyển và kết nối với nhà tuyển dụng.</>, en: 'Sign in to get personalized job recommendations, track your applications and connect with employers.' },
       features: {
         vi: ['Hàng ngàn việc làm part-time đang chờ', 'Ứng tuyển 1-click — không cần CV rườm rà', 'Theo dõi tiến trình ứng tuyển dễ dàng'],
         en: ['Thousands of part-time jobs waiting', 'Apply with 1-click — no lengthy CV needed', 'Track your application progress easily'],
@@ -1101,31 +1101,31 @@ const LoginPage = () => {
                 </motion.form>
               </AnimatePresence>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18 }}>
-                <OrDiv><span>{language === 'vi' ? 'hoặc' : 'or'}</span></OrDiv>
-                <SocialBtn type="button" $c="#EA4335"
-                  style={{
-                    width: '100%',
-                    fontSize: 16,
-                    fontWeight: 700,
-                    padding: '13px 0',
-                    borderRadius: 12,
-                    boxShadow: '0 2px 8px #0001',
-                    margin: '0 auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                  }}
-                  onClick={() => handleSocial('Google')}
-                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                  <GoogleSVG style={{ width: 22, height: 22 }} /> Google
-                </SocialBtn>
-              </div>
+              {role !== 'employer' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 18 }}>
+                  <OrDiv><span>{language === 'vi' ? 'hoặc' : 'or'}</span></OrDiv>
+                  <SocialBtn type="button" $c="#EA4335"
+                    style={{
+                      width: '100%',
+                      fontSize: 16,
+                      fontWeight: 700,
+                      padding: '13px 0',
+                      borderRadius: 12,
+                      boxShadow: '0 2px 8px #0001',
+                      margin: '0 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 10,
+                    }}
+                    onClick={() => handleSocial('Google')}
+                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                    <GoogleSVG style={{ width: 22, height: 22 }} /> Google
+                  </SocialBtn>
+                </div>
+              )}
             </>
           )}
-
-          {/* Admin notice */}
           {role === 'admin' && (
             <>
               <div style={{

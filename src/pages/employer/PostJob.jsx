@@ -924,7 +924,7 @@ const PostJob = () => {
     .filter(slot => slot.startTime && slot.endTime)
     .map(slot => {
       const time = `${slot.startTime} - ${slot.endTime}`;
-      return slot.days && slot.days.length > 0 ? `${slot.days.join(',')} @ ${time}` : time;
+      return slot.days && slot.days.length > 0 ? `${slot.days.join(',')} | ${time}` : time;
     })
     .join(' | ');
 
@@ -932,7 +932,13 @@ const PostJob = () => {
   const [showAiInfoModal, setShowAiInfoModal] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState('');
   const [workHoursList, setWorkHoursList] = useState([createWorkHourSlot(false)]);
+  const [workHourErrors, setWorkHourErrors] = useState({}); // { [slotIndex]: 'error message' }
+  const [fieldErrors, setFieldErrors] = useState({}); // inline errors for description, requirements, etc.
+  const [salaryError, setSalaryError] = useState(false); // true when salary < minimum wage
+  const [profileHasNoAddress, setProfileHasNoAddress] = useState(false); // true khi hồ sơ không có địa chỉ nào
   const [loadingAi, setLoadingAi] = useState(false);
+  const [profileAddress, setProfileAddress] = useState('');
+  const [profileBranches, setProfileBranches] = useState([]); // [] = 1 trụ sở, [a,b,...] = nhiều chi nhánh
 
   const [showJdParser, setShowJdParser] = useState(false);
   const [jdActiveTab, setJdActiveTab] = useState('file');
@@ -961,6 +967,7 @@ const PostJob = () => {
   });
 
   // Check verification status on mount — fetch real isVerified from API
+  // Also pre-fill location from employer profile when creating a new job
   useEffect(() => {
     const checkVerification = async () => {
       try {
@@ -975,6 +982,36 @@ const PostJob = () => {
             setVerificationStatus('not_started');
           }
           // Không tự động hiện modal khi vào trang
+        }
+
+        // Auto-fill location from profile address when creating a new job
+        if (!isEditing && profile?.address) {
+          setFormData(prev => ({
+            ...prev,
+            location: prev.location || profile.address
+          }));
+        }
+
+        // Store the profile address and branches for location selection logic
+        const address = profile?.address || '';
+        const branches = Array.isArray(profile?.branches) ? profile.branches.filter(b => b?.trim()) : [];
+        setProfileAddress(address);
+        setProfileBranches(branches);
+
+        // Flag when employer has no address at all (neither main address nor branches)
+        if (!address && branches.length === 0) {
+          setProfileHasNoAddress(true);
+        } else {
+          setProfileHasNoAddress(false);
+        }
+
+        // Auto-fill: if only 1 address (no branches), pre-fill location automatically
+        if (!isEditing) {
+          if (branches.length === 0 && address) {
+            // Single location — auto fill & lock
+            setFormData(prev => ({ ...prev, location: address }));
+          }
+          // Multi-branch: don't pre-fill, let user choose from dropdown
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
@@ -1021,6 +1058,26 @@ const PostJob = () => {
 
     // Clear warning for this field if any
     setFieldWarnings(prev => prev.filter(w => w !== name));
+
+    // Real-time salary validation: warn when salary/hour < 25000
+    if (name === 'salary') {
+      const num = parseFloat(String(value).replace(/[.,\s]/g, ''));
+      const unit = formData.salaryUnit; // read current unit from state
+      if (value !== '' && !isNaN(num) && unit === 'hour' && num < 25000) {
+        setSalaryError(true);
+      } else {
+        setSalaryError(false);
+      }
+    }
+    // Also re-check when unit changes
+    if (name === 'salaryUnit') {
+      const num = parseFloat(String(formData.salary).replace(/[.,\s]/g, ''));
+      if (formData.salary !== '' && !isNaN(num) && value === 'hour' && num < 25000) {
+        setSalaryError(true);
+      } else {
+        setSalaryError(false);
+      }
+    }
 
     // Update formData
     setFormData(prev => {
@@ -1123,10 +1180,88 @@ const PostJob = () => {
     }));
   };
 
+  // Real-time validate duration for a single slot
+  const validateSlotDuration = (slot, index) => {
+    if (slot.startTime && slot.endTime) {
+      const [sh, sm] = slot.startTime.split(':').map(Number);
+      const [eh, em] = slot.endTime.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      const duration = endMin > startMin ? endMin - startMin : (endMin + 1440) - startMin;
+      if (duration < 60) {
+        setWorkHourErrors(prev => ({
+          ...prev,
+          [index]: language === 'vi'
+            ? 'Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.'
+            : 'Each work shift must be at least 1 hour.'
+        }));
+        return false;
+      }
+    }
+    // Clear error for this slot
+    setWorkHourErrors(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+    return true;
+  };
+
   const handleWorkHourChange = (index, field, value) => {
-    setWorkHoursList(prev => prev.map((slot, slotIndex) => (
-      slotIndex === index ? { ...slot, [field]: value } : slot
-    )));
+    setWorkHoursList(prev => {
+      const updated = prev.map((slot, slotIndex) =>
+        slotIndex === index ? { ...slot, [field]: value } : slot
+      );
+      // Validate real-time after state update
+      const updatedSlot = updated[index];
+      if (updatedSlot.startTime && updatedSlot.endTime) {
+        const [sh, sm] = updatedSlot.startTime.split(':').map(Number);
+        const [eh, em] = updatedSlot.endTime.split(':').map(Number);
+        const startMin = sh * 60 + sm;
+        const endMin = eh * 60 + em;
+        const duration = endMin > startMin ? endMin - startMin : (endMin + 1440) - startMin;
+        if (duration < 60) {
+          setWorkHourErrors(p => ({
+            ...p,
+            [index]: language === 'vi'
+              ? 'Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.'
+              : 'Each work shift must be at least 1 hour.'
+          }));
+        } else {
+          setWorkHourErrors(p => {
+            const n = { ...p };
+            delete n[index];
+            return n;
+          });
+        }
+      } else {
+        // If either time is cleared, also clear the error
+        setWorkHourErrors(p => {
+          const n = { ...p };
+          delete n[index];
+          return n;
+        });
+      }
+      // Re-validate 3-hour rule if startTime changed and workDays is set
+      if (field === 'startTime' && formData.workDays) {
+        const newStartTime = value;
+        if (newStartTime) {
+          const shiftStart = new Date(`${formData.workDays}T${newStartTime}:00`);
+          const hoursLeft = (shiftStart - new Date()) / (1000 * 60 * 60);
+          if (hoursLeft < 3) {
+            setFieldErrors(p => ({
+              ...p,
+              workDays: language === 'vi'
+                ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
+                : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.'
+            }));
+          } else {
+            setFieldErrors(p => { const n = { ...p }; delete n.workDays; return n; });
+          }
+        }
+      }
+      return updated;
+    });
   };
 
   const toggleWorkHourDay = (index, dayKey) => {
@@ -1201,7 +1336,17 @@ const PostJob = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Require salary
+    // 1. Validate location
+    if (!formData.location.trim()) {
+      toast.warning(language === 'vi'
+        ? (!profileAddress
+          ? 'Vui lòng cập nhật địa chỉ trong Hồ Sơ Công Ty trước khi đăng tin.'
+          : 'Vui lòng chọn địa điểm làm việc.')
+        : 'Please select a work location.');
+      return;
+    }
+
+    // 2. Require salary
     if (!String(formData.salary).trim()) {
       toast.warning(language === 'vi'
         ? 'Vui lòng nhập mức lương.'
@@ -1209,7 +1354,61 @@ const PostJob = () => {
       return;
     }
 
-    // Validate work date is not in the past
+    // 2b. Minimum wage: 25,000 VNĐ/giờ
+    if (formData.salaryUnit === 'hour') {
+      const salaryNum = parseFloat(String(formData.salary).replace(/[.,\s]/g, ''));
+      if (!isNaN(salaryNum) && salaryNum < 25000) {
+        setSalaryError(true);
+        toast.warning(language === 'vi'
+          ? 'Mức lương theo giờ phải từ 25.000 VNĐ trở lên.'
+          : 'Hourly salary must be at least 25,000 VND.');
+        return;
+      }
+    }
+
+    // 3. Validate description and requirements are not empty
+    const newFieldErrors = {};
+    if (!formData.description.trim()) {
+      newFieldErrors.description = language === 'vi'
+        ? 'Vui lòng nhập mô tả công việc.'
+        : 'Please enter job description.';
+    }
+    if (!formData.requirements.trim()) {
+      newFieldErrors.requirements = language === 'vi'
+        ? 'Vui lòng nhập yêu cầu công việc.'
+        : 'Please enter job requirements.';
+    }
+    if (Object.keys(newFieldErrors).length > 0) {
+      setFieldErrors(newFieldErrors);
+      toast.warning(language === 'vi'
+        ? 'Vui lòng điền đầy đủ các trường bắt buộc.'
+        : 'Please fill in all required fields.');
+      return;
+    }
+    setFieldErrors({});
+
+    // 4. Validate each work hour slot: end time must be at least 1 hour after start time
+    for (let i = 0; i < workHoursList.length; i++) {
+      const slot = workHoursList[i];
+      if (slot.startTime && slot.endTime) {
+        const [sh, sm] = slot.startTime.split(':').map(Number);
+        const [eh, em] = slot.endTime.split(':').map(Number);
+        const startMinutes = sh * 60 + sm;
+        const endMinutes = eh * 60 + em;
+        // Handle overnight shifts: if end <= start, add 24h to end
+        const duration = endMinutes > startMinutes
+          ? endMinutes - startMinutes
+          : (endMinutes + 1440) - startMinutes;
+        if (duration < 60) {
+          toast.warning(language === 'vi'
+            ? `Ca làm việc ${i + 1}: Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.`
+            : `Shift ${i + 1}: Each work shift must be at least 1 hour.`);
+          return;
+        }
+      }
+    }
+
+    // 5. Validate work date + first shift start time → must be at least 3 hours from now
     if (formData.workDays) {
       const today = new Date().toISOString().split('T')[0];
       if (formData.workDays < today) {
@@ -1218,9 +1417,33 @@ const PostJob = () => {
           : 'Work date cannot be in the past.');
         return;
       }
+
+      // Find the first slot with a startTime to compute shiftStartDateTime
+      const firstSlotWithTime = workHoursList.find(s => s.startTime);
+      if (firstSlotWithTime) {
+        const shiftStartDateTime = new Date(`${formData.workDays}T${firstSlotWithTime.startTime}:00`);
+        const now = new Date();
+        const hoursUntilShift = (shiftStartDateTime - now) / (1000 * 60 * 60);
+        if (hoursUntilShift < 3) {
+          toast.warning(language === 'vi'
+            ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
+            : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.');
+          return;
+        }
+      } else {
+        // No startTime filled: fall back to checking date midnight is >= now + 3h
+        const deadlineStart = new Date(formData.workDays + 'T00:00:00');
+        const threeHoursFromNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        if (deadlineStart < threeHoursFromNow) {
+          toast.warning(language === 'vi'
+            ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
+            : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.');
+          return;
+        }
+      }
     }
 
-    // Block new job posting if not verified
+    // 6. Block new job posting if not verified
     if (!isEditing && verificationStatus !== 'approved') {
       setShowVerificationModal(true);
       return;
@@ -1443,7 +1666,7 @@ const PostJob = () => {
                   <div className="card-header-row">
                     <span className="card-title">
                       {language === 'vi'
-                        ? 'Đăng nhanh từ JD'
+                        ? 'Tạo tin tuyển dụng từ JD'
                         : 'Quick post from JD'}
                     </span>
                     <span className="badge">
@@ -1473,7 +1696,7 @@ const PostJob = () => {
                 <div className="card-content">
                   <span className="card-title">
                     {language === 'vi'
-                      ? 'Đăng bài thủ công (Điền tay)'
+                      ? 'Tạo tin tuyển dụng thủ công'
                       : 'Manual Post (Hand-fill)'}
                   </span>
                   <span className="card-subtitle">
@@ -1641,7 +1864,7 @@ const PostJob = () => {
                 </div>
                 <div className="header-text">
                   <h1>{isEditing
-                    ? (language === 'vi' ? 'Chỉnh Sửa Tin Tuyển Dụng' : 'Edit Job Posting')
+                    ? (language === 'vi' ? 'Cập nhật tin tuyển dụng' : 'Edit Job Posting')
                     : (language === 'vi' ? 'Đăng Bài Tiêu Chuẩn' : 'Post New Job')}
                   </h1>
                   <p>{isEditing
@@ -1666,7 +1889,7 @@ const PostJob = () => {
               <form onSubmit={handleSubmit}>
                 {/* Phân loại job: Tiêu chuẩn / Tuyển gấp */}
                 <FormGroup style={{ marginBottom: '20px' }}>
-                  <Label>{language === 'vi' ? 'Phân loại tin tuyển dụng *' : 'Job Classification *'}</Label>
+                  <Label>{language === 'vi' ? 'Phân loại tin tuyển dụng ' : 'Job Classification '}<span style={{ color: '#E24B4A' }}>*</span></Label>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
                     <button
                       type="button"
@@ -1723,7 +1946,7 @@ const PostJob = () => {
 
                 <FormRow $columns="1fr 1fr">
                   <FormGroup>
-                    <Label>{language === 'vi' ? 'Tiêu đề công việc - Vị trí công việc *' : 'Job Title - Position *'}</Label>
+                    <Label>{language === 'vi' ? 'Tiêu đề công việc - Vị trí công việc ' : 'Job Title - Position '}<span style={{ color: '#E24B4A' }}>*</span></Label>
                     <Input name="title" placeholder={language === 'vi' ? 'Nhân viên pha chế' : 'e.g., Waiter'} value={formData.title} onChange={handleChange} required />
                     {fieldWarnings.includes('title') && (
                       <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
@@ -1733,14 +1956,73 @@ const PostJob = () => {
                   </FormGroup>
 
                   <FormGroup>
-                    <Label>{language === 'vi' ? 'Địa điểm *' : 'Location *'}</Label>
-                    <Input
-                      name="location"
-                      placeholder={language === 'vi' ? 'Quận 1' : 'e.g., District 1'}
-                      value={formData.location}
-                      onChange={handleChange}
-                      required
-                    />
+                    <Label>{language === 'vi' ? 'Địa điểm làm việc ' : 'Work Location '}<span style={{ color: '#E24B4A' }}>*</span></Label>
+                    {/* Gộp: trụ sở chính + chi nhánh → dropdown duy nhất */}
+                    {profileAddress ? (
+                      <>
+                        <Select
+                          name="location"
+                          value={formData.location}
+                          onChange={handleChange}
+                          required
+                          style={{ width: '100%' }}
+                        >
+                          <option value="">{language === 'vi' ? '-- Chọn địa điểm làm việc --' : '-- Select work location --'}</option>
+                          <option value={profileAddress}>
+                            {profileBranches.length > 0
+                              ? (language === 'vi' ? `Trụ sở chính: ${profileAddress}` : `Main office: ${profileAddress}`)
+                              : profileAddress}
+                          </option>
+                          {profileBranches.map((branch, idx) => (
+                            <option key={idx} value={branch}>{`Địa điểm ${idx + 1}: ${branch}`}</option>
+                          ))}
+                        </Select>
+                        <small style={{ color: '#64748b', marginTop: '6px', display: 'block', fontSize: '12px' }}>
+                          {language === 'vi'
+                            ? 'Mỗi bài đăng chỉ áp dụng cho 1 vị trí và 1 địa điểm làm việc duy nhất.'
+                            : 'Each post applies to 1 position and 1 work location only.'}
+                        </small>
+                      </>
+                    ) : (
+                      /* Chưa có địa chỉ trong hồ sơ → nhập tay + cảnh báo */
+                      <>
+                        <div style={{
+                          padding: '10px 14px',
+                          background: '#fff7ed',
+                          border: '1.5px solid #fed7aa',
+                          borderRadius: '10px',
+                          fontSize: '13px',
+                          color: '#9a3412',
+                          fontWeight: 600,
+                          marginBottom: '8px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '8px'
+                        }}>
+                          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '1px', color: '#ea580c' }} />
+                          <span>
+                            {language === 'vi'
+                              ? 'Vui lòng cập nhật địa chỉ trong Hồ Sơ Công Ty trước khi đăng tin.'
+                              : 'Please update your address in Company Profile before posting.'}
+                            {' '}
+                            <button
+                              type="button"
+                              onClick={() => navigate('/employer/profile')}
+                              style={{ color: '#1e40af', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
+                            >
+                              {language === 'vi' ? 'Cập nhật ngay' : 'Update now'}
+                            </button>
+                          </span>
+                        </div>
+                        <Input
+                          name="location"
+                          placeholder={language === 'vi' ? 'Quận 1, TP.HCM' : 'e.g., District 1, HCMC'}
+                          value={formData.location}
+                          onChange={handleChange}
+                          required
+                        />
+                      </>
+                    )}
                     {fieldWarnings.includes('location') && (
                       <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                         ⚠️ {language === 'vi' ? 'AI không tìm thấy địa điểm làm việc, vui lòng điền tay.' : 'AI did not find location, please input manually.'}
@@ -1749,16 +2031,49 @@ const PostJob = () => {
                   </FormGroup>
 
                   <FormGroup>
-                    <Label>{language === 'vi' ? 'Thời hạn nộp hồ sơ *' : 'Application Deadline *'}</Label>
+                    <Label>{language === 'vi' ? 'Ngày làm việc ' : 'Work Date '}<span style={{ color: '#E24B4A' }}>*</span></Label>
                     <Input
                       name="workDays"
                       type="date"
-                      min={new Date().toISOString().split('T')[0]}
-                      placeholder={language === 'vi' ? 'Chọn thời hạn' : 'Select deadline'}
+                      min={(() => {
+                        // min = today (actual validation happens on submit + real-time below)
+                        return new Date().toISOString().split('T')[0];
+                      })()}
+                      placeholder={language === 'vi' ? 'Chọn ngày làm' : 'Select work date'}
                       value={formData.workDays}
-                      onChange={handleChange}
+                      onChange={(e) => {
+                        handleChange(e);
+                        // Real-time: check 3-hour rule with first available startTime
+                        const selectedDate = e.target.value;
+                        if (selectedDate) {
+                          const firstSlot = workHoursList.find(s => s.startTime);
+                          if (firstSlot) {
+                            const shiftStart = new Date(`${selectedDate}T${firstSlot.startTime}:00`);
+                            const hoursLeft = (shiftStart - new Date()) / (1000 * 60 * 60);
+                            if (hoursLeft < 3) {
+                              setFieldErrors(prev => ({
+                                ...prev,
+                                workDays: language === 'vi'
+                                  ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
+                                  : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.'
+                              }));
+                            } else {
+                              setFieldErrors(prev => { const n = { ...prev }; delete n.workDays; return n; });
+                            }
+                          } else {
+                            setFieldErrors(prev => { const n = { ...prev }; delete n.workDays; return n; });
+                          }
+                        } else {
+                          setFieldErrors(prev => { const n = { ...prev }; delete n.workDays; return n; });
+                        }
+                      }}
                       required
                     />
+                    {fieldErrors.workDays && (
+                      <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                        ⚠️ {fieldErrors.workDays}
+                      </small>
+                    )}
                     {fieldWarnings.includes('workDays') && (
                       <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                         ⚠️ {language === 'vi' ? 'AI không tìm thấy thời hạn phù hợp, vui lòng điền tay.' : 'AI did not find deadline, please input manually.'}
@@ -1767,7 +2082,7 @@ const PostJob = () => {
                   </FormGroup>
 
                   <FormGroup>
-                    <Label>{language === 'vi' ? 'Khung giờ làm việc *' : 'Working Hours *'}</Label>
+                    <Label>{language === 'vi' ? 'Khung giờ làm việc ' : 'Working Hours '}<span style={{ color: '#E24B4A' }}>*</span></Label>
                     {fieldWarnings.includes('workHours') && (
                       <small style={{ color: '#dc2626', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
                         ⚠️ {language === 'vi' ? 'AI không tìm thấy khung giờ làm việc phù hợp, vui lòng điền tay.' : 'AI did not find working hours, please input manually.'}
@@ -1850,13 +2165,18 @@ const PostJob = () => {
                               })}
                             </div>
                           </div>
+                          {workHourErrors[index] && (
+                            <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '8px', display: 'block' }}>
+                              ⚠️ {workHourErrors[index]}
+                            </small>
+                          )}
                         </div>
                       ))}
                     </div>
                   </FormGroup>
 
                   <FormGroup>
-                    <Label>{language === 'vi' ? 'Mức lương *' : 'Salary *'}</Label>
+                    <Label>{language === 'vi' ? 'Mức lương ' : 'Salary '}<span style={{ color: '#E24B4A' }}>*</span></Label>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
                       <div style={{ flex: 1 }}>
                         <Input
@@ -1868,6 +2188,10 @@ const PostJob = () => {
                           value={formData.salary ? Number(String(formData.salary).replace(/[.,\s]/g, '')).toLocaleString('vi-VN') : ''}
                           onChange={e => handleChange({ target: { name: 'salary', value: e.target.value.replace(/\D/g, '') } })}
                           required
+                          style={{
+                            borderColor: salaryError ? '#EF4444' : '',
+                            background: salaryError ? '#FFF1F2' : '',
+                          }}
                         />
                       </div>
                       <Select
@@ -1880,6 +2204,15 @@ const PostJob = () => {
                         <option value="month">{language === 'vi' ? 'VNĐ/tháng' : 'VND/month'}</option>
                       </Select>
                     </div>
+                    {salaryError ? (
+                      <small style={{ color: '#DC2626', fontSize: '12px', marginTop: '6px', display: 'block', fontWeight: '600' }}>
+                        ⚠️ {language === 'vi' ? 'Lương theo giờ phải từ 25.000 VNĐ trở lên.' : 'Hourly salary must be at least 25,000 VND.'}
+                      </small>
+                    ) : formData.salaryUnit === 'hour' && (
+                      <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        {language === 'vi' ? 'Tối thiểu 25.000 VNĐ/giờ' : 'Minimum 25,000 VND/hour'}
+                      </small>
+                    )}
                     {fieldWarnings.includes('salary') && (
                       <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                         ⚠️ {language === 'vi' ? 'AI không tìm thấy mức lương phù hợp, vui lòng điền tay.' : 'AI did not find salary, please input manually.'}
@@ -1944,7 +2277,7 @@ const PostJob = () => {
                     <AnimatedFormGroup>
                       <Label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', color: '#4C1D95' }}>
                         <ClipboardList size={16} color="#8b5cf6" />
-                        {language === 'vi' ? 'Câu hỏi phỏng vấn riêng từ bạn dành cho AI học (Mỗi câu hỏi một dòng) *' : 'Custom Interview Questions for AI to Learn (One question per line) *'}
+                        {language === 'vi' ? 'Câu hỏi phỏng vấn riêng từ bạn dành cho AI học (Mỗi câu hỏi một dòng) ' : 'Custom Interview Questions for AI to Learn (One question per line) '}<span style={{ color: '#E24B4A' }}>*</span>
                       </Label>
                       <TextArea
                         name="customQuestions"
@@ -1968,7 +2301,7 @@ const PostJob = () => {
                 <FormGroup style={{ marginTop: '8px' }}>
                   <div style={{ marginBottom: '8px' }}>
                     <SectionLabel style={{ marginBottom: 0 }}>
-                      <span>{language === 'vi' ? 'Mô tả công việc *' : 'Job Description *'}</span>
+                      <span>{language === 'vi' ? 'Mô tả công việc' : 'Job Description'} <span style={{ color: '#E24B4A' }}>*</span></span>
                     </SectionLabel>
                   </div>
                   {formData.title && (
@@ -1999,7 +2332,12 @@ const PostJob = () => {
                       )}
                     </AiButton>
                   )}
-                  <TextArea name="description" placeholder={language === 'vi' ? 'Mô tả vị trí công việc...' : 'Describe the position...'} value={formData.description} onChange={handleChange} required />
+                  <TextArea name="description" placeholder={language === 'vi' ? 'Mô tả vị trí công việc...' : 'Describe the position...'} value={formData.description} onChange={(e) => { handleChange(e); if (e.target.value.trim()) setFieldErrors(prev => { const n = { ...prev }; delete n.description; return n; }); }} required />
+                  {fieldErrors.description && (
+                    <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      {fieldErrors.description}
+                    </small>
+                  )}
                   {fieldWarnings.includes('description') && (
                     <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                       ⚠️ {language === 'vi' ? 'AI không thể tạo mô tả công việc, vui lòng nhập tay.' : 'AI did not generate description, please input manually.'}
@@ -2009,9 +2347,14 @@ const PostJob = () => {
 
                 <FormGroup>
                   <SectionLabel>
-                    <span>{language === 'vi' ? 'Yêu cầu' : 'Requirements'}</span>
+                    <span>{language === 'vi' ? 'Yêu cầu' : 'Requirements'} <span style={{ color: '#E24B4A' }}>*</span></span>
                   </SectionLabel>
-                  <TextArea name="requirements" placeholder={language === 'vi' ? 'Liệt kê yêu cầu và trình độ...' : 'List requirements and qualifications...'} value={formData.requirements} onChange={handleChange} />
+                  <TextArea name="requirements" placeholder={language === 'vi' ? 'Liệt kê yêu cầu và trình độ...' : 'List requirements and qualifications...'} value={formData.requirements} onChange={(e) => { handleChange(e); if (e.target.value.trim()) setFieldErrors(prev => { const n = { ...prev }; delete n.requirements; return n; }); }} />
+                  {fieldErrors.requirements && (
+                    <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      {fieldErrors.requirements}
+                    </small>
+                  )}
                   {fieldWarnings.includes('requirements') && (
                     <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                       ⚠️ {language === 'vi' ? 'AI không thể tạo yêu cầu công việc, vui lòng nhập tay.' : 'AI did not generate requirements, please input manually.'}
@@ -2143,7 +2486,7 @@ const PostJob = () => {
             <ChecklistItem $filled={!!formData.workDays.trim()} $warning={fieldWarnings.includes('workDays')}>
               <div className="label-group">
                 {fieldWarnings.includes('workDays') ? <AlertTriangle color="#dc2626" /> : !!formData.workDays.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
-                <span>{language === 'vi' ? 'Thời hạn nộp hồ sơ' : 'Deadline'}</span>
+                <span>{language === 'vi' ? 'Ngày làm việc' : 'Work Date'}</span>
               </div>
             </ChecklistItem>
 

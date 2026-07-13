@@ -398,6 +398,7 @@ export const createCandidateCvApprovedNotification = async (payload) => {
     jobTitle,
     companyName,
     jobId,
+    applicationId,
     employerId,
     isAiScreeningEnabled
   } = payload;
@@ -436,6 +437,7 @@ export const createCandidateCvApprovedNotification = async (payload) => {
     senderName: safeCompanyName,
     data: {
       jobId: jobId || null,
+      applicationId: applicationId || null,
       jobTitle: safeJobTitle,
       companyName: safeCompanyName,
       employerId: employerId || null,

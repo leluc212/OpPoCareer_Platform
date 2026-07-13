@@ -244,6 +244,12 @@ export const Label = styled.label`
   display: block;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+
+  /* Dấu * bắt buộc màu đỏ */
+  span.req {
+    color: #ef4444;
+    font-weight: 700;
+  }
 `;
 
 export const FormGroup = styled.div`

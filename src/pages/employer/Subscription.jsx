@@ -733,126 +733,121 @@ const Subscription = () => {
     setShowDurationModal(true);
   };
 
-  const handleSendContactRequest = async () => {
+  // ── Helper: lấy employerId và companyName ──────────────────────────────────
+  const getEmployerInfo = async () => {
+    let employerId = 'unknown';
+    let companyName = 'Unknown Company';
+    try {
+      const { fetchAuthSession } = await import('aws-amplify/auth');
+      const session = await fetchAuthSession();
+      if (session?.tokens) {
+        employerId = session.tokens.idToken?.payload?.sub || 'unknown';
+      }
+    } catch (e) { console.error('Error getting Cognito session:', e); }
+    try {
+      const profile = await employerProfileService.getMyProfile();
+      if (profile?.companyName || profile?.businessName) {
+        companyName = profile.companyName || profile.businessName;
+      }
+    } catch (e) { console.error('Error getting employer profile:', e); }
+    return { employerId, companyName };
+  };
+
+  // ── Helper: gọi API tạo subscription ──────────────────────────────────────
+  const createSubscription = async (employerId, companyName, paymentMethod) => {
+    const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+    const purchaseData = {
+      employerId,
+      companyName,
+      packageName: selectedPackage.packageName,
+      duration: selectedDuration.duration,
+      paymentMethod
+    };
+    const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(purchaseData)
+    });
+    if (!response.ok) {
+      const errorMsg = await response.json().catch(() => ({}));
+      throw new Error(errorMsg.message || 'Thất bại. Vui lòng thử lại.');
+    }
+    return response.json();
+  };
+
+  // ── Nút "Mua gói": check ví → wallet nếu đủ, không đủ → hiện modal thiếu tiền
+  const handlePurchase = async () => {
     if (!selectedPackage || !selectedDuration) {
       alert(vi ? 'Vui lòng chọn gói và thời hạn sử dụng.' : 'Please select a package and duration.');
       return;
     }
+    const packagePrice = parseInt(selectedDuration.amount.replace(/[^0-9]/g, ''));
+    const { employerId, companyName } = await getEmployerInfo();
 
-    const priceString = selectedDuration.amount.replace(/[^0-9]/g, '');
-    const packagePrice = parseInt(priceString);
-
-    // Get employerId from Cognito session
-    let employerId = 'unknown';
-    try {
-      const { fetchAuthSession } = await import('aws-amplify/auth');
-      const session = await fetchAuthSession();
-      if (session && session.tokens) {
-        const idTokenPayload = session.tokens.idToken?.payload;
-        employerId = idTokenPayload?.sub || 'unknown';
-      }
-    } catch (error) {
-      console.error('Error getting Cognito session:', error);
-    }
-
-    // Get companyName from DynamoDB
-    let companyName = 'Unknown Company';
-    try {
-      const profile = await employerProfileService.getMyProfile();
-      if (profile && (profile.companyName || profile.businessName)) {
-        companyName = profile.companyName || profile.businessName;
-      }
-    } catch (error) {
-      console.error('Error getting employer profile:', error);
-    }
-
-    // Kiểm tra số dư ví — nếu đủ tiền thì thanh toán ngay (active tức thì), nếu không thì gửi yêu cầu liên hệ
-    let paymentMethod = 'contact';
+    // Kiểm tra số dư ví
     try {
       const walletInfo = await getWallet(employerId);
       const balance = Number(walletInfo?.walletBalance ?? 0);
-      console.log(`💰 Wallet balance: ${balance}, package price: ${packagePrice}`);
+      console.log(`💰 Wallet: ${balance}, cần: ${packagePrice}`);
+
       if (balance >= packagePrice) {
-        paymentMethod = 'wallet';
-        console.log('✅ Sufficient balance — sử dụng wallet payment (active ngay)');
+        // ✅ Đủ tiền → thanh toán wallet, active ngay
+        try {
+          const result = await createSubscription(employerId, companyName, 'wallet');
+          console.log('✅ Wallet payment success:', result);
+          setLastPaymentMethod('wallet');
+          setShowDurationModal(false);
+          setShowSuccessModal(true);
+          window.dispatchEvent(new Event('storage'));
+          setTimeout(() => { setShowSuccessModal(false); setSelectedPackage(null); setSelectedDuration(null); }, 3000);
+        } catch (err) {
+          alert(err.message);
+        }
       } else {
-        // Số dư không đủ — hiện modal nạp tiền thay vì gửi yêu cầu liên hệ
+        // ❌ Không đủ tiền → hiện modal thiếu tiền (có nút gửi yêu cầu)
+        console.log('⚠️ Không đủ số dư, hiện modal thiếu tiền');
         setShowDurationModal(false);
         setShowInsufficientBalanceModal(true);
-        return;
       }
     } catch (walletErr) {
-      // Không lấy được ví → fallback về contact để không chặn flow
-      console.warn('⚠️ Không lấy được thông tin ví, fallback về contact request:', walletErr);
-      paymentMethod = 'contact';
-    }
-
-    try {
-      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
-      const purchaseData = {
-        employerId: employerId,
-        companyName: companyName,
-        packageName: selectedPackage.packageName,
-        duration: selectedDuration.duration,
-        paymentMethod: paymentMethod
-      };
-
-      console.log('📤 Sending request to subscription API:', purchaseData);
-
-      const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        },
-        body: JSON.stringify(purchaseData)
-      });
-
-      if (!response.ok) {
-        const errorMsg = await response.json().catch(() => ({}));
-        alert(errorMsg.message || 'Gửi yêu cầu mở gói thất bại. Vui lòng thử lại.');
-        return;
-      }
-
-      const result = await response.json();
-      console.log(`✅ Subscription ${paymentMethod === 'wallet' ? 'purchased (active ngay)' : 'request created'}:`, result);
-      const apiSubscriptionId = result.data?.subscriptionId;
-
-      // Lưu lại phương thức thanh toán để success modal hiển thị đúng nội dung
-      setLastPaymentMethod(paymentMethod);
-
-      // Chỉ tạo notification cho admin nếu là contact request (cần duyệt thủ công)
-      if (paymentMethod === 'contact') {
-        try {
-          const notificationData = {
-            subscriptionId: apiSubscriptionId,
-            employerId: employerId,
-            companyName: companyName,
-            packageName: selectedPackage.packageName,
-            duration: selectedDuration.duration,
-            price: packagePrice
-          };
-          await createPackagePurchaseRequestNotification(notificationData);
-        } catch (notifError) {
-          console.error('❌ Failed to create notification for admin:', notifError);
-        }
-      }
-
-      // Show success modal
+      console.warn('⚠️ Không lấy được ví, fallback contact request:', walletErr);
+      // Không lấy được ví → cho phép gửi yêu cầu liên hệ
       setShowDurationModal(false);
+      setShowInsufficientBalanceModal(true);
+    }
+  };
+
+  // ── Nút "Gửi yêu cầu mở gói" (chỉ dùng khi thiếu tiền): contact → admin duyệt
+  const handleSendContactRequest = async () => {
+    if (!selectedPackage || !selectedDuration) return;
+    const packagePrice = parseInt(selectedDuration.amount.replace(/[^0-9]/g, ''));
+    const { employerId, companyName } = await getEmployerInfo();
+    try {
+      const result = await createSubscription(employerId, companyName, 'contact');
+      const apiSubscriptionId = result.data?.subscriptionId;
+      console.log('📨 Contact request created:', result);
+
+      // Tạo notification cho admin duyệt
+      try {
+        await createPackagePurchaseRequestNotification({
+          subscriptionId: apiSubscriptionId,
+          employerId,
+          companyName,
+          packageName: selectedPackage.packageName,
+          duration: selectedDuration.duration,
+          price: packagePrice
+        });
+      } catch (notifError) {
+        console.error('❌ Failed to create admin notification:', notifError);
+      }
+
+      setLastPaymentMethod('contact');
+      setShowInsufficientBalanceModal(false);
       setShowSuccessModal(true);
-
-      // Trigger a storage event to update navbar immediately
       window.dispatchEvent(new Event('storage'));
-
-      // Auto close after 3 seconds
-      setTimeout(() => {
-        setShowSuccessModal(false);
-        setSelectedPackage(null);
-        setSelectedDuration(null);
-      }, 3000);
-
+      setTimeout(() => { setShowSuccessModal(false); setSelectedPackage(null); setSelectedDuration(null); }, 3000);
     } catch (error) {
-      console.error('❌ Error in sending contact request:', error);
+      console.error('❌ Error sending contact request:', error);
       alert(vi ? 'Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.' : 'Error sending request. Please try again.');
     }
   };
@@ -1120,10 +1115,10 @@ const Subscription = () => {
                   </CancelButton>
                   <ConfirmButton
                     type="button"
-                    onClick={handleSendContactRequest}
+                    onClick={handlePurchase}
                     style={{ background: selectedPackage.color, padding: '8px 20px', fontSize: '13.5px' }}
                   >
-                    {vi ? 'Gửi yêu cầu mở gói' : 'Send Request'}
+                    {vi ? 'Mua gói' : 'Purchase'}
                   </ConfirmButton>
                 </div>
               </ModalBody>
@@ -1188,19 +1183,23 @@ const Subscription = () => {
               </ErrorTitle>
               <ErrorMessage>
                 {vi
-                  ? `Bạn cần ${selectedDuration.amount} để mua gói này. Vui lòng nạp thêm tiền vào ví.`
-                  : `You need ${selectedDuration.amount} to purchase this package. Please top up your wallet.`}
+                  ? `Bạn cần ${selectedDuration?.amount} để mua gói này. Vui lòng nạp thêm tiền vào ví để tiếp tục.`
+                  : `You need ${selectedDuration?.amount} to purchase this package. Please top up your wallet to continue.`}
               </ErrorMessage>
-              <ModalFooter style={{ justifyContent: 'center', borderTop: 'none', paddingTop: 0 }}>
-                <CancelButton onClick={() => setShowInsufficientBalanceModal(false)}>
-                  {vi ? 'Đóng' : 'Close'}
-                </CancelButton>
+              <ModalFooter style={{ justifyContent: 'center', borderTop: 'none', paddingTop: 0, flexDirection: 'column', gap: '10px' }}>
                 <ConfirmButton onClick={() => {
                   setShowInsufficientBalanceModal(false);
                   navigate('/employer/wallet');
                 }}>
                   {vi ? 'Nạp tiền ngay' : 'Top Up Now'}
                 </ConfirmButton>
+                <button
+                  type="button"
+                  onClick={() => setShowInsufficientBalanceModal(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '13px', cursor: 'pointer', padding: '4px' }}
+                >
+                  {vi ? 'Để sau' : 'Later'}
+                </button>
               </ModalFooter>
             </InsufficientBalanceModalContent>
           </ModalOverlay>

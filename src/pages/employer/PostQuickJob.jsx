@@ -912,12 +912,18 @@ const PostQuickJob = () => {
   const [jdText, setJdText] = useState('');
   const [parsingJd, setParsingJd] = useState(false);
   const [fieldWarnings, setFieldWarnings] = useState([]);
+  const [workHourErrors, setWorkHourErrors] = useState({}); // { [slotIndex]: 'error message' }
+  const [fieldErrors, setFieldErrors] = useState({}); // inline errors for description, requirements
 
   const { user } = useAuth();
   const employerId = user?.userId || user?.id || user?.email || 'mock_employer_id';
   const [realBalance, setRealBalance] = useState(0);
 
   const [checkingAccess, setCheckingAccess] = useState(true);
+  const [profileAddress, setProfileAddress] = useState('');
+  const [profileBranches, setProfileBranches] = useState([]);
+  const [profileHasNoAddress, setProfileHasNoAddress] = useState(false);
+  const [profileLatLng, setProfileLatLng] = useState({ lat: '', lng: '' }); // GPS của trụ sở chính
 
   useEffect(() => {
     const checkAccess = async () => {
@@ -929,6 +935,25 @@ const PostQuickJob = () => {
           navigate('/employer/quick-jobs');
         } else {
           setCheckingAccess(false);
+
+          // Load address & branches for location logic
+          const address = profile.address || '';
+          const branches = Array.isArray(profile.branches) ? profile.branches.filter(b => b?.trim()) : [];
+          setProfileAddress(address);
+          setProfileBranches(branches);
+          setProfileHasNoAddress(!address && branches.length === 0);
+          // Cache GPS của trụ sở chính để dùng khi NTD chọn lại trụ sở
+          setProfileLatLng({ lat: profile.latitude || '', lng: profile.longitude || '' });
+
+          // Auto-fill location: single address → pre-fill + GPS
+          if (branches.length === 0 && address) {
+            setFormData(prev => ({
+              ...prev,
+              location: prev.location || address,
+              latitude: prev.latitude || profile.latitude || '',
+              longitude: prev.longitude || profile.longitude || ''
+            }));
+          }
         }
       } catch (err) {
         console.error('Error checking profile quick job access:', err);
@@ -1247,11 +1272,36 @@ const PostQuickJob = () => {
 
   const updateWorkHourSlot = (index, field, value) => {
     setFieldWarnings(prev => prev.filter(w => w !== 'workHoursList'));
+
+    // Merge new value with current slot to compute duration immediately
+    const currentSlot = (formData.workHoursList || [])[index] || {};
+    const mergedSlot = { ...currentSlot, [field]: value };
+
+    if (mergedSlot.startTime && mergedSlot.endTime) {
+      const [sh, sm] = mergedSlot.startTime.split(':').map(Number);
+      const [eh, em] = mergedSlot.endTime.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      const duration = endMin > startMin ? endMin - startMin : (endMin + 1440) - startMin;
+      if (duration < 60) {
+        setWorkHourErrors(p => ({
+          ...p,
+          [index]: language === 'vi'
+            ? 'Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.'
+            : 'Each work shift must be at least 1 hour.'
+        }));
+      } else {
+        setWorkHourErrors(p => { const n = { ...p }; delete n[index]; return n; });
+      }
+    } else {
+      setWorkHourErrors(p => { const n = { ...p }; delete n[index]; return n; });
+    }
+
     setFormData(prev => ({
       ...prev,
-      workHoursList: (prev.workHoursList || []).map((slot, i) => (
+      workHoursList: (prev.workHoursList || []).map((slot, i) =>
         i === index ? { ...slot, [field]: value } : slot
-      ))
+      )
     }));
   };
 
@@ -1378,6 +1428,75 @@ const PostQuickJob = () => {
       setShowModal(true);
       return;
     }
+
+    // Validate each slot duration >= 60 min
+    for (let i = 0; i < (formData.workHoursList || []).length; i++) {
+      const slot = formData.workHoursList[i];
+      if (slot.startTime && slot.endTime) {
+        const [sh, sm] = slot.startTime.split(':').map(Number);
+        const [eh, em] = slot.endTime.split(':').map(Number);
+        const startMin = sh * 60 + sm;
+        const endMin = eh * 60 + em;
+        const duration = endMin > startMin ? endMin - startMin : (endMin + 1440) - startMin;
+        if (duration < 60) {
+          setModalType('error');
+          setPaymentInfo({
+            error: true,
+            message: language === 'vi'
+              ? `Ca làm việc ${i + 1}: Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.`
+              : `Shift ${i + 1}: Each work shift must be at least 1 hour.`
+          });
+          setShowModal(true);
+          return;
+        }
+      }
+    }
+
+    // Validate 3-hour rule: post must be created >= 3h before first shift start
+    if (formData.workDate) {
+      const firstSlot = (formData.workHoursList || []).find(s => s.startTime);
+      if (firstSlot) {
+        const shiftStart = new Date(`${formData.workDate}T${firstSlot.startTime}:00`);
+        const hoursUntil = (shiftStart - new Date()) / (1000 * 60 * 60);
+        if (hoursUntil < 3) {
+          setModalType('error');
+          setPaymentInfo({
+            error: true,
+            message: language === 'vi'
+              ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
+              : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.'
+          });
+          setShowModal(true);
+          return;
+        }
+      }
+    }
+
+    // Validate description and requirements not empty
+    const newFieldErrors = {};
+    if (!formData.description.trim()) {
+      newFieldErrors.description = language === 'vi'
+        ? 'Vui lòng nhập mô tả công việc.'
+        : 'Please enter job description.';
+    }
+    if (!formData.requirements.trim()) {
+      newFieldErrors.requirements = language === 'vi'
+        ? 'Vui lòng nhập yêu cầu công việc.'
+        : 'Please enter job requirements.';
+    }
+    if (Object.keys(newFieldErrors).length > 0) {
+      setFieldErrors(newFieldErrors);
+      setModalType('error');
+      setPaymentInfo({
+        error: true,
+        message: language === 'vi'
+          ? 'Vui lòng điền đầy đủ các trường bắt buộc (Mô tả, Yêu cầu).'
+          : 'Please fill in all required fields (Description, Requirements).'
+      });
+      setShowModal(true);
+      return;
+    }
+    setFieldErrors({});
 
     // Calculate total salary (fee to deduct)
     const calculation = calculateTotalSalary();
@@ -1666,8 +1785,8 @@ const PostQuickJob = () => {
       paymentDeducted: 'Posting fee deducted',
       remainingBalance: 'Remaining balance',
       errorTitle: 'Error Occurred',
-      hourlyRateMin: 'Must be greater than or equal to 29,500 VND',
-      errorMessage: 'Please fill in all required fields and ensure hourly rate is at least 29,500 VND.',
+      hourlyRateMin: 'Must be greater than or equal to 25,000 VND',
+      errorMessage: 'Please fill in all required fields and ensure hourly rate is at least 25,000 VND.',
       closeButton: 'Close'
     }
   };
@@ -1854,14 +1973,96 @@ const PostQuickJob = () => {
                 <FormRow $columns="1fr 1fr">
                   <FormGroup>
                     <Label required>{t.location}</Label>
-                    <AddressInput
-                      value={formData.location}
-                      onChange={handleAddressChange}
-                      onCoordinatesChange={handleCoordinatesChange}
-                      placeholder={t.locationPlaceholder}
-                      required
-                      showCoordinates={true}
-                    />
+                    {/* Gộp: trụ sở chính + chi nhánh → dropdown duy nhất */}
+                    {profileAddress ? (
+                      <>
+                        <Select
+                          name="location"
+                          value={formData.location}
+                          onChange={async (e) => {
+                            const selected = e.target.value;
+                            setFieldWarnings(prev => prev.filter(w => w !== 'location'));
+                            if (selected === profileAddress) {
+                              setFormData(prev => ({
+                                ...prev,
+                                location: selected,
+                                latitude: profileLatLng.lat,
+                                longitude: profileLatLng.lng
+                              }));
+                            } else {
+                              setFormData(prev => ({ ...prev, location: selected, latitude: '', longitude: '' }));
+                              try {
+                                const geo = await hybridGeocodingService.geocodeAddress(selected);
+                                if (geo?.lat && geo?.lng) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    latitude: geo.lat.toString(),
+                                    longitude: geo.lng.toString()
+                                  }));
+                                }
+                              } catch (_) { /* fallback geocode at submit */ }
+                            }
+                          }}
+                          required
+                          style={{ width: '100%' }}
+                        >
+                          <option value="">{language === 'vi' ? '-- Chọn địa điểm làm việc --' : '-- Select work location --'}</option>
+                          <option value={profileAddress}>
+                            {profileBranches.length > 0
+                              ? (language === 'vi' ? `Trụ sở chính: ${profileAddress}` : `Main office: ${profileAddress}`)
+                              : profileAddress}
+                          </option>
+                          {profileBranches.map((branch, idx) => (
+                            <option key={idx} value={branch}>{`Địa điểm ${idx + 1}: ${branch}`}</option>
+                          ))}
+                        </Select>
+                        <small style={{ color: '#64748b', marginTop: '6px', display: 'block', fontSize: '12px' }}>
+                          {language === 'vi'
+                            ? 'Mỗi bài đăng chỉ áp dụng cho 1 vị trí và 1 địa điểm làm việc duy nhất.'
+                            : 'Each post applies to 1 position and 1 work location only.'}
+                        </small>
+                      </>
+                    ) : (
+                      /* Chưa có địa chỉ nào trong hồ sơ → nhập tay */
+                      <>
+                        <div style={{
+                          padding: '10px 14px',
+                          background: '#fff7ed',
+                          border: '1.5px solid #fed7aa',
+                          borderRadius: '10px',
+                          fontSize: '13px',
+                          color: '#9a3412',
+                          fontWeight: 600,
+                          marginBottom: '8px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '8px'
+                        }}>
+                          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '1px', color: '#ea580c' }} />
+                          <span>
+                            {language === 'vi'
+                              ? 'Vui lòng cập nhật địa chỉ trong Hồ Sơ Công Ty trước khi đăng tin.'
+                              : 'Please update your address in Company Profile before posting.'}
+                            {' '}
+                            <button
+                              type="button"
+                              onClick={() => navigate('/employer/profile')}
+                              style={{ color: '#1e40af', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
+                            >
+                              {language === 'vi' ? 'Cập nhật ngay' : 'Update now'}
+                            </button>
+                          </span>
+                        </div>
+                        <AddressInput
+                          value={formData.location}
+                          onChange={handleAddressChange}
+                          onCoordinatesChange={handleCoordinatesChange}
+                          placeholder={t.locationPlaceholder}
+                          required
+                          showCoordinates={true}
+                        />
+                      </>
+                    )}
                     {fieldWarnings.includes('location') && (
                       <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                         ⚠️ {language === 'vi' ? 'AI không tìm thấy địa điểm làm việc, vui lòng điền tay.' : 'AI did not find location, please input manually.'}
@@ -1937,54 +2138,61 @@ const PostQuickJob = () => {
                       </small>
                     )}
                     {(formData.workHoursList || []).map((slot, index) => (
-                      <FormRow key={index} $columns="1fr 1fr auto" style={{ marginBottom: '10px', alignItems: 'end' }}>
-                        <div>
-                          <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.startTime}</Label>
-                          <Input
-                            type="time"
-                            value={slot.startTime}
-                            onChange={(e) => updateWorkHourSlot(index, 'startTime', e.target.value)}
-                            placeholder={t.startTimePlaceholder}
-                            required
-                          />
-                          <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                            {language === 'vi' ? 'Gợi ý: 09:00 SA' : 'e.g. 09:00 AM'}
-                          </span>
-                        </div>
-                        <div>
-                          <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
-                          <Input
-                            type="time"
-                            value={slot.endTime}
-                            onChange={(e) => updateWorkHourSlot(index, 'endTime', e.target.value)}
-                            placeholder={t.endTimePlaceholder}
-                            required
-                          />
-                          <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                            {language === 'vi' ? 'Gợi ý: 06:00 CH' : 'e.g. 06:00 PM'}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', paddingBottom: '2px' }}>
-                          <button
-                            type="button"
-                            onClick={addWorkHourSlot}
-                            title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
-                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#EFF6FF', color: '#1e40af', border: '1px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer' }}
-                          >
-                            <Plus size={16} />
-                          </button>
-                          {(formData.workHoursList || []).length > 1 && (
+                      <div key={index}>
+                        <FormRow $columns="1fr 1fr auto" style={{ marginBottom: '4px', alignItems: 'end' }}>
+                          <div>
+                            <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.startTime}</Label>
+                            <Input
+                              type="time"
+                              value={slot.startTime}
+                              onChange={(e) => updateWorkHourSlot(index, 'startTime', e.target.value)}
+                              placeholder={t.startTimePlaceholder}
+                              required
+                            />
+                            <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                              {language === 'vi' ? 'Gợi ý: 09:00 SA' : 'e.g. 09:00 AM'}
+                            </span>
+                          </div>
+                          <div>
+                            <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{t.endTime}</Label>
+                            <Input
+                              type="time"
+                              value={slot.endTime}
+                              onChange={(e) => updateWorkHourSlot(index, 'endTime', e.target.value)}
+                              placeholder={t.endTimePlaceholder}
+                              required
+                            />
+                            <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                              {language === 'vi' ? 'Gợi ý: 06:00 CH' : 'e.g. 06:00 PM'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', paddingBottom: '2px' }}>
                             <button
                               type="button"
-                              onClick={() => removeWorkHourSlot(index)}
-                              title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
-                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: '8px', cursor: 'pointer' }}
+                              onClick={addWorkHourSlot}
+                              title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#EFF6FF', color: '#1e40af', border: '1px solid #BFDBFE', borderRadius: '8px', cursor: 'pointer' }}
                             >
-                              <Trash2 size={16} />
+                              <Plus size={16} />
                             </button>
-                          )}
-                        </div>
-                      </FormRow>
+                            {(formData.workHoursList || []).length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeWorkHourSlot(index)}
+                                title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', flexShrink: 0, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: '8px', cursor: 'pointer' }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </FormRow>
+                        {workHourErrors[index] && (
+                          <small style={{ color: '#E24B4A', fontWeight: '600', marginBottom: '8px', display: 'block' }}>
+                            ⚠️ {workHourErrors[index]}
+                          </small>
+                        )}
+                      </div>
                     ))}
                   </FormGroup>
 
@@ -2022,15 +2230,20 @@ const PostQuickJob = () => {
                 </FormRow>
 
                 <FormGroup>
-                  <Label required>{t.description}</Label>
+                  <Label required>{t.description} <span style={{ color: '#E24B4A' }}>*</span></Label>
                   <TextArea
                     name="description"
                     value={formData.description}
-                    onChange={handleChange}
+                    onChange={(e) => { handleChange(e); if (e.target.value.trim()) setFieldErrors(prev => { const n = { ...prev }; delete n.description; return n; }); }}
                     placeholder={t.descriptionPlaceholder}
                     rows={4}
                     required
                   />
+                  {fieldErrors.description && (
+                    <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      {fieldErrors.description}
+                    </small>
+                  )}
                   {fieldWarnings.includes('description') && (
                     <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                       ⚠️ {language === 'vi' ? 'AI không thể tạo mô tả công việc, vui lòng nhập tay.' : 'AI did not generate description, please input manually.'}
@@ -2039,15 +2252,20 @@ const PostQuickJob = () => {
                 </FormGroup>
 
                 <FormGroup>
-                  <Label required>{t.requirements}</Label>
+                  <Label required>{t.requirements} <span style={{ color: '#E24B4A' }}>*</span></Label>
                   <TextArea
                     name="requirements"
                     value={formData.requirements}
-                    onChange={handleChange}
+                    onChange={(e) => { handleChange(e); if (e.target.value.trim()) setFieldErrors(prev => { const n = { ...prev }; delete n.requirements; return n; }); }}
                     placeholder={t.requirementsPlaceholder}
                     rows={3}
                     required
                   />
+                  {fieldErrors.requirements && (
+                    <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                      {fieldErrors.requirements}
+                    </small>
+                  )}
                   {fieldWarnings.includes('requirements') && (
                     <small style={{ color: '#dc2626', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                       ⚠️ {language === 'vi' ? 'AI không thể tạo yêu cầu công việc, vui lòng nhập tay.' : 'AI did not generate requirements, please input manually.'}

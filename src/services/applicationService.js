@@ -293,37 +293,35 @@ export async function rejectReplacementWorker(applicationId) {
  */
 /**
  * Universal Resilient Fetcher for Admin Operations
- * Automatically handles IAM locks, Cognito auth, and Proxy fallbacks
+ * Uses Vite proxy in dev to avoid browser CORS restrictions on Lambda Function URLs.
+ * In production, a server-side proxy or API Gateway must be used — never call a
+ * Lambda Function URL directly from the browser (it will always be CORS-blocked
+ * unless the Lambda's CORS policy explicitly allows the production origin).
  */
-async function fetchResiliently({ path, defaultUrl, serviceName = 'Service' }) {
-  const endpoints = [
-    { url: path, label: 'Vite Proxy' },
-    { url: defaultUrl, label: 'Direct AWS' }
-  ];
+async function fetchResiliently({ path, serviceName = 'Service' }) {
+  try {
+    console.log(`🔍 [${serviceName}] Fetching via proxy: ${path}`);
+    const token = await getAuthTokenForApplications();
+    const headers = { 'Content-Type': 'application/json' };
+    // Include auth token even through the proxy so the Lambda can identify the caller.
+    // The Vite proxy strips CORS restrictions but passes the Authorization header through.
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  for (const endpoint of endpoints) {
-    try {
-      console.log(`🔍 [${serviceName}] Attempting fetch: ${endpoint.url}`);
-      const token = await getAuthTokenForApplications();
-      const headers = { 'Content-Type': 'application/json' };
-      if (token && !endpoint.url.startsWith('/')) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(path, { method: 'GET', headers });
 
-      const response = await fetch(endpoint.url, { method: 'GET', headers, mode: 'cors' });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ [${serviceName}] Success with ${endpoint.label}`);
-        return data.applications || (Array.isArray(data) ? data : []);
-      }
-
-      const errorBody = await response.text();
-      console.warn(`⚠️ [${serviceName}] ${endpoint.label} failed with ${response.status}: ${errorBody.substring(0, 80)}`);
-    } catch (err) {
-      console.error(`❌ [${serviceName}] Error on ${endpoint.label}:`, err.message);
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`✅ [${serviceName}] Success`);
+      return data.applications || (Array.isArray(data) ? data : []);
     }
+
+    const errorBody = await response.text();
+    console.warn(`⚠️ [${serviceName}] Proxy request failed with ${response.status}: ${errorBody.substring(0, 80)}`);
+  } catch (err) {
+    console.error(`❌ [${serviceName}] Fetch error:`, err.message);
   }
 
-  console.error(`❌ [${serviceName}] All fetch paths exhausted for ${path}`);
+  console.warn(`⚠️ [${serviceName}] Could not load data for ${path} — returning empty array`);
   return [];
 }
 
@@ -347,12 +345,15 @@ const applicationService = {
   rejectReplacementWorker,
   
   /**
-   * Get all applications via Vite proxy → Lambda Function URL (no browser CORS issues)
+   * Get all applications (admin only).
+   * In dev: routed through the Vite proxy at /api-lambda-applications → Lambda Function URL,
+   *         which avoids browser CORS restrictions entirely.
+   * In prod: must be routed through an API Gateway or server-side proxy — direct Lambda
+   *          Function URLs cannot be called from the browser due to CORS.
    */
   async getAllApplications() {
     return fetchResiliently({
       path: '/api-lambda-applications/applications',
-      defaultUrl: 'https://65fnfwjx5m7iq5ilmoj5ea7nwq0cespm.lambda-url.ap-southeast-1.on.aws/applications',
       serviceName: 'ApplicationService'
     });
   },
@@ -383,10 +384,13 @@ const applicationService = {
   async getAvailableWorkers(jobId) {
     try {
       const headers = await getAuthHeaders();
-      // Use Lambda Function URL proxy (same as getAllApplications) to avoid 403 from API GW authorizer
+      // Use Lambda Function URL proxy to bypass API Gateway Cognito authorizer.
+      // In dev, the Vite proxy at /api-lambda-applications handles the CORS rewrite.
+      // In prod, route through an API Gateway or server-side proxy instead of calling
+      // the Lambda Function URL directly (direct calls are CORS-blocked in browsers).
       const url = import.meta.env.DEV
         ? `/api-lambda-applications/applications/available-workers/${jobId}`
-        : `https://65fnfwjx5m7iq5ilmoj5ea7nwq0cespm.lambda-url.ap-southeast-1.on.aws/applications/available-workers/${jobId}`;
+        : `/api-lambda-applications/applications/available-workers/${jobId}`;
       const response = await fetch(url, { method: 'GET', headers });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();

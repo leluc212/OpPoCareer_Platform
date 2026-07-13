@@ -488,8 +488,8 @@ exports.handler = async (event) => {
       }
     }
 
-    // POST /profile - Create new profile
-    if (httpMethod === 'POST') {
+    // POST /profile - Create new profile (only when no pathUserId)
+    if (httpMethod === 'POST' && !pathUserId) {
       const body = JSON.parse(event.body || '{}');
       
       // Use userId from token

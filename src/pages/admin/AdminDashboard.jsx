@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -8,7 +8,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { s3Images } from '../../utils/s3Images';
 import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
 
-import { Users, Briefcase, Building2, DollarSign, CheckSquare, XSquare, Shield, Calendar, ArrowRight, Zap, TrendingUp, Star, Sparkles, Eye, Rocket, FileText, ChevronDown, AlertCircle, RefreshCw, X, Wifi, WifiOff } from 'lucide-react';
+import { Users, Briefcase, Building2, DollarSign, CheckSquare, XSquare, Shield, Calendar, ArrowRight, Zap, TrendingUp, Star, Sparkles, Eye, Rocket, FileText, ChevronDown, AlertCircle } from 'lucide-react';
 
 // Import Services
 import adminEmployerService from '../../services/adminEmployerService';
@@ -17,7 +17,14 @@ import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import adminReportService from '../../services/adminReportService';
-import { createWorkerReplacedNotification, createChangeRequestApprovedNotification, createChangeRequestRejectedNotification } from '../../services/notificationService';
+import {
+  ChartCard,
+  ChartHeader,
+  ChartFilters,
+  ChartLegend,
+  ChartScrollWrapper,
+  ChartsGrid2 as ChartsSection,
+} from '../../components/UnifiedChart';
 
 const DashboardContainer = styled.div`
   animation: fadeIn 0.5s ease-in;
@@ -404,17 +411,6 @@ const BoostOption = styled.div`
   }
 `;
 
-const ChartsSection = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 40px;
-  
-  @media (max-width: 1024px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
 const RevenueSection = styled.div`
   margin-bottom: 40px;
 `;
@@ -497,69 +493,7 @@ const RevenueStatBox = styled.div`
   }
 `;
 
-const ChartCard = styled.div`
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-`;
-
-const ChartHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  
-  h3 {
-    font-size: 16px;
-    font-weight: 700;
-    color: #1F2937;
-  }
-`;
-
-const ChartFilters = styled.div`
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  
-  button {
-    padding: 6px 12px;
-    border: 1px solid #E5E7EB;
-    background: white;
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 500;
-    color: #6B7280;
-    cursor: pointer;
-    transition: all 0.2s;
-    
-    &:hover, &.active {
-      background: #EFF6FF;
-      border-color: #3B82F6;
-      color: #1E40AF;
-    }
-  }
-`;
-
-const ChartLegend = styled.div`
-  display: flex;
-  gap: 20px;
-  margin-bottom: 16px;
-  
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    
-    .dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
-  }
-`;
+// ─── Local chart containers ────────────────────────────────────
 
 const ChartContainer = styled.div`
   height: 300px;
@@ -1115,114 +1049,37 @@ const AdminDashboard = () => {
     revenueTrend: []
   });
 
-  // Change Request state
+  // Change Request state — chỉ dùng để hiển thị số lượng tóm tắt ở Dashboard
   const [changeRequests, setChangeRequests] = useState([]);
   const [crLoading, setCrLoading] = useState(false);
-  const [crActionLoading, setCrActionLoading] = useState(null); // applicationId being processed
-  const [rejectModal, setRejectModal] = useState(null); // { applicationId, candidateName }
-  const [rejectNotes, setRejectNotes] = useState('');
 
   // AI Urgent recommendations
   const [showRecsModal, setShowRecsModal] = useState(false);
   const [activeRecommendations, setActiveRecommendations] = useState(null);
   const [recJobTitle, setRecJobTitle] = useState('');
 
-  // WebSocket state
-  const [wsStatus, setWsStatus] = useState('disconnected'); // 'connected' | 'connecting' | 'disconnected'
-  const wsRef = useRef(null);
-  const wsRetryCount = useRef(0);
-  const wsRetryTimer = useRef(null);
-  const newCardTimers = useRef({}); // { applicationId: timerId }
-  const [newCardIds, setNewCardIds] = useState(new Set()); // IDs hiển thị badge "Mới"
-
-  const WS_ENDPOINT = import.meta.env.VITE_ADMIN_WS_ENDPOINT || '';
-  const WS_MAX_RETRY = 5;
-  const WS_RETRY_DELAY = 3000;
-
-  const clearNewBadge = useCallback((applicationId) => {
-    setNewCardIds(prev => {
-      const next = new Set(prev);
-      next.delete(applicationId);
-      return next;
-    });
-  }, []);
-
-  const connectWebSocket = useCallback(() => {
-    if (!WS_ENDPOINT) return;
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
-
-    setWsStatus('connecting');
-    const ws = new WebSocket(WS_ENDPOINT);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setWsStatus('connected');
-      wsRetryCount.current = 0;
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'NEW_REQUEST') {
-          const newReq = msg.data;
-          setChangeRequests(prev => {
-            // Tránh trùng lặp
-            if (prev.some(r => r.applicationId === newReq.applicationId)) return prev;
-            return [newReq, ...prev];
-          });
-          // Thêm badge "Mới" trong 5 giây
-          setNewCardIds(prev => new Set([...prev, newReq.applicationId]));
-          if (newCardTimers.current[newReq.applicationId]) {
-            clearTimeout(newCardTimers.current[newReq.applicationId]);
-          }
-          newCardTimers.current[newReq.applicationId] = setTimeout(() => {
-            clearNewBadge(newReq.applicationId);
-            delete newCardTimers.current[newReq.applicationId];
-          }, 5000);
-        } else if (msg.type === 'REQUEST_UPDATED') {
-          const updated = msg.data;
-          // Xoá khỏi danh sách nếu không còn pending_change
-          if (updated.status && updated.status !== 'pending_change') {
-            setChangeRequests(prev => prev.filter(r => r.applicationId !== updated.applicationId));
-          }
-        }
-      } catch (e) {
-        console.warn('AdminDashboard WS: lỗi parse message', e);
-      }
-    };
-
-    ws.onerror = () => {
-      setWsStatus('disconnected');
-    };
-
-    ws.onclose = () => {
-      setWsStatus('disconnected');
-      wsRef.current = null;
-      // Tự động reconnect tối đa WS_MAX_RETRY lần
-      if (wsRetryCount.current < WS_MAX_RETRY) {
-        wsRetryCount.current += 1;
-        wsRetryTimer.current = setTimeout(() => {
-          connectWebSocket();
-        }, WS_RETRY_DELAY);
-      }
-    };
-  }, [WS_ENDPOINT, clearNewBadge]);
+  // Urgent jobs list modal
+  const [showUrgentJobsModal, setShowUrgentJobsModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
     fetchChangeRequests();
-    connectWebSocket();
 
-    return () => {
-      // Cleanup WebSocket khi unmount
-      if (wsRetryTimer.current) clearTimeout(wsRetryTimer.current);
-      Object.values(newCardTimers.current).forEach(clearTimeout);
-      if (wsRef.current) {
-        wsRef.current.onclose = null; // Ngăn reconnect khi unmount
-        wsRef.current.close();
-        wsRef.current = null;
+    // Realtime: chỉ refresh danh sách NTD và ứng viên mỗi 10 giây
+    const realtimeInterval = setInterval(async () => {
+      try {
+        const [freshEmployers, freshCandidates] = await Promise.all([
+          adminEmployerService.getAllEmployers(),
+          candidateProfileService.getAllCandidates()
+        ]);
+        if (freshEmployers && freshEmployers.length > 0) setEmployers(freshEmployers);
+        if (freshCandidates && freshCandidates.length > 0) setCandidates(freshCandidates);
+      } catch (e) {
+        // silent fail
       }
-    };
+    }, 10000);
+
+    return () => clearInterval(realtimeInterval);
   }, []);
 
   const fetchChangeRequests = async () => {
@@ -1372,14 +1229,166 @@ const AdminDashboard = () => {
   const totalPosts = allJobPosts.length; // From database
   const conversionRate = 0.65; // 65% of posts get applications (realistic for part-time jobs)
 
+  // Chart period state
+  const [activityPeriod, setActivityPeriod] = useState('week');
+  const [revenuePeriod, setRevenuePeriod] = useState('6months');
+  const [selectedQuarterYear, setSelectedQuarterYear] = useState(new Date().getFullYear());
+  const [selectedQuarter, setSelectedQuarter] = useState('all'); // 'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
+
+  // Helper: lấy date string YYYY-MM-DD từ application — field là appliedAt (không phải createdAt)
+  const getAppDateStr = (a) => {
+    const raw = a.appliedAt || a.createdAt || a.applied_at || '';
+    if (!raw) return '';
+    const num = Number(raw);
+    if (!isNaN(num) && num > 0) {
+      const d = new Date(num < 1e12 ? num * 1000 : num);
+      return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    }
+    // ISO string — lấy 10 ký tự đầu
+    return String(raw).slice(0, 10);
+  };
+
+  // Activity chart data — tính thật từ allJobPosts và applications
+  const buildActivityData = (period) => {
+    const now = new Date();
+    const points = [];
+
+    if (period === 'week') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now); d.setDate(now.getDate() - i);
+        const ds = d.toISOString().split('T')[0];
+        const label = d.toLocaleDateString('vi-VN', { weekday: 'short' });
+        const posts = allJobPosts.filter(j => (j.createdAt || '').startsWith(ds)).length;
+        const apps = applications.filter(a => getAppDateStr(a) === ds).length;
+        points.push({ label, posts, apps });
+      }
+    } else if (period === 'month') {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now); d.setDate(now.getDate() - i);
+        const ds = d.toISOString().split('T')[0];
+        const label = `${d.getDate()}/${d.getMonth() + 1}`;
+        const posts = allJobPosts.filter(j => (j.createdAt || '').startsWith(ds)).length;
+        const apps = applications.filter(a => getAppDateStr(a) === ds).length;
+        points.push({ label, posts, apps });
+      }
+    } else {
+      // year — 12 months
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = `T${d.getMonth() + 1}`;
+        const posts = allJobPosts.filter(j => (j.createdAt || '').startsWith(ym)).length;
+        const apps = applications.filter(a => getAppDateStr(a).startsWith(ym)).length;
+        points.push({ label, posts, apps });
+      }
+    }
+    return points;
+  };
+
+  const activityChartData = buildActivityData(activityPeriod);
+
+  // Revenue trend — tính thật từ subscriptions theo kỳ
+  const buildRevenueData = (period) => {
+    const now = new Date();
+    const points = [];
+    const months = period === '6months' ? 6 : period === 'year' ? 12 : 24;
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = `T${d.getMonth() + 1}`;
+      const revenue = subscriptions
+        .filter(s => s.status !== 'pending' && s.status !== 'rejected')
+        .filter(s => (s.purchaseDateTime || s.createdAt || '').startsWith(ym))
+        .reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0);
+      points.push({ label, revenue });
+    }
+    return points;
+  };
+
+  const revenueChartData = buildRevenueData(revenuePeriod);
+
+  // Quarterly data — ứng tuyển theo loại công việc (tiêu chuẩn vs tuyển gấp)
+  // Build a jobId -> isUrgent lookup map từ allJobPosts để join với applications
+  const jobTypeMap = {};
+  allJobPosts.forEach(j => {
+    const id = j.idJob || j.id || j.jobId;
+    if (id) {
+      jobTypeMap[id] = j.category === 'urgent' || j.category === 'quick-jobs' || j.jobType === 'urgent';
+    }
+  });
+
+  const isUrgentJob = (jobId) => {
+    if (!jobId) return false;
+    // Nếu có trong map thì dùng map
+    if (jobId in jobTypeMap) return jobTypeMap[jobId];
+    // Fallback: check trực tiếp field jobType trên application
+    return false;
+  };
+
+  const buildQuarterlyData = (year, quarterFilter) => {
+    const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+    const filtered = quarterFilter === 'all' ? quarters : quarters.filter(q => q === quarterFilter);
+
+    return filtered.map((q) => {
+      const qi = quarters.indexOf(q);
+      const s = qi * 3, e = s + 2;
+      const inPeriod = dateStr => {
+        if (!dateStr) return false;
+        const num = Number(dateStr);
+        let dt;
+        if (!isNaN(num) && num > 0) dt = new Date(num < 1e12 ? num * 1000 : num);
+        else dt = new Date(dateStr);
+        if (isNaN(dt.getTime())) return false;
+        return dt.getFullYear() === year && dt.getMonth() >= s && dt.getMonth() <= e;
+      };
+
+      const appsInQ = applications.filter(a => inPeriod(a.appliedAt || a.createdAt || a.applied_at));
+
+      const urgentApps = appsInQ.filter(a => {
+        const jobId = a.jobId || a.idJob;
+        // Ưu tiên join với jobTypeMap, fallback sang field jobType của application
+        if (jobId && jobId in jobTypeMap) return jobTypeMap[jobId];
+        const t = (a.jobType || a.category || '').toLowerCase();
+        return t === 'quick' || t === 'urgent' || t === 'quick-job' || t === 'quick-jobs';
+      }).length;
+
+      const stdApps = appsInQ.filter(a => {
+        const jobId = a.jobId || a.idJob;
+        if (jobId && jobId in jobTypeMap) return !jobTypeMap[jobId];
+        const t = (a.jobType || a.category || '').toLowerCase();
+        return t === 'standard' || t === 'standard-jobs' || t === '';
+      }).length;
+
+      // Bài đăng trong quý
+      const postsInQ = allJobPosts.filter(j => inPeriod(j.createdAt));
+      const urgentPosts = postsInQ.filter(j => j.category === 'urgent' || j.category === 'quick-jobs' || j.jobType === 'urgent').length;
+      const stdPosts = postsInQ.length - urgentPosts;
+
+      return { label: q, stdApps, urgentApps, stdPosts, urgentPosts };
+    });
+  };
+
+  const quarterlyChartData = buildQuarterlyData(selectedQuarterYear, selectedQuarter);
+
+  // Danh sách năm có thể chọn (từ năm đầu tiên có data đến năm hiện tại)
+  const availableYears = (() => {
+    const currentYear = new Date().getFullYear();
+    const allDates = [
+      ...applications.map(a => a.appliedAt || a.createdAt || a.applied_at),
+      ...allJobPosts.map(j => j.createdAt)
+    ].filter(Boolean).map(d => {
+      const num = Number(d);
+      const dt = !isNaN(num) && num > 0 ? new Date(num < 1e12 ? num * 1000 : num) : new Date(d);
+      return isNaN(dt.getTime()) ? null : dt.getFullYear();
+    }).filter(Boolean);
+    const minYear = allDates.length > 0 ? Math.min(...allDates) : currentYear;
+    const years = [];
+    for (let y = currentYear; y >= Math.max(minYear, currentYear - 4); y--) years.push(y);
+    return years;
+  })();
+
+  // Legacy kept for backward compat
   const activityData = chartData.activityData;
-  const quarterlyJobData = chartData.quarterlyData.map(q => ({
-    label: q.name,
-    standard: Math.round(q.jobs * 0.7 * 10), // simulated application multiplier for visual
-    standardPosts: Math.round(q.jobs * 0.7),
-    quick: Math.round(q.jobs * 0.3 * 10),
-    quickPosts: Math.round(q.jobs * 0.3)
-  }));
 
   const revenueTrendData = chartData.revenueTrend.map(d => ({
     month: d.month,
@@ -1410,102 +1419,128 @@ const AdminDashboard = () => {
       : '0 VND'
   };
 
-  // Boost packages data - derived from actual counts
-  const boostPackages = [
-    { name: language === 'vi' ? 'Quick Boost' : 'Quick Boost', count: urgentJobs, iconBg: '#DBEAFE', iconColor: '#1E40AF' },
-    { name: language === 'vi' ? 'Spotlight Banner' : 'Spotlight Banner', count: allJobPosts.filter(j => j.featured).length, iconBg: '#E0E7FF', iconColor: '#4F46E5' },
-    { name: language === 'vi' ? 'Hot Search' : 'Hot Search', count: allJobPosts.filter(j => j.views > 200).length, iconBg: '#FEE2E2', iconColor: '#DC2626' },
-    { name: language === 'vi' ? 'Top Spotlight' : 'Top Spotlight', count: allJobPosts.filter(j => j.jobType === 'hot').length, iconBg: '#FCE7F3', iconColor: '#BE185D' }
-  ];
-
-  // Top Employers - Nhà tuyển dụng nổi bật (Từ database)
-  const spotlightData = {
-    banner: allJobPosts.filter(j => j.featured).slice(0, 4).map(j => ({
-      id: j.idJob || j.id,
-      name: j.employerName || j.companyName || 'Employer',
-      type: j.category || 'Standard',
-      daysRemaining: 7,
-      budget: '4.000'
-    })),
-    quick_boost: allJobPosts.filter(j => j.category === 'urgent').slice(0, 4).map(j => ({
-      id: j.idJob || j.id,
-      name: j.employerName || j.companyName || 'Employer',
-      type: 'Urgent',
-      daysRemaining: 3,
-      budget: '3.500'
-    })),
-    hot_search: allJobPosts.filter(j => j.views > 200).slice(0, 4).map(j => ({
-      id: j.idJob || j.id,
-      name: j.employerName || j.companyName || 'Employer',
-      type: 'Trending',
-      daysRemaining: 5,
-      budget: '6.000'
-    })),
-    spotlight: allJobPosts.slice(0, 4).map(j => ({
-      id: j.idJob || j.id,
-      name: j.employerName || j.companyName || 'Employer',
-      type: 'Spotlight',
-      daysRemaining: 10,
-      budget: '10.000'
-    }))
+  // Top Employers spotlight — lấy từ subscriptions thật, tính daysRemaining từ expiryDateTime
+  const calcDaysRemaining = (expiryStr) => {
+    if (!expiryStr) return 0;
+    const expiry = new Date(expiryStr);
+    if (isNaN(expiry.getTime())) return 0;
+    const diff = Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
   };
 
-  // Fallback if empty
-  if (spotlightData.banner.length === 0) spotlightData.banner = [{ id: 0, name: 'Sẵn sàng vị trí', type: 'Banner', daysRemaining: 0, budget: '0' }];
-  if (spotlightData.quick_boost.length === 0) spotlightData.quick_boost = [{ id: 0, name: 'Sẵn sàng vị trí', type: 'Quick', daysRemaining: 0, budget: '0' }];
-  if (spotlightData.hot_search.length === 0) spotlightData.hot_search = [{ id: 0, name: 'Sẵn sàng vị trí', type: 'Hot', daysRemaining: 0, budget: '0' }];
-  if (spotlightData.spotlight.length === 0) spotlightData.spotlight = [{ id: 0, name: 'Sẵn sàng vị trí', type: 'Spotlight', daysRemaining: 0, budget: '0' }];
+  const activeSubscriptions = subscriptions.filter(s => s.status === 'active');
+
+  // Boost packages — đếm từ subscriptions active thật
+  const boostPackages = [
+    { name: 'Quick Boost', count: activeSubscriptions.filter(s => s.packageName === 'Quick Boost').length, iconBg: '#DBEAFE', iconColor: '#1E40AF' },
+    { name: 'Spotlight Banner', count: activeSubscriptions.filter(s => s.packageName === 'Spotlight Banner').length, iconBg: '#E0E7FF', iconColor: '#4F46E5' },
+    { name: 'Hot Search', count: activeSubscriptions.filter(s => s.packageName === 'Hot Search').length, iconBg: '#FEE2E2', iconColor: '#DC2626' },
+    { name: 'Top Spotlight', count: activeSubscriptions.filter(s => s.packageName === 'Top Spotlight').length, iconBg: '#FCE7F3', iconColor: '#BE185D' }
+  ];
+
+  const buildSpotlightList = (filterFn) =>
+    activeSubscriptions
+      .filter(filterFn)
+      .sort((a, b) => calcDaysRemaining(b.expiryDateTime) - calcDaysRemaining(a.expiryDateTime))
+      .slice(0, 4)
+      .map(s => ({
+        id: s.subscriptionId || s.employerId,
+        name: s.companyName || s.employerId || 'Employer',
+        type: s.packageName || 'Package',
+        daysRemaining: calcDaysRemaining(s.expiryDateTime || s.expiryDate),
+        budget: s.price ? new Intl.NumberFormat('vi-VN').format(Number(s.price)) : '0'
+      }));
+
+  const spotlightData = {
+    banner: buildSpotlightList(s => s.packageName === 'Spotlight Banner'),
+    quick_boost: buildSpotlightList(s => s.packageName === 'Quick Boost'),
+    hot_search: buildSpotlightList(s => s.packageName === 'Hot Search'),
+    spotlight: buildSpotlightList(s => s.packageName === 'Top Spotlight')
+  };
+
+  // Fallback nếu không có subscription nào
+  const emptyFallback = [{ id: 0, name: language === 'vi' ? 'Chưa có gói đang chạy' : 'No active package', type: '-', daysRemaining: 0, budget: '0' }];
+  if (spotlightData.banner.length === 0) spotlightData.banner = emptyFallback;
+  if (spotlightData.quick_boost.length === 0) spotlightData.quick_boost = emptyFallback;
+  if (spotlightData.hot_search.length === 0) spotlightData.hot_search = emptyFallback;
+  if (spotlightData.spotlight.length === 0) spotlightData.spotlight = emptyFallback;
 
   const currentSpotlightList = spotlightData[activeSpotlight] || spotlightData.banner;
 
-  // Top Candidates - Ứng viên mới (Từ database)
-  const topCandidates = candidates.slice(0, 4).map(can => ({
-    id: can.userId,
-    name: can.fullName || (can.email ? can.email.split('@')[0] : (can.userId ? `ID: ${can.userId.substring(0, 8)}` : (language === 'vi' ? 'Ứng viên mới' : 'New Candidate'))),
-    status: 'verified',
-    joinedTime: can.createdAt ? new Date(can.createdAt).toLocaleDateString() : 'Recently',
-    ekycStatus: language === 'vi' ? 'Đã Duyệt Xác Thực' : 'Verified'
-  }));
+  // Helper: format ngày Việt Nam DD/MM/YYYY — xử lý ISO string, số epoch, Decimal
+  const formatDateVN = (dateStr) => {
+    if (!dateStr) return 'Recently';
+    // Nếu là Decimal hoặc số (epoch seconds/milliseconds)
+    const num = Number(dateStr);
+    let d;
+    if (!isNaN(num) && num > 0) {
+      // epoch seconds (< 1e12) hoặc milliseconds
+      d = new Date(num < 1e12 ? num * 1000 : num);
+    } else {
+      d = new Date(dateStr);
+    }
+    if (isNaN(d.getTime())) return 'Recently';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  // Helper: lấy timestamp ms để sort — xử lý ISO string, số epoch, Decimal
+  const getTimestamp = (dateStr) => {
+    if (!dateStr) return 0;
+    const num = Number(dateStr);
+    if (!isNaN(num) && num > 0) return num < 1e12 ? num * 1000 : num;
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  };
+
+  // Top Candidates - Ứng viên mới (Từ database) — sort mới nhất lên đầu
+  const topCandidates = [...candidates]
+    .sort((a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt))
+    .slice(0, 4)
+    .map(can => ({
+      id: can.userId,
+      name: can.fullName || (can.email ? can.email.split('@')[0] : (can.userId ? `ID: ${can.userId.substring(0, 8)}` : (language === 'vi' ? 'Ứng viên mới' : 'New Candidate'))),
+      status: 'verified',
+      joinedTime: formatDateVN(can.createdAt),
+      ekycStatus: language === 'vi' ? 'Đã Duyệt Xác Thực' : 'Verified'
+    }));
 
   // Fallback if empty
   if (topCandidates.length === 0) {
     topCandidates.push({ id: 0, name: 'Đang chờ ứng viên', status: 'pending', joinedTime: '-', ekycStatus: '-' });
   }
 
-  // Management Posts - Bài đăng cần quản lý (Lấy từ database)
-  const managementPosts = allJobPosts.slice(0, 4).map(post => ({
-    id: post.idJob || post.id,
-    employer: post.employerName || post.companyName || 'Unknown Employer',
-    type: post.title,
-    time: post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'Recently',
-    status: post.status?.toUpperCase() || 'ACTIVE',
-    statusColor: post.status === 'active' ? { bg: '#D1FAE5', color: '#059669' } : { bg: '#FEF3C7', color: '#D97706' },
-    joinDate: post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''
-  }));
+  // Management Posts - CHỈ lấy bài đăng status 'pending', sort mới nhất lên đầu
+  const managementPosts = [...allJobPosts]
+    .filter(post => post.status === 'pending')
+    .sort((a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt))
+    .slice(0, 4)
+    .map(post => ({
+      id: post.idJob || post.id,
+      employer: post.employerName || post.companyName || 'Unknown Employer',
+      type: post.title,
+      joinDate: formatDateVN(post.createdAt),
+      status: 'PENDING',
+      statusColor: { bg: '#FEF3C7', color: '#D97706' }
+    }));
 
-  // Management Candidates - Kết hợp Ứng viên và Nhà tuyển dụng mới (Lấy từ database)
-  const managementCandidates = [
-    ...employers.slice(0, 2).map(emp => ({
+  // Nhà tuyển dụng mới nhất - sort theo createdAt giảm dần, hiển thị 4 mới nhất
+  const managementCandidates = [...employers]
+    .sort((a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt))
+    .slice(0, 4)
+    .map(emp => ({
       id: `emp-${emp.userId || emp.id}`,
+      rawId: emp.userId || emp.id,
       name: emp.companyName || emp.businessName || 'New Employer',
-      joinDate: emp.createdAt ? new Date(emp.createdAt).toLocaleDateString() : 'Recently',
+      joinDate: formatDateVN(emp.createdAt),
       verified: emp.isVerified ? 'DA_DUYET' : 'CHUA',
       verifiedColor: emp.isVerified ? { bg: '#D1FAE5', color: '#059669' } : { bg: '#FEE2E2', color: '#DC2626' },
       status: emp.approvalStatus?.toUpperCase() || 'PENDING',
       statusColor: emp.approvalStatus === 'approved' ? { bg: '#D1FAE5', color: '#059669' } : { bg: '#FEF3C7', color: '#D97706' },
-      approvalDate: emp.approvedAt ? new Date(emp.approvedAt).toLocaleDateString() : '-'
-    })),
-    ...candidates.slice(0, 2).map(can => ({
-      id: `can-${can.userId || can.id}`,
-      name: can.fullName || (can.email ? can.email.split('@')[0] : (can.userId ? `ID: ${can.userId.substring(0, 8)}` : (language === 'vi' ? 'Ứng viên mới' : 'New Candidate'))),
-      joinDate: can.createdAt ? new Date(can.createdAt).toLocaleDateString() : 'Recently',
-      verified: 'DA_DUYET',
-      verifiedColor: { bg: '#D1FAE5', color: '#059669' },
-      status: 'VERIFIED',
-      statusColor: { bg: '#D1FAE5', color: '#059669' },
-      approvalDate: can.updatedAt ? new Date(can.updatedAt).toLocaleDateString() : '-'
-    }))
-  ];
+      approvalDate: emp.approvedAt ? formatDateVN(emp.approvedAt) : '-'
+    }));
 
   if (loading) {
     return (
@@ -1525,233 +1560,70 @@ const AdminDashboard = () => {
   return (
     <DashboardLayout role="admin" key={language}>
       <DashboardContainer>
-        {/* ===== YÊU CẦU THAY ĐỔI NHÂN VIÊN — đầu trang ===== */}
-        <Section style={{ marginBottom: '36px' }}>
-          <SectionHeader>
-            <h2>
-              <AlertCircle size={20} style={{ display: 'inline', marginRight: 8, color: '#F97316', verticalAlign: 'middle' }} />
-              {language === 'vi' ? 'Yêu cầu thay đổi nhân viên' : 'Staff Change Requests'}
-              {changeRequests.length > 0 && (
-                <span style={{
-                  marginLeft: 10, background: '#F97316', color: 'white',
-                  borderRadius: '50%', padding: '2px 8px', fontSize: 13, fontWeight: 700
-                }}>{changeRequests.length}</span>
-              )}
-              {/* Chỉ báo trạng thái WebSocket */}
-              {WS_ENDPOINT && (
-                <span style={{
-                  marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontSize: 12, fontWeight: 600, verticalAlign: 'middle',
-                  color: wsStatus === 'connected' ? '#10B981' : wsStatus === 'connecting' ? '#F59E0B' : '#94A3B8'
+        {/* ===== YÊU CẦU THAY ĐỔI NHÂN VIÊN — khối tóm tắt ===== */}
+        {(() => {
+          const pendingCount = changeRequests.filter(r => r.status === 'pending_change').length;
+          return (
+            <div style={{
+              marginBottom: 36,
+              background: pendingCount > 0 ? '#FFF7ED' : '#F8FAFC',
+              border: `2px solid ${pendingCount > 0 ? '#FED7AA' : '#E2E8F0'}`,
+              borderRadius: 18,
+              padding: '24px 28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 16,
+              boxShadow: pendingCount > 0 ? '0 4px 16px rgba(249,115,22,0.10)' : 'none'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 14,
+                  background: pendingCount > 0 ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#E2E8F0',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                 }}>
-                  {wsStatus === 'connected'
-                    ? <><Wifi size={13} />Realtime</>
-                    : wsStatus === 'connecting'
-                    ? <><WifiOff size={13} />Đang kết nối...</>
-                    : <><WifiOff size={13} />Offline</>}
-                </span>
-              )}
-            </h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {changeRequests.length > 5 && (
-                <button
-                  onClick={() => navigate('/admin/employers', { state: { activeTab: 'change_requests' } })}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 14px', background: '#FFF7ED', border: '1.5px solid #FED7AA',
-                    borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#F97316'
-                  }}
-                >
-                  {language === 'vi' ? `Xem thêm (${changeRequests.length - 5})` : `View more (${changeRequests.length - 5})`}
-                  <ArrowRight size={14} />
-                </button>
-              )}
+                  <AlertCircle size={24} color="white" />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: 17, color: '#1E293B' }}>
+                      {language === 'vi' ? 'Yêu cầu thay đổi nhân viên' : 'Staff Change Requests'}
+                    </span>
+                    {pendingCount > 0 && (
+                      <span style={{ background: '#F97316', color: 'white', borderRadius: 99, padding: '2px 10px', fontSize: 13, fontWeight: 800 }}>
+                        {pendingCount}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 14, color: '#64748B' }}>
+                    {crLoading
+                      ? 'Đang tải...'
+                      : pendingCount > 0
+                        ? `Có ${pendingCount} yêu cầu đang chờ xử lý`
+                        : 'Không có yêu cầu nào đang chờ xử lý'}
+                  </div>
+                </div>
+              </div>
               <button
-                onClick={fetchChangeRequests}
+                onClick={() => navigate('/admin/change-requests')}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 14px', background: '#F8FAFC', border: '1.5px solid #E2E8F0',
-                  borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#475569'
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '11px 22px',
+                  background: pendingCount > 0 ? 'linear-gradient(135deg,#F97316,#EA580C)' : '#E2E8F0',
+                  border: 'none', borderRadius: 12,
+                  color: pendingCount > 0 ? 'white' : '#64748B',
+                  fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                  boxShadow: pendingCount > 0 ? '0 4px 12px rgba(249,115,22,0.30)' : 'none',
+                  transition: 'all 0.2s'
                 }}
               >
-                <RefreshCw size={14} />{language === 'vi' ? 'Làm mới' : 'Refresh'}
+                {language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                <ArrowRight size={16} />
               </button>
             </div>
-          </SectionHeader>
-
-          {crLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#94A3B8' }}>
-              {language === 'vi' ? 'Đang tải...' : 'Loading...'}
-            </div>
-          ) : changeRequests.length === 0 ? (
-            <div style={{
-              padding: '40px', textAlign: 'center', background: '#F8FAFC',
-              borderRadius: 16, border: '1.5px dashed #E2E8F0', color: '#94A3B8'
-            }}>
-              <AlertCircle size={32} style={{ marginBottom: 12, opacity: 0.3 }} />
-              <div style={{ fontWeight: 600, fontSize: 15 }}>
-                {language === 'vi' ? 'Không có yêu cầu nào đang chờ duyệt' : 'No pending change requests'}
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {[...changeRequests]
-                .sort((a, b) => {
-                  const aTime = new Date(a.changeRequest?.requestedAt || a.updatedAt || 0).getTime();
-                  const bTime = new Date(b.changeRequest?.requestedAt || b.updatedAt || 0).getTime();
-                  return bTime - aTime;
-                })
-                .slice(0, 5)
-                .map(req => {
-                const cr = req.changeRequest || {};
-                const isNew = newCardIds.has(req.applicationId);
-                const crStatus = String(req.changeRequestStatus || '').toLowerCase();
-                const appStatus = String(req.status || '');
-                const isPending = crStatus !== 'approved' && crStatus !== 'rejected' && appStatus !== 'ĐÃ_BỊ_THAY_THẾ';
-                const isApproved = crStatus === 'approved';
-                const isRejected = crStatus === 'rejected';
-                const borderColor = isApproved ? '#BBF7D0' : isRejected ? '#FECACA' : (isNew ? '#FED7AA' : '#FFEDD5');
-                const bgColor = isApproved ? '#F0FDF4' : isRejected ? '#FEF2F2' : 'white';
-
-                // Loại thay đổi — đồng nhất với EmployersManagement
-                const typeViMap = { cancel_shift: 'Huỷ ca làm', staff_replacement: 'Thay thế nhân viên', change_worker: 'Thay đổi nhân viên' };
-                const typeLabel = typeViMap[cr.type] || cr.typeLabel || cr.type || '(Không xác định)';
-                const isReplacement = cr.type === 'staff_replacement' || cr.type === 'change_worker';
-                const reasonLabel = cr.reasonType || '';
-                const detailLabel = cr.reasonDetail || cr.reason || '';
-
-                return (
-                  <div key={req.applicationId} style={{
-                    background: bgColor, border: `1.5px solid ${borderColor}`,
-                    borderRadius: 16, padding: '20px 24px',
-                    display: 'grid', gridTemplateColumns: '1fr auto', gap: 16,
-                    alignItems: 'center', boxShadow: '0 2px 8px rgba(249,115,22,0.07)',
-                    animation: isNew ? 'crFadeIn 0.4s ease-out' : 'none'
-                  }}>
-                    <div>
-                      {/* Row 1: status badge + NEW badge + job title */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                        {isPending && (
-                          <div style={{ background: '#FFF7ED', borderRadius: 10, padding: '5px 11px', fontSize: 12, fontWeight: 700, color: '#F97316', border: '1px solid #FFEDD5', whiteSpace: 'nowrap' }}>
-                            ⏳ {language === 'vi' ? 'Chờ duyệt' : 'Pending'}
-                          </div>
-                        )}
-                        {isApproved && (
-                          <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '5px 11px', fontSize: 12, fontWeight: 700, color: '#16A34A', border: '1px solid #BBF7D0', whiteSpace: 'nowrap' }}>
-                            ✅ {language === 'vi' ? 'Đã duyệt' : 'Approved'}
-                          </div>
-                        )}
-                        {isRejected && (
-                          <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '5px 11px', fontSize: 12, fontWeight: 700, color: '#DC2626', border: '1px solid #FECACA', whiteSpace: 'nowrap' }}>
-                            ✕ {language === 'vi' ? 'Từ chối' : 'Rejected'}
-                          </div>
-                        )}
-                        {isNew && (
-                          <span style={{ background: '#EF4444', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px' }}>MỚI</span>
-                        )}
-                        <div style={{ fontWeight: 700, fontSize: 15, color: '#1E293B' }}>
-                          {req.jobTitle || req._jobTitle || req.applicationId}
-                        </div>
-                      </div>
-
-                      {/* Row 2: employer + worker + job ID */}
-                      <div style={{ fontSize: 13, color: '#64748B', display: 'flex', flexWrap: 'wrap', gap: '4px 20px', marginBottom: 8 }}>
-                        <span>🏢 {language === 'vi' ? 'Nhà tuyển dụng:' : 'Employer:'} <b style={{ color: '#334155' }}>{req.employerName || req.companyName || req.employerId || '-'}</b></span>
-                        <span>👤 {language === 'vi' ? 'Nhân viên:' : 'Worker:'} <b style={{ color: '#334155' }}>{req.workerName || req.candidateName || req.candidateId || '-'}</b></span>
-                        <span style={{ color: '#94A3B8' }}>Job ID: {req.jobId || '-'}</span>
-                      </div>
-
-                      {/* Row 3: change type + reason + date */}
-                      <div style={{ fontSize: 13, color: '#64748B', display: 'flex', flexWrap: 'wrap', gap: '4px 20px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          {isReplacement ? '👥' : '🕐'}
-                          <b style={{ color: '#F97316' }}>{typeLabel}</b>
-                        </span>
-                        {reasonLabel && (
-                          <span>↳ <b style={{ color: '#DC2626' }}>{reasonLabel}</b></span>
-                        )}
-                        {detailLabel && (
-                          <span style={{ fontStyle: 'italic', color: '#475569' }}>💬 "{detailLabel}"</span>
-                        )}
-                        <span>🕐 {cr.requestedAt || (req.updatedAt ? new Date(req.updatedAt).toLocaleString('vi-VN') : '-')}</span>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
-                      {isPending ? (
-                        <>
-                          <button
-                            disabled={crActionLoading === req.applicationId}
-                            onClick={async () => {
-                              setCrActionLoading(req.applicationId);
-                              try {
-                                const result = await applicationService.approveChangeRequest(req.applicationId);
-                                setChangeRequests(prev => prev.map(r =>
-                                  r.applicationId === req.applicationId ? { ...r, changeRequestStatus: 'approved' } : r
-                                ));
-                                const cr = req.changeRequest || {};
-                                await Promise.allSettled([
-                                  createWorkerReplacedNotification({
-                                    workerId: result.workerId || req.candidateId || cr.workerId,
-                                    jobLocation: result.jobLocation || req.jobLocation,
-                                    workDateDisplay: result.workDateDisplay || req.jobWorkDate,
-                                    jobTitle: result.jobTitle || req.jobTitle,
-                                    reasonType: result.reasonType || cr.reasonType,
-                                    reasonDetail: result.reasonDetail || cr.reasonDetail || cr.reason
-                                  }),
-                                  createChangeRequestApprovedNotification({
-                                    employerId: result.employerId || req.employerId,
-                                    companyName: req.employerName,
-                                    candidateName: req.candidateName,
-                                    changeRequestType: cr.reasonType,
-                                  })
-                                ]);
-                              } catch (e) {
-                                alert(language === 'vi' ? `Lỗi: ${e.message}` : `Error: ${e.message}`);
-                              } finally {
-                                setCrActionLoading(null);
-                              }
-                            }}
-                            style={{
-                              padding: '10px 18px', borderRadius: 10, border: 'none',
-                              background: crActionLoading === req.applicationId ? '#E2E8F0' : 'linear-gradient(135deg, #10B981, #059669)',
-                              color: 'white', fontWeight: 700, fontSize: 13,
-                              cursor: crActionLoading === req.applicationId ? 'not-allowed' : 'pointer'
-                            }}
-                          >
-                            {crActionLoading === req.applicationId ? '...' : (language === 'vi' ? '✔ Duyệt' : '✔ Approve')}
-                          </button>
-                          <button
-                            disabled={crActionLoading === req.applicationId}
-                            onClick={() => {
-                              setRejectModal({ applicationId: req.applicationId, candidateName: req.candidateName || req.applicationId });
-                              setRejectNotes('');
-                            }}
-                            style={{
-                              padding: '10px 18px', borderRadius: 10, border: '1.5px solid #FECACA',
-                              background: '#FEF2F2', color: '#DC2626', fontWeight: 700, fontSize: 13,
-                              cursor: crActionLoading === req.applicationId ? 'not-allowed' : 'pointer'
-                            }}
-                          >
-                            {language === 'vi' ? '✕ Từ chối' : '✕ Reject'}
-                          </button>
-                        </>
-                      ) : (
-                        <div style={{
-                          fontSize: 13, fontWeight: 600, padding: '10px 4px',
-                          color: isApproved ? '#16A34A' : '#DC2626'
-                        }}>
-                          {isApproved
-                            ? (language === 'vi' ? '✅ Đã xử lý' : '✅ Processed')
-                            : (language === 'vi' ? '✕ Đã từ chối' : '✕ Rejected')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Section>
+          );
+        })()}
 
         {/* 4 Thống kê chính */}
         <StatsGrid>
@@ -1843,7 +1715,11 @@ const AdminDashboard = () => {
             <BoostHeader $iconBg="#FEF3C7" $iconColor="#F59E0B">
               <h3>{language === 'vi' ? 'BÀI TUYỂN GẤP' : 'URGENT JOBS'}</h3>
             </BoostHeader>
-            <BoostMainStat>
+            <BoostMainStat
+              onClick={() => setShowUrgentJobsModal(true)}
+              style={{ cursor: 'pointer' }}
+              title={language === 'vi' ? 'Xem danh sách bài tuyển gấp' : 'View urgent job list'}
+            >
               <div className="top-row">
                 <span className="number">{platformData.totalJobs}</span>
                 <span className="label">{language === 'vi' ? 'Tin tuyển gấp' : 'Urgent Jobs'}</span>
@@ -1895,27 +1771,26 @@ const AdminDashboard = () => {
         <SpotlightSection>
           {/* Nhà Tuyển Dụng Mới - Đã thu gọn và mang lên bên trái */}
           <SpotlightCard $bgColor="#EDE9FE">
-            <SpotlightBadge $color="#7C3AED">
+            <SpotlightBadge $color="#7C3AED" onClick={() => navigate('/admin/employers')} style={{ cursor: 'pointer' }}>
               <Building2 />
               <span>{language === 'vi' ? 'Nhà Tuyển Dụng Mới' : 'New Employers'}</span>
             </SpotlightBadge>
-            <SpotlightTitle>
-              {language === 'vi' ? 'Nhà Tuyển Dụng Vừa Tham Gia' : 'Recently Joined Employers'}
-            </SpotlightTitle>
+
             <SpotlightList>
               {managementCandidates.map((candidate, index) => {
                 const initials = candidate.name.split(' ').slice(0, 2).map(w => w[0]).join('');
                 const colors = [
                   { bg: '#E0E7FF', color: '#4F46E5' },
                   { bg: '#DBEAFE', color: '#0284C7' },
-                  { bg: '#FEE2E2', color: '#DC2626' }
+                  { bg: '#FEE2E2', color: '#DC2626' },
+                  { bg: '#D1FAE5', color: '#059669' }
                 ];
                 const colorScheme = colors[index % colors.length];
 
                 return (
                   <SpotlightItem
                     key={candidate.id}
-                    onClick={() => navigate('/admin/employers')}
+                    onClick={() => candidate.rawId ? navigate(`/admin/employers/${candidate.rawId}`) : navigate('/admin/employers')}
                     style={{
                       backgroundColor: candidate.verified === 'CHO_DUYET' ? '#FEFCE8' : 'white',
                       border: candidate.verified === 'CHO_DUYET' ? '1px solid #FEF3C7' : 'none'
@@ -1959,13 +1834,10 @@ const AdminDashboard = () => {
 
           {/* Ứng viên mới - Bên phải */}
           <SpotlightCard $bgColor="#EDE9FE">
-            <SpotlightBadge $color="#7C3AED">
+            <SpotlightBadge $color="#7C3AED" onClick={() => navigate('/admin/candidates')} style={{ cursor: 'pointer' }}>
               <Users />
               <span>{language === 'vi' ? 'Ứng Viên Mới' : 'New Candidates'}</span>
             </SpotlightBadge>
-            <SpotlightTitle>
-              {language === 'vi' ? 'Ứng Viên Vừa Tham Gia' : 'Recently Joined Candidates'}
-            </SpotlightTitle>
             <SpotlightList>
               {topCandidates.map((candidate, index) => {
                 const initials = candidate.name.split(' ').slice(-2).map(w => w[0]).join('');
@@ -1978,7 +1850,10 @@ const AdminDashboard = () => {
                 const colorScheme = colors[index % colors.length];
 
                 return (
-                  <SpotlightItem key={candidate.id} onClick={() => navigate('/admin/candidates')}>
+                  <SpotlightItem
+                    key={candidate.id}
+                    onClick={() => candidate.id ? navigate(`/admin/candidates/${candidate.id}`) : navigate('/admin/candidates')}
+                  >
                     <SpotlightAvatar $bgColor={colorScheme.bg} $color={colorScheme.color}>
                       {initials}
                     </SpotlightAvatar>
@@ -2087,7 +1962,7 @@ const AdminDashboard = () => {
 
           {/* QUẢN LÝ BÀI ĐĂNG - Chuyển lên bên phải */}
           <SpotlightCard $bgColor="#DCFCE7">
-            <SpotlightBadge $color="#7C3AED">
+            <SpotlightBadge $color="#7C3AED" onClick={() => navigate('/admin/posts')} style={{ cursor: 'pointer' }}>
               <FileText />
               <span>{language === 'vi' ? 'QUẢN LÝ BÀI ĐĂNG' : 'POST MANAGEMENT'}</span>
             </SpotlightBadge>
@@ -2095,7 +1970,11 @@ const AdminDashboard = () => {
               {language === 'vi' ? 'Bài Đăng Chờ Duyệt' : 'Pending Posts'}
             </SpotlightTitle>
             <SpotlightList>
-              {managementPosts.map((post, index) => {
+              {managementPosts.length === 0 ? (
+                <div style={{ padding: '24px 16px', textAlign: 'center', color: '#6B7280', fontSize: '14px' }}>
+                  {language === 'vi' ? 'Không có bài đăng nào chờ duyệt' : 'No posts pending approval'}
+                </div>
+              ) : managementPosts.map((post, index) => {
                 const initials = post.employer.split(' ').slice(0, 2).map(w => w[0]).join('');
                 const colors = ['#1E40AF', '#DC2626', '#059669', '#D97706', '#7C3AED'];
                 const bgColor = colors[index % colors.length];
@@ -2119,9 +1998,8 @@ const AdminDashboard = () => {
                         <div>{post.type}</div>
                       </SpotlightMeta>
                     </SpotlightContent>
-                    <SpotlightBadgeStatus $bgColor="#F3F4F6" $color="#6B7280">
-                      <div style={{ fontSize: '12px', fontWeight: '700' }}>{post.time}</div>
-                      <div style={{ fontSize: '10px' }}>{post.joinDate}</div>
+                    <SpotlightBadgeStatus $bgColor="#FEF3C7" $color="#D97706">
+                      <div style={{ fontSize: '12px', fontWeight: '700' }}>{post.joinDate}</div>
                     </SpotlightBadgeStatus>
                   </SpotlightItem>
                 );
@@ -2137,9 +2015,17 @@ const AdminDashboard = () => {
             <ChartHeader>
               <h3>{language === 'vi' ? 'Hoạt động Nền Tảng' : 'Platform Activity'}</h3>
               <ChartFilters>
-                <button className="active">{language === 'vi' ? 'Tuần' : 'Week'}</button>
-                <button>{language === 'vi' ? 'Tháng' : 'Month'}</button>
-                <button>{language === 'vi' ? 'Năm' : 'Year'}</button>
+                {[
+                  { key: 'week', label: language === 'vi' ? 'Tuần' : 'Week' },
+                  { key: 'month', label: language === 'vi' ? 'Tháng' : 'Month' },
+                  { key: 'year', label: language === 'vi' ? 'Năm' : 'Year' }
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    className={activityPeriod === f.key ? 'active' : ''}
+                    onClick={() => setActivityPeriod(f.key)}
+                  >{f.label}</button>
+                ))}
               </ChartFilters>
             </ChartHeader>
             <ChartLegend>
@@ -2152,226 +2038,235 @@ const AdminDashboard = () => {
                 <span>{language === 'vi' ? 'Ứng tuyển' : 'Applications'}</span>
               </div>
             </ChartLegend>
-            <SimpleLineChart>
-              <LineChartSvg viewBox="0 0 700 320">
-                <defs>
-                  <linearGradient id="gradient1" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
-                  </linearGradient>
-                  <linearGradient id="gradient2" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.2" />
-                    <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Grid lines */}
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <line
-                    key={i}
-                    x1="50"
-                    y1={50 + i * 50}
-                    x2="650"
-                    y2={50 + i * 50}
-                    stroke="#f0f0f0"
-                    strokeWidth="1"
-                  />
-                ))}
-
-                {/* Y-axis labels */}
-                {[(totalPosts > 80 ? totalPosts : 80), Math.round(totalPosts * 0.75), Math.round(totalPosts * 0.5), Math.round(totalPosts * 0.25), '0'].map((val, i) => (
-                  <text
-                    key={i}
-                    x="40"
-                    y={55 + i * 50}
-                    textAnchor="end"
-                    fontSize="11"
-                    fill="#9ca3af"
-                    fontWeight="400"
-                  >
-                    {val}
-                  </text>
-                ))}
-
-                {/* Posts line with area */}
-                <polyline
-                  fill="url(#gradient1)"
-                  stroke="none"
-                  points={`50,250 ${activityData.map((d, i) =>
-                    `${50 + (i / (activityData.length - 1)) * 600},${250 - (d.posts / (totalPosts > 80 ? totalPosts : 80)) * 200}`
-                  ).join(' ')} 650,250`}
-                />
-                <polyline
-                  fill="none"
-                  stroke="#3B82F6"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  points={activityData.map((d, i) =>
-                    `${50 + (i / (activityData.length - 1)) * 600},${250 - (d.posts / (totalPosts > 80 ? totalPosts : 80)) * 200}`
-                  ).join(' ')}
-                />
-
-                {/* Applications line with area */}
-                <polyline
-                  fill="url(#gradient2)"
-                  stroke="none"
-                  points={`50,250 ${activityData.map((d, i) =>
-                    `${50 + (i / (activityData.length - 1)) * 600},${250 - (d.applications / (totalPosts > 80 ? totalPosts : 80)) * 200}`
-                  ).join(' ')} 650,250`}
-                />
-                <polyline
-                  fill="none"
-                  stroke="#10B981"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  points={activityData.map((d, i) =>
-                    `${50 + (i / (activityData.length - 1)) * 600},${250 - (d.applications / (totalPosts > 80 ? totalPosts : 80)) * 200}`
-                  ).join(' ')}
-                />
-
-                {/* Data points with values */}
-                {activityData.map((d, i) => {
-                  const maxVal = totalPosts > 80 ? totalPosts : 80;
-                  const x = 50 + (i / (activityData.length - 1)) * 600;
-                  const yPosts = 250 - (d.posts / maxVal) * 200;
-                  const yApps = 250 - (d.applications / maxVal) * 200;
-                  return (
-                    <g key={i}>
-                      <circle cx={x} cy={yPosts} r="4" fill="#3B82F6" stroke="white" strokeWidth="2" />
-                      <circle cx={x} cy={yApps} r="4" fill="#10B981" stroke="white" strokeWidth="2" />
-
-                      {/* Value labels */}
-                      <text x={x} y={yPosts - 10} textAnchor="middle" fontSize="10" fill="#3B82F6" fontWeight="600">
-                        {d.posts}
-                      </text>
-                      <text x={x} y={yApps - 10} textAnchor="middle" fontSize="10" fill="#10B981" fontWeight="600">
-                        {d.applications}
-                      </text>
-
-                      {/* Date labels */}
-                      <text x={x} y="275" textAnchor="middle" fontSize="11" fill="#6b7280" fontWeight="400">
-                        {d.date}
-                      </text>
-                    </g>
-                  );
-                })}
-              </LineChartSvg>
-            </SimpleLineChart>
+            {(() => {
+              const data = activityChartData;
+              const totalPosts = data.reduce((s, d) => s + d.posts, 0);
+              const totalApps = data.reduce((s, d) => s + d.apps, 0);
+              const maxVal = Math.max(...data.map(d => Math.max(d.posts, d.apps)), 1);
+              // Làm tròn maxVal lên bội số đẹp
+              const step = maxVal <= 5 ? 1 : maxVal <= 20 ? 5 : maxVal <= 100 ? 10 : 50;
+              const yMax = Math.ceil(maxVal / step) * step;
+              const PAD_L = 48, PAD_R = 20, PAD_T = 30, PAD_B = 40;
+              const W = 620, H = 220;
+              const scaleY = v => PAD_T + (H - PAD_T - PAD_B) * (1 - v / yMax);
+              const scaleX = i => PAD_L + (i / Math.max(data.length - 1, 1)) * (W - PAD_L - PAD_R);
+              const yTicks = Array.from({ length: 5 }, (_, i) => Math.round((yMax / 4) * (4 - i)));
+              // Hiển thị nhãn thưa nếu nhiều điểm
+              const skipLabel = data.length > 15 ? Math.floor(data.length / 8) : 1;
+              return (
+                <>
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <div style={{ background: '#EFF6FF', borderRadius: 8, padding: '6px 14px', fontSize: 13, color: '#1D4ED8', fontWeight: 700 }}>
+                      {language === 'vi' ? 'Tin đăng' : 'Posts'}: {totalPosts}
+                    </div>
+                    <div style={{ background: '#ECFDF5', borderRadius: 8, padding: '6px 14px', fontSize: 13, color: '#065F46', fontWeight: 700 }}>
+                      {language === 'vi' ? 'Ứng tuyển' : 'Applications'}: {totalApps}
+                    </div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 320, display: 'block' }}>
+                    <defs>
+                      <linearGradient id="actGrad1" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.18" />
+                        <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+                      </linearGradient>
+                      <linearGradient id="actGrad2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10B981" stopOpacity="0.18" />
+                        <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {/* Grid */}
+                    {yTicks.map((v, i) => (
+                      <g key={i}>
+                        <line x1={PAD_L} y1={scaleY(v)} x2={W - PAD_R} y2={scaleY(v)} stroke="#F1F5F9" strokeWidth="1" />
+                        <text x={PAD_L - 6} y={scaleY(v) + 4} textAnchor="end" fontSize="10" fill="#94A3B8" fontWeight="600">{v}</text>
+                      </g>
+                    ))}
+                    <line x1={PAD_L} y1={scaleY(0)} x2={W - PAD_R} y2={scaleY(0)} stroke="#E2E8F0" strokeWidth="1.5" />
+                    {/* Area posts */}
+                    {data.length > 1 && (
+                      <polygon
+                        fill="url(#actGrad1)"
+                        points={[
+                          `${scaleX(0)},${scaleY(0)}`,
+                          ...data.map((d, i) => `${scaleX(i)},${scaleY(d.posts)}`),
+                          `${scaleX(data.length - 1)},${scaleY(0)}`
+                        ].join(' ')}
+                      />
+                    )}
+                    {/* Area apps */}
+                    {data.length > 1 && (
+                      <polygon
+                        fill="url(#actGrad2)"
+                        points={[
+                          `${scaleX(0)},${scaleY(0)}`,
+                          ...data.map((d, i) => `${scaleX(i)},${scaleY(d.apps)}`),
+                          `${scaleX(data.length - 1)},${scaleY(0)}`
+                        ].join(' ')}
+                      />
+                    )}
+                    {/* Lines */}
+                    {data.length > 1 && (
+                      <>
+                        <polyline fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                          points={data.map((d, i) => `${scaleX(i)},${scaleY(d.posts)}`).join(' ')} />
+                        <polyline fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                          points={data.map((d, i) => `${scaleX(i)},${scaleY(d.apps)}`).join(' ')} />
+                      </>
+                    )}
+                    {/* Points + labels */}
+                    {data.map((d, i) => {
+                      const x = scaleX(i);
+                      const yP = scaleY(d.posts);
+                      const yA = scaleY(d.apps);
+                      const showLbl = i % skipLabel === 0;
+                      return (
+                        <g key={i}>
+                          <circle cx={x} cy={yP} r="4" fill="#3B82F6" stroke="white" strokeWidth="2" />
+                          <circle cx={x} cy={yA} r="4" fill="#10B981" stroke="white" strokeWidth="2" />
+                          {d.posts > 0 && <text x={x} y={yP - 8} textAnchor="middle" fontSize="10" fill="#3B82F6" fontWeight="700">{d.posts}</text>}
+                          {d.apps > 0 && <text x={x} y={yA - 8} textAnchor="middle" fontSize="10" fill="#10B981" fontWeight="700">{d.apps}</text>}
+                          {showLbl && <text x={x} y={H - PAD_B + 16} textAnchor="middle" fontSize="10" fill="#64748B">{d.label}</text>}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  </div>
+                </>
+              );
+            })()}
           </ChartCard>
 
-          {/* Bar Chart - Thống kê công việc theo quý */}
+          {/* Line Chart - Ứng tuyển theo loại công việc theo Quý */}
           <ChartCard>
             <ChartHeader>
-              <h3>{language === 'vi' ? 'Ứng tuyển theo loại công việc' : 'Applications by Job Type'}</h3>
-              <ChartFilters>
-                <button className="active">{language === 'vi' ? 'Quý' : 'Quarter'}</button>
-                <button>{language === 'vi' ? 'Năm' : 'Year'}</button>
-              </ChartFilters>
+              <h3>{language === 'vi' ? 'Ứng tuyển theo Loại Công Việc' : 'Applications by Job Type'}</h3>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Filter quý */}
+                <ChartFilters>
+                  {['all', 'Q1', 'Q2', 'Q3', 'Q4'].map(q => (
+                    <button
+                      key={q}
+                      className={selectedQuarter === q ? 'active' : ''}
+                      onClick={() => setSelectedQuarter(q)}
+                    >
+                      {q === 'all' ? (language === 'vi' ? 'Cả năm' : 'All') : q}
+                    </button>
+                  ))}
+                </ChartFilters>
+                {/* Dropdown chọn năm */}
+                <select
+                  value={selectedQuarterYear}
+                  onChange={e => setSelectedQuarterYear(Number(e.target.value))}
+                  style={{
+                    padding: '6px 10px',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#1E40AF',
+                    background: '#EFF6FF',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  {availableYears.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </ChartHeader>
             <ChartLegend>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px 30px', background: '#F8FAFC', padding: '10px 15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', gap: '20px' }}>
-                  <div className="legend-item">
-                    <div className="dot" style={{ background: '#2563EB', width: '10px', height: '10px' }}></div>
-                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#1E293B' }}>{language === 'vi' ? 'Ứng tuyển Tiêu chuẩn' : 'Std Apps'}</span>
-                  </div>
-                  <div className="legend-item">
-                    <div className="dot" style={{ background: '#93C5FD', width: '10px', height: '10px', opacity: 0.8 }}></div>
-                    <span style={{ fontSize: '11px', fontWeight: '500', color: '#64748B' }}>{language === 'vi' ? 'Bài đăng' : 'Posts'}</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '20px' }}>
-                  <div className="legend-item">
-                    <div className="dot" style={{ background: '#D97706', width: '10px', height: '10px' }}></div>
-                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#1E293B' }}>{language === 'vi' ? 'Ứng tuyển Tuyển gấp' : 'Urg Apps'}</span>
-                  </div>
-                  <div className="legend-item">
-                    <div className="dot" style={{ background: '#FCD34D', width: '10px', height: '10px', opacity: 0.8 }}></div>
-                    <span style={{ fontSize: '11px', fontWeight: '500', color: '#64748B' }}>{language === 'vi' ? 'Bài đăng' : 'Posts'}</span>
-                  </div>
-                </div>
+              <div className="legend-item">
+                <div className="dot" style={{ background: '#3B82F6' }}></div>
+                <span>{language === 'vi' ? 'ƯT Tiêu chuẩn' : 'Std Apps'}</span>
+              </div>
+              <div className="legend-item">
+                <div className="dot" style={{ background: '#F59E0B' }}></div>
+                <span>{language === 'vi' ? 'ƯT Tuyển gấp' : 'Urgent Apps'}</span>
               </div>
             </ChartLegend>
-            <SimpleBarChart>
-              {quarterlyJobData.map((d, i) => (
-                <BarGroup key={i}>
-                  <div className="bars">
-                    {/* Standard Pair */}
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', height: '100%' }}>
-                      <div
-                        className="bar"
-                        style={{
-                          height: `${(d.standard / 1000) * 100}%`,
-                          background: '#3B82F6',
-                          position: 'relative',
-                          borderRadius: '4px 4px 0 0',
-                          width: '36px',
-                          boxShadow: '0 4px 6px rgba(59, 130, 246, 0.3)'
-                        }}
-                      >
-                        <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', fontWeight: '900', color: '#1D4ED8' }}>
-                          {d.standard}
-                        </span>
-                      </div>
-                      <div
-                        className="bar"
-                        style={{
-                          height: `${(d.standardPosts / 1000) * 100}%`,
-                          background: '#BFDBFE',
-                          position: 'relative',
-                          borderRadius: '4px 4px 0 0',
-                          width: '28px'
-                        }}
-                      >
-                        <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', fontWeight: '800', color: '#3B82F6' }}>
-                          {d.standardPosts}
-                        </span>
-                      </div>
+            {(() => {
+              const data = quarterlyChartData;
+              const maxVal = Math.max(...data.map(d => Math.max(d.stdApps, d.urgentApps)), 1);
+              const step = maxVal <= 5 ? 1 : maxVal <= 20 ? 5 : maxVal <= 100 ? 10 : 50;
+              const yMax = Math.ceil(maxVal / step) * step;
+              const PAD_L = 48, PAD_R = 20, PAD_T = 30, PAD_B = 40;
+              const W = 620, H = 220;
+              // Dùng cùng cách scale như "Hoạt động Nền Tảng": điểm đầu tại PAD_L, điểm cuối tại W-PAD_R
+              const scaleY = v => PAD_T + (H - PAD_T - PAD_B) * (1 - v / yMax);
+              const scaleX = i => PAD_L + (i / (data.length - 1)) * (W - PAD_L - PAD_R);
+              const yTicks = Array.from({ length: 5 }, (_, i) => Math.round((yMax / 4) * (4 - i)));
+              const totalStd = data.reduce((s, d) => s + d.stdApps, 0);
+              const totalUrgent = data.reduce((s, d) => s + d.urgentApps, 0);
+              return (
+                <>
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <div style={{ background: '#EFF6FF', borderRadius: 8, padding: '6px 14px', fontSize: 13, color: '#1D4ED8', fontWeight: 700 }}>
+                      {language === 'vi' ? 'ƯT Tiêu chuẩn' : 'Std Apps'}: {totalStd}
                     </div>
-
-                    {/* Urgent Pair */}
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', height: '100%' }}>
-                      <div
-                        className="bar"
-                        style={{
-                          height: `${(d.quick / 1000) * 100}%`,
-                          background: '#F59E0B',
-                          position: 'relative',
-                          borderRadius: '4px 4px 0 0',
-                          width: '36px',
-                          boxShadow: '0 4px 6px rgba(245, 158, 11, 0.3)'
-                        }}
-                      >
-                        <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', fontWeight: '900', color: '#B45309' }}>
-                          {d.quick}
-                        </span>
-                      </div>
-                      <div
-                        className="bar"
-                        style={{
-                          height: `${(d.quickPosts / 1000) * 100}%`,
-                          background: '#FDE68A',
-                          position: 'relative',
-                          borderRadius: '4px 4px 0 0',
-                          width: '28px'
-                        }}
-                      >
-                        <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', fontWeight: '800', color: '#D97706' }}>
-                          {d.quickPosts}
-                        </span>
-                      </div>
+                    <div style={{ background: '#FFFBEB', borderRadius: 8, padding: '6px 14px', fontSize: 13, color: '#B45309', fontWeight: 700 }}>
+                      {language === 'vi' ? 'ƯT Tuyển gấp' : 'Urgent Apps'}: {totalUrgent}
                     </div>
                   </div>
-
-                  <div className="label" style={{ fontWeight: '800', fontSize: '13px', margin: '12px 0 6px' }}>{d.label}</div>
-                </BarGroup>
-              ))}
-            </SimpleBarChart>
+                  <div style={{ overflowX: 'auto' }}>
+                    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 280, display: 'block' }}>
+                      <defs>
+                        <linearGradient id="qGrad1" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.18" />
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="qGrad2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.18" />
+                          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      {/* Grid — y=0 baseline */}
+                      {yTicks.map((v, i) => (
+                        <g key={i}>
+                          <line x1={PAD_L} y1={scaleY(v)} x2={W - PAD_R} y2={scaleY(v)} stroke="#F1F5F9" strokeWidth="1" />
+                          <text x={PAD_L - 6} y={scaleY(v) + 4} textAnchor="end" fontSize="10" fill="#94A3B8" fontWeight="600">{v}</text>
+                        </g>
+                      ))}
+                      <line x1={PAD_L} y1={scaleY(0)} x2={W - PAD_R} y2={scaleY(0)} stroke="#E2E8F0" strokeWidth="1.5" />
+                      {/* Area fills */}
+                      <polygon fill="url(#qGrad1)" points={[
+                        `${scaleX(0)},${scaleY(0)}`,
+                        ...data.map((d, i) => `${scaleX(i)},${scaleY(d.stdApps)}`),
+                        `${scaleX(data.length - 1)},${scaleY(0)}`
+                      ].join(' ')} />
+                      <polygon fill="url(#qGrad2)" points={[
+                        `${scaleX(0)},${scaleY(0)}`,
+                        ...data.map((d, i) => `${scaleX(i)},${scaleY(d.urgentApps)}`),
+                        `${scaleX(data.length - 1)},${scaleY(0)}`
+                      ].join(' ')} />
+                      {/* Lines */}
+                      <polyline fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        points={data.map((d, i) => `${scaleX(i)},${scaleY(d.stdApps)}`).join(' ')} />
+                      <polyline fill="none" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        points={data.map((d, i) => `${scaleX(i)},${scaleY(d.urgentApps)}`).join(' ')} />
+                      {/* Points + value labels + x labels */}
+                      {data.map((d, i) => {
+                        const x = scaleX(i);
+                        const yS = scaleY(d.stdApps);
+                        const yU = scaleY(d.urgentApps);
+                        return (
+                          <g key={i}>
+                            <circle cx={x} cy={yS} r="4" fill="#3B82F6" stroke="white" strokeWidth="2" />
+                            <circle cx={x} cy={yU} r="4" fill="#F59E0B" stroke="white" strokeWidth="2" />
+                            {d.stdApps > 0 && <text x={x} y={yS - 8} textAnchor="middle" fontSize="10" fill="#3B82F6" fontWeight="700">{d.stdApps}</text>}
+                            {d.urgentApps > 0 && <text x={x} y={yU - 8} textAnchor="middle" fontSize="10" fill="#B45309" fontWeight="700">{d.urgentApps}</text>}
+                            <text x={x} y={H - PAD_B + 16} textAnchor="middle" fontSize="11" fill="#6b7280" fontWeight="400">{d.label}</text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                </>
+              );
+            })()}
           </ChartCard>
         </ChartsSection>
-
         {/* Doanh Thu Từ Dịch Vụ */}
         <RevenueSection>
           <SectionHeader>
@@ -2382,272 +2277,113 @@ const AdminDashboard = () => {
             <ChartHeader>
               <h3>{language === 'vi' ? 'Xu Hướng Doanh Thu' : 'Revenue Trend'}</h3>
               <ChartFilters>
-                <button className="active">{language === 'vi' ? '6 Tháng' : '6 Months'}</button>
-                <button>{language === 'vi' ? 'Năm' : 'Year'}</button>
-                <button>{language === 'vi' ? 'Tất cả' : 'All'}</button>
+                {[
+                  { key: '6months', label: language === 'vi' ? '6 Tháng' : '6 Months' },
+                  { key: 'year', label: language === 'vi' ? '12 Tháng' : '12 Months' },
+                  { key: 'all', label: language === 'vi' ? '24 Tháng' : '24 Months' }
+                ].map(f => (
+                  <button key={f.key} className={revenuePeriod === f.key ? 'active' : ''} onClick={() => setRevenuePeriod(f.key)}>{f.label}</button>
+                ))}
               </ChartFilters>
             </ChartHeader>
 
-            {/* Legend */}
             <ChartLegend>
               <div className="legend-item">
                 <div className="dot" style={{ background: '#3b82f6' }}></div>
-                <span style={{ fontWeight: '600' }}>{language === 'vi' ? 'Doanh thu thực tế' : 'Actual Revenue'}</span>
-              </div>
-              <div className="legend-item">
-                <div className="dot" style={{ background: '#f97316' }}></div>
-                <span style={{ fontWeight: '600' }}>{language === 'vi' ? 'Mục tiêu' : 'Target'}</span>
+                <span style={{ fontWeight: '600' }}>{language === 'vi' ? 'Doanh thu (VND)' : 'Revenue (VND)'}</span>
               </div>
             </ChartLegend>
 
-            <SimpleLineChart>
-              <LineChartSvg viewBox="0 0 1200 350" preserveAspectRatio="xMidYMid meet">
-                <defs>
-                  <linearGradient id="blueGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.1" />
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Grid lines */}
-                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                  <line
-                    key={i}
-                    x1="60"
-                    y1={30 + i * 45}
-                    x2="1140"
-                    y2={30 + i * 45}
-                    stroke="#F1F5F9"
-                    strokeWidth="1"
-                  />
-                ))}
-
-                {/* Y-axis labels */}
-                {['6000', '5000', '4000', '3000', '2000', '1000', '0'].map((val, i) => (
-                  <text
-                    key={i}
-                    x="50"
-                    y={35 + i * 45}
-                    textAnchor="end"
-                    fontSize="12"
-                    fill="#94A3B8"
-                    fontWeight="700"
-                  >
-                    {val}
-                  </text>
-                ))}
-
-                {/* Decorative Artistic Bars (4 columns per month) */}
-                {revenueTrendData.length > 0 && revenueTrendData.map((d, i) => {
-                  const x = 120 + i * 140; 
-                  return (
-                    <g key={`bars-${i}`}>
-                      <rect x={x - 44} y={300 - d.actual * 40} width="18" height={d.actual * 40} fill="#0284c7" opacity="0.4" rx="3" />
-                      <rect x={x - 22} y={300 - d.target * 35} width="18" height={d.target * 35} fill="#8b5cf6" opacity="0.4" rx="3" />
-                      <rect x={x + 4} y={300 - d.actual * 45} width="18" height={d.actual * 45} fill="#f59e0b" opacity="0.4" rx="3" />
-                      <rect x={x + 26} y={300 - d.target * 30} width="18" height={d.target * 30} fill="#10b981" opacity="0.4" rx="3" />
-                    </g>
-                  );
-                })}
-
-                {/* Smooth Orange Curve (Target) */}
-                {revenueTrendData.length > 0 && (
-                  <path
-                    d={`M 120 ${300 - revenueTrendData[0].target * 45} 
-                       ${revenueTrendData.map((d, i) => {
-                      if (i === 0) return '';
-                      const prev = revenueTrendData[i - 1];
-                      const cp1x = (120 + (i - 1) * 140) + 70;
-                      const cp2x = (120 + i * 140) - 70;
-                      return `C ${cp1x} ${300 - prev.target * 45}, ${cp2x} ${300 - d.target * 45}, ${120 + i * 140} ${300 - d.target * 45}`;
-                    }).join(' ')}`}
-                    fill="none"
-                    stroke="#F97316"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {/* Smooth Blue Curve (Actual) */}
-                {revenueTrendData.length > 0 && (
-                  <path
-                    d={`M 120 ${300 - revenueTrendData[0].actual * 50} 
-                       ${revenueTrendData.map((d, i) => {
-                      if (i === 0) return '';
-                      const prev = revenueTrendData[i - 1];
-                      const cp1x = (120 + (i - 1) * 140) + 70;
-                      const cp2x = (120 + i * 140) - 70;
-                      return `C ${cp1x} ${300 - prev.actual * 50}, ${cp2x} ${300 - d.actual * 50}, ${120 + i * 140} ${300 - d.actual * 50}`;
-                    }).join(' ')}`}
-                    fill="none"
-                    stroke="#3B82F6"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {/* Data points */}
-                {revenueTrendData.length > 0 && revenueTrendData.map((d, i) => {
-                  const x = 120 + i * 140;
-                  const yBlue = 300 - d.actual * 50;
-                  const yOrange = 300 - d.target * 45;
-                  return (
-                    <g key={`points-${i}`}>
-                      <circle cx={x} cy={yBlue} r="7" fill="#3B82F6" stroke="white" strokeWidth="3" />
-                      <circle cx={x} cy={yOrange} r="7" fill="#F97316" stroke="white" strokeWidth="3" />
-                    </g>
-                  );
-                })}
-
-                {/* Month labels */}
-                {revenueTrendData.map((d, i) => (
-                  <text
-                    key={`month-${i}`}
-                    x={120 + i * 140}
-                    y="335"
-                    textAnchor="middle"
-                    fontSize="13"
-                    fill="#94A3B8"
-                    fontWeight="700"
-                  >
-                    {language === 'vi' ? `Tháng ${i + 1}` : `Month ${i + 1}`}
-                  </text>
-                ))}
-              </LineChartSvg>
-            </SimpleLineChart>
+            {(() => {
+              const data = revenueChartData;
+              const maxVal = Math.max(...data.map(d => d.revenue), 1);
+              const step = maxVal <= 100000 ? 10000 : maxVal <= 1000000 ? 100000 : maxVal <= 10000000 ? 1000000 : 10000000;
+              const yMax = Math.ceil(maxVal / step) * step;
+              const fmtY = v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v;
+              const PAD_L = 58, PAD_R = 20, PAD_T = 30, PAD_B = 40;
+              const W = 900, H = 240;
+              const chartH = H - PAD_T - PAD_B;
+              const scaleY = v => PAD_T + chartH * (1 - v / yMax);
+              const scaleX = i => PAD_L + (i / Math.max(data.length - 1, 1)) * (W - PAD_L - PAD_R);
+              const yTicks = Array.from({ length: 5 }, (_, i) => Math.round((yMax / 4) * (4 - i)));
+              const skipLabel = data.length > 12 ? 2 : 1;
+              const totalRevByPeriod = data.reduce((s, d) => s + d.revenue, 0);
+              return (
+                <>
+                  <div style={{ marginBottom: 10, fontSize: 14, color: '#1E293B', fontWeight: 700 }}>
+                    {language === 'vi' ? 'Tổng kỳ này' : 'Period total'}: {' '}
+                    <span style={{ color: '#3B82F6' }}>{new Intl.NumberFormat('vi-VN').format(Math.round(totalRevByPeriod))} VND</span>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: 400, display: 'block' }}>
+                      <defs>
+                        <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.2" />
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      {/* Grid */}
+                      {yTicks.map((v, i) => (
+                        <g key={i}>
+                          <line x1={PAD_L} y1={scaleY(v)} x2={W - PAD_R} y2={scaleY(v)} stroke="#F1F5F9" strokeWidth="1" />
+                          <text x={PAD_L - 6} y={scaleY(v) + 4} textAnchor="end" fontSize="10" fill="#94A3B8" fontWeight="600">{fmtY(v)}</text>
+                        </g>
+                      ))}
+                      <line x1={PAD_L} y1={scaleY(0)} x2={W - PAD_R} y2={scaleY(0)} stroke="#E2E8F0" strokeWidth="1.5" />
+                      {/* Area */}
+                      {data.length > 1 && (
+                        <polygon fill="url(#revGrad)" points={[
+                          `${scaleX(0)},${scaleY(0)}`,
+                          ...data.map((d, i) => `${scaleX(i)},${scaleY(d.revenue)}`),
+                          `${scaleX(data.length - 1)},${scaleY(0)}`
+                        ].join(' ')} />
+                      )}
+                      {/* Line */}
+                      {data.length > 1 && (
+                        <polyline fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                          points={data.map((d, i) => `${scaleX(i)},${scaleY(d.revenue)}`).join(' ')} />
+                      )}
+                      {/* Points */}
+                      {data.map((d, i) => {
+                        const x = scaleX(i);
+                        const y = scaleY(d.revenue);
+                        return (
+                          <g key={i}>
+                            <circle cx={x} cy={y} r="4" fill="#3B82F6" stroke="white" strokeWidth="2" />
+                            {d.revenue > 0 && <text x={x} y={y - 8} textAnchor="middle" fontSize="9" fill="#3B82F6" fontWeight="700">{fmtY(d.revenue)}</text>}
+                            {i % skipLabel === 0 && <text x={x} y={H - PAD_B + 16} textAnchor="middle" fontSize="10" fill="#64748B">{d.label}</text>}
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                </>
+              );
+            })()}
 
             <RevenueStatsGrid style={{ marginTop: '20px', borderTop: '1px solid #F1F5F9', paddingTop: '24px' }}>
-              <RevenueStatBox $bgColor="#E0F2FE" $iconColor="#0369A1">
-                <div className="icon">
-                  <CheckSquare />
-                </div>
-                <div className="content">
-                  <div className="label">
-                    {language === 'vi' ? 'Quick Boost' : 'Quick Boost'}
-                  </div>
-                  <div className="value">{revenueFromBoost.toLocaleString('vi-VN')}đ</div>
-                </div>
-              </RevenueStatBox>
-
-              <RevenueStatBox $bgColor="#F3E8FF" $iconColor="#7E22CE">
-                <div className="icon">
-                  <TrendingUp />
-                </div>
-                <div className="content">
-                  <div className="label">
-                    {language === 'vi' ? 'Hot Search' : 'Hot Search'}
-                  </div>
-                  <div className="value">{revenueFromHotSearch.toLocaleString('vi-VN')}đ</div>
-                </div>
-              </RevenueStatBox>
-
-              <RevenueStatBox $bgColor="#FFEDD5" $iconColor="#D97706">
-                <div className="icon">
-                  <Star />
-                </div>
-                <div className="content">
-                  <div className="label">
-                    {language === 'vi' ? 'Spotlight Banner' : 'Spotlight Banner'}
-                  </div>
-                  <div className="value">{revenueFromBanner.toLocaleString('vi-VN')}đ</div>
-                </div>
-              </RevenueStatBox>
-
-              <RevenueStatBox $bgColor="#D1FAE5" $iconColor="#059669">
-                <div className="icon">
-                  <Sparkles />
-                </div>
-                <div className="content">
-                  <div className="label">
-                    {language === 'vi' ? 'Top Spotlight' : 'Top Spotlight'}
-                  </div>
-                  <div className="value">{revenueFromTopSpotlight.toLocaleString('vi-VN')}đ</div>
-                </div>
-              </RevenueStatBox>
+              {[
+                { label: 'Quick Boost', color: '#E0F2FE', iconColor: '#0369A1', icon: <CheckSquare />, pkg: 'Quick Boost' },
+                { label: 'Hot Search', color: '#F3E8FF', iconColor: '#7E22CE', icon: <TrendingUp />, pkg: 'Hot Search' },
+                { label: 'Spotlight Banner', color: '#FFEDD5', iconColor: '#D97706', icon: <Star />, pkg: 'Spotlight Banner' },
+                { label: 'Top Spotlight', color: '#D1FAE5', iconColor: '#059669', icon: <Sparkles />, pkg: 'Top Spotlight' }
+              ].map(item => {
+                const rev = subscriptions
+                  .filter(s => s.packageName === item.pkg && s.status !== 'pending' && s.status !== 'rejected')
+                  .reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0);
+                return (
+                  <RevenueStatBox key={item.label} $bgColor={item.color} $iconColor={item.iconColor}>
+                    <div className="icon">{item.icon}</div>
+                    <div className="content">
+                      <div className="label">{item.label}</div>
+                      <div className="value">{new Intl.NumberFormat('vi-VN').format(Math.round(rev))}đ</div>
+                    </div>
+                  </RevenueStatBox>
+                );
+              })}
             </RevenueStatsGrid>
           </RevenueChartCard>
         </RevenueSection>
-
-        {/* Reject Modal */}
-        {rejectModal && (
-          <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-            zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }} onClick={() => setRejectModal(null)}>
-            <div style={{
-              background: 'white', borderRadius: 20, padding: 32, maxWidth: 460, width: '92%',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
-            }} onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <h3 style={{ fontWeight: 800, fontSize: 18, color: '#1E293B', margin: 0 }}>
-                  {language === 'vi' ? 'Từ chối yêu cầu' : 'Reject Request'}
-                </h3>
-                <button onClick={() => setRejectModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                  <X size={20} color="#64748B" />
-                </button>
-              </div>
-              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 16 }}>
-                {language === 'vi'
-                  ? `Nhập lý do từ chối yêu cầu cho "${rejectModal.candidateName}":`
-                  : `Enter rejection reason for "${rejectModal.candidateName}":`}
-              </p>
-              <textarea
-                rows={4}
-                value={rejectNotes}
-                onChange={e => setRejectNotes(e.target.value)}
-                placeholder={language === 'vi' ? 'Lý do từ chối (không bắt buộc)...' : 'Rejection reason (optional)...'}
-                style={{
-                  width: '100%', padding: '12px 14px', borderRadius: 12,
-                  border: '1.5px solid #E2E8F0', fontSize: 14, fontFamily: 'inherit',
-                  resize: 'vertical', marginBottom: 20
-                }}
-              />
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button onClick={() => setRejectModal(null)} style={{
-                  padding: '10px 18px', background: '#F1F5F9', border: 'none',
-                  borderRadius: 10, fontWeight: 600, cursor: 'pointer', color: '#475569'
-                }}>
-                  {language === 'vi' ? 'Hủy' : 'Cancel'}
-                </button>
-                <button
-                  onClick={async () => {
-                    const { applicationId } = rejectModal;
-                    const rejectedReq = changeRequests.find(r => r.applicationId === applicationId);
-                    setCrActionLoading(applicationId);
-                    setRejectModal(null);
-                    try {
-                      await applicationService.rejectChangeRequest(applicationId, rejectNotes);
-                      setChangeRequests(prev => prev.filter(r => r.applicationId !== applicationId));
-                      // Gửi notification cho employer
-                      if (rejectedReq) {
-                        const cr = rejectedReq.changeRequest || {};
-                        await createChangeRequestRejectedNotification({
-                          employerId: rejectedReq.employerId,
-                          companyName: rejectedReq.employerName,
-                          candidateName: rejectedReq.candidateName,
-                          changeRequestType: cr.reasonType,
-                          applicationId,
-                          reason: rejectNotes
-                        }).catch(() => {});
-                      }
-                    } catch (e) {
-                      alert(language === 'vi' ? `Lỗi: ${e.message}` : `Error: ${e.message}`);
-                    } finally {
-                      setCrActionLoading(null);
-                    }
-                  }}
-                  style={{
-                    padding: '10px 22px', background: 'linear-gradient(135deg, #EF4444, #DC2626)',
-                    border: 'none', borderRadius: 10, color: 'white', fontWeight: 700,
-                    fontSize: 14, cursor: 'pointer'
-                  }}
-                >
-                  {language === 'vi' ? 'Xác nhận từ chối' : 'Confirm Reject'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* AI Urgent recommendations modal */}
         <UrgentRecommendationsModal
@@ -2656,6 +2392,193 @@ const AdminDashboard = () => {
           recommendations={activeRecommendations}
           jobTitle={recJobTitle}
         />
+
+        {/* Urgent Jobs List Modal */}
+        {showUrgentJobsModal && (() => {
+          const urgentJobList = allJobPosts.filter(
+            post => post.category === 'urgent' || post.category === 'quick-jobs' || post.jobType === 'urgent'
+          );
+          return (
+            <div
+              onClick={() => setShowUrgentJobsModal(false)}
+              style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+                zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '20px'
+              }}
+            >
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: 'white', borderRadius: '16px', width: '100%', maxWidth: '760px',
+                  maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+                }}
+              >
+                {/* Header */}
+                <div style={{
+                  padding: '20px 24px', borderBottom: '1px solid #F3F4F6',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '8px',
+                      background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Zap size={18} color="#F59E0B" />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: '800', fontSize: '17px', color: '#111827' }}>
+                        {language === 'vi' ? 'BÀI TUYỂN GẤP' : 'URGENT JOBS'}
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#6B7280', marginTop: '1px' }}>
+                        {urgentJobList.length} {language === 'vi' ? 'tin' : 'jobs'} · {language === 'vi' ? 'Hoa hồng 15%' : '15% Commission'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowUrgentJobsModal(false)}
+                    style={{
+                      background: '#F3F4F6', border: 'none', borderRadius: '8px',
+                      width: '32px', height: '32px', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', cursor: 'pointer', color: '#6B7280', fontSize: '18px',
+                      transition: 'background 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#E5E7EB'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#F3F4F6'}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ overflowY: 'auto', flex: 1, padding: '16px 24px' }}>
+                  {urgentJobList.length === 0 ? (
+                    <div style={{
+                      textAlign: 'center', padding: '48px 0', color: '#9CA3AF'
+                    }}>
+                      <Zap size={40} style={{ marginBottom: '12px', opacity: 0.3 }} />
+                      <div style={{ fontWeight: '600', fontSize: '15px' }}>
+                        {language === 'vi' ? 'Chưa có bài tuyển gấp nào' : 'No urgent jobs yet'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {urgentJobList.map((job, idx) => {
+                        const salary = job.salary || job.totalSalary || job.salaryPerHour || '';
+                        const commission = salary
+                          ? new Intl.NumberFormat('vi-VN').format(Math.round(Number(salary) * 0.15)) + ' VND'
+                          : '—';
+                        const statusColor = job.status === 'approved' ? { bg: '#D1FAE5', color: '#059669' }
+                          : job.status === 'pending' ? { bg: '#FEF3C7', color: '#D97706' }
+                          : { bg: '#FEE2E2', color: '#DC2626' };
+                        const statusLabel = job.status === 'approved'
+                          ? (language === 'vi' ? 'Đã duyệt' : 'Approved')
+                          : job.status === 'pending'
+                          ? (language === 'vi' ? 'Chờ duyệt' : 'Pending')
+                          : (job.status || '—');
+
+                        return (
+                          <div
+                            key={job.idJob || job.id || idx}
+                            style={{
+                              background: '#FAFAFA', border: '1px solid #E5E7EB', borderRadius: '10px',
+                              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '14px',
+                              transition: 'border-color 0.2s, box-shadow 0.2s',
+                              cursor: 'pointer'
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.borderColor = '#F59E0B';
+                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(245,158,11,0.12)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.borderColor = '#E5E7EB';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }}
+                          >
+                            {/* Index badge */}
+                            <div style={{
+                              width: '28px', height: '28px', borderRadius: '6px',
+                              background: '#FEF3C7', color: '#D97706', fontWeight: '700',
+                              fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {idx + 1}
+                            </div>
+
+                            {/* Job info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontWeight: '700', fontSize: '14.5px', color: '#111827',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                              }}>
+                                {job.title || job.jobTitle || (language === 'vi' ? '(Không có tiêu đề)' : '(No title)')}
+                              </div>
+                              <div style={{ fontSize: '12.5px', color: '#6B7280', marginTop: '3px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                <span>🏢 {job.companyName || job.employerName || '—'}</span>
+                                {job.location && <span>📍 {job.location}</span>}
+                                {job.workDate && <span>📅 {job.workDate}</span>}
+                              </div>
+                            </div>
+
+                            {/* Salary & commission */}
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              {salary && (
+                                <div style={{ fontWeight: '700', fontSize: '13.5px', color: '#111827' }}>
+                                  {new Intl.NumberFormat('vi-VN').format(Number(salary))} VND
+                                </div>
+                              )}
+                              <div style={{ fontSize: '11.5px', color: '#F59E0B', fontWeight: '600', marginTop: '2px' }}>
+                                💰 {language === 'vi' ? 'HH: ' : 'Comm: '}{commission}
+                              </div>
+                            </div>
+
+                            {/* Status badge */}
+                            <div style={{
+                              padding: '4px 10px', borderRadius: '6px', fontSize: '11.5px',
+                              fontWeight: '700', background: statusColor.bg, color: statusColor.color,
+                              flexShrink: 0
+                            }}>
+                              {statusLabel}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div style={{
+                  padding: '14px 24px', borderTop: '1px solid #F3F4F6',
+                  display: 'flex', justifyContent: 'flex-end', gap: '10px'
+                }}>
+                  <button
+                    onClick={() => { setShowUrgentJobsModal(false); navigate('/admin/jobs'); }}
+                    style={{
+                      padding: '8px 18px', borderRadius: '8px', border: 'none',
+                      background: '#F59E0B', color: 'white', fontWeight: '700',
+                      fontSize: '13.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                    }}
+                  >
+                    <ArrowRight size={15} />
+                    {language === 'vi' ? 'Xem tất cả' : 'View all'}
+                  </button>
+                  <button
+                    onClick={() => setShowUrgentJobsModal(false)}
+                    style={{
+                      padding: '8px 16px', borderRadius: '8px', border: '1px solid #E5E7EB',
+                      background: 'white', color: '#374151', fontWeight: '600',
+                      fontSize: '13.5px', cursor: 'pointer'
+                    }}
+                  >
+                    {language === 'vi' ? 'Đóng' : 'Close'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </DashboardContainer>
     </DashboardLayout>

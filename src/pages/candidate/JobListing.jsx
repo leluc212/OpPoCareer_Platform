@@ -29,6 +29,7 @@ import { getIdToken } from '../../services/authHeaders';
 import { requestInterviewMedia } from '../../services/interviewMediaService';
 import * as applicationService from '../../services/applicationService';
 import adminEmployerService from '../../services/adminEmployerService';
+import { formatShiftString } from '../../utils/formatDays';
 
 const CV_AI_API_BASE_URL =
   (import.meta.env.VITE_CV_AI_API_URL || '/api-cv-ai').replace(/\/$/, '');
@@ -6069,7 +6070,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
               <div className="info-row">
                 <span className="info-label">{language === 'vi' ? 'Thời gian' : 'Time'}:</span>
                 <span className="info-value">
-                  {(applyModal.job.workHours || applyModal.job.shiftDetails?.time || applyModal.job.type?.match(/\((.*?)\)/)?.[1] || '-').replace(/ @ /g, ' | ')}
+                  {formatShiftString(applyModal.job.workHours || applyModal.job.shiftDetails?.time || applyModal.job.type?.match(/\((.*?)\)/)?.[1] || '-', language)}
                 </span>
               </div>
             </div>
@@ -7594,7 +7595,7 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
             <span>
               {language === 'vi' ? 'Thời gian:' : 'Hours:'}
               {' '}
-              {job.workHours.replace(/ @ /g, ' | ')}
+              {formatShiftString(job.workHours, language)}
             </span>
           </div>
         )}

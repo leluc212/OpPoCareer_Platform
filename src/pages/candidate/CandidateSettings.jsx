@@ -778,8 +778,7 @@ function CandidateSettings() {
               </Card>
 
               {/* Notifications */}
-              <ComingSoonWrapper>
-                <Card
+              <Card
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.3 }}
@@ -863,17 +862,9 @@ function CandidateSettings() {
                     </Toggle>
                   </SettingItem>
                 </Card>
-                <ComingSoonOverlay>
-                  <ComingSoonBadge>
-                    <span className="badge-icon">🚧</span>
-                    Tính năng đang phát triển
-                  </ComingSoonBadge>
-                </ComingSoonOverlay>
-              </ComingSoonWrapper>
 
               {/* Privacy */}
-              <ComingSoonWrapper>
-                <Card
+              <Card
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.4 }}
@@ -957,13 +948,6 @@ function CandidateSettings() {
                     </Toggle>
                   </SettingItem>
                 </Card>
-                <ComingSoonOverlay>
-                  <ComingSoonBadge>
-                    <span className="badge-icon">🚧</span>
-                    Tính năng đang phát triển
-                  </ComingSoonBadge>
-                </ComingSoonOverlay>
-              </ComingSoonWrapper>
 
               {/* Policies */}
               <Card

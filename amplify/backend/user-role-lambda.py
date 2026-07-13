@@ -3,10 +3,16 @@ import os
 from datetime import datetime
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 cognito = boto3.client('cognito-idp')
 dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE_NAME', 'Users'))
+
+# GSI name on the Users table that indexes by email.
+# If the GSI does not exist, find_user_by_email will raise and we fall through
+# to the normal sub-based upsert (fail-open).
+EMAIL_GSI = os.environ.get('EMAIL_GSI_NAME', 'email-index')
 
 
 def get_headers():
@@ -77,20 +83,69 @@ def update_groups(user_pool_id, username, role):
     )
 
 
+def find_user_by_email(email):
+    """
+    Query the Users table by email via the email GSI.
+    Returns the first matching item dict, or None if not found / GSI unavailable.
+    """
+    if not email:
+        return None
+    try:
+        result = users_table.query(
+            IndexName=EMAIL_GSI,
+            KeyConditionExpression=Key('email').eq(email),
+            Limit=1,
+        )
+        items = result.get('Items', [])
+        return items[0] if items else None
+    except Exception as e:
+        # GSI may not exist yet — log and return None so caller falls through.
+        print(f'[user-role-lambda] find_user_by_email failed (GSI may not exist): {e}')
+        return None
+
+
 def upsert_user(user_id, email, role):
+    """
+    Upsert the user record in DynamoDB.
+
+    Always resolves the canonical userId by checking the email GSI first.
+    If a record already exists for this email (e.g. native account), we update
+    THAT record instead of the caller-supplied user_id (which might be a Google sub).
+    This prevents duplicate rows when account-linking at the Cognito layer races
+    with post-login DynamoDB writes.
+    """
     now = datetime.utcnow().isoformat() + 'Z'
+
+    # ── Resolve canonical userId via email GSI ────────────────────────────────
+    resolved_user_id = user_id
+    if email:
+        existing = find_user_by_email(email)
+        if existing and existing.get('userId') and existing['userId'] != user_id:
+            print(
+                f'[user-role-lambda] Found existing record for email {email} '
+                f'(userId: {existing["userId"]}). Using existing userId instead of {user_id}.'
+            )
+            resolved_user_id = existing['userId']
+
+    print(f'[user-role-lambda] Upserting userId={resolved_user_id} email={email}')
+
     users_table.update_item(
-        Key={'userId': user_id},
-        UpdateExpression='SET #role = :role, #email = if_not_exists(#email, :email), #updatedAt = :updatedAt, #createdAt = if_not_exists(#createdAt, :createdAt)',
+        Key={'userId': resolved_user_id},
+        UpdateExpression=(
+            'SET #role = :role, '
+            '#email = if_not_exists(#email, :email), '
+            '#updatedAt = :updatedAt, '
+            '#createdAt = if_not_exists(#createdAt, :createdAt)'
+        ),
         ExpressionAttributeNames={
-            '#role': 'role',
-            '#email': 'email',
+            '#role':      'role',
+            '#email':     'email',
             '#updatedAt': 'updatedAt',
             '#createdAt': 'createdAt',
         },
         ExpressionAttributeValues={
-            ':role': role,
-            ':email': email or '',
+            ':role':      role,
+            ':email':     email or '',
             ':updatedAt': now,
             ':createdAt': now,
         },

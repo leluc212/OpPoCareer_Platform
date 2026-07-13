@@ -924,7 +924,7 @@ const PostJob = () => {
     .filter(slot => slot.startTime && slot.endTime)
     .map(slot => {
       const time = `${slot.startTime} - ${slot.endTime}`;
-      return slot.days && slot.days.length > 0 ? `${slot.days.join(',')} @ ${time}` : time;
+      return slot.days && slot.days.length > 0 ? `${slot.days.join(',')} | ${time}` : time;
     })
     .join(' | ');
 

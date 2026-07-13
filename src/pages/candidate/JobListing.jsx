@@ -4289,7 +4289,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     // Quick/shift jobs không có trang chi tiết riêng — giữ nguyên flow cũ (open modal)
     if (job.isQuickJob || job.category === 'shift') return;
     // Standard jobs → navigate sang trang chi tiết
-    navigate(`/candidate/jobs/${job.idJob}`);
+    const targetId = String(job.idJob || job.id || '').replace('dynamo-', '');
+    if (!targetId) return;
+    navigate(`/candidate/jobs/${targetId}`);
   };
 
   const getJobApplicationStatus = (jobId) => {

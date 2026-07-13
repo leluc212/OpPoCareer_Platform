@@ -1493,7 +1493,7 @@ const CandidateDashboard = () => {
                     : formatSalary(matchedJob.salary || matchedJob.totalSalary, matchedJob.salaryUnit);
 
                   recommended.push({
-                    id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
+                    id: String(matchedJob.idJob || matchedJob.jobID || matchedJob.id || ''),
                     title: matchedJob.title || 'Untitled',
                     company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
                     companyLogo: matchedJob.companyLogo || null,
@@ -1583,7 +1583,7 @@ const CandidateDashboard = () => {
               : formatSalary(matchedJob.salary || matchedJob.totalSalary, matchedJob.salaryUnit);
 
             recommended.push({
-              id: matchedJob.idJob || matchedJob.jobID || matchedJob.id,
+              id: String(matchedJob.idJob || matchedJob.jobID || matchedJob.id || ''),
               title: matchedJob.title || 'Untitled',
               company: matchedJob.employerName || matchedJob.companyName || (language === 'vi' ? 'Công ty' : 'Company'),
               companyLogo: matchedJob.companyLogo || null,
@@ -2732,7 +2732,7 @@ const CandidateDashboard = () => {
                             whileHover={{ scale: 1.02 }}
                             onClick={() => job.isQuick
                               ? navigate({ pathname: '/candidate/jobs', search: '?tab=shift' }, { state: { selectedJobId: job.id } })
-                              : navigate(`/candidate/jobs/${job.id}`)
+                              : navigate(`/candidate/jobs/${String(job.id || '')}`)
                             }
                           >
                             {/* Header: logo + title + company + urgent badge */}

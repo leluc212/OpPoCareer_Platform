@@ -5,7 +5,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   MapPin, DollarSign, Clock, Calendar, ChevronRight, ChevronLeft,
   Send, Users, Briefcase, Globe,
-  Facebook, Twitter, Linkedin, Copy, Check, X,
+  Check, X,
   AlertCircle, Award, Heart, ExternalLink
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -209,23 +209,6 @@ const LBNav = styled.button`
   svg { width: 20px; height: 20px; }
 `;
 
-// ─── Social share bar ─────────────────────────────────────────────────────────
-const ShareBar = styled.div`
-  position: sticky; top: 110px;
-  display: flex; flex-direction: column; gap: 7px; align-items: center;
-  width: 36px; margin-right: 10px;
-  @media (max-width: 880px) { display: none; }
-`;
-const ShareIcon = styled(motion.button)`
-  width: 34px; height: 34px; border-radius: 50%;
-  background: ${p => p.theme.colors.bgLight};
-  color: ${p => p.theme.colors.textLight};
-  border: 1.5px solid ${p => p.theme.colors.border};
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  svg { width: 15px; height: 15px; }
-  &:hover { background: ${p => p.theme.colors.primary}; color: #fff; border-color: ${p => p.theme.colors.primary}; }
-`;
-
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const LogoBox = styled.div`
   width: 56px; height: 56px; border-radius: 10px; overflow: hidden; flex-shrink: 0;
@@ -273,7 +256,71 @@ const fmtDate = d => {
   if (!d) return '';
   const dt = new Date(d);
   if (isNaN(dt)) return d;
-  return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+  // Format theo timezone Việt Nam (UTC+7)
+  const vnDate = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+  return `${String(vnDate.getDate()).padStart(2,'0')}/${String(vnDate.getMonth()+1).padStart(2,'0')}/${vnDate.getFullYear()}`;
+};
+
+// Format workHours: "T2,T3,T4,T5,T6,T7,CN @ 07:00 - 12:00" → "Thứ 2 - CN | 07:00 - 12:00"
+const fmtWorkHours = raw => {
+  if (!raw) return '';
+  const DAY_ORDER = ['T2','T3','T4','T5','T6','T7','CN'];
+  const DAY_LABEL = { T2: 'Thứ 2', T3: 'Thứ 3', T4: 'Thứ 4', T5: 'Thứ 5', T6: 'Thứ 6', T7: 'Thứ 7', CN: 'CN' };
+
+  // Replace @ with | for old data
+  const str = raw.replace(/ @ /g, ' | ');
+
+  // Split multiple slots by " | " but keep day|time pairs together
+  // Format: "T2,T3,T4,T5,T6,T7,CN | 07:00 - 12:00"
+  // Could also be just "07:00 - 12:00" without days
+  const parts = str.split(' | ');
+
+  // Try to detect if first part is days list
+  const condenseDays = (daysStr) => {
+    const days = daysStr.split(',').map(d => d.trim());
+    if (days.length <= 1) return DAY_LABEL[days[0]] || days[0];
+
+    // Check if days are consecutive in DAY_ORDER
+    const indices = days.map(d => DAY_ORDER.indexOf(d)).filter(i => i >= 0).sort((a, b) => a - b);
+    if (indices.length < 2) return days.map(d => DAY_LABEL[d] || d).join(', ');
+
+    // Find consecutive ranges
+    const ranges = [];
+    let start = indices[0], end = indices[0];
+    for (let i = 1; i < indices.length; i++) {
+      if (indices[i] === end + 1) {
+        end = indices[i];
+      } else {
+        ranges.push([start, end]);
+        start = end = indices[i];
+      }
+    }
+    ranges.push([start, end]);
+
+    return ranges.map(([s, e]) => {
+      if (s === e) return DAY_LABEL[DAY_ORDER[s]];
+      return `${DAY_LABEL[DAY_ORDER[s]]} - ${DAY_LABEL[DAY_ORDER[e]]}`;
+    }).join(', ');
+  };
+
+  // Check if first part looks like days (contains T2-T7 or CN)
+  if (parts.length >= 2 && /^[T2-7CN,\s]+$/i.test(parts[0].replace(/T[2-7]/g, '').replace(/CN/g, '').replace(/[,\s]/g, '') === '' ? parts[0] : '___')) {
+    // Simple check: first part has day codes
+    const hasDays = /\b(T[2-7]|CN)\b/.test(parts[0]);
+    if (hasDays) {
+      const daysFormatted = condenseDays(parts[0]);
+      const time = parts.slice(1).join(' | ');
+      return `${daysFormatted} | ${time}`;
+    }
+  }
+
+  // Fallback: try matching the pattern directly
+  const match = str.match(/^([T2-7CN,\s]+)\s*\|\s*(.+)$/);
+  if (match) {
+    return `${condenseDays(match[1].trim())} | ${match[2].trim()}`;
+  }
+
+  return str;
 };
 const daysLeft = d => {
   if (!d) return null;
@@ -283,8 +330,14 @@ const fmtSalary = j => {
   if (!j.salary) return 'Thỏa thuận';
   const s = String(j.salary);
   if (/thỏa thuận|negotiate/i.test(s)) return 'Thỏa thuận';
-  const unit = j.salaryUnit === 'month' ? '/tháng' : j.salaryUnit === 'shift' ? '/ca' : '/giờ';
-  return (s.includes('VND') || s.includes('triệu')) ? s : `${s}${unit}`;
+  const unit = j.salaryUnit === 'month' ? 'đ/tháng' : j.salaryUnit === 'shift' ? 'đ/ca' : 'đ/giờ';
+  // Nếu đã chứa VND hoặc triệu thì giữ nguyên
+  if (s.includes('VND') || s.includes('triệu') || s.includes('đ')) return s;
+  // Format số có dấu chấm phân cách hàng nghìn
+  const num = s.replace(/[^\d]/g, '');
+  if (!num) return s;
+  const formatted = Number(num).toLocaleString('vi-VN');
+  return `${formatted}${unit}`;
 };
 const tagsArr = j => {
   if (!j?.tags) return [];
@@ -298,13 +351,8 @@ const richHtml = text => {
     .replace(/^### (.+)$/gm, '<h4>$1</h4>')
     .replace(/^## (.+)$/gm, '<h3>$1</h3>')
     .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>');
+    .replace(/^[-•]\s*/gm, '');
 };
-const copyLink = () => {
-  try { navigator.clipboard.writeText(window.location.href); }
-  catch { const e = document.createElement('textarea'); e.value = window.location.href; document.body.appendChild(e); e.select(); document.execCommand('copy'); document.body.removeChild(e); }
-};
-
 // ─── Component ────────────────────────────────────────────────────────────────
 // standalone=true  → /candidate/jobs/:jobId  (DashboardLayout)
 // standalone=false → /jobs/:jobId            (inside LandingPage, no layout)
@@ -320,7 +368,6 @@ const JobDetail = ({ standalone = true }) => {
   const [missing, setMissing]   = useState(false);
 
   const [saved, setSaved]               = useState(false);
-  const [copied, setCopied]             = useState(false);
   const [lb, setLb]                     = useState({ open: false, idx: 0 });
   const [alreadyApplied, setApplied]    = useState(false);
 
@@ -397,7 +444,6 @@ const JobDetail = ({ standalone = true }) => {
     navigate('/candidate/jobs', { state: { selectedJobId: `dynamo-${job.idJob}` } });
   };
 
-  const handleCopy = () => { copyLink(); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const openLb  = idx => setLb({ open: true, idx });
   const closeLb = ()  => setLb(s => ({ ...s, open: false }));
   const prevLb  = ()  => setLb(s => ({ ...s, idx: (s.idx - 1 + gallery.length) % gallery.length }));
@@ -486,7 +532,7 @@ const JobDetail = ({ standalone = true }) => {
   // ── Main render ────────────────────────────────────────────────────────────
   const inner = (
     <PageWrapper>
-      {/* Nút quay lại + Breadcrumb */}
+      {/* Nút quay lại */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <button
           onClick={() => navigate(-1)}
@@ -502,37 +548,10 @@ const JobDetail = ({ standalone = true }) => {
         >
           <ChevronLeft size={15} /> Quay lại
         </button>
-
-        <Breadcrumb style={{ marginBottom: 0, flex: 1 }}>
-          <button onClick={() => navigate(homeRoute)}>Trang chủ</button>
-          <span className="sep"><ChevronRight size={12} /></span>
-          <button onClick={() => navigate(listRoute)}>Tìm việc làm</button>
-          {industries[0] && <>
-            <span className="sep"><ChevronRight size={12} /></span>
-            <button onClick={() => navigate(listRoute, { state: { searchKeyword: industries[0] } })}>{industries[0]}</button>
-          </>}
-          <span className="sep"><ChevronRight size={12} /></span>
-          <span className="current">{title}</span>
-        </Breadcrumb>
       </div>
 
-      {/* Outer flex: share bar + grid */}
+      {/* Two-column grid */}
       <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start' }}>
-        {/* Social share bar */}
-        <ShareBar>
-          {[
-            { icon: <Facebook size={15} />, fn: () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`, '_blank'), title: 'Facebook' },
-            { icon: <Twitter size={15} />, fn: () => window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(title)}`, '_blank'), title: 'Twitter/X' },
-            { icon: <Linkedin size={15} />, fn: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`, '_blank'), title: 'LinkedIn' },
-            { icon: copied ? <Check size={15} /> : <Copy size={15} />, fn: handleCopy, title: 'Sao chép link' },
-          ].map((s, i) => (
-            <ShareIcon key={i} onClick={s.fn} title={s.title} whileHover={{ scale: 1.1 }} whileTap={{ scale: .9 }}>
-              {s.icon}
-            </ShareIcon>
-          ))}
-        </ShareBar>
-
-        {/* Two-column grid */}
         <Grid style={{ flex: 1, minWidth: 0 }}>
           {/* ── LEFT ────────────────────────────────────────────────────── */}
           <MainCol>
@@ -549,8 +568,8 @@ const JobDetail = ({ standalone = true }) => {
                 const tiles = [
                   { icon: <DollarSign />, label: 'Mức lương', val: salary },
                   { icon: <MapPin />,     label: 'Địa điểm',  val: location || null },
-                  { icon: <Clock />,      label: 'Giờ làm',   val: job.workHours || null },
-                  { icon: <Calendar />,   label: 'Ngày làm',  val: job.workDays || null },
+                  { icon: <Clock />,      label: 'Giờ làm',   val: job.workHours ? fmtWorkHours(job.workHours) : null },
+                  { icon: <Calendar />,   label: 'Ngày làm',  val: job.workDays ? fmtDate(job.workDays) : null },
                   ...(experience ? [{ icon: <Award />, label: 'Kinh nghiệm', val: experience }] : []),
                 ].filter(t => t.val);
 
@@ -680,7 +699,7 @@ const JobDetail = ({ standalone = true }) => {
                   {job.workHours && (
                     <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 14 }}>
                       <Clock size={14} style={{ color: '#1e40af' }} />
-                      <span><strong>Giờ làm:</strong> {job.workHours}</span>
+                      <span><strong>Giờ làm:</strong> {fmtWorkHours(job.workHours)}</span>
                     </div>
                   )}
                   {Array.isArray(job.workHoursList) && job.workHoursList.length > 0 && (
@@ -828,7 +847,7 @@ const JobDetail = ({ standalone = true }) => {
                 if (job.workDays) rows.push({ icon: <Calendar size={15} />, label: 'Ngày làm việc', val: job.workDays });
 
                 // Giờ làm
-                if (job.workHours) rows.push({ icon: <Clock size={15} />, label: 'Giờ làm việc', val: job.workHours });
+                if (job.workHours) rows.push({ icon: <Clock size={15} />, label: 'Giờ làm việc', val: fmtWorkHours(job.workHours) });
 
                 // Tags (kỹ năng yêu cầu)
                 if (tags.length > 0) rows.push({ icon: <Users size={15} />, label: 'Kỹ năng yêu cầu', val: tags.join(', ') });

@@ -2387,7 +2387,12 @@ const JobListing = () => {
   }, []);
   const quickJobApproved = quickJobStatus === 'APPROVED';
   // ─────────────────────────────────────────────────────────────────────────
-  const [savedJobs, setSavedJobs] = useState([]);
+  const [savedJobs, setSavedJobs] = useState(() => {
+    try {
+      const cached = localStorage.getItem('candidate_saved_jobs_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [searchKeyword, setSearchKeyword] = useState('');
   const [hotSearchEmployerIds, setHotSearchEmployerIds] = useState(new Set());
   const [topSpotlightEmployerIds, setTopSpotlightEmployerIds] = useState(new Set());
@@ -4075,6 +4080,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     if (candidateProfile && Array.isArray(candidateProfile.savedJobs)) {
       console.log('📥 Syncing saved jobs from DynamoDB profile:', candidateProfile.savedJobs);
       setSavedJobs(candidateProfile.savedJobs);
+      try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(candidateProfile.savedJobs)); } catch {}
     }
   }, [candidateProfile]);
 
@@ -4268,11 +4274,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
     // To provide immediate feedback, we update the local state first
     const isAlreadySaved = savedJobs.includes(jobId);
-    setSavedJobs(prev =>
-      isAlreadySaved
-        ? prev.filter(id => id !== jobId)
-        : [...prev, jobId]
-    );
+    const updatedList = isAlreadySaved
+      ? savedJobs.filter(id => id !== jobId)
+      : [...savedJobs, jobId];
+    setSavedJobs(updatedList);
+    try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(updatedList)); } catch {}
 
     try {
       console.log(`💾 Syncing saved job state to database for: ${jobId}`);
@@ -4285,11 +4291,11 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       console.error('❌ Failed to sync saved job to database:', error);
 
       // Rollback local state on error
-      setSavedJobs(prev =>
-        isAlreadySaved
-          ? [...prev, jobId]
-          : prev.filter(id => id !== jobId)
-      );
+      const rolledBack = isAlreadySaved
+        ? [...savedJobs]
+        : savedJobs.filter(id => id !== jobId);
+      setSavedJobs(rolledBack);
+      try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(rolledBack)); } catch {}
 
       setErrorModal({
         show: true,
@@ -6185,7 +6191,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 className="btn-info"
                 onClick={() => {
                   recordJobView(applyModal.job);
-                  setJobDescriptionModal({ job: applyModal.job });
+                  const jobId = applyModal.job.idJob || applyModal.job.id;
+                  setApplyModal(null);
+                  navigate(`/candidate/jobs/${jobId}`);
                 }}
                 style={{
                   flex: 1,

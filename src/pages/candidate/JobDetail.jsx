@@ -15,6 +15,8 @@ import candidateProfileService from '../../services/candidateProfileService';
 import { getMyCandidateApplications } from '../../services/applicationService';
 import { formatShiftString } from '../../utils/formatDays';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../hooks/useToast';
+import Toast from '../../components/Toast';
 
 // ─── Animations ───────────────────────────────────────────────────────────────
 const fadeUp = keyframes`from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}`;
@@ -305,6 +307,7 @@ const JobDetail = ({ standalone = true }) => {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const toast = useToast();
 
   const [job, setJob]           = useState(null);
   const [employer, setEmployer] = useState(null);
@@ -365,18 +368,42 @@ const JobDetail = ({ standalone = true }) => {
   }, [job, isAuthenticated, user]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const toggleSave = () => {
+  const toggleSave = async () => {
     if (!job) return;
     const id = job.idJob;
     const next = !saved;
     setSaved(next);
     if (isAuthenticated && user?.role === 'candidate') {
-      candidateProfileService.toggleSavedJob(id).catch(() => setSaved(!next));
+      try {
+        await candidateProfileService.toggleSavedJob(id);
+        toast.addToast({
+          type: 'success',
+          title: next ? 'Đã lưu tin' : 'Đã bỏ lưu',
+          message: next ? 'Công việc đã được lưu vào danh sách của bạn.' : 'Đã xóa công việc khỏi danh sách lưu.',
+          duration: 2500
+        });
+      } catch (err) {
+        setSaved(!next);
+        toast.addToast({
+          type: 'error',
+          title: 'Lỗi',
+          message: 'Không thể lưu tin. Vui lòng thử lại.',
+          duration: 3000
+        });
+      }
     } else {
       try {
         const ls = JSON.parse(localStorage.getItem('public_saved_jobs') || '[]');
         localStorage.setItem('public_saved_jobs', JSON.stringify(next ? [...ls, id] : ls.filter(x => x !== id)));
-      } catch {}
+        toast.addToast({
+          type: 'success',
+          title: next ? 'Đã lưu tin' : 'Đã bỏ lưu',
+          message: next ? 'Công việc đã được lưu.' : 'Đã xóa công việc khỏi danh sách lưu.',
+          duration: 2500
+        });
+      } catch {
+        setSaved(!next);
+      }
     }
   };
 
@@ -831,7 +858,7 @@ const JobDetail = ({ standalone = true }) => {
     </PageWrapper>
   );
 
-  return standalone ? <DashboardLayout role="candidate">{inner}</DashboardLayout> : inner;
+  return standalone ? <DashboardLayout role="candidate"><Toast toasts={toast.toasts} removeToast={toast.removeToast} />{inner}</DashboardLayout> : <><Toast toasts={toast.toasts} removeToast={toast.removeToast} />{inner}</>;
 };
 
 export default JobDetail;

@@ -506,6 +506,7 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
     }
 
     let objectUrl = null;
+    let timeout;
 
     const fetchPDF = async () => {
       try {
@@ -523,9 +524,28 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
         if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
         const blob = await response.blob();
+
+        // Kiểm tra: nếu blob quá nhỏ hoặc content-type không phải PDF → URL hết hạn
+        if (blob.size < 100 || (blob.type && !blob.type.includes('pdf') && !blob.type.includes('octet-stream'))) {
+          console.warn('⚠️ Response không phải PDF (type:', blob.type, 'size:', blob.size, ')');
+          throw new Error('Response is not a valid PDF');
+        }
+
         objectUrl = URL.createObjectURL(blob);
         console.log('✅ PDF fetched, size:', blob.size);
         setPdfData(objectUrl);
+
+        // Safety timeout: nếu react-pdf không fire callback trong 10s → fallback
+        timeout = setTimeout(() => {
+          setLoading(prev => {
+            if (prev) {
+              console.warn('⚠️ react-pdf không load được, fallback...');
+              setUseGoogleViewer(true);
+              return false;
+            }
+            return prev;
+          });
+        }, 10000);
 
       } catch (err) {
         console.error('❌ Error fetching PDF:', err);
@@ -536,7 +556,7 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
 
     fetchPDF();
 
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); if (timeout) clearTimeout(timeout); };
   }, [activeCvUrl, isPDF]);
 
   const onDocumentLoadSuccess = ({ numPages }) => {

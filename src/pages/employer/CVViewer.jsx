@@ -4,6 +4,7 @@ import {
   Download, FileText, AlertCircle,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RefreshCw,
 } from 'lucide-react';
+import { getJobApplications } from '../../services/applicationService';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 const getExt = (name = '') => name.split('.').pop().toLowerCase().replace(/\?.*$/, '');
@@ -21,10 +22,17 @@ const detectType = (fileName, url) => {
 const CVViewer = () => {
   const [searchParams] = useSearchParams();
 
-  const cvUrl    = searchParams.get('url')       || '';
-  const fileName = searchParams.get('name')      || 'CV';
-  const candName = searchParams.get('candidate') || '';
-  const jobTitle = searchParams.get('job')       || '';
+  const initialUrl    = searchParams.get('url')           || '';
+  const fileName      = searchParams.get('name')          || 'CV';
+  const candName      = searchParams.get('candidate')     || '';
+  const jobTitle      = searchParams.get('job')           || '';
+  const jobId         = searchParams.get('jobId')         || '';
+  const applicationId = searchParams.get('applicationId') || '';
+  const candidateId   = searchParams.get('candidateId')   || '';
+
+  // Active URL — có thể được refresh nếu URL ban đầu hết hạn
+  const [cvUrl, setCvUrl] = useState(initialUrl);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fileType = detectType(fileName, cvUrl);
 
@@ -43,10 +51,38 @@ const CVViewer = () => {
     if (candName) document.title = `CV – ${candName}`;
   }, [candName]);
 
+  /* ── Refresh CV URL from backend (lấy presigned URL mới) ── */
+  const refreshCvUrl = useCallback(async () => {
+    if (!jobId) return null;
+    try {
+      setRefreshing(true);
+      const apps = await getJobApplications(jobId);
+      const match = apps.find(a =>
+        (applicationId && a.applicationId === applicationId) ||
+        (candidateId && a.candidateId === candidateId)
+      );
+      if (match?.cvUrl) {
+        setCvUrl(match.cvUrl);
+        setError('');
+        setLoading(true); // restart loading with new URL
+        setPdfDoc(null);
+        return match.cvUrl;
+      }
+    } catch (e) {
+      console.warn('Could not refresh CV URL:', e);
+    } finally {
+      setRefreshing(false);
+    }
+    return null;
+  }, [jobId, applicationId, candidateId]);
+
   /* ── Load PDF via pdf.js ─────────────────────────────── */
   useEffect(() => {
     if (fileType !== 'pdf') { setLoading(false); return; }
     if (!cvUrl)             { setLoading(false); setError('no_url'); return; }
+
+    let timeout;
+    let cancelled = false;
 
     const loadPdfJs = () => new Promise((resolve, reject) => {
       if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
@@ -61,11 +97,35 @@ const CVViewer = () => {
       document.head.appendChild(s);
     });
 
+    // Timeout: nếu quá 15s không load được → thử refresh hoặc hiển thị lỗi
+    timeout = setTimeout(async () => {
+      if (!cancelled) {
+        if (jobId) {
+          const freshUrl = await refreshCvUrl();
+          if (freshUrl) return;
+        }
+        setLoading(false);
+        setError('load_failed');
+      }
+    }, 15000);
+
     loadPdfJs()
       .then(lib => lib.getDocument({ url: cvUrl, withCredentials: false }).promise)
-      .then(doc  => { setPdfDoc(doc); setTotal(doc.numPages); setLoading(false); })
-      .catch(()  => { setLoading(false); setError('load_failed'); });
-  }, [cvUrl, fileType]);
+      .then(doc  => { if (!cancelled) { setPdfDoc(doc); setTotal(doc.numPages); setLoading(false); clearTimeout(timeout); } })
+      .catch(async ()  => {
+        if (cancelled) return;
+        clearTimeout(timeout);
+        // Thử refresh URL nếu có jobId (URL hết hạn)
+        if (jobId) {
+          const freshUrl = await refreshCvUrl();
+          if (freshUrl) return; // sẽ re-trigger effect với URL mới
+        }
+        setLoading(false);
+        setError('load_failed');
+      });
+
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [cvUrl, fileType, jobId, refreshCvUrl]);
 
   /* ── Render PDF page ─────────────────────────────────── */
   useEffect(() => {
@@ -105,6 +165,18 @@ const CVViewer = () => {
 
   /* ── Office iframe onLoad ────────────────────────────── */
   const onOfficeLoad = useCallback(() => setLoading(false), []);
+
+  // Timeout cho office/image: nếu 20s không load → hiện lỗi
+  useEffect(() => {
+    if (fileType === 'pdf' || !cvUrl) return;
+    const timeout = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) { setError('load_failed'); return false; }
+        return prev;
+      });
+    }, 20000);
+    return () => clearTimeout(timeout);
+  }, [fileType, cvUrl]);
 
   /* ─── Render ─────────────────────────────────────────── */
   if (!cvUrl) {
@@ -177,12 +249,23 @@ const CVViewer = () => {
             <AlertCircle size={48} color="#f59e0b" />
             <h2 style={{ color: '#f1f5f9', marginTop: 12 }}>Không thể hiển thị file</h2>
             <p style={{ color: '#94a3b8', maxWidth: 340, textAlign: 'center' }}>
-              Trình duyệt không hỗ trợ xem loại file này trực tiếp. Vui lòng tải về để mở.
+              Link xem CV có thể đã hết hạn hoặc trình duyệt không hỗ trợ xem trực tiếp.
             </p>
-            <a href={cvUrl} download={fileName} target="_blank" rel="noreferrer"
-              style={{ ...S.downloadBtn, marginTop: 20 }}>
-              <Download size={15} /> Tải về máy
-            </a>
+            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+              {jobId && (
+                <button
+                  onClick={refreshCvUrl}
+                  disabled={refreshing}
+                  style={{ ...S.downloadBtn, background: 'linear-gradient(135deg, #059669, #10b981)' }}
+                >
+                  <RefreshCw size={15} style={refreshing ? { animation: 'spin 0.8s linear infinite' } : {}} />
+                  {refreshing ? 'Đang tải...' : 'Thử lại'}
+                </button>
+              )}
+              <a href={cvUrl} download={fileName} target="_blank" rel="noreferrer" style={S.downloadBtn}>
+                <Download size={15} /> Tải về máy
+              </a>
+            </div>
           </div>
         )}
 

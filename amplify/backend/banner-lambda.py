@@ -86,6 +86,7 @@ def create_banner(body):
             'order':     int(body.get('order', 0)),
             'targetRegions': body.get('targetRegions', []),  # [] = all regions
             'isTopSpotlight': body.get('isTopSpotlight', False),
+            'orientation': body.get('orientation', 'horizontal'),  # 'horizontal' | 'vertical'
             'displayTime': body.get('displayTime'),
             'expiredAt': body.get('expiredAt'),
             'createdAt': now_iso(),
@@ -115,7 +116,7 @@ def update_banner(banner_id, body):
             updates['targetRegions'] = body['targetRegions']
 
         # Check explicit fields to allow setting them to None/null
-        for field in ['isTopSpotlight', 'displayTime', 'expiredAt']:
+        for field in ['isTopSpotlight', 'displayTime', 'expiredAt', 'orientation']:
             if field in body:
                 updates[field] = body[field]
 

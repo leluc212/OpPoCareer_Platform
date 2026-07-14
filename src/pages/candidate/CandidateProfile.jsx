@@ -1174,7 +1174,7 @@ const CandidateProfile = () => {
                 email: profile.email, // Always use DynamoDB email (which is from Cognito)
                 phone: profile.phone || '',
                 location: profile.location || '',
-                cccd: profile.cccd ? String(profile.cccd).padStart(12, '0') : '',
+                cccd: profile.cccd ? String(profile.cccd) : '',
                 dateOfBirth: profile.dateOfBirth || '',
                 title: profile.title || '',
                 bio: profile.bio || '',
@@ -1414,7 +1414,7 @@ const CandidateProfile = () => {
           email: profile.email,
           phone: profile.phone || '',
           location: profile.location || '',
-          cccd: profile.cccd ? String(profile.cccd).padStart(12, '0') : '',
+          cccd: profile.cccd ? String(profile.cccd) : '',
           dateOfBirth: profile.dateOfBirth || '',
           title: profile.title || '',
           bio: profile.bio || '',
@@ -1954,7 +1954,7 @@ const CandidateProfile = () => {
                         </div>
                         <div className="label">{language === 'vi' ? 'Số CCCD' : 'Citizen ID'}</div>
                       </div>
-                      <div className="value">{formData.cccd ? String(formData.cccd).padStart(12, '0') : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
+                      <div className="value">{formData.cccd ? String(formData.cccd) : (language === 'vi' ? 'Chưa cập nhật' : 'Not updated')}</div>
                     </InfoCard>
 
                     <InfoCard

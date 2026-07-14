@@ -7,7 +7,7 @@ import { useLanguage } from '../context/LanguageContext';
 import candidateProfileService from '../services/candidateProfileService';
 import employerProfileService from '../services/employerProfileService';
 import jobPostService from '../services/jobPostService';
-import { getNotifications, markAsRead, markAllAsRead, createChatMessageNotification } from '../services/notificationService';
+import { getNotifications, markAsRead, createChatMessageNotification } from '../services/notificationService';
 import RelativeTime from './RelativeTime';
 import UrgentJobAlertModal from './UrgentJobAlertModal';
 import { s3Images } from '../utils/s3Images';
@@ -1596,37 +1596,28 @@ const Navbar = ({ showSearch = true }) => {
     const nextState = !showNotifications;
     setShowNotifications(nextState);
     
-    // When opening notifications, mark as read immediately to clear the badge
+    // When opening notifications, only dismiss chat badge visually
+    // Do NOT mark all as read on the server - only mark individual ones when clicked
     if (nextState) {
-      setUnreadCount(0);
       setAcknowledgedChatCountBell(unreadChatCount); // "Dismiss" current chat count only from bell
-      try {
-        const effectiveUser = user || JSON.parse(localStorage.getItem('user') || '{}');
-        const userId = effectiveUser.role === 'admin' ? 'admin' : (effectiveUser.userId || effectiveUser.id || effectiveUser.email);
-        if (userId) {
-          markAllAsRead(userId, effectiveUser.role).catch(() => {});
-        }
-      } catch (err) {}
     }
   };
 
   const handleNotificationItemClick = async (notification = null) => {
     setShowNotifications(false);
 
-    // Mark all as read and reset badge immediately, then re-fetch from DB
+    // Only mark the clicked notification as read (not all)
     try {
       const effectiveUser = user || JSON.parse(localStorage.getItem('user') || '{}');
       const userId = effectiveUser.role === 'admin' ? 'admin' : (effectiveUser.userId || effectiveUser.id || effectiveUser.email);
-      if (userId) {
-        // Optimistic update
-        setUnreadCount(0);
-        setRealNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      if (userId && notification && notification.notificationId) {
+        // Optimistic update for the single notification
+        setRealNotifications(prev => prev.map(n => 
+          n.notificationId === notification.notificationId ? { ...n, read: true } : n
+        ));
+        setUnreadCount(prev => Math.max(0, prev - 1));
         
-        if (notification && notification.notificationId) {
-          await markAsRead(notification.notificationId);
-        } else {
-          await markAllAsRead(userId, effectiveUser.role);
-        }
+        await markAsRead(notification.notificationId);
 
         // Re-fetch from DB to confirm
         const freshNotifs = await getNotifications(userId, effectiveUser.role);
@@ -1637,6 +1628,54 @@ const Navbar = ({ showSearch = true }) => {
       console.error('Error marking as read:', err);
     }
 
+    // If notification has actionUrl, navigate directly to it
+    if (notification && notification.actionUrl) {
+      let url = notification.actionUrl;
+
+      // Parse data field if it's a JSON string
+      const notifData = typeof notification.data === 'string'
+        ? (() => { try { return JSON.parse(notification.data); } catch { return {}; } })()
+        : (notification.data || {});
+
+      // Handle employer_cv_approved → AI interview
+      if (notification.type === 'employer_cv_approved' && notifData?.jobId) {
+        if (notifData.interviewDeadline) {
+          const deadline = new Date(notifData.interviewDeadline);
+          if (new Date() > deadline) {
+            alert(language === 'vi' 
+              ? 'Rất tiếc, thời gian phỏng vấn đã hết hạn.' 
+              : 'Sorry, the interview deadline has passed.');
+            return;
+          }
+        }
+        navigate('/candidate/jobs?tab=standard', {
+          state: { selectedJobId: notifData.jobId, applicationId: notifData.applicationId || null, openInterview: true }
+        });
+        return;
+      }
+
+      // Handle CV accepted → AI interview
+      const isCvApproved = (notification.type === 'success' || notification.type === 'CV_ACCEPTED') && notifData?.jobId;
+      if (isCvApproved) {
+        navigate('/candidate/jobs?tab=standard', {
+          state: { selectedJobId: notifData.jobId, openInterview: true }
+        });
+        return;
+      }
+
+      // Normalize /candidate/jobs with jobId
+      if (url === '/candidate/jobs' && notifData?.jobId) {
+        navigate('/candidate/jobs?tab=standard', {
+          state: { selectedJobId: notifData.jobId, openInterview: true }
+        });
+        return;
+      }
+
+      navigate(url);
+      return;
+    }
+
+    // No actionUrl (e.g. "View all" button click) → go to notifications page
     if (user?.role === 'candidate') {
       navigate('/candidate/notifications');
     } else if (user?.role === 'employer') {

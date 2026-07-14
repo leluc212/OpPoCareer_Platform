@@ -540,6 +540,8 @@ function CandidateNotifications() {
         return Zap;
       case 'worker_replaced_shift_cancelled':
         return Bell;
+      case 'change_request_received':
+        return AlertCircle;
       case 'employer_review':
         return Star;
       case 'cv_review':
@@ -580,6 +582,8 @@ function CandidateNotifications() {
         return '#ef4444';
       case 'worker_replaced_shift_cancelled':
         return '#EF4444';
+      case 'change_request_received':
+        return '#F59E0B';
       case 'employer_review':
         return '#F59E0B';
       case 'system':
@@ -1033,7 +1037,11 @@ function CandidateNotifications() {
                     <span className="stat-label">{language === 'vi' ? 'CV được chấp nhận' : 'Accepted CVs'}</span>
                     <CheckCircle />
                   </div>
-                  <div className="stat-value">{notifications.filter(n => n.type === 'success' && n.title.includes(language === 'vi' ? 'chấp nhận' : 'accepted')).length}</div>
+                  <div className="stat-value">{notifications.filter(n => {
+                    const acceptedTypes = ['success', 'CV_ACCEPTED', 'application_success'];
+                    const keyword = language === 'vi' ? 'chấp nhận' : 'accepted';
+                    return acceptedTypes.includes(n.type) || (n.title && n.title.toLowerCase().includes(keyword));
+                  }).length}</div>
                 </StatItem>
               </QuickStats>
             </Card>

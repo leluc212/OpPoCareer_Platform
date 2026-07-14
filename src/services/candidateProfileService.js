@@ -412,6 +412,8 @@ class CandidateProfileService {
    */
   async toggleSavedJob(jobId) {
     try {
+      // Clear cached profile to ensure we get fresh data
+      this.myProfilePromise = null;
       const profile = await this.getMyProfile();
       if (!profile) {
         throw new Error('Candidate profile not found. Please create a profile first.');
@@ -425,6 +427,9 @@ class CandidateProfileService {
       console.log(`🔄 Toggling job ${jobId}. New list:`, updatedSavedJobs);
       
       const result = await this.updateProfile({ savedJobs: updatedSavedJobs });
+      
+      // Clear cache after update so next getMyProfile call gets fresh data
+      this.myProfilePromise = null;
       
       // Dispatch a custom event to notify components like FloatingSupportBar
       if (typeof window !== 'undefined') {

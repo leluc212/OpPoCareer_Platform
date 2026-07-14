@@ -1951,6 +1951,9 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading, onApprov
                             name: candidate.cvFileName || 'CV.pdf',
                             candidate: candidate.candidate || candidate.fullName || '',
                             job: candidate.job || '',
+                            ...(candidate.jobId && { jobId: candidate.jobId }),
+                            ...(candidate.applicationId && { applicationId: candidate.applicationId }),
+                            ...(candidate.candidateId && { candidateId: candidate.candidateId }),
                           });
                           window.open(`/cv-viewer?${params.toString()}`, '_blank');
                         }}

@@ -382,14 +382,12 @@ const Sidebar = ({ role, onHoverChange }) => {
           
           const reportsCount = (feedbacksRaw || []).filter(item => item.status === 'unread').length;
           
-          const pendingVerificationCount = employers.filter(e => e.verificationStatus === 'pending' && !e.isVerified).length;
-          const pendingQuickJobCount = employers.filter(e => e.quickJobStatus === 'pending').length;
-          
           // pendingChangeCount = đúng theo server: chỉ status === 'pending_change'
           const pendingChangeCount = (changeRequestsRaw || []).filter(r => r.status === 'pending_change').length;
           
-          const employersCount = pendingVerificationCount + pendingChangeCount + pendingQuickJobCount;
-          const candidatesCount = unreadNotifs.filter(n => n.actionUrl === '/admin/candidates' && n.type !== 'candidate_withdrawal_request').length;
+          // Badge employer = unread notifications liên quan đến employer (bấm vào xem → hết badge)
+          const employersCount = unreadNotifs.filter(n => n.actionUrl === '/admin/employers').length;
+          const candidatesCount = unreadNotifs.filter(n => (n.actionUrl === '/admin/candidates' || n.actionUrl === '/admin/candidates?tab=experiences' || n.actionUrl === '/admin/experiences') && n.type !== 'candidate_withdrawal_request').length;
 
           // Calculate pending standard and quick jobs (neither approved nor rejected)
           const standardList = Array.isArray(standardJobsRaw) ? standardJobsRaw : (standardJobsRaw?.data || []);

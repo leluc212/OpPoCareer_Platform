@@ -25,6 +25,7 @@ import {
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import candidateProfileService from '../services/candidateProfileService';
+import employerProfileService from '../services/employerProfileService';
 import feedbackService from '../services/feedbackService';
 import { useToast } from '../hooks/useToast';
 import Toast from './Toast';
@@ -692,6 +693,7 @@ export default function FloatingSupportBar() {
 
   const [savedJobsCount, setSavedJobsCount] = useState(0);
   const [kycCompleted, setKycCompleted] = useState(false);
+  const [employerVerified, setEmployerVerified] = useState(false);
   const [activeModal, setActiveModal] = useState(null); // 'feedback', 'support', 'referral', or null
   const [feedbackCategory, setFeedbackCategory] = useState('bug');
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -718,6 +720,16 @@ export default function FloatingSupportBar() {
           }
         } catch (err) {
           console.error('Error fetching candidate profile data:', err);
+        }
+      }
+      if (isAuthenticated && user?.role === 'employer') {
+        try {
+          const profile = await employerProfileService.getMyProfile();
+          if (profile && profile.isVerified === true) {
+            setEmployerVerified(true);
+          }
+        } catch (err) {
+          console.error('Error fetching employer profile data:', err);
         }
       }
     };
@@ -964,7 +976,7 @@ export default function FloatingSupportBar() {
         )}
 
         {/* KYC / Verification Status Circular Button */}
-        {!isAdmin && !(user?.role === 'candidate' && kycCompleted) && (
+        {!isAdmin && !(user?.role === 'candidate' && kycCompleted) && !(user?.role === 'employer' && employerVerified) && (
           <PulseCircularBtn onClick={() => handleShortcutClick('kyc')}>
             <ShieldCheck />
             <Tooltip>

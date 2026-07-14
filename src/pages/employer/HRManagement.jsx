@@ -16,7 +16,7 @@ import cvAiService from '../../services/cvAiService';
 import jobPostService from '../../services/jobPostService';
 import experienceService from '../../services/experienceService';
 import candidateProfileService from '../../services/candidateProfileService';
-import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification, createEmployerReviewNotification, createChangeRequestSubmittedNotification } from '../../services/notificationService';
+import { createCandidateCvAcceptedNotification, createCandidateCvRejectedNotification, createQuickJobActivationRequestNotification, createChatMessageNotification, createEmployerReviewNotification, createChangeRequestSubmittedNotification, createCandidateChangeRequestReceivedNotification } from '../../services/notificationService';
 import DynamicTranslate from '../../components/DynamicTranslate';
 import ProfileSetupPrompt from '../../components/ProfileSetupPrompt';
 import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
@@ -7026,6 +7026,16 @@ const HRManagement = () => {
                               employerId: user?.userId,
                               companyName: user?.companyName || user?.username,
                               candidateName: changeRequestStaff.name,
+                              changeRequestType: changeRequestType,
+                              changeRequestReason: changeRequestReason.trim(),
+                              applicationId: changeRequestStaff.applicationId
+                            });
+                            // Thông báo cho UV biết NTD đã gửi yêu cầu thay đổi
+                            await createCandidateChangeRequestReceivedNotification({
+                              candidateId: changeRequestStaff.candidateId,
+                              candidateName: changeRequestStaff.name,
+                              companyName: user?.companyName || user?.username,
+                              jobTitle: changeRequestStaff.position || changeRequestStaff.jobTitle,
                               changeRequestType: changeRequestType,
                               changeRequestReason: changeRequestReason.trim(),
                               applicationId: changeRequestStaff.applicationId

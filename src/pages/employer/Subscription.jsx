@@ -7,7 +7,7 @@ import employerProfileService from '../../services/employerProfileService';
 import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, Clock, CheckCircle, Mail, Phone } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { createPackagePurchaseRequestNotification } from '../../services/notificationService';
-import { getDefaultPackageCatalog, getPackageCatalog, getWallet } from '../../services/packageCatalogService';
+import { getDefaultPackageCatalog, getPackageCatalog } from '../../services/packageCatalogService';
 
 // ─── Animations ───────────────────────────────────────────────
 const rotateBorder = keyframes`
@@ -775,7 +775,7 @@ const Subscription = () => {
     return response.json();
   };
 
-  // ── Nút "Mua gói": check ví → wallet nếu đủ, không đủ → hiện modal thiếu tiền
+  // ── Nút "Mua gói": luôn gửi yêu cầu liên hệ (contact request) → admin duyệt
   const handlePurchase = async () => {
     if (!selectedPackage || !selectedDuration) {
       alert(vi ? 'Vui lòng chọn gói và thời hạn sử dụng.' : 'Please select a package and duration.');
@@ -784,36 +784,32 @@ const Subscription = () => {
     const packagePrice = parseInt(selectedDuration.amount.replace(/[^0-9]/g, ''));
     const { employerId, companyName } = await getEmployerInfo();
 
-    // Kiểm tra số dư ví
     try {
-      const walletInfo = await getWallet(employerId);
-      const balance = Number(walletInfo?.walletBalance ?? 0);
-      console.log(`💰 Wallet: ${balance}, cần: ${packagePrice}`);
+      const result = await createSubscription(employerId, companyName, 'contact');
+      const apiSubscriptionId = result.data?.subscriptionId;
+      console.log('📨 Contact request created:', result);
 
-      if (balance >= packagePrice) {
-        // ✅ Đủ tiền → thanh toán wallet, active ngay
-        try {
-          const result = await createSubscription(employerId, companyName, 'wallet');
-          console.log('✅ Wallet payment success:', result);
-          setLastPaymentMethod('wallet');
-          setShowDurationModal(false);
-          setShowSuccessModal(true);
-          window.dispatchEvent(new Event('storage'));
-          setTimeout(() => { setShowSuccessModal(false); setSelectedPackage(null); setSelectedDuration(null); }, 3000);
-        } catch (err) {
-          alert(err.message);
-        }
-      } else {
-        // ❌ Không đủ tiền → hiện modal thiếu tiền (có nút gửi yêu cầu)
-        console.log('⚠️ Không đủ số dư, hiện modal thiếu tiền');
-        setShowDurationModal(false);
-        setShowInsufficientBalanceModal(true);
+      // Tạo notification cho admin duyệt
+      try {
+        await createPackagePurchaseRequestNotification({
+          subscriptionId: apiSubscriptionId,
+          employerId,
+          companyName,
+          packageName: selectedPackage.packageName,
+          duration: selectedDuration.duration,
+          price: packagePrice
+        });
+      } catch (notifError) {
+        console.error('❌ Failed to create admin notification:', notifError);
       }
-    } catch (walletErr) {
-      console.warn('⚠️ Không lấy được ví, fallback contact request:', walletErr);
-      // Không lấy được ví → cho phép gửi yêu cầu liên hệ
+
+      setLastPaymentMethod('contact');
       setShowDurationModal(false);
-      setShowInsufficientBalanceModal(true);
+      setShowSuccessModal(true);
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error('❌ Error sending purchase request:', error);
+      alert(error.message || (vi ? 'Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.' : 'Error sending request. Please try again.'));
     }
   };
 
@@ -1142,20 +1138,14 @@ const Subscription = () => {
                 <CheckCircle size={60} />
               </SuccessIcon>
               <SuccessTitle>
-                {vi
-                  ? (lastPaymentMethod === 'wallet' ? 'Thanh toán thành công!' : 'Gửi yêu cầu thành công!')
-                  : (lastPaymentMethod === 'wallet' ? 'Payment Successful!' : 'Request Sent Successfully!')}
+                {vi ? 'Yêu cầu mua gói của bạn thành công!' : 'Your package request was successful!'}
               </SuccessTitle>
               <SuccessMessage>
-                {lastPaymentMethod === 'wallet'
-                  ? (vi
-                      ? 'Gói dịch vụ đã được kích hoạt thành công! Tin tuyển dụng của bạn sẽ xuất hiện trong Banner Động ngay lập tức.'
-                      : 'Your service package has been activated successfully! Your job post will appear in the Dynamic Banner immediately.')
-                  : (vi
-                      ? 'Yêu cầu mở gói dịch vụ đã được gửi thành công. Chúng tôi sẽ liên hệ bạn sớm nhất để hỗ trợ kích hoạt.'
-                      : 'Your service package activation request has been sent successfully. We will contact you shortly to activate it.')}
+                {vi
+                  ? 'Ốp Pờ sẽ liên lạc với bạn sớm nhất để hỗ trợ kích hoạt gói dịch vụ.'
+                  : 'OpPo will contact you as soon as possible to help activate your service package.'}
               </SuccessMessage>
-              <SuccessButton onClick={() => setShowSuccessModal(false)}>
+              <SuccessButton onClick={() => { setShowSuccessModal(false); setSelectedPackage(null); setSelectedDuration(null); }}>
                 {vi ? 'Đóng' : 'Close'}
               </SuccessButton>
             </SuccessModalContent>

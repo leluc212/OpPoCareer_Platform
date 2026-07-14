@@ -296,10 +296,25 @@ def update_kyc_verified(user_id: str, session_id: str, status: str, decision: di
                 id_verifications = [decision]
         if id_verifications and isinstance(id_verifications, list):
             id_doc = id_verifications[0]
-            cccd_number   = id_doc.get('document_number') or id_doc.get('personal_number') or ''
+            # Log toàn bộ id_doc để debug — xem Didit trả những field nào
+            print(f'[Didit] id_doc keys: {list(id_doc.keys())}')
+            print(f'[Didit] id_doc raw: document_number={id_doc.get("document_number")!r}, '
+                  f'personal_number={id_doc.get("personal_number")!r}, '
+                  f'id_number={id_doc.get("id_number")!r}, '
+                  f'mrz_document_number={id_doc.get("mrz_document_number")!r}')
+            # Ưu tiên lấy CCCD từ các field (Didit có thể trả ở field khác nhau tùy loại giấy tờ)
+            cccd_number = str(
+                id_doc.get('document_number')
+                or id_doc.get('id_number')
+                or id_doc.get('personal_number')
+                or id_doc.get('mrz_document_number')
+                or ''
+            ).strip()
             date_of_birth = id_doc.get('date_of_birth') or ''
             full_name     = id_doc.get('full_name') or ''
-            print(f'[Didit] Extracted from decision: cccd={cccd_number}, dob={date_of_birth}, name={full_name}')
+            # KHÔNG dùng zfill — nếu Didit trả thiếu digits thì pad zeros sẽ sai
+            # Chỉ lưu nguyên giá trị Didit trả về
+            print(f'[Didit] Extracted: cccd={cccd_number}, dob={date_of_birth}, name={full_name}')
 
     # Build update expression dynamically
     update_parts = [

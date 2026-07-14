@@ -727,6 +727,7 @@ const EmployersManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState('verifications');
   const [mainTab, setMainTab] = useState('verification');
+  const [viewedTabs, setViewedTabs] = useState({ verification: true, verifications: true });
 
   // Nếu được navigate từ AdminDashboard với state.activeTab, tự động chuyển tab
   useEffect(() => {
@@ -1959,11 +1960,12 @@ const EmployersManagement = () => {
                 onClick={() => {
                   setMainTab('verification');
                   setActiveTab('verifications');
+                  setViewedTabs(prev => ({ ...prev, verification: true, verifications: true }));
                 }}
               >
                 <Award size={20} />
                 {language === 'vi' ? 'Xác thực nhà tuyển dụng' : 'Employer Verification'}
-                {pendingVerificationCount > 0 && <TabBadge>{pendingVerificationCount}</TabBadge>}
+                {!viewedTabs.verification && pendingVerificationCount > 0 && <TabBadge>{pendingVerificationCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'all_employers'}
@@ -1980,35 +1982,36 @@ const EmployersManagement = () => {
                 onClick={() => {
                   setMainTab('change_requests');
                   setActiveTab('change_requests');
+                  setViewedTabs(prev => ({ ...prev, change_requests: true }));
                 }}
               >
                 <RefreshCw size={20} />
                 {language === 'vi' ? 'Yêu cầu thay đổi ứng viên' : 'Change Candidate Requests'}
-                {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
+                {!viewedTabs.change_requests && pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'profile_changes'}
                 onClick={() => {
                   setMainTab('profile_changes');
                   setActiveTab('profile_changes');
+                  setViewedTabs(prev => ({ ...prev, profile_changes: true }));
                 }}
               >
                 <Edit size={20} />
                 {language === 'vi' ? 'Yêu cầu chỉnh sửa hồ sơ' : 'Profile Change Requests'}
-                {pendingProfileChangesCount > 0 && <TabBadge>{pendingProfileChangesCount}</TabBadge>}
+                {!viewedTabs.profile_changes && pendingProfileChangesCount > 0 && <TabBadge>{pendingProfileChangesCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'features'}
                 onClick={() => {
                   setMainTab('features');
                   setActiveTab('quick_jobs');
+                  setViewedTabs(prev => ({ ...prev, features: true, quick_jobs: true }));
                 }}
               >
                 <Briefcase size={20} />
                 {language === 'vi' ? 'Chức năng của Nhà tuyển dụng' : 'Employer Features'}
-                {pendingQuickJobCount > 0 && (
-                  <TabBadge>{pendingQuickJobCount}</TabBadge>
-                )}
+                {!viewedTabs.features && pendingQuickJobCount > 0 && <TabBadge>{pendingQuickJobCount}</TabBadge>}
               </MainTabButton>
             </MainTabsContainer>
 
@@ -2017,11 +2020,11 @@ const EmployersManagement = () => {
               <SubTabsContainer>
                 <SubTabButton
                   $active={activeTab === 'verifications'}
-                  onClick={() => setActiveTab('verifications')}
+                  onClick={() => { setActiveTab('verifications'); setViewedTabs(prev => ({ ...prev, verifications: true })); }}
                 >
                   <FileText size={16} style={{ marginRight: '6px' }} />
                   {language === 'vi' ? 'Xác thực hồ sơ' : 'Profile Verifications'}
-                  {pendingVerificationCount > 0 && <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>{pendingVerificationCount}</TabBadge>}
+                  {!viewedTabs.verifications && pendingVerificationCount > 0 && <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>{pendingVerificationCount}</TabBadge>}
                 </SubTabButton>
                 <SubTabButton
                   $active={activeTab === 'pending'}
@@ -2044,11 +2047,11 @@ const EmployersManagement = () => {
               <SubTabsContainer>
                 <SubTabButton
                   $active={activeTab === 'quick_jobs'}
-                  onClick={() => setActiveTab('quick_jobs')}
+                  onClick={() => { setActiveTab('quick_jobs'); setViewedTabs(prev => ({ ...prev, quick_jobs: true })); }}
                 >
                   <Zap size={16} style={{ marginRight: '6px' }} />
                   {language === 'vi' ? 'Chức năng tuyển gấp' : 'Urgent Recruiting'}
-                  {pendingQuickJobCount > 0 && (
+                  {!viewedTabs.quick_jobs && pendingQuickJobCount > 0 && (
                     <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>
                       {pendingQuickJobCount}
                     </TabBadge>

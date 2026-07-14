@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import cvAiService from '../../services/cvAiService';
+import { formatShiftString } from '../../utils/formatDays';
 
 
 
@@ -615,6 +616,7 @@ const RecommendedJobCard = styled(motion.div)`
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   
   &:hover {
@@ -641,7 +643,7 @@ const JobTypeBadge = styled.span`
 `;
 
 const AiMatchSection = styled.div`
-  margin-top: 14px;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px dashed ${props => props.theme.colors.border};
   display: flex;
@@ -674,6 +676,10 @@ const AiMatchReason = styled.p`
   line-height: 1.5;
   font-style: italic;
   margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   
   &::before {
     content: '"';
@@ -796,6 +802,8 @@ const JobInfo = styled.div`
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.35;
+    text-transform: uppercase;
+    min-height: calc(2 * 1.35em);
   }
   
   p {
@@ -834,6 +842,7 @@ const JobTags = styled.div`
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 10px;
   
   span {
     padding: 6px 14px;
@@ -1366,17 +1375,25 @@ const CandidateDashboard = () => {
     const location = candidateProfile?.location || '';
     getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
-        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl, isTopSpotlight: !!b.isTopSpotlight })));
+        setBanners(activeBanners.map(b => ({
+          src: b.imageUrl,
+          alt: b.title || 'Banner',
+          linkUrl: b.linkUrl,
+          isTopSpotlight: !!b.isTopSpotlight,
+          orientation: b.orientation || 'horizontal'
+        })));
       }
     }).catch(() => {/* fallback to default banners */ });
   }, [candidateProfile?.location]);
 
   useEffect(() => {
+    const hCount = banners.filter(b => b.orientation !== 'vertical').length;
+    if (hCount <= 1) return;
     const bannerInterval = setInterval(() => {
-      setCurrentBannerIndex(prev => (prev + 1) % banners.length);
+      setCurrentBannerIndex(prev => (prev + 1) % hCount);
     }, 7000);
     return () => clearInterval(bannerInterval);
-  }, [banners.length]);
+  }, [banners]);
 
   // Fetch candidate profile
   useEffect(() => {
@@ -2633,55 +2650,60 @@ const CandidateDashboard = () => {
 
           <ContentGrid>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Bamos Boost Banner */}
-              <BoostBannerWrap
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.22 }}
-                whileHover={{ y: -2 }}
-                onClick={() => {
-                  const link = banners[currentBannerIndex]?.linkUrl;
-                  if (link) window.open(link, '_blank', 'noopener,noreferrer');
-                }}
-                style={{ cursor: banners[currentBannerIndex]?.linkUrl ? 'pointer' : 'default' }}
-                $isTopSpotlight={banners[currentBannerIndex]?.isTopSpotlight}
-              >
-
-                <div style={{ position: 'relative', width: '100%', height: '100%', lineHeight: 0 }}>
-                  <AnimatePresence mode="sync">
-                    <motion.img
-                      key={currentBannerIndex}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{
-                        duration: 1.8,
-                        ease: 'easeInOut'
-                      }}
-                      src={banners[currentBannerIndex].src}
-                      alt={banners[currentBannerIndex].alt}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: 'block'
-                      }}
-                    />
-                  </AnimatePresence>
-                </div>
-                <BannerDots>
-                  {banners.map((_, idx) => (
-                    <BannerDot
-                      key={idx}
-                      $active={currentBannerIndex === idx}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentBannerIndex(idx);
-                      }}
-                    />
-                  ))}
-                </BannerDots>
-              </BoostBannerWrap>
+              {/* Bamos Boost Banner — chỉ hiện banner ngang */}
+              {(() => {
+                const hBanners = banners.filter(b => b.orientation !== 'vertical');
+                if (hBanners.length === 0) return null;
+                const safeIdx = currentBannerIndex % hBanners.length;
+                const currentBanner = hBanners[safeIdx];
+                return (
+                  <BoostBannerWrap
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.22 }}
+                    whileHover={{ y: -2 }}
+                    onClick={() => {
+                      if (currentBanner?.linkUrl) window.open(currentBanner.linkUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                    style={{ cursor: currentBanner?.linkUrl ? 'pointer' : 'default' }}
+                    $isTopSpotlight={currentBanner?.isTopSpotlight}
+                  >
+                    <div style={{ position: 'relative', width: '100%', height: '100%', lineHeight: 0 }}>
+                      <AnimatePresence mode="sync">
+                        <motion.img
+                          key={safeIdx}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 1.8, ease: 'easeInOut' }}
+                          src={currentBanner.src}
+                          alt={currentBanner.alt}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
+                        />
+                      </AnimatePresence>
+                    </div>
+                    {hBanners.length > 1 && (
+                      <BannerDots>
+                        {hBanners.map((_, idx) => (
+                          <BannerDot
+                            key={idx}
+                            $active={safeIdx === idx}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCurrentBannerIndex(idx);
+                            }}
+                          />
+                        ))}
+                      </BannerDots>
+                    )}
+                  </BoostBannerWrap>
+                );
+              })()}
 
               {/* Recommended Jobs - Full Width */}
               <Section
@@ -2721,7 +2743,7 @@ const CandidateDashboard = () => {
                       </button>
                     </KycPromptCard>
                   ) : realRecommendedJobs.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignItems: 'start' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', alignItems: 'stretch', gridAutoRows: '1fr' }}>
                       {realRecommendedJobs.map((job, index) => {
                         // Helpers
                         const formatDate = (d) => {
@@ -2736,9 +2758,9 @@ const CandidateDashboard = () => {
                         return (
                           <RecommendedJobCard
                             key={job.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.4 + index * 0.1 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.3 }}
                             whileHover={{ scale: 1.02 }}
                             onClick={() => job.isQuick
                               ? navigate({ pathname: '/candidate/jobs', search: '?tab=shift' }, { state: { selectedJobId: job.id } })
@@ -2784,7 +2806,7 @@ const CandidateDashboard = () => {
                             {job.workHours && job.workHours !== '' && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#6B7280', marginBottom: '5px' }}>
                                 <Clock size={12} style={{ flexShrink: 0, color: '#9CA3AF' }} />
-                                <span>{language === 'vi' ? 'Thời gian:' : 'Hours:'} {job.workHours}</span>
+                                <span>{language === 'vi' ? 'Thời gian:' : 'Hours:'} {formatShiftString(job.workHours, language)}</span>
                               </div>
                             )}
 
@@ -2819,18 +2841,48 @@ const CandidateDashboard = () => {
                               </JobTags>
                             )}
 
-                            {/* AI match score */}
-                            {job.matchScore !== undefined && (
-                              <AiMatchSection>
-                                <AiMatchBadge>
-                                  <Sparkles size={13} />
-                                  <span>{language === 'vi' ? `Phù hợp ${job.matchScore}%` : `${job.matchScore}% match`}</span>
-                                </AiMatchBadge>
-                                {job.matchReason && (
-                                  <AiMatchReason>{job.matchReason}</AiMatchReason>
-                                )}
-                              </AiMatchSection>
-                            )}
+                            {/* Bottom section pushed to card bottom */}
+                            <div style={{ marginTop: 'auto', paddingTop: '12px' }}>
+                              {/* Suggestion hint */}
+                              {(() => {
+                                const titleLower = (job.title || '').toLowerCase();
+                                const tagsJoined = (job.tags || []).join(' ').toLowerCase();
+                                const hasSuggestion = titleLower.includes('pha chế') || tagsJoined.includes('pha chế') || tagsJoined.includes('bartender') ||
+                                  titleLower.includes('phục vụ') || tagsJoined.includes('phục vụ') || tagsJoined.includes('f&b');
+                                if (!hasSuggestion) return null;
+                                return (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    marginBottom: '10px',
+                                    padding: '6px 10px',
+                                    background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+                                    borderRadius: '6px',
+                                    border: '1px solid #bfdbfe',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: '#1d4ed8',
+                                  }}>
+                                    <span style={{ fontSize: '13px' }}>✨</span>
+                                    {language === 'vi' ? 'Vị trí này có thể phù hợp với bạn' : 'This position may suit you'}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* AI match score */}
+                              {job.matchScore !== undefined && (
+                                <div style={{ paddingTop: '10px', borderTop: `1px dashed #e5e7eb`, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <AiMatchBadge>
+                                    <Sparkles size={13} />
+                                    <span>{language === 'vi' ? `Phù hợp ${job.matchScore}%` : `${job.matchScore}% match`}</span>
+                                  </AiMatchBadge>
+                                  {job.matchReason && (
+                                    <AiMatchReason>{job.matchReason}</AiMatchReason>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </RecommendedJobCard>
                         );
                       })}
@@ -3099,16 +3151,39 @@ const CandidateDashboard = () => {
               )}
             </AnimatePresence>
 
-            {/* Side Banners */}
+            {/* Side Banners — lấy từ DynamoDB (banner dọc) */}
             <SidebarCol>
-              <SideAdWrap
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                whileHover={{ y: -3 }}
-              >
-                <img src={s3Images.poster.phucloctho} alt="Phúc Lộc Thọ" />
-              </SideAdWrap>
+              {(() => {
+                // Ưu tiên: banner dọc (vertical) từ DB
+                const verticalBanner = banners.find(b => b.orientation === 'vertical');
+                if (verticalBanner) {
+                  return (
+                    <SideAdWrap
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                      whileHover={{ y: -3 }}
+                      onClick={() => {
+                        if (verticalBanner.linkUrl) window.open(verticalBanner.linkUrl, '_blank', 'noopener,noreferrer');
+                      }}
+                      style={{ cursor: verticalBanner.linkUrl ? 'pointer' : 'default' }}
+                    >
+                      <img src={verticalBanner.src} alt={verticalBanner.alt || 'Banner'} />
+                    </SideAdWrap>
+                  );
+                }
+                // Fallback: ảnh tĩnh Phúc Lộc Thọ
+                return (
+                  <SideAdWrap
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                    whileHover={{ y: -3 }}
+                  >
+                    <img src={s3Images.poster.phucloctho} alt="Phúc Lộc Thọ" />
+                  </SideAdWrap>
+                );
+              })()}
             </SidebarCol>
           </ContentGrid>
 

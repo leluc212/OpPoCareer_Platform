@@ -120,7 +120,13 @@ def main():
             continue
 
         id_doc = id_verifications[0]
-        cccd_number = id_doc.get('document_number') or id_doc.get('personal_number') or ''
+        cccd_number = str(
+            id_doc.get('document_number')
+            or id_doc.get('id_number')
+            or id_doc.get('personal_number')
+            or id_doc.get('mrz_document_number')
+            or ''
+        ).strip()
         date_of_birth = id_doc.get('date_of_birth') or ''
         full_name_from_doc = id_doc.get('full_name') or ''
 

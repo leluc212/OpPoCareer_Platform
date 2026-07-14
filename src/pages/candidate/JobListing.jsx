@@ -1233,19 +1233,38 @@ const MainLayout = styled.div`
 
 /* ── Cột trái chứa VerticalAdBanner — flex-stretch mode ── */
 const SideVerticalBanner = styled(motion.aside)`
-  width: 280px;
+  width: 420px;
   flex-shrink: 0;
-  /* Không dùng align-self: start nữa — để stretch hoạt động */
-  /* Truyền chiều cao xuống VerticalAdBanner */
   display: flex;
   flex-direction: column;
 
   @media (max-width: 1280px) {
-    width: 260px;
+    width: 360px;
   }
 
   @media (max-width: 1024px) {
     display: none;
+  }
+`;
+
+/* Poster Top Spotlight từ DynamoDB — giống banner Phúc Lộc Thọ */
+const SpotlightPosterWrap = styled(motion.div)`
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  position: sticky;
+  top: 100px;
+  z-index: 10;
+
+  img {
+    width: 100%;
+    height: auto;
+    display: block;
+    transition: transform 0.3s ease;
+  }
+
+  &:hover img {
+    transform: scale(1.03);
   }
 `;
 
@@ -1916,9 +1935,9 @@ const SaveButton = styled(motion.button)`
   width: 28px;
   height: 28px;
   border-radius: ${props => props.theme.borderRadius.md};
-  border: 1px solid ${props => props.theme.colors.border};
-  background: ${props => props.$saved ? props.theme.colors.warning + '15' : props.theme.colors.bgLight};
-  color: ${props => props.$saved ? props.theme.colors.warning : props.theme.colors.textLight};
+  border: 1px solid ${props => props.$saved ? props.theme.colors.primary : props.theme.colors.border};
+  background: ${props => props.$saved ? props.theme.colors.primary + '15' : props.theme.colors.bgLight};
+  color: ${props => props.$saved ? props.theme.colors.primary : props.theme.colors.textLight};
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1928,13 +1947,13 @@ const SaveButton = styled(motion.button)`
   svg {
     width: 13px;
     height: 13px;
-    fill: ${props => props.$saved ? props.theme.colors.warning : 'none'};
+    fill: ${props => props.$saved ? 'currentColor' : 'none'};
   }
   
   &:hover {
-    border-color: ${props => props.theme.colors.warning};
-    color: ${props => props.theme.colors.warning};
-    background: ${props => props.theme.colors.warning}15;
+    border-color: ${props => props.theme.colors.primary};
+    color: ${props => props.theme.colors.primary};
+    background: ${props => props.theme.colors.primary}15;
   }
 `;
 
@@ -4008,7 +4027,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     const location = candidateProfile?.location || '';
     getActiveBanners(location).then(activeBanners => {
       if (activeBanners && activeBanners.length > 0) {
-        setBanners(activeBanners.map(b => ({ src: b.imageUrl, alt: b.title || 'Banner', linkUrl: b.linkUrl, isTopSpotlight: !!b.isTopSpotlight })));
+        setBanners(activeBanners.map(b => ({
+          src: b.imageUrl,
+          alt: b.title || 'Banner',
+          linkUrl: b.linkUrl,
+          isTopSpotlight: !!b.isTopSpotlight,
+          orientation: b.orientation || 'horizontal'
+        })));
       }
     }).catch(() => {/* fallback to default banners */ });
   }, [candidateProfile?.location]);
@@ -4083,6 +4108,18 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(candidateProfile.savedJobs)); } catch {}
     }
   }, [candidateProfile]);
+
+  // Listen for savedJobsChanged events from other components (e.g. JobDetail)
+  useEffect(() => {
+    const handleSavedJobsChanged = (e) => {
+      if (e.detail && Array.isArray(e.detail.savedJobs)) {
+        setSavedJobs(e.detail.savedJobs);
+        try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(e.detail.savedJobs)); } catch {}
+      }
+    };
+    window.addEventListener('savedJobsChanged', handleSavedJobsChanged);
+    return () => window.removeEventListener('savedJobsChanged', handleSavedJobsChanged);
+  }, []);
 
   // Fetch candidate profile and applications
   useEffect(() => {
@@ -4280,13 +4317,12 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     setSavedJobs(updatedList);
     try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(updatedList)); } catch {}
 
+    // Dispatch optimistic event immediately so FloatingSupportBar/sidebar updates instantly
+    window.dispatchEvent(new CustomEvent('savedJobsChanged', { detail: { savedJobs: updatedList } }));
+
     try {
       console.log(`💾 Syncing saved job state to database for: ${jobId}`);
       await candidateProfileService.toggleSavedJob(jobId);
-
-      // Optionally update the whole profile state to stay in sync
-      const updatedProfile = await candidateProfileService.getMyProfile();
-      if (updatedProfile) setCandidateProfile(updatedProfile);
     } catch (error) {
       console.error('❌ Failed to sync saved job to database:', error);
 
@@ -4296,6 +4332,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         : savedJobs.filter(id => id !== jobId);
       setSavedJobs(rolledBack);
       try { localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(rolledBack)); } catch {}
+
+      // Rollback the optimistic event
+      window.dispatchEvent(new CustomEvent('savedJobsChanged', { detail: { savedJobs: rolledBack } }));
 
       setErrorModal({
         show: true,
@@ -5712,30 +5751,43 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
         {/* Main Content with Filters */}
         <MainLayout>
-          {/* Banner dọc bên trái — dùng VerticalAdBanner */}
+          {/* Banner dọc bên trái — poster dọc từ DynamoDB, giống dashboard */}
           <SideVerticalBanner
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <VerticalAdBanner
-              jobs={topSpotlightJobs}
-              banners={banners}
-              onJobClick={handleJobClick}
-              language={language}
-            />
+            <SpotlightPosterWrap
+              onClick={() => {
+                const verticalBanner = banners.find(b => b.orientation === 'vertical');
+                if (verticalBanner?.linkUrl) window.open(verticalBanner.linkUrl, '_blank', 'noopener,noreferrer');
+              }}
+              style={{ cursor: banners.find(b => b.orientation === 'vertical')?.linkUrl ? 'pointer' : 'default' }}
+              whileHover={{ y: -3 }}
+            >
+              <img
+                src={banners.find(b => b.orientation === 'vertical')?.src || s3Images.poster.phucloctho}
+                alt={banners.find(b => b.orientation === 'vertical')?.alt || 'Banner dọc'}
+              />
+            </SpotlightPosterWrap>
           </SideVerticalBanner>
 
           {/* Jobs List */}
           <MainContent ref={resultsRef}>
             {/* Banner mobile — hiện dạng ngang trên tablet/mobile */}
             <MobileBannerSection>
-              <VerticalAdBanner
-                jobs={topSpotlightJobs}
-                banners={banners}
-                onJobClick={handleJobClick}
-                language={language}
-              />
+              <SpotlightPosterWrap
+                onClick={() => {
+                  const verticalBanner = banners.find(b => b.orientation === 'vertical');
+                  if (verticalBanner?.linkUrl) window.open(verticalBanner.linkUrl, '_blank', 'noopener,noreferrer');
+                }}
+                style={{ cursor: banners.find(b => b.orientation === 'vertical')?.linkUrl ? 'pointer' : 'default' }}
+              >
+                <img
+                  src={banners.find(b => b.orientation === 'vertical')?.src || s3Images.poster.phucloctho}
+                  alt={banners.find(b => b.orientation === 'vertical')?.alt || 'Banner dọc'}
+                />
+              </SpotlightPosterWrap>
             </MobileBannerSection>
 
             {/* Bộ lọc ngang */}
@@ -6091,8 +6143,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
             <p className="apply-desc">
               {language === 'vi'
-                ? <>Bạn muốn gửi CV ứng tuyển vào vị trí <strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /></strong> tại <strong><DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>?</>
-                : <>Send your CV for <strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /></strong> at <strong><DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>?</>
+                ? <>Bạn muốn gửi CV ứng tuyển vào vị trí:<br/><strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /> - <DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>!</>
+                : <>Send your CV for:<br/><strong><DynamicTranslate text={applyModal.job.title} showIndicator={false} /> - <DynamicTranslate text={applyModal.job.company} showIndicator={false} /></strong>!</>
               }
             </p>
 

@@ -1617,7 +1617,29 @@ const Reports = () => {
                         </TableCell>
                         <TableCell>
                           <div style={{ maxWidth: '400px', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.4' }}>
-                            {item.comment}
+                            {item.comment && item.comment.length > 20 ? (
+                              <span>
+                                {item.comment.substring(0, 20)}...
+                                <span
+                                  onClick={() => {
+                                    setSelectedFeedback(item);
+                                  }}
+                                  title={language === 'vi' ? 'Xem đầy đủ' : 'View full'}
+                                  style={{ 
+                                    cursor: 'pointer', 
+                                    color: '#2563eb', 
+                                    marginLeft: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    verticalAlign: 'middle'
+                                  }}
+                                >
+                                  <Eye size={14} />
+                                </span>
+                              </span>
+                            ) : (
+                              item.comment
+                            )}
                           </div>
                           {Array.isArray(item.imageUrls) && item.imageUrls.length > 0 && (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
@@ -1676,7 +1698,6 @@ const Reports = () => {
                             <ActionButtonSmall
                               onClick={() => {
                                 setSelectedFeedback(item);
-                                if (item.status === 'unread') handleMarkAsRead(item.id);
                               }}
                               style={{ background: '#eff6ff', color: '#2563eb' }}
                               title={language === 'vi' ? 'Xem chi tiết' : 'View detail'}

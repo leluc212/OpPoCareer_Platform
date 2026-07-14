@@ -1583,6 +1583,53 @@ export const createChangeRequestSubmittedNotification = async (payload) => {
   return await saveNotification(notification);
 };
 
+/**
+ * Notify candidate when employer submits a change request (shift cancellation) for them
+ * @param {object} payload - { candidateId, candidateName, companyName, jobTitle, changeRequestType, changeRequestReason, applicationId }
+ */
+export const createCandidateChangeRequestReceivedNotification = async (payload) => {
+  const { candidateId, candidateName, companyName, jobTitle, changeRequestType, changeRequestReason, applicationId } = payload;
+
+  if (!candidateId) {
+    console.error('❌ candidateId is required for candidate change request received notification');
+    return null;
+  }
+
+  const safeCompanyName = companyName || 'Nhà tuyển dụng';
+  const safeJobTitle = jobTitle || 'ca làm';
+  const reasonStr = changeRequestType
+    ? (changeRequestReason ? `${changeRequestType} - ${changeRequestReason}` : changeRequestType)
+    : '';
+
+  const notification = {
+    type: 'change_request_received',
+    title: 'Nhà tuyển dụng yêu cầu thay đổi nhân viên',
+    titleEn: 'Employer requested staff change',
+    message: `${safeCompanyName} vừa gửi yêu cầu thay đổi nhân viên cho ca "${safeJobTitle}" của bạn.${reasonStr ? ` Lý do: ${reasonStr}.` : ''} Yêu cầu đang chờ Admin xét duyệt.`,
+    messageEn: `${safeCompanyName} has submitted a staff change request for your shift "${safeJobTitle}".${reasonStr ? ` Reason: ${reasonStr}.` : ''} The request is pending Admin review.`,
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: 'system',
+    senderName: safeCompanyName,
+    data: {
+      candidateId,
+      candidateName: candidateName || '',
+      companyName: safeCompanyName,
+      jobTitle: safeJobTitle,
+      changeRequestType: changeRequestType || '',
+      changeRequestReason: changeRequestReason || '',
+      applicationId: applicationId || null
+    },
+    icon: 'alert-circle',
+    color: '#F59E0B',
+    actionUrl: '/candidate/applications',
+    actionText: 'Xem lịch sử ứng tuyển',
+    actionTextEn: 'View applications'
+  };
+
+  return await saveNotification(notification);
+};
+
 export default {
   getAllNotifications,
   getNotifications,
@@ -1612,6 +1659,7 @@ export default {
   createCandidateAiScreeningRejectedNotification,
   createCandidateApplicationSubmittedNotification,
   createChangeRequestSubmittedNotification,
+  createCandidateChangeRequestReceivedNotification,
   createChangeRequestApprovedNotification,
   createChangeRequestRejectedNotification,
   createWorkerReplacedNotification,

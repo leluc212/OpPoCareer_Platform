@@ -15,6 +15,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Zap, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
+import VerticalJobBanner from './VerticalJobBanner';
 
 // ─── Animations ───────────────────────────────────────────────────────────────
 
@@ -113,7 +114,19 @@ const BottomGradient = styled.div`
   z-index: 2;
 `;
 
-/* Badge góc trên trái — nền tối mờ, không animation */
+/* Gradient nhẹ chỉ cho dots — không che mờ ảnh */
+const BottomGradientLight = styled.div`
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 2;
+`;
+
+/* Badge góc trên trái */
 const Badge = styled.div`
   position: absolute;
   top: 10px;
@@ -122,17 +135,24 @@ const Badge = styled.div`
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(0,0,0,0.52);
+  background: ${props => props.$spotlight
+    ? 'linear-gradient(135deg, #f59e0b 0%, #dc2626 100%)'
+    : 'rgba(0,0,0,0.52)'};
   backdrop-filter: blur(6px);
-  color: rgba(255,255,255,0.92);
+  color: #fff;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 20px;
   pointer-events: none;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: ${props => props.$spotlight
+    ? '1.5px solid rgba(255,255,255,0.4)'
+    : '1px solid rgba(255,255,255,0.15)'};
+  box-shadow: ${props => props.$spotlight
+    ? '0 3px 12px rgba(220,38,38,0.4)'
+    : 'none'};
 
   svg { width: 10px; height: 10px; }
 `;
@@ -367,6 +387,7 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
   // ── Mode: hiển thị ảnh banner thuần (không có jobs) ──
   if (useImageMode) {
     const banner = banners[idx];
+    const isSpotlight = banner?.isTopSpotlight;
     return (
       <Wrapper
         className="banner-ad-wrapper"
@@ -375,7 +396,7 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
       >
         <CardOuter
           onClick={() => { if (banner?.linkUrl) window.open(banner.linkUrl, '_blank', 'noopener,noreferrer'); }}
-          style={{ cursor: banner?.linkUrl ? 'pointer' : 'default' }}
+          style={{ cursor: banner?.linkUrl ? 'pointer' : 'default', border: isSpotlight ? '2px solid #dc2626' : undefined }}
         >
           <AnimatePresence mode="wait">
             <motion.div
@@ -386,14 +407,17 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
               transition={{ duration: 0.45 }}
               style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}
             >
-              {/* Khung dọc — lấp đầy chiều cao card (stretch từ SideVerticalBanner) */}
+              {/* Khung dọc — lấp đầy chiều cao card */}
               <ImageFrame className="banner-ad-image-frame">
                 <BgImg
                   src={banner.src}
                   alt={banner.alt || 'Banner quảng cáo'}
                 />
-                <BottomGradient />
-                <Badge>Quảng cáo</Badge>
+                {/* Chỉ thêm gradient nhẹ ở dưới cho dots dễ đọc — không đè mờ toàn bộ ảnh */}
+                {total > 1 && <BottomGradientLight />}
+                <Badge $spotlight={isSpotlight}>
+                  {isSpotlight ? '⭐ Top Spotlight' : 'Quảng cáo'}
+                </Badge>
 
                 {total > 1 && (
                   <DotsOverlay>
@@ -429,115 +453,17 @@ const VerticalAdBanner = ({ jobs = [], banners = [], onJobClick, language = 'vi'
     );
   }
 
-  // ── Mode: job Top Spotlight ──
+  // ── Mode: job Top Spotlight — dùng VerticalJobBanner (bố cục Phúc Lộc Thọ) ──
   const job = jobs[idx];
   if (!job) return null;
 
-  const bg = getJobBg(job);
-
   return (
-    <Wrapper
-      className="banner-ad-wrapper"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      {/* Nút lên — chỉ hiện khi có nhiều job */}
-      {total > 1 && (
-        <NavBtn onClick={prev} title="Job trước">
-          <ChevronUp />
-        </NavBtn>
-      )}
-
-      <CardOuter onClick={() => onJobClick?.(job.id || job.idJob)}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={job.id || idx}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}
-          >
-            {/* Khung ảnh dọc — stretch theo chiều cao CardOuter */}
-            <ImageFrame className="banner-ad-image-frame">
-              {bg ? (
-                <BgImg src={bg} alt={job.company} />
-              ) : (
-                /* Gradient fallback + logo */
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: 'linear-gradient(160deg,#0f172a 0%,#1e3a5f 50%,#0f172a 100%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {job.companyLogo && (
-                    <img
-                      src={job.companyLogo}
-                      alt={job.company}
-                      style={{ width: 80, height: 80, objectFit: 'contain', borderRadius: 12, opacity: 0.9 }}
-                    />
-                  )}
-                </div>
-              )}
-
-              <BottomGradient />
-
-              {/* Badge "Top Spotlight" góc trên trái */}
-              <Badge>
-                <Sparkles />
-                Top Spotlight
-              </Badge>
-
-              {/* Dots overlay ở đáy ảnh */}
-              {total > 1 && (
-                <DotsOverlay>
-                  {jobs.map((_, i) => (
-                    <Dot
-                      key={i}
-                      $active={i === idx}
-                      onClick={(e) => { e.stopPropagation(); setIdx(i); }}
-                      aria-label={`Slide ${i + 1}`}
-                    />
-                  ))}
-                </DotsOverlay>
-              )}
-            </ImageFrame>
-
-            {/* ── Info bar bên dưới ảnh ── */}
-            <InfoBar>
-              <JobTitleText title={job.title}>{job.title}</JobTitleText>
-              <CompanyText>{job.company}</CompanyText>
-
-              <MetaRow>
-                {job.location && (
-                  <MetaBadge>
-                    <MapPin />
-                    {job.location}
-                  </MetaBadge>
-                )}
-              </MetaRow>
-
-              {job.salary && <SalaryText>{job.salary}</SalaryText>}
-
-              <ApplyBtn
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onJobClick?.(job.id || job.idJob);
-                }}
-              >
-                <Zap />
-                {language === 'vi' ? 'Ứng tuyển ngay' : 'Apply Now'}
-              </ApplyBtn>
-            </InfoBar>
-          </motion.div>
-        </AnimatePresence>
-      </CardOuter>
-
-      {/* Nút xuống */}
-      {total > 1 && (
-        <NavBtn onClick={next} title="Job tiếp">
-          <ChevronDown />
-        </NavBtn>
-      )}
+    <Wrapper className="banner-ad-wrapper">
+      <VerticalJobBanner
+        jobs={jobs}
+        onJobClick={onJobClick}
+        language={language}
+      />
     </Wrapper>
   );
 };

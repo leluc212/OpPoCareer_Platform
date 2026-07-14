@@ -429,7 +429,7 @@ def handle_create_experience(event, candidate_id):
         },
         'icon':       'briefcase',
         'color':      '#3b82f6',
-        'actionUrl':  '/admin/experiences',
+        'actionUrl':  '/admin/candidates?tab=experiences',
         'actionText': 'Xem chi tiết',
         'actionTextEn': 'View details',
     })

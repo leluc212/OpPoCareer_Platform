@@ -5,14 +5,17 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   MapPin, DollarSign, Clock, Calendar, ChevronRight, ChevronLeft,
   Send, Users, Briefcase, Globe,
-  Check, X,
+  Check, X, FileText, Loader,
   AlertCircle, Award, Bookmark, ExternalLink
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import jobPostService from '../../services/jobPostService';
 import adminEmployerService from '../../services/adminEmployerService';
 import candidateProfileService from '../../services/candidateProfileService';
-import { getMyCandidateApplications } from '../../services/applicationService';
+import { getMyCandidateApplications, submitApplication } from '../../services/applicationService';
+import { getCVInfo } from '../../services/cvUploadService';
+import { getKycStatus } from '../../services/ekycService';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { formatShiftString } from '../../utils/formatDays';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
@@ -119,6 +122,7 @@ const JobTitle = styled.h1`
   font-size: 22px; font-weight: 800;
   color: ${p => p.theme.colors.text};
   line-height: 1.3; flex: 1;
+  text-transform: uppercase;
 `;
 
 const VerifiedBadge = styled.span`
@@ -254,6 +258,34 @@ const ReportBox = styled.div`
   a { color: ${p => p.theme.colors.primary}; }
 `;
 
+// ─── Apply Modal Styles ───────────────────────────────────────────────────────
+const ModalOverlay = styled(motion.div)`
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  z-index: 900; display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+`;
+
+const ModalCard = styled(motion.div)`
+  background: #fff; border-radius: 16px; padding: 28px;
+  max-width: 440px; width: 100%; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+`;
+
+const CVItem = styled.div`
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 10px; cursor: pointer;
+  border: 2px solid ${p => p.$active ? '#059669' : '#e2e8f0'};
+  background: ${p => p.$active ? '#ecfdf5' : '#f8fafc'};
+  transition: all .2s;
+  &:hover { border-color: ${p => p.$active ? '#059669' : '#94a3b8'}; }
+  margin-bottom: 8px;
+`;
+
+const ModalBtn = styled.button`
+  flex: 1; padding: 12px 18px; border-radius: 10px; font-size: 14px;
+  font-weight: 700; cursor: pointer; border: none; transition: all .2s;
+`;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = d => {
   if (!d) return '';
@@ -318,6 +350,16 @@ const JobDetail = ({ standalone = true }) => {
   const [saved, setSaved]               = useState(false);
   const [lb, setLb]                     = useState({ open: false, idx: 0 });
   const [alreadyApplied, setApplied]    = useState(false);
+  const [addressExpanded, setAddressExpanded] = useState(false);
+  const [tileAddressExpanded, setTileAddressExpanded] = useState(false);
+
+  // ── Apply modal state ─────────────────────────────────────────────────────
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyStep, setApplyStep]           = useState('confirm'); // 'confirm' | 'cv-select' | 'submitting'
+  const [cvList, setCvList]                 = useState([]);
+  const [selectedCV, setSelectedCV]         = useState(null);
+  const [applyError, setApplyError]         = useState('');
+  const [isSubmitting, setIsSubmitting]     = useState(false);
 
   // ── Load job ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -374,6 +416,15 @@ const JobDetail = ({ standalone = true }) => {
     const next = !saved;
     setSaved(next);
     if (isAuthenticated && user?.role === 'candidate') {
+      // Dispatch optimistic event immediately so FloatingSupportBar updates instantly
+      // Also update localStorage cache so JobListing stays in sync
+      try {
+        const cached = JSON.parse(localStorage.getItem('candidate_saved_jobs_cache') || '[]');
+        const optimisticList = next ? [...cached.filter(x => x !== id), id] : cached.filter(x => x !== id);
+        localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(optimisticList));
+        window.dispatchEvent(new CustomEvent('savedJobsChanged', { detail: { savedJobs: optimisticList } }));
+      } catch {}
+
       try {
         await candidateProfileService.toggleSavedJob(id);
         toast.addToast({
@@ -384,6 +435,13 @@ const JobDetail = ({ standalone = true }) => {
         });
       } catch (err) {
         setSaved(!next);
+        // Rollback the optimistic event and localStorage cache
+        try {
+          const cached = JSON.parse(localStorage.getItem('candidate_saved_jobs_cache') || '[]');
+          const rolledBack = next ? cached.filter(x => x !== id) : [...cached, id];
+          localStorage.setItem('candidate_saved_jobs_cache', JSON.stringify(rolledBack));
+          window.dispatchEvent(new CustomEvent('savedJobsChanged', { detail: { savedJobs: rolledBack } }));
+        } catch {}
         toast.addToast({
           type: 'error',
           title: 'Lỗi',
@@ -407,13 +465,124 @@ const JobDetail = ({ standalone = true }) => {
     }
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!isAuthenticated) {
       navigate('/login', { state: { redirect: `/candidate/jobs/${jobId}` } });
       return;
     }
-    // Navigate to JobListing and open apply modal via selectedJobId state
-    navigate('/candidate/jobs', { state: { selectedJobId: `dynamo-${job.idJob}` } });
+    // Open inline apply modal
+    setApplyError('');
+    setApplyStep('confirm');
+    setShowApplyModal(true);
+  };
+
+  const handleConfirmApply = async () => {
+    setApplyError('');
+    setApplyStep('submitting');
+    try {
+      const session = await fetchAuthSession();
+      const userId = session.tokens?.idToken?.payload?.sub;
+      if (!userId) { setApplyError('Vui lòng đăng nhập để ứng tuyển.'); setApplyStep('confirm'); return; }
+
+      // eKYC check
+      try {
+        const kycRes = await getKycStatus(userId);
+        const isVerified = kycRes?.kycCompleted || kycRes?.kycStatus === 'VERIFIED';
+        if (!isVerified) {
+          setApplyError('Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển.');
+          setApplyStep('confirm');
+          return;
+        }
+      } catch {
+        setApplyError('Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển.');
+        setApplyStep('confirm');
+        return;
+      }
+
+      // Load CV list
+      const cvData = await getCVInfo(userId);
+      if (!cvData || !cvData.cvList || cvData.cvList.length === 0) {
+        setApplyError('Bạn chưa có CV. Vui lòng tải CV lên trong phần Hồ sơ trước khi ứng tuyển.');
+        setApplyStep('confirm');
+        return;
+      }
+
+      setCvList(cvData.cvList);
+      setSelectedCV(cvData.cvList.length === 1 ? cvData.cvList[0].id : null);
+      setApplyStep('cv-select');
+    } catch (err) {
+      console.error('Error loading CV:', err);
+      setApplyError('Không thể tải thông tin CV. Vui lòng thử lại.');
+      setApplyStep('confirm');
+    }
+  };
+
+  const handleSubmitApplication = async () => {
+    if (!selectedCV) { setApplyError('Vui lòng chọn CV để gửi.'); return; }
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setApplyError('');
+
+    try {
+      const cvData = cvList.find(cv => cv.id === selectedCV);
+      if (!cvData) throw new Error('CV không tồn tại');
+
+      const finalCVUrl = cvData.cvUrl || cvData.cvS3Key;
+      if (!finalCVUrl) { setApplyError('Dữ liệu CV không hợp lệ. Vui lòng chọn lại CV.'); setIsSubmitting(false); return; }
+
+      const jId = job.idJob || jobId;
+      await submitApplication(jId, finalCVUrl, cvData.cvFileName || 'CV.pdf', cvData.cvS3Key);
+
+      // Send notifications (fire-and-forget)
+      try {
+        const { createEmployerApplicationNotification, createCandidateApplicationSubmittedNotification } = await import('../../services/notificationService');
+        const session = await fetchAuthSession();
+        const candidateId = session.tokens?.idToken?.payload?.sub;
+        const candidateEmail = session.tokens?.idToken?.payload?.email;
+        const candidateName = user?.name || candidateEmail || 'Ứng viên';
+
+        if (job.employerId) {
+          await createEmployerApplicationNotification({
+            employerId: job.employerId,
+            candidateId,
+            candidateName,
+            jobTitle: job.title,
+            companyName: employer?.companyName || '',
+            jobId: jId,
+            isQuickJob: false
+          });
+        }
+        if (candidateId) {
+          await createCandidateApplicationSubmittedNotification({
+            candidateId,
+            jobTitle: job.title,
+            companyName: employer?.companyName || '',
+            jobId: jId,
+            isQuickJob: false
+          });
+        }
+      } catch (notifErr) {
+        console.error('Notification error:', notifErr);
+      }
+
+      // Success
+      setShowApplyModal(false);
+      setApplied(true);
+      toast.addToast({ type: 'success', title: 'Ứng tuyển thành công!', message: 'CV của bạn đã được gửi đến nhà tuyển dụng.', duration: 4000 });
+    } catch (error) {
+      console.error('Error applying:', error);
+      const msg = error.statusCode === 409 || error.message?.includes('already applied') || error.message?.includes('đã ứng tuyển')
+        ? 'Bạn đã ứng tuyển công việc này rồi!'
+        : error.statusCode === 410 || error.errorCode === 'JOB_DELETED'
+          ? 'Bài đăng này đã hết hạn hoặc đã bị xóa.'
+          : error.statusCode === 429
+            ? 'Bạn gửi CV quá nhanh! Vui lòng đợi 30 giây.'
+            : (error.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
+      setApplyError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const openLb  = idx => setLb({ open: true, idx });
@@ -547,13 +716,25 @@ const JobDetail = ({ standalone = true }) => {
 
                 if (tiles.length === 0) return null;
                 return (
-                  <InfoGrid style={{ gridTemplateColumns: `repeat(${Math.min(tiles.length, 3)}, 1fr)` }}>
+                  <InfoGrid style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
                     {tiles.map((t, i) => (
                       <InfoTile key={i}>
                         <TileIcon>{t.icon}</TileIcon>
                         <div>
                           <div style={{ fontSize: 11, color: '#64748b', marginBottom: 1 }}>{t.label}</div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{t.val}</div>
+                          {t.label === 'Địa điểm' && t.val && t.val.length > 40 ? (
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>
+                              {tileAddressExpanded ? t.val : t.val.slice(0, 40) + '...'}
+                              <span
+                                onClick={() => setTileAddressExpanded(!tileAddressExpanded)}
+                                style={{ color: '#1e40af', cursor: 'pointer', marginLeft: 4, fontSize: 12, fontWeight: 600 }}
+                              >
+                                {tileAddressExpanded ? 'Thu gọn' : 'Hiện thêm'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{t.val}</div>
+                          )}
                         </div>
                       </InfoTile>
                     ))}
@@ -718,7 +899,27 @@ const JobDetail = ({ standalone = true }) => {
               </div>
               {employer?.companySize && <MetaRow><Users size={14} /><span>Quy mô: {employer.companySize}</span></MetaRow>}
               {(employer?.industry || industries[0]) && <MetaRow><Briefcase size={14} /><span>Lĩnh vực: {employer?.industry || industries[0]}</span></MetaRow>}
-              {(employer?.address || location) && <MetaRow><MapPin size={14} /><span>Địa điểm: {employer?.address || location}</span></MetaRow>}
+              {(employer?.address || location) && (() => {
+                const addr = employer?.address || location;
+                const maxLen = 40;
+                const isLong = addr.length > maxLen;
+                return (
+                  <MetaRow>
+                    <MapPin size={14} />
+                    <span>
+                      Địa điểm: {isLong && !addressExpanded ? addr.slice(0, maxLen) + '...' : addr}
+                      {isLong && (
+                        <span
+                          onClick={() => setAddressExpanded(!addressExpanded)}
+                          style={{ color: '#1e40af', cursor: 'pointer', marginLeft: 4, fontSize: 12, fontWeight: 600 }}
+                        >
+                          {addressExpanded ? 'Thu gọn' : 'Hiện thêm'}
+                        </span>
+                      )}
+                    </span>
+                  </MetaRow>
+                );
+              })()}
               {employer?.website && (
                 <MetaRow>
                   <Globe size={14} />
@@ -836,6 +1037,114 @@ const JobDetail = ({ standalone = true }) => {
           </SideCol>
         </Grid>
       </div>
+
+      {/* Apply Modal */}
+      <AnimatePresence>
+        {showApplyModal && (
+          <ModalOverlay initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSubmitting && setShowApplyModal(false)}>
+            <ModalCard
+              initial={{ scale: .9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: .9, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+            >
+              {applyStep === 'confirm' && (
+                <>
+                  <div style={{ textAlign: 'center', marginBottom: 18 }}>
+                    <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Xác nhận ứng tuyển</h3>
+                    <p style={{ fontSize: 14, color: '#64748b' }}>
+                      Bạn muốn gửi CV ứng tuyển vào vị trí:<br />
+                      <strong>{title} - {employer?.companyName || ''}</strong>
+                    </p>
+                  </div>
+
+                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 13 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ color: '#64748b' }}>Vị trí:</span>
+                      <span style={{ fontWeight: 600 }}>{title}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ color: '#64748b' }}>Công ty:</span>
+                      <span style={{ fontWeight: 600 }}>{employer?.companyName || ''}</span>
+                    </div>
+                    {location && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ color: '#64748b' }}>Địa điểm:</span>
+                        <span style={{ fontWeight: 600 }}>{job.location}</span>
+                      </div>
+                    )}
+                    {salary && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#64748b' }}>Mức lương:</span>
+                        <span style={{ fontWeight: 600, color: '#059669' }}>{salary}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {applyError && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
+                      {applyError}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <ModalBtn onClick={() => setShowApplyModal(false)} style={{ background: '#f3f4f6', color: '#374151' }}>Hủy</ModalBtn>
+                    <ModalBtn onClick={handleConfirmApply} style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff' }}>
+                      Tiếp tục
+                    </ModalBtn>
+                  </div>
+                </>
+              )}
+
+              {applyStep === 'cv-select' && (
+                <>
+                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 36, marginBottom: 8 }}>📄</div>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Chọn CV để gửi</h3>
+                    <p style={{ fontSize: 13, color: '#64748b' }}>Chọn CV bạn muốn gửi cho nhà tuyển dụng</p>
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    {cvList.map(cv => (
+                      <CVItem key={cv.id} $active={selectedCV === cv.id} onClick={() => setSelectedCV(cv.id)}>
+                        <FileText size={18} style={{ color: selectedCV === cv.id ? '#059669' : '#94a3b8', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {cv.cvFileName || cv.name || 'CV.pdf'}
+                          </div>
+                          {cv.uploadedAt && <div style={{ fontSize: 11, color: '#94a3b8' }}>Uploaded: {new Date(cv.uploadedAt).toLocaleDateString('vi-VN')}</div>}
+                        </div>
+                        {selectedCV === cv.id && <Check size={18} style={{ color: '#059669' }} />}
+                      </CVItem>
+                    ))}
+                  </div>
+
+                  {applyError && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
+                      {applyError}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <ModalBtn onClick={() => { setApplyStep('confirm'); setApplyError(''); }} style={{ background: '#f3f4f6', color: '#374151' }}>Quay lại</ModalBtn>
+                    <ModalBtn onClick={handleSubmitApplication} disabled={isSubmitting || !selectedCV} style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff', opacity: (!selectedCV || isSubmitting) ? .6 : 1 }}>
+                      {isSubmitting ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Đang gửi...</> : 'Gửi CV ngay'}
+                    </ModalBtn>
+                  </div>
+                </>
+              )}
+
+              {applyStep === 'submitting' && (
+                <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                  <Loader size={32} style={{ color: '#059669', animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+                  <p style={{ fontSize: 14, color: '#64748b' }}>Đang kiểm tra thông tin...</p>
+                </div>
+              )}
+            </ModalCard>
+          </ModalOverlay>
+        )}
+      </AnimatePresence>
 
       {/* Lightbox */}
       <AnimatePresence>

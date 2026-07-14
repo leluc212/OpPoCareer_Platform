@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import StatsCard from '../../components/StatsCard';
@@ -626,6 +626,7 @@ const StatusBadge = styled.span`
 const CandidatesManagement = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Bug 3 fix: toast state thay thế alert() — dùng pattern giống các trang admin khác
   const [adminToast, setAdminToast] = useState(null); // { type: 'success'|'error', message }
@@ -653,7 +654,13 @@ const CandidatesManagement = () => {
   const [apiChartData, setApiChartData] = useState([]);
   const [apiJobChartData, setApiJobChartData] = useState([]);
 
-  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates', 'verifications', 'experiences', 'deletions'
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    if (['candidates', 'verifications', 'experiences', 'deletions'].includes(tabParam)) {
+      return tabParam;
+    }
+    return 'candidates';
+  }); // 'candidates', 'verifications', 'experiences', 'deletions'
   const [pendingExpCount, setPendingExpCount] = useState(0);
   const [verifications, setVerifications] = useState([]);
   const [verifLoading, setVerifLoading] = useState(false);

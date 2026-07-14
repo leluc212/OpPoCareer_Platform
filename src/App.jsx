@@ -461,6 +461,7 @@ function AppRoutes() {
           <AdminChangeRequests />
         </ProtectedRoute>
       } />
+      <Route path="/admin/experiences" element={<Navigate to="/admin/candidates?tab=experiences" replace />} />
       {/* Catch-all: redirect mọi URL không khớp về trang chủ */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

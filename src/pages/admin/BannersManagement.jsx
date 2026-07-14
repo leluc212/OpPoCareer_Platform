@@ -699,6 +699,7 @@ const BannersManagement = () => {
   const [linkUrl, setLinkUrl]     = useState('');
   const [displayTime, setDisplayTime] = useState('');
   const [targetRegions, setTargetRegions] = useState([]); // [] = all regions
+  const [orientation, setOrientation] = useState('horizontal'); // 'horizontal' | 'vertical'
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -772,6 +773,7 @@ const BannersManagement = () => {
     setLinkUrl('');
     setDisplayTime('');
     setTargetRegions([]);
+    setOrientation('horizontal');
     setImageFile(null);
     setImagePreview('');
     setShowModal(true);
@@ -783,6 +785,7 @@ const BannersManagement = () => {
     setLinkUrl(banner.linkUrl || '');
     setDisplayTime(banner.displayTime || '');
     setTargetRegions(banner.targetRegions || []);
+    setOrientation(banner.orientation || 'horizontal');
     setImageFile(null);
     setImagePreview(banner.imageUrl || '');
     setShowModal(true);
@@ -797,6 +800,7 @@ const BannersManagement = () => {
     setLinkUrl('');
     setDisplayTime('');
     setTargetRegions([]);
+    setOrientation('horizontal');
   };
 
   // ── file drop / select ────────────────────────────────────────────────────
@@ -859,6 +863,7 @@ const BannersManagement = () => {
         linkUrl: linkUrl.trim(),
         imageUrl,
         targetRegions,
+        orientation,
         order: editTarget?.order || banners.length + 1,
         displayTime: displayTime || null,
         expiredAt: expiredAt || null,
@@ -1185,6 +1190,40 @@ const BannersManagement = () => {
                         }}
                       >
                         {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </FormGroup>
+
+                {/* Orientation — Dọc / Ngang */}
+                <FormGroup>
+                  <label>{vi ? 'Hướng banner *' : 'Banner orientation *'}</label>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    {[
+                      { id: 'horizontal', label: vi ? '↔ Ngang' : '↔ Horizontal', desc: vi ? 'Hiện ở carousel chính' : 'Main carousel' },
+                      { id: 'vertical', label: vi ? '↕ Dọc' : '↕ Vertical', desc: vi ? 'Hiện ở sidebar bên trái' : 'Left sidebar' }
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setOrientation(opt.id)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: '12px',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          border: '2px solid',
+                          borderColor: orientation === opt.id ? '#3b82f6' : '#e5e7eb',
+                          background: orientation === opt.id ? '#eff6ff' : 'transparent',
+                          color: orientation === opt.id ? '#2563eb' : '#6b7280',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                          textAlign: 'center',
+                        }}
+                      >
+                        <div>{opt.label}</div>
+                        <div style={{ fontSize: '11px', fontWeight: 500, marginTop: '2px', opacity: 0.7 }}>{opt.desc}</div>
                       </button>
                     ))}
                   </div>

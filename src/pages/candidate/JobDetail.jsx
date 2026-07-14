@@ -605,9 +605,7 @@ const JobDetail = ({ standalone = true }) => {
   const isVerified = employer?.isVerified || employer?.approvalStatus === 'approved';
 
   const gallery = [
-    employer?.companyBanner,
-    ...(Array.isArray(employer?.companyImages) ? employer.companyImages : []),
-    employer?.companyImage,
+    ...(Array.isArray(employer?.companyImages) ? employer.companyImages.map(img => typeof img === 'string' ? img : img?.url) : []),
   ].filter(url => url && typeof url === 'string' && (url.startsWith('http') || url.startsWith('data:'))).slice(0, 10);
 
   const industries  = employer?.industry
@@ -1060,23 +1058,23 @@ const JobDetail = ({ standalone = true }) => {
                   </div>
 
                   <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 13 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                      <span style={{ color: '#64748b' }}>Vị trí:</span>
+                    <div style={{ display: 'flex', marginBottom: 5 }}>
+                      <span style={{ color: '#64748b', minWidth: 70, flexShrink: 0 }}>Vị trí:</span>
                       <span style={{ fontWeight: 600 }}>{title}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                      <span style={{ color: '#64748b' }}>Công ty:</span>
+                    <div style={{ display: 'flex', marginBottom: 5 }}>
+                      <span style={{ color: '#64748b', minWidth: 70, flexShrink: 0 }}>Công ty:</span>
                       <span style={{ fontWeight: 600 }}>{employer?.companyName || ''}</span>
                     </div>
                     {location && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ color: '#64748b' }}>Địa điểm:</span>
+                      <div style={{ display: 'flex', marginBottom: 5 }}>
+                        <span style={{ color: '#64748b', minWidth: 70, flexShrink: 0 }}>Địa điểm:</span>
                         <span style={{ fontWeight: 600 }}>{job.location}</span>
                       </div>
                     )}
                     {salary && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>Mức lương:</span>
+                      <div style={{ display: 'flex' }}>
+                        <span style={{ color: '#64748b', minWidth: 70, flexShrink: 0 }}>Mức lương:</span>
                         <span style={{ fontWeight: 600, color: '#059669' }}>{salary}</span>
                       </div>
                     )}

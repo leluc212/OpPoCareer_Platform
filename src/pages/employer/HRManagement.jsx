@@ -189,6 +189,22 @@ const QuickJobIcon = styled.div`
 
 const QuickJobLabel = styled.div``;
 
+const QuickJobBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: ${props => props.$color || '#ef4444'};
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+`;
+
 const QuickJobDescription = styled.div`
   display: none;
 `;
@@ -3301,6 +3317,12 @@ const HRManagement = () => {
     const saved = sessionStorage.getItem('employer_hr_active_section');
     return saved !== null ? saved : 'posts';
   }); // Default to 'posts' (Quản lý bài đăng)
+  const [viewedTabs, setViewedTabs] = useState(() => {
+    const initial = new Set();
+    const saved = sessionStorage.getItem('employer_hr_active_section');
+    initial.add(saved !== null ? saved : 'posts');
+    return initial;
+  });
   const [hrStaff, setHrStaff] = useState(() => getHRStaff(language).map(s => ({ ...s, rated: false, pendingRating: false })));
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [showRecommendationsModal, setShowRecommendationsModal] = useState(false);
@@ -3665,12 +3687,12 @@ const HRManagement = () => {
     loadQuickJobsFromDynamoDB();
   }, []);
 
-  // Load applications when switching to HR section
+  // Load applications when jobs are ready
   useEffect(() => {
-    if (activeSection === 'hr') {
+    if (allQuickJobs.length > 0) {
       loadApplicationsFromQuickJobs();
     }
-  }, [activeSection, allQuickJobs]);
+  }, [allQuickJobs]);
 
   const loadQuickJobsFromDynamoDB = async () => {
     try {
@@ -5500,7 +5522,7 @@ const HRManagement = () => {
             <QuickJobCard
               $color="#10B981"
               $active={activeSection === 'posts'}
-              onClick={() => setActiveSection('posts')}
+              onClick={() => { setActiveSection('posts'); setViewedTabs(prev => new Set(prev).add('posts')); }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -5508,6 +5530,9 @@ const HRManagement = () => {
                 <FileText />
               </QuickJobIcon>
               <QuickJobLabel>{language === 'vi' ? 'Quản lý bài đăng' : 'Post Management'}</QuickJobLabel>
+              {!viewedTabs.has('posts') && quickJobPosts.length > 0 && (
+                <QuickJobBadge $color="#ef4444">{quickJobPosts.length}</QuickJobBadge>
+              )}
               <QuickJobDescription>
                 {language === 'vi' ? 'Tạo và quản lý các tin tuyển dụng' : 'Create and manage job postings'}
               </QuickJobDescription>
@@ -5516,7 +5541,7 @@ const HRManagement = () => {
             <QuickJobCard
               $color="#1e40af"
               $active={activeSection === 'hr'}
-              onClick={() => setActiveSection('hr')}
+              onClick={() => { setActiveSection('hr'); setViewedTabs(prev => new Set(prev).add('hr')); }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -5524,6 +5549,9 @@ const HRManagement = () => {
                 <UsersRound />
               </QuickJobIcon>
               <QuickJobLabel>{language === 'vi' ? 'Quản lý nhân sự' : 'HR Management'}</QuickJobLabel>
+              {realApplications.filter(a => a.status === 'pending').length > 0 && (
+                <QuickJobBadge $color="#ef4444">{realApplications.filter(a => a.status === 'pending').length}</QuickJobBadge>
+              )}
               <QuickJobDescription>
                 {language === 'vi' ? 'Quản lý và theo dõi nhân viên đang làm việc' : 'Manage and track your workforce'}
               </QuickJobDescription>

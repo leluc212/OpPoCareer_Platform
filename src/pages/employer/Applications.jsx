@@ -162,6 +162,22 @@ const StandardJobIcon = styled.div`
 
 const StandardJobLabel = styled.div``;
 
+const StandardJobBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: ${props => props.$color || '#ef4444'};
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+`;
+
 const StandardJobDescription = styled.div`
   display: none;
 `;
@@ -2770,6 +2786,16 @@ const Applications = () => {
     }
     return 'posts';
   });
+  const [viewedTabs, setViewedTabs] = useState(() => {
+    const initial = new Set();
+    // Mark the default/initial tab as viewed
+    if (location.state?.section) {
+      initial.add(location.state.section);
+    } else {
+      initial.add('posts');
+    }
+    return initial;
+  });
   // Highlight a specific job/application coming from a notification
   const [highlightJobId, setHighlightJobId] = useState(() => location.state?.jobId || null);
   const highlightTimerRef = React.useRef(null);
@@ -3006,9 +3032,9 @@ const Applications = () => {
   // Load real applications from DynamoDB when switching to applications tab
   useEffect(() => {
     const loadApplications = async () => {
-      if (activeSection !== 'applications') return;
       // Wait for jobs to finish loading first
       if (isLoadingJobs) return;
+      if (jobPosts.length === 0) return;
 
       try {
         setIsLoadingApplications(true);
@@ -3102,20 +3128,6 @@ const Applications = () => {
 
         setRealApplications(transformedApplications);
 
-        // Mark all loaded applications as viewed so sidebar badge resets
-        const userId = user?.userId || user?.id || user?.email;
-        if (userId && transformedApplications.length > 0) {
-          const viewedKey = `employer_viewed_apps_${userId}`;
-          const viewedApps = JSON.parse(localStorage.getItem(viewedKey) || '[]');
-          const viewedSet = new Set(viewedApps);
-          transformedApplications.forEach(app => {
-            if (app.applicationId) viewedSet.add(app.applicationId);
-          });
-          localStorage.setItem(viewedKey, JSON.stringify([...viewedSet]));
-          // Notify sidebar to refresh badge count
-          window.dispatchEvent(new Event('applicationsViewed'));
-        }
-
         // Enrich: fetch tên thực của ứng viên nếu candidate field là email
         const needsEnrich = transformedApplications.filter(
           a => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.candidate)
@@ -3167,10 +3179,10 @@ const Applications = () => {
       }
     };
 
-    if (activeSection === 'applications') {
+    if (!isLoadingJobs && jobPosts.length > 0) {
       loadApplications();
     }
-  }, [activeSection, jobPosts, isLoadingJobs, language]);
+  }, [jobPosts, isLoadingJobs, language]);
 
   // Comprehensive screenshot prevention
   useEffect(() => {
@@ -3993,7 +4005,7 @@ const Applications = () => {
               $color="#10B981"
               $active={activeSection === 'posts'}
               type="button"
-              onClick={() => setActiveSection('posts')}
+              onClick={() => { setActiveSection('posts'); setViewedTabs(prev => new Set(prev).add('posts')); }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -4001,6 +4013,9 @@ const Applications = () => {
                 <FileText />
               </StandardJobIcon>
               <StandardJobLabel>{language === 'vi' ? 'Quản lý bài đăng' : 'Post Management'}</StandardJobLabel>
+              {!viewedTabs.has('posts') && jobPosts.filter(p => p.status !== 'closed').length > 0 && (
+                <StandardJobBadge $color="#ef4444">{jobPosts.filter(p => p.status !== 'closed').length}</StandardJobBadge>
+              )}
               <StandardJobDescription>
                 {language === 'vi' ? 'Quản lý các bài đăng tuyển dụng tiêu chuẩn' : 'Manage standard job postings'}
               </StandardJobDescription>
@@ -4010,7 +4025,7 @@ const Applications = () => {
               $color="#1e40af"
               $active={activeSection === 'applications'}
               type="button"
-              onClick={() => setActiveSection('applications')}
+              onClick={() => { setActiveSection('applications'); setViewedTabs(prev => new Set(prev).add('applications')); }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -4018,6 +4033,9 @@ const Applications = () => {
                 <Users />
               </StandardJobIcon>
               <StandardJobLabel>{language === 'vi' ? 'Hồ sơ ứng tuyển' : 'Applications'}</StandardJobLabel>
+              {realApplications.filter(a => a.status === 'pending').length > 0 && (
+                <StandardJobBadge $color="#ef4444">{realApplications.filter(a => a.status === 'pending').length}</StandardJobBadge>
+              )}
               <StandardJobDescription>
                 {language === 'vi' ? 'Xem và quản lý hồ sơ ứng viên tiêu chuẩn' : 'View and manage standard job applications'}
               </StandardJobDescription>

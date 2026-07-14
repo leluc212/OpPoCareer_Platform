@@ -924,7 +924,8 @@ const PostJob = () => {
     .filter(slot => slot.startTime && slot.endTime)
     .map(slot => {
       const time = `${slot.startTime} - ${slot.endTime}`;
-      return slot.days && slot.days.length > 0 ? `${slot.days.join(',')} | ${time}` : time;
+      const daysStr = slot.daysRaw ? slot.daysRaw.trim() : (slot.days && slot.days.length > 0 ? slot.days.join(',') : '');
+      return daysStr ? `${daysStr} | ${time}` : time;
     })
     .join(' | ');
 
@@ -1413,8 +1414,8 @@ const PostJob = () => {
       const today = new Date().toISOString().split('T')[0];
       if (formData.workDays < today) {
         toast.warning(language === 'vi'
-          ? 'Ngày làm việc không được ở trong quá khứ.'
-          : 'Work date cannot be in the past.');
+          ? 'Hạn nộp hồ sơ không được ở trong quá khứ.'
+          : 'Application deadline cannot be in the past.');
         return;
       }
 
@@ -2031,7 +2032,7 @@ const PostJob = () => {
                   </FormGroup>
 
                   <FormGroup>
-                    <Label>{language === 'vi' ? 'Ngày làm việc ' : 'Work Date '}<span style={{ color: '#E24B4A' }}>*</span></Label>
+                    <Label>{language === 'vi' ? 'Hạn nộp hồ sơ ' : 'Application Deadline '}<span style={{ color: '#E24B4A' }}>*</span></Label>
                     <Input
                       name="workDays"
                       type="date"
@@ -2139,31 +2140,17 @@ const PostJob = () => {
                           </WorkHoursRow>
                           <div style={{ marginTop: '12px' }}>
                             <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Thứ' : 'Days'}</Label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {WORK_DAY_OPTIONS.map(opt => {
-                                const active = (slot.days || []).includes(opt.key);
-                                return (
-                                  <button
-                                    key={opt.key}
-                                    type="button"
-                                    onClick={() => toggleWorkHourDay(index, opt.key)}
-                                    style={{
-                                      padding: '6px 12px',
-                                      borderRadius: '8px',
-                                      border: `1px solid ${active ? '#1e40af' : '#cbd5e1'}`,
-                                      background: active ? '#1e40af' : '#ffffff',
-                                      color: active ? '#ffffff' : '#475569',
-                                      fontSize: '13px',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      transition: 'all 0.15s ease'
-                                    }}
-                                  >
-                                    {language === 'vi' ? opt.vi : opt.en}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            <Input
+                              type="text"
+                              placeholder={language === 'vi' ? 'Ví dụ: T2 - T6' : 'e.g. Mon - Fri'}
+                              value={slot.daysRaw || (slot.days ? slot.days.join(', ') : '')}
+                              onChange={(e) => {
+                                setWorkHoursList(prev => prev.map((s, i) => i === index ? { ...s, daysRaw: e.target.value } : s));
+                              }}
+                            />
+                            <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                              {language === 'vi' ? 'Gợi ý: T2 - T6 hoặc T2, T4, T7' : 'e.g. Mon-Fri or Mon, Wed, Sat'}
+                            </span>
                           </div>
                           {workHourErrors[index] && (
                             <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '8px', display: 'block' }}>
@@ -2486,7 +2473,7 @@ const PostJob = () => {
             <ChecklistItem $filled={!!formData.workDays.trim()} $warning={fieldWarnings.includes('workDays')}>
               <div className="label-group">
                 {fieldWarnings.includes('workDays') ? <AlertTriangle color="#dc2626" /> : !!formData.workDays.trim() ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
-                <span>{language === 'vi' ? 'Ngày làm việc' : 'Work Date'}</span>
+                <span>{language === 'vi' ? 'Hạn nộp hồ sơ' : 'Application Deadline'}</span>
               </div>
             </ChecklistItem>
 

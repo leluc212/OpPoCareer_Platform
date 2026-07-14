@@ -271,7 +271,7 @@ const AIRecommendationsPage = () => {
         >
           {vi 
             ? 'Công nghệ AI của Ốp Pờ phân tích kỹ năng và mong muốn của bạn để đưa ra những gợi ý việc làm chính xác đến 99%.' 
-            : 'OpPo AI analyzes your skills and preferences to provide job recommendations with up to 99% accuracy.'}
+            : 'Op Po AI analyzes your skills and preferences to provide job recommendations with up to 99% accuracy.'}
         </HeroSub>
         
         <motion.div
@@ -285,7 +285,7 @@ const AIRecommendationsPage = () => {
       <Container>
         <Section>
           <SectionHeading>
-            <Badge>{vi ? 'Tại sao chọn OpPo AI?' : 'Why OpPo AI?'}</Badge>
+            <Badge>{vi ? 'Tại sao chọn Ốp Pờ AI?' : 'Why Op Po AI?'}</Badge>
             <SectionTitle $isDark={isDarkMode}>
               {vi ? 'Sức mạnh của đề xuất thông minh' : 'The Power of Smart Recommendations'}
             </SectionTitle>

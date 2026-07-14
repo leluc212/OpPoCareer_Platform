@@ -396,7 +396,7 @@ const CandidateKYC = () => {
               </li>
               <li>
                 <div className="num">3</div>
-                <div className="text">{t('Quay lại OpPo — kết quả xác minh sẽ được cập nhật tự động', 'Return to OpPo — verification result will be updated automatically')}</div>
+                <div className="text">{t('Quay lại Ốp Pờ — kết quả xác minh sẽ được cập nhật tự động', 'Return to Op Po — verification result will be updated automatically')}</div>
               </li>
             </StepList>
 

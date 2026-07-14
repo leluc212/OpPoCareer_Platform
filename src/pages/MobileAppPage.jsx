@@ -339,7 +339,7 @@ const MobileAppPage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          {vi ? 'Ứng dụng Ốp Pờ\ntrên điện thoại' : 'OpPo App\non Your Phone'}
+          {vi ? 'Ứng dụng Ốp Pờ\ntrên điện thoại' : 'Op Po App\non Your Phone'}
         </HeroTitle>
         <HeroSub
           initial={{ opacity: 0, y: 24 }}
@@ -415,7 +415,7 @@ const MobileAppPage = () => {
           <SectionDesc $isDark={isDarkMode}>
             {vi
               ? 'Ốp Pờ cung cấp đầy đủ công cụ để ứng viên tìm việc và nhà tuyển dụng kết nối nhân sự F&B hiệu quả.'
-              : 'OpPo provides all the tools for candidates to find jobs and employers to connect with F&B staff effectively.'}
+              : 'Op Po provides all the tools for candidates to find jobs and employers to connect with F&B staff effectively.'}
           </SectionDesc>
           <FeatGrid>
             {features.map((f, i) => (

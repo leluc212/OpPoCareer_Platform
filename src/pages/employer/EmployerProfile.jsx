@@ -2631,8 +2631,8 @@ const EmployerProfile = () => {
                         <div className="info-content">
                           <p>
                             {language === 'vi' 
-                              ? 'Các tài liệu xác thực này đã được gửi đến OpPo để xem xét. Bạn không thể chỉnh sửa hoặc xóa các tài liệu này. Nếu cần cập nhật, vui lòng liên hệ bộ phận hỗ trợ.'
-                              : 'These verification documents have been submitted to OpPo for review. You cannot edit or delete these documents. If you need to update them, please contact support.'}
+                              ? 'Các tài liệu xác thực này đã được gửi đến Ốp Pờ để xem xét. Bạn không thể chỉnh sửa hoặc xóa các tài liệu này. Nếu cần cập nhật, vui lòng liên hệ bộ phận hỗ trợ.'
+                              : 'These verification documents have been submitted to Op Po for review. You cannot edit or delete these documents. If you need to update them, please contact support.'}
                           </p>
                         </div>
                       </InfoBox>

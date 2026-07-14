@@ -338,12 +338,12 @@ const AboutPage = () => {
             {vi ? 'Giới thiệu về công ty' : 'About OpPo'}
           </HeroBadge>
           <HeroTitle initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
-            {vi ? <>Ốp Pờ — Nền tảng nhân sự <span>F&B</span> hàng đầu Việt Nam</> : <>OpPo — OpPo � Vietnam's <span>F&B</span> Staffing Platform</>}
+            {vi ? <>Ốp Pờ — Nền tảng nhân sự <span>F&B</span> hàng đầu Việt Nam</> : <>Op Po — Op Po � Vietnam's <span>F&B</span> Staffing Platform</>}
           </HeroTitle>
           <HeroDesc initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
             {vi
               ? 'Ốp Pờ hỗ trợ các chủ doanh nghiệp F&B tiêu chuẩn hóa hoạt động kinh doanh bằng cách giải quyết tình trạng biến động nhân sự và rủi ro tuyển dụng. Nền tảng kết nối doanh nghiệp với đội ngũ nhân sự bán thời gian đã được xác thực và có kỹ năng.'
-              : 'OpPo helps F&B business owners standardize operations by solving staff turnover and hiring risks. The platform connects businesses with verified, skilled part-time staff.'}
+              : 'Op Po helps F&B business owners standardize operations by solving staff turnover and hiring risks. The platform connects businesses with verified, skilled part-time staff.'}
           </HeroDesc>
           <HeroStats initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}>
             <HeroStat><span className="num">70%</span><span className="lbl">{vi ? 'Rút ngắn tuyển dụng' : 'Faster Hiring'}</span></HeroStat>
@@ -362,7 +362,7 @@ const AboutPage = () => {
         <SectionInner>
           <Tag $isDark={isDarkMode}><Target size={13} />{vi ? 'Vấn đề & Giải pháp' : 'Problem & Solution'}</Tag>
           <STitle $isDark={isDarkMode}>{vi ? 'Chúng tôi giải quyết điều gì?' : 'What Do We Solve?'}</STitle>
-          <SDesc $isDark={isDarkMode}>{vi ? <>Ngành F&B Việt Nam đang đối mặt với những thách thức nhân sự nghiêm trọng.<br />ỐP PỜ được xây dựng để giải quyết tận gốc những vấn đề này.</> : "Vietnam's F&B industry faces serious staffing challenges. OpPo is built to solve these problems at the root."}</SDesc>
+          <SDesc $isDark={isDarkMode}>{vi ? <>Ngành F&B Việt Nam đang đối mặt với những thách thức nhân sự nghiêm trọng.<br />ỐP PỜ được xây dựng để giải quyết tận gốc những vấn đề này.</> : "Vietnam's F&B industry faces serious staffing challenges. Op Po is built to solve these problems at the root."}</SDesc>
           <TwoCol>
             <div>
               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>
@@ -379,7 +379,7 @@ const AboutPage = () => {
             </div>
             <div>
               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1a62ff', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>
-                {vi ? '✓ Giải pháp của OpPo' : '✓ OpPo Solutions'}
+                {vi ? '✓ Giải pháp của Ốp Pờ' : '✓ Op Po Solutions'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {solutions.map((s, i) => (

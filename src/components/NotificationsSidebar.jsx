@@ -325,6 +325,23 @@ const NotificationsSidebar = () => {
           });
           return;
         }
+
+        // Handle employer application notifications → go to applications tab
+        if (notification.type === 'application') {
+          const jobId = notifData?.jobId || null;
+          const isQuickJobNotif = jobId ? String(jobId).startsWith('QJOB-') : notifData?.isQuickJob;
+          const targetPath = isQuickJobNotif ? '/employer/quick-jobs' : '/employer/standard-jobs';
+          navigate(targetPath, {
+            state: {
+              fromNotifications: true,
+              jobId,
+              section: 'applications',
+              staffTab: isQuickJobNotif ? 'pending_confirm' : undefined
+            }
+          });
+          return;
+        }
+
         navigate(url);
       }
     } catch (error) {

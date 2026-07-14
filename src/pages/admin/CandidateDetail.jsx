@@ -458,7 +458,7 @@ const CandidateDetail = () => {
         <PageContainer>
           <BackButton onClick={() => navigate('/admin/candidates')}>
             <ArrowLeft />
-            {language === 'vi' ? 'Quay lại danh sách' : 'Back to list'}
+            {language === 'vi' ? 'Quay lại' : 'Back to list'}
           </BackButton>
           <VerificationCard $verified={false}>
             <AlertTriangle />

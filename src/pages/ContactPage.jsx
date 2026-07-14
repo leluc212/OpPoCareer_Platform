@@ -334,7 +334,7 @@ const ContactPage = () => {
     { year: '2025', title: 'Tăng trưởng mạnh mẽ', desc: 'Đạt 5,000+ ứng viên đăng ký, hơn 200 doanh nghiệp đối tác và được gia nhập chương trình Google for Startups.' },
     { year: '2026', title: 'Hướng tới nền tảng hàng đầu', desc: 'Phát triển ứng dụng di động, mở rộng ra các thành phố lớn và hướng tới vị trí nền tảng nhân sự F&B số 1 Việt Nam.' },
   ] : [
-    { year: '2023', title: 'OpPo Founded', desc: 'Launched Vietnam\'s first F&B-specialized HR platform connecting businesses with skilled, verified part-time staff.' },
+    { year: '2023', title: 'Op Po Founded', desc: 'Launched Vietnam\'s first F&B-specialized HR platform connecting businesses with skilled, verified part-time staff.' },
     { year: '2024', title: 'Feature & Partner Expansion', desc: 'Integrated AI job matching, business verification, and 24h urgent hiring. Onboarded 100+ F&B companies.' },
     { year: '2025', title: 'Strong Growth', desc: 'Reached 5,000+ candidates, 200+ partner companies, and joined the Google for Startups program.' },
     { year: '2026', title: 'Towards Market Leader', desc: 'Launching mobile app, expanding to major cities, aiming to be Vietnam\'s #1 F&B HR platform.' },
@@ -362,7 +362,7 @@ const ContactPage = () => {
         <HeroSub>
           {vi
             ? 'Ốp Pờ kết nối doanh nghiệp F&B với đội ngũ nhân sự bán thời gian đã được xác thực và có kỹ năng — nhanh chóng, an toàn, hiệu quả.'
-            : 'OpPo connects F&B businesses with verified, skilled part-time staff — quickly, safely, and efficiently.'}
+            : 'Op Po connects F&B businesses with verified, skilled part-time staff — quickly, safely, and efficiently.'}
         </HeroSub>
       </HeroSection>
 
@@ -377,7 +377,7 @@ const ContactPage = () => {
             <SectionDesc $isDark={isDarkMode}>
               {vi
                 ? 'Ốp Pờ là nền tảng công nghệ tuyển dụng chuyên biệt dành cho ngành F&B (Nhà hàng, Café, Khách sạn, Tiệc cưới...). Chúng tôi giải quyết bài toán nhân sự biến động — nơi thiếu hụt nhân viên có thể xảy ra bất kỳ lúc nào.'
-                : 'OpPo is a recruitment technology platform specialized for the F&B industry (Restaurants, Cafes, Hotels, Events...). We solve the volatile staffing problem — where staff shortages can happen at any time.'}
+                : 'Op Po is a recruitment technology platform specialized for the F&B industry (Restaurants, Cafes, Hotels, Events...). We solve the volatile staffing problem — where staff shortages can happen at any time.'}
             </SectionDesc>
             <AboutFeatList>
               {(vi ? [
@@ -416,7 +416,7 @@ const ContactPage = () => {
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <SectionBadge>{vi ? 'Những con số' : 'Numbers'}</SectionBadge>
             <SectionTitle $isDark={isDarkMode} style={{ textAlign: 'center' }}>
-              {vi ? 'Ốp Pờ trong những con số' : 'OpPo by the Numbers'}
+              {vi ? 'Ốp Pờ trong những con số' : 'Op Po by the Numbers'}
             </SectionTitle>
           </div>
           <StatsGrid>

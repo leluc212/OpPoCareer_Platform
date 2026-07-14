@@ -343,19 +343,19 @@ const Sidebar = ({ role, onHoverChange }) => {
   const navRef = useRef(null);
   const isNavigatingRef = useRef(false);
 
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [unreadChatCount, setUnreadChatCount] = useState(0);
-  const [standardPendingCount, setStandardPendingCount] = useState(0);
-  const [quickPendingCount, setQuickPendingCount] = useState(0);
-  const [adminBadges, setAdminBadges] = useState({
-    employers: 0,
-    candidates: 0,
-    posts: 0,
-    wallet: 0,
-    notifications: 0,
-    reports: 0,
-    changeRequests: 0
+  // Use cached values from previous mount to avoid flicker on re-mount
+  const [unreadNotifications, setUnreadNotifications] = useState(Sidebar._cachedCounts?.unreadNotifications || 0);
+  const [unreadChatCount, setUnreadChatCount] = useState(Sidebar._cachedCounts?.unreadChatCount || 0);
+  const [standardPendingCount, setStandardPendingCount] = useState(Sidebar._cachedCounts?.standardPendingCount || 0);
+  const [quickPendingCount, setQuickPendingCount] = useState(Sidebar._cachedCounts?.quickPendingCount || 0);
+  const [adminBadges, setAdminBadges] = useState(Sidebar._cachedCounts?.adminBadges || {
+    employers: 0, candidates: 0, posts: 0, wallet: 0, notifications: 0, reports: 0, changeRequests: 0
   });
+
+  // Sync counts to static cache so next mount has instant values
+  useEffect(() => {
+    Sidebar._cachedCounts = { unreadNotifications, unreadChatCount, standardPendingCount, quickPendingCount, adminBadges };
+  }, [unreadNotifications, unreadChatCount, standardPendingCount, quickPendingCount, adminBadges]);
 
   useEffect(() => {
     let active = true;
@@ -498,16 +498,7 @@ const Sidebar = ({ role, onHoverChange }) => {
 
         // 3. Fetch applications counts for employer
         if (role === 'employer') {
-          // Helper to check if application has been viewed by employer
-          const isViewedByEmployer = (applicationId) => {
-            const userId = user?.userId || user?.id || user?.email;
-            if (!userId || !applicationId) return false;
-            const viewedKey = `employer_viewed_apps_${userId}`;
-            const viewedApps = JSON.parse(localStorage.getItem(viewedKey) || '[]');
-            return viewedApps.includes(applicationId);
-          };
-
-          // Standard Job Applications Count (status === 'pending' AND not viewed)
+          // Standard Job Applications Count (status === 'pending')
           const stdJobs = await jobPostService.getMyJobPosts();
           if (stdJobs && stdJobs.length > 0) {
             const stdPromises = stdJobs.map(job =>
@@ -515,7 +506,7 @@ const Sidebar = ({ role, onHoverChange }) => {
             );
             const stdAppsList = await Promise.all(stdPromises);
             const pendingStdCount = stdAppsList.flat().filter(app => 
-              app.status === 'pending' && !isViewedByEmployer(app.applicationId)
+              app.status === 'pending'
             ).length;
             if (active) setStandardPendingCount(pendingStdCount);
           } else {
@@ -773,4 +764,7 @@ const Sidebar = ({ role, onHoverChange }) => {
 };
 
 export default Sidebar;
+
+// Static cache for badge counts - persists across remounts within same session
+Sidebar._cachedCounts = Sidebar._cachedCounts || null;
 

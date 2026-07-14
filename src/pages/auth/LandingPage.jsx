@@ -3939,7 +3939,7 @@ const LandingPage = ({ children }) => {
                   >
                     {language === 'vi'
                       ? 'Ốp Pờ hỗ trợ các chủ doanh nghiệp F&B tiêu chuẩn hóa hoạt động kinh\u00a0doanh bằng cách giải quyết tình trạng biến động nhân\u00a0sự và rủi ro tuyển\u00a0dụng. Nền tảng kết nối doanh nghiệp với đội ngũ nhân\u00a0sự bán thời gian đã\u00a0được xác thực và có kỹ năng.'
-                      : 'OpPo helps F&B business owners standardize operations by solving staff turnover and hiring risks. The platform connects businesses with verified, skilled part-time staff.'}
+                      : 'Op Po helps F&B business owners standardize operations by solving staff turnover and hiring risks. The platform connects businesses with verified, skilled part-time staff.'}
                   </AboutInlineDesc>
                   <AboutInlineStats>
                     <AboutInlineStat>

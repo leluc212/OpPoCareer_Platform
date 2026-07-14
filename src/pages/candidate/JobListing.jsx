@@ -4597,7 +4597,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
           setErrorModal({
             show: true,
             message: 'Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển. Vui lòng vào phần Xác minh danh tính để thực hiện.',
-            action: () => navigate('/candidate/ekyc')
+            action: () => navigate('/candidate/kyc')
           });
           return;
         }
@@ -4607,7 +4607,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         setErrorModal({
           show: true,
           message: 'Bạn cần hoàn tất xác minh danh tính (eKYC) trước khi ứng tuyển. Vui lòng vào phần Xác minh danh tính để thực hiện.',
-          action: () => navigate('/candidate/ekyc')
+          action: () => navigate('/candidate/kyc')
         });
         return;
       }

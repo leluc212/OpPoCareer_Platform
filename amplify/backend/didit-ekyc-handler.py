@@ -302,14 +302,27 @@ def update_kyc_verified(user_id: str, session_id: str, status: str, decision: di
                   f'personal_number={id_doc.get("personal_number")!r}, '
                   f'id_number={id_doc.get("id_number")!r}, '
                   f'mrz_document_number={id_doc.get("mrz_document_number")!r}')
-            # Ưu tiên lấy CCCD từ các field (Didit có thể trả ở field khác nhau tùy loại giấy tờ)
-            cccd_number = str(
-                id_doc.get('document_number')
-                or id_doc.get('id_number')
-                or id_doc.get('personal_number')
-                or id_doc.get('mrz_document_number')
-                or ''
-            ).strip()
+            # Ưu tiên lấy CCCD từ personal_number (12 ký tự đầy đủ)
+            # document_number trên CCCD Việt Nam thường chỉ là phần sau mã tỉnh (9 ký tự)
+            # personal_number mới là số CCCD 12 ký tự chính xác
+            raw_personal = str(id_doc.get('personal_number') or '').strip()
+            raw_document = str(id_doc.get('document_number') or '').strip()
+            raw_id       = str(id_doc.get('id_number') or '').strip()
+            raw_mrz      = str(id_doc.get('mrz_document_number') or '').strip()
+            
+            # Ưu tiên: personal_number (12 digits) > id_number > document_number > mrz
+            # Nếu personal_number đủ 12 ký tự số → dùng luôn
+            if raw_personal and len(raw_personal) == 12 and raw_personal.isdigit():
+                cccd_number = raw_personal
+            elif raw_id and len(raw_id) == 12 and raw_id.isdigit():
+                cccd_number = raw_id
+            elif raw_document and len(raw_document) == 12 and raw_document.isdigit():
+                cccd_number = raw_document
+            elif raw_mrz and len(raw_mrz) == 12 and raw_mrz.isdigit():
+                cccd_number = raw_mrz
+            else:
+                # Fallback: lấy bất kỳ giá trị nào có
+                cccd_number = raw_personal or raw_id or raw_document or raw_mrz
             date_of_birth = id_doc.get('date_of_birth') or ''
             full_name     = id_doc.get('full_name') or ''
             # KHÔNG dùng zfill — nếu Didit trả thiếu digits thì pad zeros sẽ sai

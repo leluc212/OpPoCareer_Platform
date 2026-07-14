@@ -1324,8 +1324,24 @@ const CandidateProfile = () => {
 
 
 
+  const [cccdError, setCccdError] = useState('');
+
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    
+    // CCCD validation: only digits, max 12 characters
+    if (name === 'cccd') {
+      const digitsOnly = value.replace(/\D/g, '').slice(0, 12);
+      setFormData({ ...formData, cccd: digitsOnly });
+      if (digitsOnly && digitsOnly.length < 12) {
+        setCccdError(language === 'vi' ? 'Số CCCD phải đủ 12 chữ số' : 'Citizen ID must be exactly 12 digits');
+      } else {
+        setCccdError('');
+      }
+      return;
+    }
+    
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleImageUpload = (e) => {
@@ -1375,6 +1391,19 @@ const CandidateProfile = () => {
 
   const handleSave = async () => {
     try {
+      // Validate CCCD must be exactly 12 digits if provided
+      if (formData.cccd && formData.cccd.trim()) {
+        const cccdValue = formData.cccd.trim();
+        if (!/^\d{12}$/.test(cccdValue)) {
+          setCccdError(language === 'vi' ? 'Số CCCD phải đủ 12 chữ số' : 'Citizen ID must be exactly 12 digits');
+          toast.error(
+            language === 'vi' ? 'Số CCCD phải đủ 12 chữ số' : 'Citizen ID must be exactly 12 digits',
+            language === 'vi' ? 'Lỗi' : 'Error'
+          );
+          return;
+        }
+      }
+
       setIsLoadingProfile(true);
       
       // Check if CCCD or DOB are being set for the first time
@@ -1400,6 +1429,15 @@ const CandidateProfile = () => {
         profileImage,
         kycCompleted // Include eKYC status
       };
+      
+      // Don't send locked fields (cccd, dateOfBirth) to avoid overwriting eKYC-verified values
+      // with stale frontend state
+      if (isLockedFields.cccd) {
+        delete profileData.cccd;
+      }
+      if (isLockedFields.dateOfBirth) {
+        delete profileData.dateOfBirth;
+      }
       
       // Save to DynamoDB - ALWAYS use updateProfile (PUT) which is safe
       // PUT uses update_item which only updates specified fields without overwriting the entire record
@@ -1870,12 +1908,23 @@ const CandidateProfile = () => {
                     <Label>{language === 'vi' ? 'Số CCCD' : 'Citizen ID'}</Label>
                     <Input 
                       name="cccd" 
+                      type="text"
+                      inputMode="numeric"
                       value={formData.cccd} 
                       onChange={handleChange} 
                       placeholder="079202012345"
+                      maxLength={12}
                       disabled={isLockedFields.cccd}
-                      style={isLockedFields.cccd ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
+                      style={{
+                        ...(isLockedFields.cccd ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
+                        ...(cccdError ? { borderColor: '#ef4444' } : {})
+                      }}
                     />
+                    {cccdError && (
+                      <span style={{ color: '#ef4444', fontSize: 12, marginTop: 4, display: 'block' }}>
+                        {cccdError}
+                      </span>
+                    )}
                   </FormGroup>
 
                   <FormGroup>

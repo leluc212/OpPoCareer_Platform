@@ -289,6 +289,19 @@ def lambda_handler(event, context):
             body.pop('createdAt', None)
             body['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
 
+            # ── Guard: protect eKYC-verified fields from being overwritten by stale frontend data ─
+            if prev_profile.get('provider') == 'DIDIT' and prev_profile.get('kycCompleted') is True:
+                existing_cccd = prev_profile.get('cccd', '')
+                incoming_cccd = str(body.get('cccd', '')).strip() if 'cccd' in body else ''
+                # If DB has a valid 12-digit CCCD from eKYC, don't allow overwrite with shorter/different value
+                if existing_cccd and len(str(existing_cccd)) == 12 and incoming_cccd != existing_cccd:
+                    print(f'[Guard] Blocking cccd overwrite: DB={existing_cccd}, incoming={incoming_cccd}')
+                    body.pop('cccd', None)
+                # Same for dateOfBirth from eKYC
+                existing_dob = prev_profile.get('dateOfBirth', '')
+                if existing_dob and 'dateOfBirth' in body:
+                    body.pop('dateOfBirth', None)
+
             # ── Guard: prevent negative wallet balance when adding NEW withdrawals ─
             if 'withdrawals' in body:
                 from decimal import Decimal as _D

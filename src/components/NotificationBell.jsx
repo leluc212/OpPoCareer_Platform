@@ -197,19 +197,23 @@ const NotificationBell = ({ userId, role }) => {
   const loadNotifications = async () => {
     try {
       const notifs = await getNotifications(userId, role);
-      const count = await getUnreadCount(userId, role);
       setNotifications(notifs);
-      setUnreadCount(count);
+      setUnreadCount((notifs || []).filter(n => !n.read).length);
     } catch (error) {
-      console.error('Error loading notifications:', error);
+      // Circuit breaker trong service sẽ xử lý — không cần log thêm
     }
   };
 
   useEffect(() => {
+    if (!userId || !role) return;
     loadNotifications();
 
-    // Poll for updates every 10 seconds
-    const interval = setInterval(loadNotifications, 10000);
+    // Poll mỗi 30 giây (thay vì 10s), chỉ khi tab đang visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadNotifications();
+      }
+    }, 30000);
 
     return () => {
       clearInterval(interval);

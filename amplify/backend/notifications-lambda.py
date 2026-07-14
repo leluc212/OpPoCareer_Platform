@@ -93,24 +93,35 @@ def lambda_handler(event, context):
             items = []
             last_evaluated_key = None
             
-            while True:
-                query_kwargs = {
-                    'IndexName': 'RecipientIndex',
-                    'KeyConditionExpression': 'recipientId = :uid AND recipientRole = :role',
-                    'ExpressionAttributeValues': {
-                        ':uid': user_id,
-                        ':role': role
+            try:
+                while True:
+                    query_kwargs = {
+                        'IndexName': 'RecipientIndex',
+                        'KeyConditionExpression': 'recipientId = :uid AND recipientRole = :role',
+                        'ExpressionAttributeValues': {
+                            ':uid': user_id,
+                            ':role': role
+                        }
                     }
-                }
-                if last_evaluated_key:
-                    query_kwargs['ExclusiveStartKey'] = last_evaluated_key
-                
-                response = table.query(**query_kwargs)
-                items.extend(response.get('Items', []))
-                
-                last_evaluated_key = response.get('LastEvaluatedKey')
-                if not last_evaluated_key:
-                    break
+                    if last_evaluated_key:
+                        query_kwargs['ExclusiveStartKey'] = last_evaluated_key
+                    
+                    response = table.query(**query_kwargs)
+                    items.extend(response.get('Items', []))
+                    
+                    last_evaluated_key = response.get('LastEvaluatedKey')
+                    if not last_evaluated_key:
+                        break
+            except Exception as gsi_error:
+                # GSI might not exist or have wrong schema — fallback to scan + filter
+                print(f"⚠️ GSI query failed: {str(gsi_error)}, falling back to scan")
+                response = table.scan()
+                all_items = response.get('Items', [])
+                items = [
+                    item for item in all_items
+                    if item.get('recipientId') == user_id
+                    and item.get('recipientRole') == role
+                ]
             
             # Filter out deleted notifications
             items = [item for item in items if not item.get('deleted', False)]
@@ -132,16 +143,25 @@ def lambda_handler(event, context):
             query_params = event.get('queryStringParameters') or {}
             role = query_params.get('role', 'employer')
             
-            response = table.query(
-                IndexName='RecipientIndex',
-                KeyConditionExpression='recipientId = :uid AND recipientRole = :role',
-                ExpressionAttributeValues={
-                    ':uid': user_id,
-                    ':role': role
-                }
-            )
-            
-            items = response.get('Items', [])
+            try:
+                response = table.query(
+                    IndexName='RecipientIndex',
+                    KeyConditionExpression='recipientId = :uid AND recipientRole = :role',
+                    ExpressionAttributeValues={
+                        ':uid': user_id,
+                        ':role': role
+                    }
+                )
+                items = response.get('Items', [])
+            except Exception as gsi_error:
+                print(f"⚠️ GSI query failed for unread count: {str(gsi_error)}, falling back to scan")
+                response = table.scan()
+                all_items = response.get('Items', [])
+                items = [
+                    item for item in all_items
+                    if item.get('recipientId') == user_id
+                    and item.get('recipientRole') == role
+                ]
             
             # Count unread and not deleted
             unread_count = sum(1 for item in items if not item.get('read', False) and not item.get('deleted', False))

@@ -3333,8 +3333,8 @@ const HRManagement = () => {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
 
-  const [profile, setProfile] = useState(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profile, setProfile] = useState(HRManagement._cachedProfile || null);
+  const [loadingProfile, setLoadingProfile] = useState(!HRManagement._cachedProfile);
   const [requestSending, setRequestSending] = useState(false);
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
   const [showVerifyModalHR, setShowVerifyModalHR] = useState(false);
@@ -3487,6 +3487,7 @@ const HRManagement = () => {
         setLoadingProfile(true);
         const data = await employerProfileService.getMyProfile();
         setProfile(data);
+        HRManagement._cachedProfile = data;
       } catch (err) {
         console.error('Error fetching employer profile:', err);
       } finally {
@@ -3664,12 +3665,33 @@ const HRManagement = () => {
   };
 
   // Load quick jobs from DynamoDB
-  const [quickJobPosts, setQuickJobPosts] = useState([]);
-  const [allQuickJobs, setAllQuickJobs] = useState([]); // All jobs including closed (for HR section)
-  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [quickJobPosts, _setQuickJobPosts] = useState(HRManagement._cachedQuickJobPosts || []);
+  const setQuickJobPosts = (val) => {
+    _setQuickJobPosts(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      HRManagement._cachedQuickJobPosts = next;
+      return next;
+    });
+  };
+  const [allQuickJobs, _setAllQuickJobs] = useState(HRManagement._cachedAllQuickJobs || []);
+  const setAllQuickJobs = (val) => {
+    _setAllQuickJobs(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      HRManagement._cachedAllQuickJobs = next;
+      return next;
+    });
+  };
+  const [loadingJobs, setLoadingJobs] = useState(!HRManagement._cachedQuickJobPosts);
 
   // Load applications from Quick Jobs
-  const [realApplications, setRealApplications] = useState([]);
+  const [realApplications, _setRealApplications] = useState(HRManagement._cachedApplications || []);
+  const setRealApplications = (val) => {
+    _setRealApplications(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      HRManagement._cachedApplications = next;
+      return next;
+    });
+  };
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [changeRequestStatusOverrides, setChangeRequestStatusOverrides] = useState({});
   const changeRequestStatusOverridesRef = useRef({});
@@ -8516,4 +8538,10 @@ const ProfileDetailModal = React.memo(({ candidate, onClose, isLoading }) => {
 ProfileDetailModal.displayName = 'ProfileDetailModal';
 
 export default HRManagement;
+
+// Static cache for applications - persists across remounts for instant badge display
+HRManagement._cachedApplications = HRManagement._cachedApplications || null;
+HRManagement._cachedProfile = HRManagement._cachedProfile || null;
+HRManagement._cachedQuickJobPosts = HRManagement._cachedQuickJobPosts || null;
+HRManagement._cachedAllQuickJobs = HRManagement._cachedAllQuickJobs || null;
 // Touched to refresh HMR cache

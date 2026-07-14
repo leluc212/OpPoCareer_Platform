@@ -2,10 +2,42 @@
 
 const API_ENDPOINT = import.meta.env.VITE_NOTIFICATIONS_API;
 
-// Debug: Log API endpoint on module load
-console.log('🔧 notificationService.js loaded');
-console.log('🔧 API_ENDPOINT:', API_ENDPOINT);
-console.log('🔧 import.meta.env:', import.meta.env);
+// Debug: Log API endpoint on module load (chỉ log 1 lần)
+console.log('🔧 notificationService.js loaded, API_ENDPOINT:', API_ENDPOINT ? '✅ configured' : '❌ missing');
+
+// ===== Circuit Breaker =====
+// Khi API trả 500 liên tục, ngừng gọi trong 1 khoảng thời gian để tránh spam
+const circuitBreaker = {
+  failures: 0,
+  lastFailure: 0,
+  isOpen: false,
+  // Thời gian chờ tăng dần: 30s, 60s, 120s, tối đa 5 phút
+  getCooldown() {
+    return Math.min(30000 * Math.pow(2, this.failures - 1), 300000);
+  },
+  recordFailure() {
+    this.failures++;
+    this.lastFailure = Date.now();
+    if (this.failures >= 3) {
+      this.isOpen = true;
+      console.warn(`⚡ [Notifications] Circuit breaker OPEN — pausing requests for ${this.getCooldown() / 1000}s`);
+    }
+  },
+  recordSuccess() {
+    this.failures = 0;
+    this.isOpen = false;
+  },
+  canRequest() {
+    if (!this.isOpen) return true;
+    const elapsed = Date.now() - this.lastFailure;
+    if (elapsed > this.getCooldown()) {
+      // Half-open: cho phép 1 request thử lại
+      console.log('⚡ [Notifications] Circuit breaker half-open — trying one request...');
+      return true;
+    }
+    return false;
+  }
+};
 
 // ===== API Functions =====
 
@@ -17,15 +49,23 @@ export const getAllNotifications = async () => {
     throw new Error('Notifications API endpoint is not configured');
   }
 
+  if (!circuitBreaker.canRequest()) {
+    console.log('⚡ [Notifications] Request blocked by circuit breaker');
+    return [];
+  }
+
   try {
     const response = await fetch(`${API_ENDPOINT}/notifications`);
     if (!response.ok) {
-      throw new Error('Failed to fetch notifications');
+      circuitBreaker.recordFailure();
+      throw new Error(`Failed to fetch notifications (HTTP ${response.status})`);
     }
+    circuitBreaker.recordSuccess();
     const data = await response.json();
     return data || [];
   } catch (error) {
-    console.error('Error getting notifications from API:', error);
+    circuitBreaker.recordFailure();
+    console.error('Error getting notifications from API:', error.message);
     throw error;
   }
 };
@@ -40,22 +80,24 @@ export const getNotifications = async (userId, role) => {
     throw new Error('Notifications API endpoint is not configured');
   }
 
-  console.log('🔔 [notificationService] getNotifications called with userId:', userId, 'role:', role);
-  console.log('🔔 [notificationService] URL:', `${API_ENDPOINT}/notifications/user/${userId}?role=${role}`);
+  if (!circuitBreaker.canRequest()) {
+    return [];
+  }
 
   try {
     // Use /notifications/user/{userId}?role=... endpoint which uses GSI query (faster & paginated)
     const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`);
-    console.log('🔔 [notificationService] Response status:', response.status);
     if (!response.ok) {
-      throw new Error('Failed to fetch notifications');
+      circuitBreaker.recordFailure();
+      throw new Error(`Failed to fetch notifications (HTTP ${response.status})`);
     }
+    circuitBreaker.recordSuccess();
     const data = await response.json();
-    console.log('🔔 [notificationService] Data received:', data?.length, 'items');
     const list = data || [];
     return list.filter(n => n.type !== 'chat_message');
   } catch (error) {
-    console.error('Error getting notifications from API:', error);
+    circuitBreaker.recordFailure();
+    console.error('Error getting notifications from API:', error.message);
     throw error;
   }
 };

@@ -2806,10 +2806,24 @@ const Applications = () => {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [initialModalTab, setInitialModalTab] = useState('profile');
   const [applications, setApplications] = useState([]);
-  const [realApplications, setRealApplications] = useState([]); // Real applications from DynamoDB
+  const [realApplications, _setRealApplications] = useState(Applications._cachedApplications || []); // Real applications from DynamoDB
+  const setRealApplications = (val) => {
+    _setRealApplications(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      Applications._cachedApplications = next;
+      return next;
+    });
+  };
   const [isLoadingApplications, setIsLoadingApplications] = useState(false);
-  const [jobPosts, setJobPosts] = useState([]);
-  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [jobPosts, _setJobPosts] = useState(Applications._cachedJobPosts || []);
+  const setJobPosts = (val) => {
+    _setJobPosts(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      Applications._cachedJobPosts = next;
+      return next;
+    });
+  };
+  const [isLoadingJobs, setIsLoadingJobs] = useState(!Applications._cachedJobPosts);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [deleteJobId, setDeleteJobId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -4881,3 +4895,7 @@ const Applications = () => {
 };
 
 export default Applications;
+
+// Static cache for applications - persists across remounts for instant badge display
+Applications._cachedApplications = Applications._cachedApplications || null;
+Applications._cachedJobPosts = Applications._cachedJobPosts || null;

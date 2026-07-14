@@ -6,5 +6,5 @@ if (import.meta.env.PROD) {
   console.info = noop;
   console.debug = noop;
   console.warn = noop;
-  // Keep console.error for critical runtime issues
+  console.error = noop;
 }

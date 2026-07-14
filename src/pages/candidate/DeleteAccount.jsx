@@ -373,7 +373,7 @@ function DeleteAccount() {
               <WarningItem>
                 <div className="icon"><Info size={18} /></div>
                 <div className="text">
-                  <h4>{vi ? 'Mất danh tiếng' : 'Lose Reputation'}</h4>
+                  <h4>{vi ? 'Kinh nghiệm không sao lưu' : 'Lose Reputation'}</h4>
                   <p>{vi ? 'Điểm uy tín và lịch sử đánh giá của bạn sẽ không thể khôi phục.' : 'Your reputation points and rating history cannot be recovered.'}</p>
                 </div>
               </WarningItem>

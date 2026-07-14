@@ -7231,10 +7231,14 @@ const HRManagement = () => {
                                   comment: ratingComment
                                 };
                                 const employerConfirmedAt = new Date().toISOString();
+                                // Persist the company name onto the application so it shows in
+                                // the candidate's work history (job posts may be deleted later).
+                                const employerName = employerProfile?.companyName || user?.companyName || '';
 
                                 await applicationService.updateApplicationStatus(staffId, 'completed_pending_candidate', {
                                   employerRating,
-                                  employerConfirmedAt
+                                  employerConfirmedAt,
+                                  ...(employerName ? { employerName } : {})
                                 });
 
                                 setHrStaff(prev => prev.map(s =>

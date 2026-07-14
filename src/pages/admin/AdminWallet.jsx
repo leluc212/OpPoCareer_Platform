@@ -15,6 +15,8 @@ import {
   createWithdrawalRejectedNotification
 } from '../../services/notificationService';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
+import { useToast } from '../../hooks/useToast';
+import Toast from '../../components/Toast';
 import {
   Wallet as WalletIcon,
   TrendingUp,
@@ -1338,6 +1340,7 @@ const ReceiptCard = styled(motion.div)`
 
 const AdminWallet = () => {
   const { language } = useLanguage();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'escrow' | 'withdrawals'
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -1620,9 +1623,10 @@ const AdminWallet = () => {
           console.warn('Notification error (withdrawal approved):', notifErr.message);
         }
       }
+      toast.success(language === 'vi' ? 'Đã duyệt yêu cầu rút tiền.' : 'Withdrawal request approved.');
     } catch (err) {
       console.error('Error approving withdrawal:', err);
-      alert(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền' : 'Failed to approve withdrawal');
+      toast.error(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền. Vui lòng thử lại.' : 'Failed to approve withdrawal. Please try again.');
     }
   };
 
@@ -1647,9 +1651,10 @@ const AdminWallet = () => {
           console.warn('Notification error (withdrawal rejected):', notifErr.message);
         }
       }
+      toast.warning(language === 'vi' ? 'Đã từ chối yêu cầu rút tiền.' : 'Withdrawal request rejected.');
     } catch (err) {
       console.error('Error rejecting withdrawal:', err);
-      alert(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền' : 'Failed to reject withdrawal');
+      toast.error(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền. Vui lòng thử lại.' : 'Failed to reject withdrawal. Please try again.');
     }
   };
 
@@ -1683,10 +1688,10 @@ const AdminWallet = () => {
         console.error('Error sending approval notification:', notifyErr);
       }
 
-      alert(language === 'vi' ? 'Duyệt yêu cầu rút tiền thành công!' : 'Withdrawal request approved successfully!');
+      toast.success(language === 'vi' ? 'Đã duyệt yêu cầu rút tiền của ứng viên.' : 'Candidate withdrawal request approved.');
     } catch (err) {
       console.error('Error approving withdrawal:', err);
-      alert(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền' : 'Failed to approve withdrawal');
+      toast.error(language === 'vi' ? 'Không thể duyệt yêu cầu rút tiền. Vui lòng thử lại.' : 'Failed to approve withdrawal. Please try again.');
     }
   };
 
@@ -1724,10 +1729,10 @@ const AdminWallet = () => {
         console.error('Error sending rejection notification:', notifyErr);
       }
 
-      alert(language === 'vi' ? 'Đã từ chối yêu cầu rút tiền!' : 'Withdrawal request rejected!');
+      toast.warning(language === 'vi' ? 'Đã từ chối yêu cầu rút tiền của ứng viên. Số tiền đã được hoàn lại ví.' : 'Candidate withdrawal request rejected. The amount has been refunded.');
     } catch (err) {
       console.error('Error rejecting withdrawal:', err);
-      alert(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền' : 'Failed to reject withdrawal');
+      toast.error(language === 'vi' ? 'Không thể từ chối yêu cầu rút tiền. Vui lòng thử lại.' : 'Failed to reject withdrawal. Please try again.');
     }
   };
 
@@ -2954,6 +2959,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
         isOpen={isDevModalOpen}
         onClose={() => setIsDevModalOpen(false)}
       />
+      <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
     </DashboardLayout>
   );
 };

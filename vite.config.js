@@ -114,6 +114,24 @@ export default defineConfig({
           });
         }
       },
+      // Candidate profile API (sd7ds72m8g). The API Gateway currently returns NO CORS
+      // headers, so authenticated browser requests (which trigger a preflight because of
+      // the Authorization header) are blocked. Routing through this same-origin dev proxy
+      // avoids CORS entirely so candidate profiles load/save in local development.
+      // NOTE: This only fixes DEV. In production the API Gateway CORS must be re-enabled.
+      '/api-profile': {
+        target: 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-profile/, ''),
+        secure: false,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
+          });
+        }
+      },
       // eKYC Mock Server (local dev) — đổi target thành API Gateway khi deploy AWS
       '/api-ekyc': {
         target: 'http://localhost:3001',

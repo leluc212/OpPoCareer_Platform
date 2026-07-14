@@ -956,6 +956,24 @@ const WithdrawSuccessState = styled(SuccessState)`
   .amount-text { color: #b45309; }
 `;
 
+const PaymentDetailsTable = styled.div`
+  width: 100%;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const ConfirmDetailsTable = styled(PaymentDetailsTable)`
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  margin-top: 8px;
+  margin-bottom: 8px;
+`;
+
 const QRContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -970,17 +988,6 @@ const QRCodeImage = styled.img`
   border-radius: 16px;
   border: 4px solid #f1f5f9;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-`;
-
-const PaymentDetailsTable = styled.div`
-  width: 100%;
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 `;
 
 const DetailRow = styled.div`
@@ -1091,6 +1098,7 @@ const EmployerWallet = () => {
 
   // Withdraw modal state
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawStep, setWithdrawStep] = useState(1); // 1: Fill form, 2: Review details
   const [withdrawRawAmount, setWithdrawRawAmount] = useState('');
   const [withdrawBankName, setWithdrawBankName] = useState('');
   const [withdrawAccountNumber, setWithdrawAccountNumber] = useState('');
@@ -1226,6 +1234,7 @@ const EmployerWallet = () => {
     setWithdrawAccountName('');
     setWithdrawSuccess(false);
     setWithdrawLoading(false);
+    setWithdrawStep(1);
     setShowWithdrawModal(true);
     setTimeout(() => withdrawInputRef.current?.focus(), 120);
   };
@@ -1679,104 +1688,159 @@ const EmployerWallet = () => {
                       <Send />
                     </ModalHeadIcon>
                     <ModalHeadTitle>
-                      <h2>{language === 'vi' ? 'Rút tiền' : 'Withdraw Funds'}</h2>
-                      <p>{language === 'vi' ? 'Chuyển tiền về tài khoản ngân hàng' : 'Transfer funds to your bank account'}</p>
+                      <h2>{withdrawStep === 1 
+                        ? (language === 'vi' ? 'Rút tiền' : 'Withdraw Funds')
+                        : (language === 'vi' ? 'Xác nhận thông tin' : 'Confirm Details')}</h2>
+                      <p>{withdrawStep === 1
+                        ? (language === 'vi' ? 'Chuyển tiền về tài khoản ngân hàng' : 'Transfer funds to your bank account')
+                        : (language === 'vi' ? 'Kiểm tra kỹ trước khi gửi yêu cầu cho Admin' : 'Review details before submitting to Admin')}</p>
                     </ModalHeadTitle>
                   </WithdrawModalHead>
 
                   <ModalBody>
-                    {/* Amount */}
-                    <SectionLabel>{language === 'vi' ? 'Chọn nhanh' : 'Quick select'}</SectionLabel>
-                    <QuickAmountsGrid>
-                      {QUICK_AMOUNTS.map(amt => (
-                        <WithdrawQuickBtn
-                          key={amt}
-                          $selected={parsedWithdrawAmount === amt}
-                          onClick={() => setWithdrawRawAmount(String(amt))}
-                        >
-                          {formatQuickAmount(amt)}
-                        </WithdrawQuickBtn>
-                      ))}
-                    </QuickAmountsGrid>
+                    {withdrawStep === 1 ? (
+                      <>
+                        {/* Amount */}
+                        <SectionLabel>{language === 'vi' ? 'Chọn nhanh' : 'Quick select'}</SectionLabel>
+                        <QuickAmountsGrid>
+                          {QUICK_AMOUNTS.map(amt => (
+                            <WithdrawQuickBtn
+                              key={amt}
+                              $selected={parsedWithdrawAmount === amt}
+                              onClick={() => setWithdrawRawAmount(String(amt))}
+                            >
+                              {formatQuickAmount(amt)}
+                            </WithdrawQuickBtn>
+                          ))}
+                        </QuickAmountsGrid>
 
-                    <SectionLabel>{language === 'vi' ? 'Số tiền rút' : 'Withdraw amount'}</SectionLabel>
-                    <AmountInputWrapper>
-                      <WithdrawAmountInput
-                        ref={withdrawInputRef}
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={withdrawRawAmount ? parseInt(withdrawRawAmount).toLocaleString('vi-VN') : ''}
-                        onChange={handleWithdrawAmountInput}
-                        $invalid={withdrawRawAmount !== '' && (parsedWithdrawAmount <= 0 || withdrawExceedsBalance)}
-                      />
-                      <CurrencyLabel>VND</CurrencyLabel>
-                    </AmountInputWrapper>
+                        <SectionLabel>{language === 'vi' ? 'Số tiền rút' : 'Withdraw amount'}</SectionLabel>
+                        <AmountInputWrapper>
+                          <WithdrawAmountInput
+                            ref={withdrawInputRef}
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={withdrawRawAmount ? parseInt(withdrawRawAmount).toLocaleString('vi-VN') : ''}
+                            onChange={handleWithdrawAmountInput}
+                            $invalid={withdrawRawAmount !== '' && (parsedWithdrawAmount <= 0 || withdrawExceedsBalance)}
+                          />
+                          <CurrencyLabel>VND</CurrencyLabel>
+                        </AmountInputWrapper>
 
-                    <BalanceHint $error={withdrawExceedsBalance}>
-                      {withdrawExceedsBalance ? (
-                        <><AlertCircle />{language === 'vi' ? 'Vượt số dư khả dụng!' : 'Exceeds available balance!'}</>
-                      ) : (
-                        <><AlertCircle />{language === 'vi' ? `Số dư khả dụng: ${balance.toLocaleString('vi-VN')} VND` : `Available: ${balance.toLocaleString('vi-VN')} VND`}</>
-                      )}
-                    </BalanceHint>
+                        <BalanceHint $error={withdrawExceedsBalance}>
+                          {withdrawExceedsBalance ? (
+                            <><AlertCircle />{language === 'vi' ? 'Vượt số dư khả dụng!' : 'Exceeds available balance!'}</>
+                          ) : (
+                            <><AlertCircle />{language === 'vi' ? `Số dư khả dụng: ${balance.toLocaleString('vi-VN')} VND` : `Available: ${balance.toLocaleString('vi-VN')} VND`}</>
+                          )}
+                        </BalanceHint>
 
-                    <SectionLabel>{language === 'vi' ? 'Ngân hàng thụ hưởng' : 'Recipient Bank'}</SectionLabel>
-                    <AmountInputWrapper>
-                      <WithdrawInput
-                        type="text"
-                        placeholder={language === 'vi' ? "Ví dụ: Vietcombank, MBBank..." : "e.g. Vietcombank, MBBank..."}
-                        value={withdrawBankName}
-                        onChange={(e) => setWithdrawBankName(e.target.value)}
-                        style={{ marginBottom: '12px' }}
-                      />
-                    </AmountInputWrapper>
+                        <SectionLabel>{language === 'vi' ? 'Ngân hàng thụ hưởng' : 'Recipient Bank'}</SectionLabel>
+                        <AmountInputWrapper>
+                          <WithdrawInput
+                            type="text"
+                            placeholder={language === 'vi' ? "Ví dụ: Vietcombank, MBBank..." : "e.g. Vietcombank, MBBank..."}
+                            value={withdrawBankName}
+                            onChange={(e) => setWithdrawBankName(e.target.value)}
+                            style={{ marginBottom: '12px' }}
+                          />
+                        </AmountInputWrapper>
 
-                    <SectionLabel>{language === 'vi' ? 'Số tài khoản' : 'Account Number'}</SectionLabel>
-                    <AmountInputWrapper>
-                      <WithdrawInput
-                        type="text"
-                        placeholder={language === 'vi' ? "Nhập số tài khoản" : "Enter account number"}
-                        value={withdrawAccountNumber}
-                        onChange={(e) => setWithdrawAccountNumber(e.target.value)}
-                        style={{ marginBottom: '12px' }}
-                      />
-                    </AmountInputWrapper>
+                        <SectionLabel>{language === 'vi' ? 'Số tài khoản' : 'Account Number'}</SectionLabel>
+                        <AmountInputWrapper>
+                          <WithdrawInput
+                            type="text"
+                            placeholder={language === 'vi' ? "Nhập số tài khoản" : "Enter account number"}
+                            value={withdrawAccountNumber}
+                            onChange={(e) => setWithdrawAccountNumber(e.target.value)}
+                            style={{ marginBottom: '12px' }}
+                          />
+                        </AmountInputWrapper>
 
-                    <SectionLabel>{language === 'vi' ? 'Tên chủ tài khoản' : 'Account Holder'}</SectionLabel>
-                    <AmountInputWrapper>
-                      <WithdrawInput
-                        type="text"
-                        placeholder={language === 'vi' ? "NHAP TEN KHONG DAU" : "ENTER NAME IN ALL CAPS"}
-                        value={withdrawAccountName}
-                        onChange={(e) => setWithdrawAccountName(e.target.value.toUpperCase())}
-                        style={{ marginBottom: '12px' }}
-                      />
-                    </AmountInputWrapper>
-
+                        <SectionLabel>{language === 'vi' ? 'Tên chủ tài khoản' : 'Account Holder'}</SectionLabel>
+                        <AmountInputWrapper>
+                          <WithdrawInput
+                            type="text"
+                            placeholder={language === 'vi' ? "NHAP TEN KHONG DAU" : "ENTER NAME IN ALL CAPS"}
+                            value={withdrawAccountName}
+                            onChange={(e) => setWithdrawAccountName(e.target.value.toUpperCase())}
+                            style={{ marginBottom: '12px' }}
+                          />
+                        </AmountInputWrapper>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ textAlign: 'center', marginBottom: '16px', padding: '0 4px' }}>
+                          <p style={{ fontSize: '13.5px', color: '#64748b', fontWeight: '500', lineHeight: '1.5' }}>
+                            {language === 'vi' 
+                              ? 'Vui lòng kiểm tra lại tất cả thông tin giao dịch dưới đây trước khi gửi yêu cầu lên Admin.' 
+                              : 'Please check all the transaction details below before sending the request to Admin.'}
+                          </p>
+                        </div>
+                        <ConfirmDetailsTable>
+                          <DetailRow style={{ padding: '4px 0' }}>
+                            <span className="label">{language === 'vi' ? 'Số tiền rút' : 'Withdraw Amount'}</span>
+                            <span className="value" style={{ color: '#b45309', fontSize: '15px', fontWeight: '800' }}>
+                              {parsedWithdrawAmount.toLocaleString('vi-VN')} VND
+                            </span>
+                          </DetailRow>
+                          <DetailRow style={{ padding: '4px 0' }}>
+                            <span className="label">{language === 'vi' ? 'Ngân hàng thụ hưởng' : 'Recipient Bank'}</span>
+                            <span className="value" style={{ color: '#1e293b', fontWeight: '600' }}>{withdrawBankName}</span>
+                          </DetailRow>
+                          <DetailRow style={{ padding: '4px 0' }}>
+                            <span className="label">{language === 'vi' ? 'Số tài khoản' : 'Account Number'}</span>
+                            <span className="value" style={{ color: '#1e293b', fontWeight: '600' }}>{withdrawAccountNumber}</span>
+                          </DetailRow>
+                          <DetailRow style={{ padding: '4px 0' }}>
+                            <span className="label">{language === 'vi' ? 'Tên chủ tài khoản' : 'Account Holder'}</span>
+                            <span className="value" style={{ color: '#1e293b', fontWeight: '700', textTransform: 'uppercase' }}>{withdrawAccountName}</span>
+                          </DetailRow>
+                        </ConfirmDetailsTable>
+                      </>
+                    )}
                   </ModalBody>
 
                   <ModalFooter>
-                    <CancelBtn onClick={() => !withdrawLoading && setShowWithdrawModal(false)}>
-                      {language === 'vi' ? 'Hủy' : 'Cancel'}
-                    </CancelBtn>
-                    <WithdrawConfirmBtn
-                      onClick={handleConfirmWithdraw}
-                      disabled={withdrawLoading || !withdrawFormValid}
-                      whileTap={{ scale: 0.97 }}
-                    >
-                      {withdrawLoading ? (
-                        <LoadingSpinner
-                          animate={{ rotate: 360 }}
-                          transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }}
-                        />
-                      ) : (
-                        <>
+                    {withdrawStep === 1 ? (
+                      <>
+                        <CancelBtn onClick={() => !withdrawLoading && setShowWithdrawModal(false)}>
+                          {language === 'vi' ? 'Hủy' : 'Cancel'}
+                        </CancelBtn>
+                        <WithdrawConfirmBtn
+                          onClick={() => setWithdrawStep(2)}
+                          disabled={!withdrawFormValid}
+                          whileTap={{ scale: 0.97 }}
+                        >
                           <Send />
                           {language === 'vi' ? 'Xác nhận rút tiền' : 'Confirm Withdrawal'}
-                        </>
-                      )}
-                    </WithdrawConfirmBtn>
+                        </WithdrawConfirmBtn>
+                      </>
+                    ) : (
+                      <>
+                        <CancelBtn onClick={() => !withdrawLoading && setWithdrawStep(1)}>
+                          {language === 'vi' ? 'Quay lại' : 'Back'}
+                        </CancelBtn>
+                        <WithdrawConfirmBtn
+                          onClick={handleConfirmWithdraw}
+                          disabled={withdrawLoading || !withdrawFormValid}
+                          whileTap={{ scale: 0.97 }}
+                        >
+                          {withdrawLoading ? (
+                            <LoadingSpinner
+                              animate={{ rotate: 360 }}
+                              transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }}
+                            />
+                          ) : (
+                            <>
+                              <Send />
+                              {language === 'vi' ? 'Gửi yêu cầu cho Admin' : 'Send Request to Admin'}
+                            </>
+                          )}
+                        </WithdrawConfirmBtn>
+                      </>
+                    )}
                   </ModalFooter>
                 </>
               )}

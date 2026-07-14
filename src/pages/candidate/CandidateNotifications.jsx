@@ -631,15 +631,18 @@ function CandidateNotifications() {
         const title = language === 'vi' ? notif.title : (notif.titleEn || notif.title);
         const message = language === 'vi' ? notif.message : (notif.messageEn || notif.message);
         let parsedData = {};
-        let isQuickJob = true;
         if (notif.data) {
           if (typeof notif.data === 'string') {
-            try { parsedData = JSON.parse(notif.data); isQuickJob = parsedData.isQuickJob ?? true; } catch { }
+            try { parsedData = JSON.parse(notif.data); } catch { }
           } else {
             parsedData = notif.data;
-            isQuickJob = notif.data.isQuickJob ?? true;
           }
         }
+        // Only job-related notifications carry an explicit isQuickJob boolean AND a job reference.
+        // Non-job notifications (rút tiền, chat, hệ thống...) must NOT show a Tiêu chuẩn/Tuyển gấp tag.
+        const isQuickJob = parsedData.isQuickJob === true;
+        const showJobTag = typeof parsedData.isQuickJob === 'boolean'
+          && !!(parsedData.jobId || parsedData.jobTitle);
         return {
           id: notif.notificationId,
           type: notif.type || 'system',
@@ -647,6 +650,7 @@ function CandidateNotifications() {
           color: getColorForType(notif.type, title, message),
           data: parsedData,
           isQuickJob,
+          showJobTag,
           title,
           message,
           createdAt: notif.createdAt,
@@ -908,7 +912,7 @@ function CandidateNotifications() {
                   <h3>
                     {notif.title}
                     {notif.unread && <span className="unread-badge" />}
-                    {(notif.isQuickJob === false) && (
+                    {notif.showJobTag && (notif.isQuickJob === false) && (
                       <span style={{
                         marginLeft: '6px',
                         fontSize: '10px',
@@ -924,16 +928,16 @@ function CandidateNotifications() {
                         {language === 'vi' ? 'Tiêu Chuẩn' : 'Standard'}
                       </span>
                     )}
-                    {notif.isQuickJob === true && (
+                    {notif.showJobTag && (notif.isQuickJob === true) && (
                       <span style={{
                         marginLeft: '6px',
                         fontSize: '10px',
                         fontWeight: '700',
                         padding: '2px 7px',
                         borderRadius: '9999px',
-                        background: 'rgba(30,64,175,0.1)',
-                        color: '#1e40af',
-                        border: '1px solid rgba(30,64,175,0.2)',
+                        background: 'rgba(245,158,11,0.12)',
+                        color: '#b45309',
+                        border: '1px solid rgba(245,158,11,0.3)',
                         verticalAlign: 'middle',
                         whiteSpace: 'nowrap',
                       }}>

@@ -1759,20 +1759,24 @@ const CandidateDashboard = () => {
       }
 
       // Bug 6 fix: detect recently-replaced applications để hiện banner thông báo cho candidate
-      // Dùng field replacedNoticeDismissed trong DB để dismissed state tồn tại vĩnh viễn
-      const recentlyReplaced = apps.find(app =>
+      // Dùng field replacedNoticeDismissed trong DB để dismissed state tồn tại vĩnh viễn.
+      // Gom TẤT CẢ đơn bị thay thế chưa dismiss — khi bấm X sẽ tắt hết cùng lúc và không hiện lại.
+      const undismissedReplaced = apps.filter(app =>
         (app.status === 'ĐÃ_BỊ_THAY_THẾ' || app.status === 'change_approved') &&
         !app.replacedNoticeDismissed
       );
-      if (recentlyReplaced) {
+      if (undismissedReplaced.length > 0) {
+        const first = undismissedReplaced[0];
         const replacedJob = finalAllJobs.find(j =>
-          (j.idJob || j.id || j.jobID) === recentlyReplaced.jobId
+          (j.idJob || j.id || j.jobID) === first.jobId
         );
         setReplacedNotice({
-          applicationId: recentlyReplaced.applicationId,
-          jobTitle: replacedJob?.title || recentlyReplaced.jobTitle || 'Ca làm',
-          replacedAt: recentlyReplaced.replacedAt || recentlyReplaced.updatedAt,
-          rawStatus: recentlyReplaced.status,
+          applicationId: first.applicationId,
+          jobTitle: replacedJob?.title || first.jobTitle || 'Ca làm',
+          replacedAt: first.replacedAt || first.updatedAt,
+          rawStatus: first.status,
+          // All undismissed replaced apps, so one X dismisses them all permanently
+          allApplications: undismissedReplaced.map(a => ({ applicationId: a.applicationId, rawStatus: a.status })),
         });
       } else {
         setReplacedNotice(null);
@@ -2274,14 +2278,20 @@ const CandidateDashboard = () => {
                 </div>
                 <button
                   onClick={async () => {
-                    // Dismiss: lưu replacedNoticeDismissed=true vào DB
-                    setReplacedNotice(null); // ẩn ngay lập tức cho UX tốt
+                    // Dismiss: mark ALL currently-replaced apps as dismissed in DB so the banner
+                    // never comes back (even after logout/login). Hide immediately for good UX.
+                    const targets = (replacedNotice.allApplications && replacedNotice.allApplications.length > 0)
+                      ? replacedNotice.allApplications
+                      : [{ applicationId: replacedNotice.applicationId, rawStatus: replacedNotice.rawStatus }];
+                    setReplacedNotice(null);
                     try {
-                      await applicationService.updateApplicationStatus(
-                        replacedNotice.applicationId,
-                        replacedNotice.rawStatus || 'ĐÃ_BỊ_THAY_THẾ',
-                        { replacedNoticeDismissed: true }
-                      );
+                      await Promise.all(targets.map(t =>
+                        applicationService.updateApplicationStatus(
+                          t.applicationId,
+                          t.rawStatus || 'ĐÃ_BỊ_THAY_THẾ',
+                          { replacedNoticeDismissed: true }
+                        )
+                      ));
                     } catch (err) {
                       console.error('Could not save notice dismissed state:', err);
                     }

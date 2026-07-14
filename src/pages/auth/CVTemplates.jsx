@@ -16,6 +16,8 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { s3Images } from '../../utils/s3Images';
+import { useToast } from '../../hooks/useToast';
+import Toast from '../../components/Toast';
 
 const fadeUp = keyframes`
   from { opacity: 0; transform: translateY(20px); }
@@ -189,7 +191,12 @@ const LoginNote = styled.div`
   p {
     font-size: 0.9rem;
     color: ${p => p.$isDark ? '#94a3b8' : '#64748b'};
-    margin-bottom: 16px;
+    margin: 0 auto 16px;
+    max-width: 480px;
+    line-height: 1.6;
+    text-align: left;
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 `;
 
@@ -217,6 +224,9 @@ const AICard = styled.div`
     max-width: 500px;
     margin: 0 auto;
     line-height: 1.6;
+    text-align: left;
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 `;
 
@@ -551,14 +561,14 @@ const GlobalPrintStyle = createGlobalStyle`
   #cv-preview-paper {
     position: relative !important;
     width: 210mm !important;
-    height: 297mm !important;
+    min-height: 297mm !important;
     box-sizing: border-box !important;
     border: none !important;
     border-radius: 0 !important;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
     margin: 0 auto !important;
     background: white !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
 
   @media print {
@@ -850,12 +860,98 @@ const SkillBadge = styled.span`
   }
 `;
 
+const ConfirmOverlay = styled(motion.div)`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+`;
+
+const ConfirmBox = styled(motion.div)`
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 32px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  text-align: center;
+`;
+
+const ConfirmIcon = styled.div`
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dbeafe, #eff6ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  svg {
+    width: 28px;
+    height: 28px;
+    color: #2563eb;
+  }
+`;
+
+const ConfirmTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 10px 0;
+`;
+
+const ConfirmMessage = styled.p`
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 28px 0;
+`;
+
+const ConfirmActions = styled.div`
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+`;
+
+const ConfirmBtn = styled.button`
+  padding: 12px 28px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+
+  ${p => p.$primary ? `
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+    }
+  ` : `
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    &:hover {
+      background: #e2e8f0;
+    }
+  `}
+`;
+
 const CVTemplates = () => {
   const { language } = useLanguage();
   const { isDarkMode } = useTheme();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const vi = language === 'vi';
+  const toast = useToast();
   
   const [isEditing, setIsEditing] = useState(false);
   const [selectedStyleIndex, setSelectedStyleIndex] = useState(0);
@@ -868,7 +964,41 @@ const CVTemplates = () => {
   const [aiError, setAiError] = useState('');
   const [savingToProfile, setSavingToProfile] = useState(false);
   const [aiGenLoading, setAiGenLoading] = useState(false);
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  const [errorModal, setErrorModal] = useState({ show: false, title: '', message: '' });
   const [aiGenError, setAiGenError] = useState('');
+
+  // Helper: render element to canvas with oklch CSS error handling
+  const safeHtml2Canvas = async (element, scale = 2) => {
+    const originalAlert = window.alert;
+    window.alert = (msg) => console.warn('[html2canvas suppressed]:', msg);
+    
+    try {
+      const canvas = await html2canvas(element, {
+        scale,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        onclone: (clonedDoc) => {
+          // Remove all stylesheets from the clone to avoid oklch parsing issues
+          // The inline styles on elements are preserved and sufficient for CV rendering
+          const externalStyles = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
+          externalStyles.forEach(s => s.remove());
+          // Remove <style> tags that contain oklch
+          const inlineStyles = clonedDoc.querySelectorAll('style');
+          inlineStyles.forEach(style => {
+            if (style.textContent && style.textContent.includes('oklch')) {
+              style.remove();
+            }
+          });
+        }
+      });
+      return canvas;
+    } finally {
+      window.alert = originalAlert;
+    }
+  };
 
   const simpleTemplates = [
     {
@@ -914,19 +1044,30 @@ const CVTemplates = () => {
   };
 
   const [cvData, setCvData] = useState(defaultCVData);
+  // Header avatar = the user's PROFILE avatar (profileImage). It is kept separate from
+  // the CV photo (cvData.avatar) so changing the CV photo never affects this header avatar.
+  const [profileAvatar, setProfileAvatar] = useState(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const profile = await candidateProfileService.getMyProfile();
         if (profile) {
+          setProfileAvatar(profile.profileImage || null);
           setCvData(prev => ({
             ...prev,
-            fullName: profile.fullName || '',
-            email: profile.email || '',
-            phone: profile.phone || '',
-            address: profile.location || '',
-            avatar: profile.profileImage || null,
+            fullName: profile.fullName || prev.fullName,
+            email: profile.email || prev.email,
+            phone: profile.phone || prev.phone,
+            address: profile.location || prev.address,
+            title: profile.title || prev.title,
+            objective: profile.bio || prev.objective,
+            // CV photo defaults to the profile avatar (profileImage) so the CV is
+            // pre-filled with the user's profile picture. If the user has set a
+            // custom CV photo, that (cvAvatar) takes precedence. Changing the CV photo
+            // only writes to cvAvatar, so it never changes the profile avatar.
+            avatar: profile.cvAvatar || profile.profileImage || prev.avatar,
+            skills: (profile.skills && profile.skills.length > 0) ? profile.skills : prev.skills
           }));
         }
       } catch (err) {
@@ -940,12 +1081,21 @@ const CVTemplates = () => {
     setCvData(prev => ({ ...prev, [field]: val }));
   };
 
+  // Persist ONLY the CV photo (cvAvatar) to the profile record — never profileImage.
+  // This keeps the CV photo and the profile avatar completely independent.
+  const persistCvAvatar = (value) => {
+    candidateProfileService
+      .updateProfile({ cvAvatar: value })
+      .catch(err => console.warn('Could not persist CV avatar:', err));
+  };
+
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setCvData(prev => ({ ...prev, avatar: reader.result }));
+        persistCvAvatar(reader.result);
       };
       reader.readAsDataURL(file);
     }
@@ -953,6 +1103,7 @@ const CVTemplates = () => {
 
   const removeAvatar = () => {
     setCvData(prev => ({ ...prev, avatar: null }));
+    persistCvAvatar(null);
   };
 
   const handleExperienceChange = (index, field, val) => {
@@ -1095,114 +1246,263 @@ const CVTemplates = () => {
     }));
   };
 
+  // Helper: check if CV data contains AI suggestion placeholders that haven't been edited
+  const hasAiPlaceholders = () => {
+    const placeholderPatterns = [
+      '(Gợi ý)', '(Suggested)',
+      '[Gợi ý cải thiện từ AI]', '[AI Improvement Suggestion]',
+      'Tên công ty (Gợi ý)', 'Company Name (Suggested)',
+      'Chức danh (Gợi ý)', 'Job Title (Suggested)',
+      'Trường học (Gợi ý)', 'School Name (Suggested)',
+      'Bằng cấp / Ngành học (Gợi ý)', 'Degree / Major (Suggested)',
+    ];
+    
+    const checkText = (text) => {
+      if (!text) return false;
+      return placeholderPatterns.some(p => text.includes(p));
+    };
+    
+    // Check experiences
+    for (const exp of (cvData.experiences || [])) {
+      if (checkText(exp.company) || checkText(exp.role) || checkText(exp.description)) return true;
+    }
+    // Check educations
+    for (const edu of (cvData.educations || [])) {
+      if (checkText(edu.school) || checkText(edu.degree) || checkText(edu.description)) return true;
+    }
+    return false;
+  };
+
+  // Helper: remove all AI suggestion placeholders from CV data
+  const clearAiSuggestions = () => {
+    setCvData(prev => {
+      const cleanExperiences = (prev.experiences || []).filter(exp => {
+        // Remove entries that are entirely AI placeholders
+        const isPlaceholder = (exp.company || '').includes('(Gợi ý)') || (exp.company || '').includes('(Suggested)');
+        return !isPlaceholder;
+      }).map(exp => ({
+        ...exp,
+        description: (exp.description || '')
+          .replace(/\n?\n?\[Gợi ý cải thiện từ AI\]:.*$/gm, '')
+          .replace(/\n?\n?\[AI Improvement Suggestion\]:.*$/gm, '')
+          .trim()
+      }));
+
+      const cleanEducations = (prev.educations || []).filter(edu => {
+        const isPlaceholder = (edu.school || '').includes('(Gợi ý)') || (edu.school || '').includes('(Suggested)');
+        return !isPlaceholder;
+      }).map(edu => ({
+        ...edu,
+        description: (edu.description || '')
+          .replace(/\n?\n?\[Gợi ý cải thiện từ AI\]:.*$/gm, '')
+          .replace(/\n?\n?\[AI Improvement Suggestion\]:.*$/gm, '')
+          .trim()
+      }));
+
+      return {
+        ...prev,
+        experiences: cleanExperiences.length > 0 ? cleanExperiences : [],
+        educations: cleanEducations.length > 0 ? cleanEducations : [],
+      };
+    });
+    toast.success(vi ? 'Đã xoá tất cả gợi ý từ AI.' : 'All AI suggestions removed.');
+  };
+
   const handleDownloadPDF = async () => {
+    if (aiLoading) {
+      toast.warning(vi ? 'AI đang phân tích CV của bạn. Vui lòng đợi hoàn tất trước khi tải xuống.' : 'AI is analyzing your CV. Please wait until it finishes before downloading.');
+      return;
+    }
+    if (aiAnalysis) {
+      toast.info(vi ? 'Bạn có đề xuất từ AI chưa áp dụng. Hãy xem xét áp dụng hoặc đóng trước khi tải xuống nhé!' : 'You have unapplied AI suggestions. Please review or dismiss them before downloading.');
+      return;
+    }
+    if (hasAiPlaceholders()) {
+      setErrorModal({
+        show: true,
+        title: vi ? 'CV chưa sẵn sàng' : 'CV Not Ready',
+        message: vi
+          ? 'CV của bạn vẫn còn nội dung gợi ý từ AI chưa được chỉnh sửa (ví dụ: "Tên công ty (Gợi ý)", "Chức danh (Gợi ý)"...). Vui lòng cập nhật các mục này bằng thông tin thật của bạn trước khi tải xuống.'
+          : 'Your CV still contains unedited AI suggestion placeholders. Please update these with your real information before downloading.',
+      });
+      return;
+    }
     try {
       const element = document.getElementById('cv-preview-paper');
       if (!element) {
-        alert(vi ? 'Không tìm thấy khung CV để tải xuống.' : 'CV preview container not found.');
+        toast.error(vi ? 'Không tìm thấy khung CV để tải xuống. Vui lòng thử lại.' : 'CV preview container not found. Please try again.');
         return;
       }
 
-      console.log('Generating PDF...');
-
-      const canvas = await html2canvas(element, {
-        scale: 2, // High resolution
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const canvas = await safeHtml2Canvas(element, 2);
       
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      // A4 dimensions: 210mm x 297mm
-      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      if (imgHeight <= pageHeight) {
+        // Single page
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+      } else {
+        // Multi-page: slice canvas into A4-sized pages
+        const totalPages = Math.ceil(imgHeight / pageHeight);
+        for (let page = 0; page < totalPages; page++) {
+          if (page > 0) pdf.addPage();
+          const srcY = page * (canvas.height / totalPages);
+          const srcH = canvas.height / totalPages;
+          
+          // Create a temporary canvas for this page slice
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = srcH;
+          const ctx = pageCanvas.getContext('2d');
+          ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+          
+          pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, imgWidth, pageHeight, undefined, 'FAST');
+        }
+      }
       
       const fileName = cvData.fullName 
         ? `CV_${cvData.fullName.replace(/\s+/g, '_')}.pdf`
         : 'CV.pdf';
-        
       pdf.save(fileName);
+      toast.success(vi ? 'Tải xuống PDF thành công!' : 'PDF downloaded successfully!');
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert(vi ? 'Có lỗi xảy ra khi tải xuống PDF. Vui lòng thử lại.' : 'Failed to download PDF. Please try again.');
+      toast.error(vi ? 'Có lỗi xảy ra khi tải xuống PDF. Vui lòng thử lại.' : 'Failed to download PDF. Please try again.');
     }
   };
 
   const handleDownloadJPG = async () => {
+    if (aiLoading) {
+      toast.warning(vi ? 'AI đang phân tích CV của bạn. Vui lòng đợi hoàn tất trước khi tải xuống.' : 'AI is analyzing your CV. Please wait until it finishes before downloading.');
+      return;
+    }
+    if (aiAnalysis) {
+      toast.info(vi ? 'Bạn có đề xuất từ AI chưa áp dụng. Hãy xem xét áp dụng hoặc đóng trước khi tải xuống nhé!' : 'You have unapplied AI suggestions. Please review or dismiss them before downloading.');
+      return;
+    }
+    if (hasAiPlaceholders()) {
+      setErrorModal({
+        show: true,
+        title: vi ? 'CV chưa sẵn sàng' : 'CV Not Ready',
+        message: vi
+          ? 'CV của bạn vẫn còn nội dung gợi ý từ AI chưa được chỉnh sửa (ví dụ: "Tên công ty (Gợi ý)", "Chức danh (Gợi ý)"...). Vui lòng cập nhật các mục này bằng thông tin thật của bạn trước khi tải xuống.'
+          : 'Your CV still contains unedited AI suggestion placeholders. Please update these with your real information before downloading.',
+      });
+      return;
+    }
     try {
       const element = document.getElementById('cv-preview-paper');
       if (!element) {
-        alert(vi ? 'Không tìm thấy khung CV để tải xuống.' : 'CV preview container not found.');
+        toast.error(vi ? 'Không tìm thấy khung CV để tải xuống. Vui lòng thử lại.' : 'CV preview container not found. Please try again.');
         return;
       }
 
-      console.log('Generating JPG...');
-
-      const canvas = await html2canvas(element, {
-        scale: 2, // High resolution
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false
-      });
-
+      const canvas = await safeHtml2Canvas(element, 2);
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
       
       const link = document.createElement('a');
       link.href = imgData;
-      
       const fileName = cvData.fullName 
         ? `CV_${cvData.fullName.replace(/\s+/g, '_')}.jpg`
         : 'CV.jpg';
-        
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      toast.success(vi ? 'Tải xuống JPG thành công!' : 'JPG downloaded successfully!');
     } catch (error) {
       console.error('Error generating JPG:', error);
-      alert(vi ? 'Có lỗi xảy ra khi tải xuống JPG. Vui lòng thử lại.' : 'Failed to download JPG. Please try again.');
+      toast.error(vi ? 'Có lỗi xảy ra khi tải xuống JPG. Vui lòng thử lại.' : 'Failed to download JPG. Please try again.');
     }
   };
 
   const handleSaveToProfile = async () => {
+    if (aiLoading) {
+      toast.warning(vi ? 'AI đang phân tích CV của bạn. Vui lòng đợi hoàn tất trước khi lưu.' : 'AI is analyzing your CV. Please wait until it finishes before saving.');
+      return;
+    }
+    if (aiAnalysis) {
+      toast.info(vi ? 'Bạn có đề xuất từ AI chưa áp dụng. Hãy xem xét áp dụng hoặc đóng trước khi lưu hồ sơ nhé!' : 'You have unapplied AI suggestions. Please review or dismiss them before saving.');
+      return;
+    }
+    if (hasAiPlaceholders()) {
+      setErrorModal({
+        show: true,
+        title: vi ? 'CV chưa sẵn sàng' : 'CV Not Ready',
+        message: vi
+          ? 'CV của bạn vẫn còn nội dung gợi ý từ AI chưa được chỉnh sửa (ví dụ: "Tên công ty (Gợi ý)", "Chức danh (Gợi ý)"...). Vui lòng cập nhật các mục này bằng thông tin thật của bạn trước khi lưu.'
+          : 'Your CV still contains unedited AI suggestion placeholders. Please update these with your real information before saving.',
+      });
+      return;
+    }
     setSavingToProfile(true);
     try {
       const element = document.getElementById('cv-preview-paper');
       if (!element) {
         throw new Error(vi ? 'Không tìm thấy bản xem trước CV.' : 'CV preview not found.');
       }
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      });
+
+      const canvas = await safeHtml2Canvas(element, 2);
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      if (imgHeight <= pageHeight) {
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+      } else {
+        const totalPages = Math.ceil(imgHeight / pageHeight);
+        for (let page = 0; page < totalPages; page++) {
+          if (page > 0) pdf.addPage();
+          const srcY = page * (canvas.height / totalPages);
+          const srcH = canvas.height / totalPages;
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = srcH;
+          const ctx = pageCanvas.getContext('2d');
+          ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+          pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, imgWidth, pageHeight, undefined, 'FAST');
+        }
+      }
 
       const session = await fetchAuthSession();
       const userId = session.tokens?.idToken?.payload?.sub;
       if (!userId) {
-        throw new Error(vi ? 'Không tìm thấy phiên đăng nhập.' : 'Login session not found.');
+        throw new Error(vi ? 'Không tìm thấy phiên đăng nhập. Vui lòng đăng nhập lại.' : 'Login session not found. Please log in again.');
       }
       const fileName = cvData.fullName
         ? `CV_${cvData.fullName.replace(/\s+/g, '_')}.pdf`
         : 'CV.pdf';
       const file = new File([pdf.output('blob')], fileName, { type: 'application/pdf' });
       await uploadCV(userId, file);
-      alert(vi ? 'Đã tạo và lưu CV vào hồ sơ.' : 'CV created and saved to your profile.');
+      toast.success(vi ? 'Đã tạo và lưu CV vào hồ sơ thành công!' : 'CV created and saved to your profile.');
+      // Route to the candidate profile page and scroll straight to the CV / Hồ sơ section
+      setTimeout(() => navigate('/candidate/profile', { state: { focusCv: true } }), 1200);
     } catch (error) {
       console.error('Error saving CV to profile:', error);
-      alert(error.message || (vi ? 'Không thể lưu CV.' : 'Unable to save CV.'));
+      const errMsg = error.message || '';
+      if (errMsg.toLowerCase().includes('maximum') || errMsg.toLowerCase().includes('3 cv')) {
+        setErrorModal({
+          show: true,
+          title: vi ? 'Không thể lưu CV' : 'Cannot Save CV',
+          message: vi
+            ? 'Bạn đã đạt giới hạn tối đa 3 CV trong hồ sơ. Vui lòng xoá bớt một CV cũ trước khi lưu CV mới.'
+            : 'You have reached the maximum limit of 3 CVs. Please delete an existing CV before saving a new one.',
+        });
+      } else {
+        setErrorModal({
+          show: true,
+          title: vi ? 'Lỗi lưu CV' : 'Error Saving CV',
+          message: vi
+            ? 'Không thể lưu CV vào hồ sơ. Vui lòng thử lại sau hoặc liên hệ hỗ trợ nếu lỗi tiếp tục xảy ra.'
+            : 'Unable to save CV to your profile. Please try again or contact support if the issue persists.',
+        });
+      }
     } finally {
       setSavingToProfile(false);
     }
@@ -1326,7 +1626,7 @@ const CVTemplates = () => {
             <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>💡</span>
             <div>
               <strong style={{ display: 'block', marginBottom: 2 }}>
-                {vi ? 'Gợi ý cải thiện từ AI:' : 'AI Improvement Suggestion:'}
+                {vi ? 'Gợi ý cải thiện:' : 'Improvement Suggestion:'}
               </strong>
               {suggestionText}
             </div>
@@ -1360,7 +1660,7 @@ const CVTemplates = () => {
             <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>💡</span>
             <div>
               <strong style={{ display: 'block', marginBottom: 2 }}>
-                {vi ? 'Gợi ý cải thiện từ AI:' : 'AI Improvement Suggestion:'}
+                {vi ? 'Gợi ý cải thiện:' : 'Improvement Suggestion:'}
               </strong>
               {suggestionText}
             </div>
@@ -1374,10 +1674,12 @@ const CVTemplates = () => {
 
   const applyAiSuggestions = () => {
     if (!aiAnalysis) return;
-    const confirmed = window.confirm(vi
-      ? 'Áp dụng mục tiêu nghề nghiệp, kỹ năng và các đề xuất cải thiện vào CV?'
-      : 'Apply the AI-suggested objective, skills, and improvement suggestions to your CV?');
-    if (!confirmed) return;
+    setShowApplyConfirm(true);
+  };
+
+  const confirmApplyAiSuggestions = () => {
+    setShowApplyConfirm(false);
+    if (!aiAnalysis) return;
 
     setCvData((current) => {
       // Apply experience suggestions
@@ -1613,7 +1915,7 @@ const CVTemplates = () => {
                 {vi ? 'Kỹ năng' : 'Skills'}
                 <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {data.skills.map(s => (
                   <SkillTag key={s} $color="#1a62ff">{s}</SkillTag>
                 ))}
@@ -1922,9 +2224,18 @@ const CVTemplates = () => {
             >
               <Star size={16} />
               {aiLoading
-                ? (vi ? 'AI đang phân tích...' : 'AI is analyzing...')
-                : (vi ? 'Phân tích bằng AI' : 'Analyze with AI')}
+                ? (vi ? 'Đang phân tích...' : 'Analyzing...')
+                : (vi ? 'Phân tích CV' : 'Analyze CV')}
             </PrintBtn>
+            {hasAiPlaceholders() && (
+              <PrintBtn
+                onClick={clearAiSuggestions}
+                style={{ background: '#ef4444', boxShadow: '0 4px 12px rgba(239,68,68,0.2)' }}
+              >
+                <X size={16} />
+                {vi ? 'Xoá gợi ý' : 'Clear tips'}
+              </PrintBtn>
+            )}
             <PrintBtn
               onClick={handleSaveToProfile}
               disabled={savingToProfile}
@@ -2523,10 +2834,79 @@ const CVTemplates = () => {
                           </p>
                         </div>
                       )}
-                      <ModalUseBtn onClick={applyAiSuggestions} style={{ width: '100%', margin: '22px 0 0' }}>
-                        <Star size={17} />
-                        {vi ? 'Áp dụng đề xuất vào CV' : 'Apply suggestions'}
-                      </ModalUseBtn>
+                      {!showApplyConfirm ? (
+                        <ModalUseBtn onClick={() => setShowApplyConfirm(true)} style={{ width: '100%', margin: '22px 0 0' }}>
+                          <Star size={17} />
+                          {vi ? 'Áp dụng đề xuất vào CV' : 'Apply suggestions'}
+                        </ModalUseBtn>
+                      ) : (
+                        <div style={{
+                          marginTop: '22px',
+                          padding: '20px',
+                          borderRadius: '16px',
+                          background: 'linear-gradient(135deg, #eff6ff, #f0f4ff)',
+                          border: '1.5px solid #bfdbfe',
+                          textAlign: 'center'
+                        }}>
+                          <div style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '50%',
+                            background: '#dbeafe',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 14px',
+                          }}>
+                            <Star size={22} color="#2563eb" />
+                          </div>
+                          <p style={{ fontSize: '14px', fontWeight: 700, color: '#1e3a8a', margin: '0 0 8px' }}>
+                            {vi ? 'Xác nhận áp dụng đề xuất AI?' : 'Confirm applying AI suggestions?'}
+                          </p>
+                          <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 18px', lineHeight: 1.6 }}>
+                            {vi
+                              ? 'Mục tiêu nghề nghiệp, kỹ năng và đề xuất cải thiện sẽ được áp dụng vào CV. Bạn vẫn có thể chỉnh sửa sau.'
+                              : 'Objective, skills and improvement suggestions will be applied. You can still edit afterwards.'}
+                          </p>
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setShowApplyConfirm(false)}
+                              style={{
+                                padding: '10px 24px',
+                                borderRadius: '10px',
+                                border: '1px solid #e2e8f0',
+                                background: '#f8fafc',
+                                color: '#475569',
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                              }}
+                            >
+                              {vi ? 'Huỷ' : 'Cancel'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={confirmApplyAiSuggestions}
+                              style={{
+                                padding: '10px 24px',
+                                borderRadius: '10px',
+                                border: 'none',
+                                background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                                color: '#ffffff',
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                              }}
+                            >
+                              {vi ? 'Áp dụng ngay' : 'Apply Now'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -2534,6 +2914,43 @@ const CVTemplates = () => {
             </ModalOverlay>
           )}
         </AnimatePresence>
+
+        {/* Error Modal - Editing mode */}
+        <AnimatePresence>
+          {errorModal.show && (
+            <ConfirmOverlay
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setErrorModal({ show: false, title: '', message: '' })}
+            >
+              <ConfirmBox
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                onClick={e => e.stopPropagation()}
+              >
+                <ConfirmIcon style={{ background: 'linear-gradient(135deg, #fee2e2, #fef2f2)' }}>
+                  <X style={{ color: '#ef4444' }} />
+                </ConfirmIcon>
+                <ConfirmTitle>{errorModal.title}</ConfirmTitle>
+                <ConfirmMessage>{errorModal.message}</ConfirmMessage>
+                <ConfirmActions>
+                  <ConfirmBtn
+                    $primary
+                    type="button"
+                    onClick={() => setErrorModal({ show: false, title: '', message: '' })}
+                  >
+                    {vi ? 'Đã hiểu' : 'Got it'}
+                  </ConfirmBtn>
+                </ConfirmActions>
+              </ConfirmBox>
+            </ConfirmOverlay>
+          )}
+        </AnimatePresence>
+
+        <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
       </PageWrapper>
     );
   }
@@ -2551,9 +2968,9 @@ const CVTemplates = () => {
           </BackToProfileBtn>
         </NavLeft>
         <UserProfile>
-          {cvData.avatar ? (
+          {profileAvatar ? (
             <img 
-              src={cvData.avatar} 
+              src={profileAvatar} 
               alt="Avatar" 
               style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #1a62ff' }} 
             />
@@ -2645,7 +3062,7 @@ const CVTemplates = () => {
             <h3>{vi ? 'Tạo nhanh CV của bạn bằng AI' : 'Quickly Create Your CV with AI'}</h3>
             <p>
               {vi
-                ? 'Hệ thống AI sẽ tự động điền các thông tin thực tế từ Hồ sơ cá nhân của bạn vào mẫu CV. Các mục thông tin chưa có (như Kinh nghiệm hay Học vấn) sẽ được để trống để bạn tự bổ sung chính xác trong trình biên tập, đảm bảo thông tin trung thực tuyệt đối.'
+                ? 'Hệ thống AI sẽ tự động điền các thông tin thực tế từ Hồ\u00A0sơ cá\u00A0nhân của\u00A0bạn vào mẫu CV. Các mục thông tin chưa có (như Kinh\u00A0nghiệm hay Học\u00A0vấn) sẽ được để trống để bạn tự bổ sung chính\u00A0xác trong trình biên\u00A0tập, đảm bảo thông tin trung\u00A0thực tuyệt\u00A0đối.'
                 : 'The AI system will automatically fill in real information from your Personal Profile. Missing sections (like Experience or Education) will be left blank for you to fill in accurately in the editor, ensuring absolute integrity of your information.'}
             </p>
             {aiGenError && (
@@ -2708,6 +3125,43 @@ const CVTemplates = () => {
           </ModalOverlay>
         )}
       </AnimatePresence>
+
+      {/* Error Modal */}
+      <AnimatePresence>
+        {errorModal.show && (
+          <ConfirmOverlay
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setErrorModal({ show: false, title: '', message: '' })}
+          >
+            <ConfirmBox
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <ConfirmIcon style={{ background: 'linear-gradient(135deg, #fee2e2, #fef2f2)' }}>
+                <X style={{ color: '#ef4444' }} />
+              </ConfirmIcon>
+              <ConfirmTitle>{errorModal.title}</ConfirmTitle>
+              <ConfirmMessage>{errorModal.message}</ConfirmMessage>
+              <ConfirmActions>
+                <ConfirmBtn
+                  $primary
+                  type="button"
+                  onClick={() => setErrorModal({ show: false, title: '', message: '' })}
+                >
+                  {vi ? 'Đã hiểu' : 'Got it'}
+                </ConfirmBtn>
+              </ConfirmActions>
+            </ConfirmBox>
+          </ConfirmOverlay>
+        )}
+      </AnimatePresence>
+
+      <Toast toasts={toast.toasts} removeToast={toast.removeToast} />
     </PageWrapper>
   );
 };

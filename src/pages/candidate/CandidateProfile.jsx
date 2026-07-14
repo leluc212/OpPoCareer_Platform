@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -1065,6 +1065,7 @@ const ModalButtons = styled.div`
 const CandidateProfile = () => {
   const { language, t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [profileImage, setProfileImage] = useState(null); // Will be loaded from DynamoDB
@@ -1104,10 +1105,14 @@ const CandidateProfile = () => {
     try {
       const apps = await applicationService.getMyCandidateApplications();
       
-      // Process apps to find those with employerRating
-      const ratedApps = apps.filter(app => app.employerRating && typeof app.employerRating.overall === 'number');
+      // Process apps to find those with employerRating.
+      // NOTE: the backend serializes DynamoDB Decimal values with `default=str`,
+      // so `overall` may arrive as a numeric STRING (e.g. "5") instead of a number.
+      // Use Number(...) + isFinite check instead of `typeof === 'number'` so ratings
+      // aren't silently dropped.
+      const ratedApps = apps.filter(app => app.employerRating && Number.isFinite(Number(app.employerRating.overall)));
       if (ratedApps.length > 0) {
-        const sum = ratedApps.reduce((acc, app) => acc + app.employerRating.overall, 0);
+        const sum = ratedApps.reduce((acc, app) => acc + Number(app.employerRating.overall), 0);
         const avg = sum / ratedApps.length;
         setAverageRating(Math.round(avg * 10) / 10);
         setTotalReviews(ratedApps.length);
@@ -1120,7 +1125,9 @@ const CandidateProfile = () => {
       // Use data already stored in the application record to avoid 404 errors
       // from fetching deleted/expired job posts individually
       const completedApps = apps
-        .filter(app => app.status === 'completed' || app.status === 'completed_pending_candidate')
+        // Only show completed jobs that actually have an employer review
+        .filter(app => (app.status === 'completed' || app.status === 'completed_pending_candidate')
+          && app.employerRating && Number.isFinite(Number(app.employerRating.overall)))
         .map(app => ({
           id: app.applicationId || app.id,
           jobTitle: app.jobTitle || '---',
@@ -1223,6 +1230,20 @@ const CandidateProfile = () => {
     
     loadProfile();
   }, []);
+
+  // When navigated here right after saving a CV (from the CV builder), scroll to the CV/Hồ sơ section.
+  useEffect(() => {
+    if (location.state?.focusCv) {
+      // Wait for content (incl. CV list) to render, then scroll into view
+      const timer = setTimeout(() => {
+        const el = document.getElementById('cv-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Clear the state so it doesn't re-trigger on refresh/navigation
+        navigate('.', { replace: true, state: {} });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [location.state, navigate]);
 
   const defaultSkills = [];
   
@@ -2286,7 +2307,9 @@ const CandidateProfile = () => {
             </Card>
             
             {/* CV / Resume Section - Using real S3 upload */}
-            <CVUpload />
+            <div id="cv-section">
+              <CVUpload />
+            </div>
           </Sidebar>
         </ContentGrid>
 

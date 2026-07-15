@@ -4274,15 +4274,11 @@ const HRManagement = () => {
           : (app.status === 'change_approved' || app.status === 'completed' || app.status === 'completed_pending_candidate')
             ? 'completed'
             : app.status === 'ĐÃ_BỊ_THAY_THẾ'
-              ? (() => {
-                  // Check if there is another candidate accepted for this job
-                  const hasReplacement = realApplications.some(otherApp => 
-                    otherApp.jobId === app.jobId &&
-                    otherApp.applicationId !== app.applicationId &&
-                    ['accepted', 'active', 'completed', 'completed_pending_candidate'].includes(otherApp.status)
-                  );
-                  return hasReplacement ? 'replaced' : 'pending_change';
-                })()
+              // Worker đã bị admin duyệt thay thế → luôn xếp vào 'replaced' (lịch sử đã thay thế),
+              // loại khỏi tab "Đang làm" và "Chờ duyệt" ngay lập tức, không phụ thuộc việc đã tuyển
+              // worker mới hay chưa. Trước đây khi chưa có worker thay thế nó bị map nhầm về
+              // 'pending_change' khiến card kẹt lại cho tới khi refresh trang.
+              ? 'replaced'
               : (app.status === 'pending_change' || hasPendingChangeRequest)
                 ? 'pending_change'
                 : 'active';
@@ -7231,9 +7227,15 @@ const HRManagement = () => {
                 >
                   <RateModalHeader>
                     <h2><Briefcase />{language === 'vi' ? (ratingSubmitted ? 'Đánh Giá Hoàn Tất' : 'Đánh Giá Nhân Viên') : (ratingSubmitted ? 'Review Submitted' : 'Rate Employee')}</h2>
-                    {ratingSubmitted && (
-                      <button onClick={() => { setShowRateModal(false); setRateStaff(null); checkAndEndShift(hrStaff); }}><X size={18} /></button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setShowRateModal(false);
+                        setRateStaff(null);
+                        if (ratingSubmitted) checkAndEndShift(hrStaff);
+                      }}
+                    >
+                      <X size={18} />
+                    </button>
                   </RateModalHeader>
                   <RateModalBody>
                     {!ratingSubmitted ? (
@@ -7279,7 +7281,14 @@ const HRManagement = () => {
                             disabled={!canSubmit || requestSending}
                             onClick={async () => {
                               if (!canSubmit) return;
-                              const staffId = rateStaff.id;
+                              const staffId = rateStaff.id || rateStaff.applicationId;
+                              if (!staffId) {
+                                console.error('❌ Missing staffId/applicationId for rating submission', rateStaff);
+                                setErrorNotificationMessage(language === 'vi' ? 'Không tìm thấy mã đơn ứng tuyển!' : 'Application ID not found!');
+                                setShowErrorNotification(true);
+                                setTimeout(() => setShowErrorNotification(false), 4000);
+                                return;
+                              }
                               try {
                                 setRequestSending(true);
                                 const employerRating = {
@@ -7288,12 +7297,15 @@ const HRManagement = () => {
                                   efficiency: ratings.efficiency,
                                   discipline: ratings.discipline,
                                   skills: ratings.skills,
-                                  comment: ratingComment
+                                  comment: ratingComment || ''
                                 };
                                 const employerConfirmedAt = new Date().toISOString();
+                                // Fetch the employer profile once so we can persist the company
+                                // name and reuse it for the candidate notification below.
+                                const employerProfileData = await employerProfileService.getMyProfile().catch(() => null);
                                 // Persist the company name onto the application so it shows in
                                 // the candidate's work history (job posts may be deleted later).
-                                const employerName = employerProfile?.companyName || user?.companyName || '';
+                                const employerName = employerProfileData?.companyName || user?.companyName || '';
 
                                 await applicationService.updateApplicationStatus(staffId, 'completed_pending_candidate', {
                                   employerRating,
@@ -7315,16 +7327,28 @@ const HRManagement = () => {
                                     }
                                     : s
                                 ));
+                                // Also update realApplications (source of the rendered list) so the
+                                // rated candidate moves out of the active list immediately without refresh.
+                                setRealApplications(prev => prev.map(app =>
+                                  String(app.applicationId) === String(staffId)
+                                    ? {
+                                      ...app,
+                                      status: 'completed_pending_candidate',
+                                      employerRating,
+                                      employerConfirmedAt,
+                                      ...(employerName ? { employerName } : {})
+                                    }
+                                    : app
+                                ));
                                 setRatingSubmitted(true);
 
                                 // Notify candidate about the review
                                 try {
-                                  const employerProfile = await employerProfileService.getMyProfile().catch(() => null);
                                   await createEmployerReviewNotification({
                                     candidateId: rateStaff.candidateId,
                                     candidateName: rateStaff.name || rateStaff.candidate,
                                     employerId: user?.userId || user?.id,
-                                    companyName: employerProfile?.companyName || user?.companyName || 'Nhà tuyển dụng',
+                                    companyName: employerProfileData?.companyName || user?.companyName || 'Nhà tuyển dụng',
                                     jobTitle: rateStaff.position || rateStaff.jobTitle,
                                     rating: employerRating.overall,
                                     comment: ratingComment
@@ -7333,10 +7357,15 @@ const HRManagement = () => {
                                   console.warn('⚠️ Failed to send review notification to candidate:', notifErr.message);
                                 }
                               } catch (err) {
-                                console.error('Failed to submit employer rating:', err);
-                                setErrorNotificationMessage(language === 'vi' ? 'Đánh giá thất bại, vui lòng thử lại!' : 'Failed to submit rating, please try again!');
+                                console.error('❌ Failed to submit employer rating:', err, { staffId, employerRating: { overall: ratings.overall, attitude: ratings.attitude, efficiency: ratings.efficiency, discipline: ratings.discipline, skills: ratings.skills } });
+                                const errMsg = err?.serverMessage || err?.message || '';
+                                setErrorNotificationMessage(
+                                  language === 'vi'
+                                    ? `Đánh giá thất bại${errMsg ? ': ' + errMsg : ''}, vui lòng thử lại!`
+                                    : `Failed to submit rating${errMsg ? ': ' + errMsg : ''}, please try again!`
+                                );
                                 setShowErrorNotification(true);
-                                setTimeout(() => setShowErrorNotification(false), 4000);
+                                setTimeout(() => setShowErrorNotification(false), 5000);
                               } finally {
                                 setRequestSending(false);
                               }
@@ -8153,7 +8182,22 @@ const HRManagement = () => {
             }}
             onDownload={async () => {
               try {
-                const response = await fetch(selectedCV.url);
+                // Thử fetch URL hiện tại trước
+                let downloadUrl = selectedCV.url;
+                let response = await fetch(downloadUrl);
+                
+                // Nếu URL hết hạn (403/401), refresh và thử lại
+                if (!response.ok && selectedCV.jobId) {
+                  const freshApps = await applicationService.getJobApplications(selectedCV.jobId);
+                  const match = freshApps.find(a => a.applicationId === selectedCV.applicationId);
+                  if (match?.cvUrl) {
+                    downloadUrl = match.cvUrl;
+                    setSelectedCV(prev => prev ? { ...prev, url: match.cvUrl } : prev);
+                    response = await fetch(downloadUrl);
+                  }
+                }
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');

@@ -306,8 +306,12 @@ const AdminChangeRequests = () => {
     setCrActionLoading(req.applicationId);
     try {
       const result = await applicationService.approveChangeRequest(req.applicationId);
+      // Server đặt worker cũ sang 'ĐÃ_BỊ_THAY_THẾ'. Cập nhật cả status lẫn changeRequestStatus
+      // để card chuyển sang "Đã xử lý" ngay, không cần refresh trang.
       setChangeRequests(prev => prev.map(r =>
-        r.applicationId === req.applicationId ? { ...r, changeRequestStatus: 'approved' } : r
+        r.applicationId === req.applicationId
+          ? { ...r, status: 'ĐÃ_BỊ_THAY_THẾ', changeRequestStatus: 'approved' }
+          : r
       ));
       const cr = req.changeRequest || {};
       await Promise.allSettled([
@@ -341,8 +345,12 @@ const AdminChangeRequests = () => {
     setRejectModal(null);
     try {
       await applicationService.rejectChangeRequest(applicationId, rejectNotes);
+      // Server khôi phục worker cũ về 'accepted'. Cập nhật cả status lẫn changeRequestStatus
+      // để card chuyển sang "Đã từ chối" ngay, không cần refresh trang.
       setChangeRequests(prev => prev.map(r =>
-        r.applicationId === applicationId ? { ...r, changeRequestStatus: 'rejected' } : r
+        r.applicationId === applicationId
+          ? { ...r, status: 'accepted', changeRequestStatus: 'rejected' }
+          : r
       ));
       if (rejectedReq) {
         const cr = rejectedReq.changeRequest || {};

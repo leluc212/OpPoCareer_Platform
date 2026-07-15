@@ -63,17 +63,36 @@ const CVViewer = () => {
     return null;
   }, [jobId, applicationId, candidateId]);
 
-  /* ── Timeout: nếu iframe không load trong 10s → hiện error ── */
+  /* ── Auto-refresh URL on mount if expired ── */
+  useEffect(() => {
+    if (!jobId) return;
+    // Luôn refresh URL từ backend khi mở để đảm bảo URL mới nhất
+    // (backend generate presigned URL mới mỗi lần gọi API)
+    console.log('🔄 Auto-refreshing CV URL from backend...');
+    refreshCvUrl();
+  }, [refreshCvUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Timeout: nếu iframe không load trong 10s → auto refresh rồi mới hiện error ── */
   useEffect(() => {
     if (!cvUrl) { setLoading(false); setError('no_url'); return; }
     const timeout = setTimeout(() => {
       setLoading(prev => {
-        if (prev) { setError('load_failed'); return false; }
+        if (prev) {
+          // Thử auto-refresh trước khi hiện lỗi
+          if (jobId) {
+            refreshCvUrl().then(freshUrl => {
+              if (!freshUrl) setError('load_failed');
+            });
+          } else {
+            setError('load_failed');
+          }
+          return false;
+        }
         return prev;
       });
     }, 10000);
     return () => clearTimeout(timeout);
-  }, [cvUrl]);
+  }, [cvUrl, jobId, refreshCvUrl]);
 
   const onIframeLoad = useCallback(() => {
     setLoading(false);

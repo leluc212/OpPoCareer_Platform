@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
+import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize2, RefreshCw } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 
 // Configure PDF.js worker - use cdnjs instead of unpkg for better CORS support
@@ -339,6 +339,8 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
   const [docxHtml, setDocxHtml] = useState(null);
   // Fresh URL after refresh
   const [activeCvUrl, setActiveCvUrl] = useState(cvUrl);
+  // Use iframe fallback when react-pdf fails
+  const [useIframeFallback, setUseIframeFallback] = useState(false);
 
   // Check if a presigned URL is expired or near expiry
   const isUrlExpired = (url) => {
@@ -365,11 +367,11 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
     return false;
   };
 
-  // On open, refresh URL if it's expired
+  // On open, always refresh URL from backend to ensure freshness
   React.useEffect(() => {
     const refreshIfNeeded = async () => {
-      if (isUrlExpired(cvUrl) && onGetFreshUrl) {
-        console.log('⚠️ CV URL expired on open, requesting fresh URL...');
+      if (onGetFreshUrl) {
+        console.log('🔄 Refreshing CV URL from backend on open...');
         try {
           const freshUrl = await onGetFreshUrl();
           if (freshUrl) {
@@ -508,39 +510,101 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
     let objectUrl = null;
     let timeout;
 
+    const fetchPdfFromUrl = async (url) => {
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+        headers: { 'Accept': 'application/pdf' }
+      });
+
+      if (!response.ok) {
+        const err = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        err.isExpired = response.status === 403 || response.status === 401;
+        throw err;
+      }
+
+      const blob = await response.blob();
+
+      // Kiểm tra: nếu blob quá nhỏ hoặc content-type không phải PDF → URL hết hạn
+      if (blob.size < 100 || (blob.type && !blob.type.includes('pdf') && !blob.type.includes('octet-stream'))) {
+        console.warn('⚠️ Response không phải PDF (type:', blob.type, 'size:', blob.size, ')');
+        const err = new Error('Response is not a valid PDF');
+        err.isExpired = true;
+        throw err;
+      }
+
+      return blob;
+    };
+
     const fetchPDF = async () => {
       try {
         setLoading(true);
         setError(null);
         console.log('📥 Fetching PDF from:', activeCvUrl);
 
-        const response = await fetch(activeCvUrl, {
-          method: 'GET',
-          mode: 'cors',
-          credentials: 'omit',
-          headers: { 'Accept': 'application/pdf' }
-        });
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-
-        const blob = await response.blob();
-
-        // Kiểm tra: nếu blob quá nhỏ hoặc content-type không phải PDF → URL hết hạn
-        if (blob.size < 100 || (blob.type && !blob.type.includes('pdf') && !blob.type.includes('octet-stream'))) {
-          console.warn('⚠️ Response không phải PDF (type:', blob.type, 'size:', blob.size, ')');
-          throw new Error('Response is not a valid PDF');
+        let blob;
+        try {
+          blob = await fetchPdfFromUrl(activeCvUrl);
+        } catch (err) {
+          // URL hết hạn → thử refresh URL mới trước khi fallback
+          if (err.isExpired && onGetFreshUrl) {
+            console.log('🔄 PDF URL expired, requesting fresh URL...');
+            try {
+              const freshUrl = await onGetFreshUrl();
+              if (freshUrl && !isUrlExpired(freshUrl)) {
+                console.log('✅ Got fresh PDF URL, retrying...');
+                setActiveCvUrl(freshUrl);
+                blob = await fetchPdfFromUrl(freshUrl);
+              } else {
+                // Fresh URL cũng hết hạn hoặc null → dùng iframe với URL mới nhất
+                console.warn('⚠️ Fresh URL also expired, using iframe fallback...');
+                if (freshUrl) setActiveCvUrl(freshUrl);
+                setUseIframeFallback(true);
+                setLoading(false);
+                return;
+              }
+            } catch (retryErr) {
+              console.error('❌ Retry with fresh URL also failed:', retryErr);
+              // Vẫn thử iframe fallback với fresh URL nếu có
+              setUseIframeFallback(true);
+              setLoading(false);
+              return;
+            }
+          } else if (onGetFreshUrl) {
+            // Lỗi khác nhưng có onGetFreshUrl → thử refresh rồi dùng iframe
+            console.log('🔄 PDF fetch failed, trying fresh URL for iframe fallback...');
+            try {
+              const freshUrl = await onGetFreshUrl();
+              if (freshUrl) {
+                setActiveCvUrl(freshUrl);
+                setUseIframeFallback(true);
+                setLoading(false);
+                return;
+              }
+            } catch (_) { /* ignore */ }
+            // Không refresh được → dùng iframe với URL hiện tại
+            setUseIframeFallback(true);
+            setLoading(false);
+            return;
+          } else {
+            // Không có onGetFreshUrl → dùng iframe fallback luôn
+            setUseIframeFallback(true);
+            setLoading(false);
+            return;
+          }
         }
 
         objectUrl = URL.createObjectURL(blob);
         console.log('✅ PDF fetched, size:', blob.size);
         setPdfData(objectUrl);
 
-        // Safety timeout: nếu react-pdf không fire callback trong 10s → fallback
+        // Safety timeout: nếu react-pdf không fire callback trong 10s → dùng iframe fallback
         timeout = setTimeout(() => {
           setLoading(prev => {
             if (prev) {
-              console.warn('⚠️ react-pdf không load được, fallback...');
-              setUseGoogleViewer(true);
+              console.warn('⚠️ react-pdf không load được, dùng iframe fallback...');
+              setUseIframeFallback(true);
               return false;
             }
             return prev;
@@ -549,7 +613,8 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
 
       } catch (err) {
         console.error('❌ Error fetching PDF:', err);
-        setUseGoogleViewer(true);
+        // Luôn dùng iframe fallback thay vì chỉ hiện lỗi
+        setUseIframeFallback(true);
         setLoading(false);
       }
     };
@@ -557,7 +622,7 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
     fetchPDF();
 
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); if (timeout) clearTimeout(timeout); };
-  }, [activeCvUrl, isPDF]);
+  }, [activeCvUrl, isPDF]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
@@ -568,7 +633,7 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
   const onDocumentLoadError = (err) => {
     console.error('PDF.js load error:', err);
     setLoading(false);
-    setUseGoogleViewer(true);
+    setUseIframeFallback(true);
   };
 
   const handleZoomIn = () => {
@@ -582,7 +647,7 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
     setTimeout(() => setShowZoomIndicator(false), 1000);
   };
 
-  const showPdfControls = isPDF && !useGoogleViewer;
+  const showPdfControls = isPDF && !useGoogleViewer && !useIframeFallback;
 
   const renderContent = () => {
     // Loading spinner
@@ -632,7 +697,7 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
     }
 
     // PDF native render
-    if (isPDF && !useGoogleViewer) {
+    if (isPDF && !useGoogleViewer && !useIframeFallback) {
       return (
         <PDFContainer>
           {numPages > 1 && (
@@ -675,19 +740,79 @@ const CVPreviewModal = ({ cvUrl, fileName, onClose, onDownload, onGetFreshUrl })
       );
     }
 
-    // PDF fallback (fetch lỗi) → thông báo tải xuống
+    // PDF iframe fallback — embed trực tiếp vào iframe (browser built-in PDF viewer)
+    if (isPDF && useIframeFallback && activeCvUrl) {
+      return (
+        <PDFContainer style={{ padding: 0, overflow: 'hidden' }}>
+          <iframe
+            key={activeCvUrl}
+            src={`${activeCvUrl}#toolbar=1&navpanes=0&view=FitH`}
+            title={fileName || 'CV PDF'}
+            style={{
+              width: '100%',
+              height: '82vh',
+              border: 'none',
+              background: '#fff',
+            }}
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              // iframe cũng không load được → hiện error cuối cùng
+              setUseGoogleViewer(true);
+              setUseIframeFallback(false);
+            }}
+          />
+        </PDFContainer>
+      );
+    }
+
+    // PDF fallback cuối cùng (cả iframe lẫn fetch đều thất bại)
     if (useGoogleViewer) {
       return (
         <ErrorMessage>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📄</div>
           Không thể xem file PDF trong trình duyệt. URL có thể đã hết hạn.
-          {onDownload && (
-            <div style={{ marginTop: '16px' }}>
+          <div style={{ marginTop: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {onGetFreshUrl && (
+              <ControlButton
+                onClick={async () => {
+                  try {
+                    setUseGoogleViewer(false);
+                    setUseIframeFallback(false);
+                    setLoading(true);
+                    setError(null);
+                    setPdfData(null);
+                    const freshUrl = await onGetFreshUrl();
+                    if (freshUrl) {
+                      setActiveCvUrl(freshUrl);
+                    } else {
+                      setUseGoogleViewer(true);
+                      setLoading(false);
+                    }
+                  } catch (e) {
+                    console.warn('Retry failed:', e);
+                    setUseGoogleViewer(true);
+                    setLoading(false);
+                  }
+                }}
+                style={{ width: 'auto', padding: '0 20px', background: 'rgba(16,185,129,0.3)', border: '1px solid rgba(16,185,129,0.5)' }}
+              >
+                <RefreshCw style={{ marginRight: '8px', width: 16, height: 16 }} />Thử lại
+              </ControlButton>
+            )}
+            {activeCvUrl && (
+              <ControlButton
+                onClick={() => window.open(activeCvUrl, '_blank')}
+                style={{ width: 'auto', padding: '0 20px', background: 'rgba(99,102,241,0.3)', border: '1px solid rgba(99,102,241,0.5)' }}
+              >
+                <Maximize2 style={{ marginRight: '8px', width: 16, height: 16 }} />Mở tab mới
+              </ControlButton>
+            )}
+            {onDownload && (
               <ControlButton onClick={onDownload} style={{ width: 'auto', padding: '0 20px', background: 'rgba(255,255,255,0.2)' }}>
                 <Download style={{ marginRight: '8px' }} />Tải xuống CV
               </ControlButton>
-            </div>
-          )}
+            )}
+          </div>
         </ErrorMessage>
       );
     }

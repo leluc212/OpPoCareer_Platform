@@ -637,10 +637,28 @@ def update_application_status(event, application_id, user_id, create_response):
             'replacedNoticeDismissed',  # candidate dismissed the "bị thay thế" banner
         ]
 
+        def convert_numbers_to_decimal(obj):
+            """Recursively convert int/float to Decimal for DynamoDB compatibility."""
+            if isinstance(obj, dict):
+                return {k: convert_numbers_to_decimal(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numbers_to_decimal(i) for i in obj]
+            elif isinstance(obj, float):
+                return Decimal(str(obj))
+            elif isinstance(obj, int) and not isinstance(obj, bool):
+                return Decimal(str(obj))
+            return obj
+
         for field in optional_fields:
             if field in body:
                 update_expr += f', {field} = :{field}'
-                expr_attr_values[f':{field}'] = body[field]
+                value = body[field]
+                # Convert nested numbers to Decimal for DynamoDB (maps with numeric values)
+                if isinstance(value, dict):
+                    value = convert_numbers_to_decimal(value)
+                elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                    value = Decimal(str(value))
+                expr_attr_values[f':{field}'] = value
 
         # Support changeRequest under multiple keys (camelCase, snake_case, or inside extraFields)
         change_req_raw = None

@@ -932,7 +932,6 @@ const PostJob = () => {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showAiInfoModal, setShowAiInfoModal] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState('');
-  const [workHoursList, setWorkHoursList] = useState([createWorkHourSlot(false)]);
   const [workHourErrors, setWorkHourErrors] = useState({}); // { [slotIndex]: 'error message' }
   const [fieldErrors, setFieldErrors] = useState({}); // inline errors for description, requirements, etc.
   const [salaryError, setSalaryError] = useState(false); // true when salary < minimum wage
@@ -956,6 +955,7 @@ const PostJob = () => {
     urgencyLevel: 'standard',
     workDays: '',
     workHours: '',
+    workHoursText: '',
     salary: '',
     salaryUnit: 'hour',
     tags: '',
@@ -1025,15 +1025,15 @@ const PostJob = () => {
   // Pre-fill form if editing
   useEffect(() => {
     if (editingJob) {
-      const parsedWorkHours = parseWorkHours(editingJob.workHours || `${editingJob.startTime || ''} - ${editingJob.endTime || ''}`);
-      setWorkHoursList(parsedWorkHours);
+      const workHoursText = editingJob.workHours || `${editingJob.startTime || ''} - ${editingJob.endTime || ''}`;
       setFormData({
         title: editingJob.title || '',
         location: editingJob.location || '',
         jobType: editingJob.jobType || 'part-time',
         urgencyLevel: editingJob.urgencyLevel || 'standard',
         workDays: editingJob.workDays || '',
-        workHours: editingJob.workHours || serializeWorkHours(parsedWorkHours),
+        workHours: workHoursText,
+        workHoursText: workHoursText,
         salary: editingJob.salary || '',
         salaryUnit: editingJob.salaryUnit || 'hour',
         tags: editingJob.tags || '',
@@ -1050,9 +1050,9 @@ const PostJob = () => {
   useEffect(() => {
     setFormData(prev => ({
       ...prev,
-      workHours: serializeWorkHours(workHoursList)
+      workHours: prev.workHoursText || ''
     }));
-  }, [workHoursList]);
+  }, [formData.workHoursText]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -1111,12 +1111,13 @@ const PostJob = () => {
         }));
 
         if (Array.isArray(result.workHoursList) && result.workHoursList.length > 0) {
-          setWorkHoursList(result.workHoursList.map((slot, index) => ({
-            startTime: slot.startTime || '',
-            endTime: slot.endTime || '',
-            days: slot.days || [],
-            isNew: index > 0
-          })));
+          // Convert AI-parsed work hours to a single text string
+          const workHoursText = result.workHoursList.map(slot => {
+            const time = [slot.startTime, slot.endTime].filter(Boolean).join(' - ');
+            const days = (slot.days || []).join(', ');
+            return [days, time].filter(Boolean).join(': ');
+          }).join('; ');
+          setFormData(prev => ({ ...prev, workHoursText }));
         }
 
         setFieldWarnings(result.warnings || []);
@@ -1206,91 +1207,6 @@ const PostJob = () => {
       return next;
     });
     return true;
-  };
-
-  const handleWorkHourChange = (index, field, value) => {
-    setWorkHoursList(prev => {
-      const updated = prev.map((slot, slotIndex) =>
-        slotIndex === index ? { ...slot, [field]: value } : slot
-      );
-      // Validate real-time after state update
-      const updatedSlot = updated[index];
-      if (updatedSlot.startTime && updatedSlot.endTime) {
-        const [sh, sm] = updatedSlot.startTime.split(':').map(Number);
-        const [eh, em] = updatedSlot.endTime.split(':').map(Number);
-        const startMin = sh * 60 + sm;
-        const endMin = eh * 60 + em;
-        const duration = endMin > startMin ? endMin - startMin : (endMin + 1440) - startMin;
-        if (duration < 60) {
-          setWorkHourErrors(p => ({
-            ...p,
-            [index]: language === 'vi'
-              ? 'Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.'
-              : 'Each work shift must be at least 1 hour.'
-          }));
-        } else {
-          setWorkHourErrors(p => {
-            const n = { ...p };
-            delete n[index];
-            return n;
-          });
-        }
-      } else {
-        // If either time is cleared, also clear the error
-        setWorkHourErrors(p => {
-          const n = { ...p };
-          delete n[index];
-          return n;
-        });
-      }
-      // Re-validate 3-hour rule if startTime changed and workDays is set
-      if (field === 'startTime' && formData.workDays) {
-        const newStartTime = value;
-        if (newStartTime) {
-          const shiftStart = new Date(`${formData.workDays}T${newStartTime}:00`);
-          const hoursLeft = (shiftStart - new Date()) / (1000 * 60 * 60);
-          if (hoursLeft < 3) {
-            setFieldErrors(p => ({
-              ...p,
-              workDays: language === 'vi'
-                ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
-                : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.'
-            }));
-          } else {
-            setFieldErrors(p => { const n = { ...p }; delete n.workDays; return n; });
-          }
-        }
-      }
-      return updated;
-    });
-  };
-
-  const toggleWorkHourDay = (index, dayKey) => {
-    setWorkHoursList(prev => prev.map((slot, slotIndex) => {
-      if (slotIndex !== index) return slot;
-      const days = slot.days || [];
-      const nextDays = days.includes(dayKey)
-        ? days.filter(d => d !== dayKey)
-        : [...days, dayKey];
-      // Keep canonical week order (T2 -> CN)
-      const ordered = WORK_DAY_OPTIONS.map(o => o.key).filter(k => nextDays.includes(k));
-      return { ...slot, days: ordered };
-    }));
-  };
-
-  const addWorkHour = () => {
-    setWorkHoursList(prev => {
-      if (prev.length >= 5) return prev;
-      return [...prev, createWorkHourSlot()];
-    });
-  };
-
-  const removeWorkHour = (index) => {
-    setWorkHoursList(prev => {
-      if (prev.length === 1) return prev;
-      const next = prev.filter((_, slotIndex) => slotIndex !== index);
-      return next.length > 0 ? next : [createWorkHourSlot()];
-    });
   };
 
   const handleGenerateJdWithAi = async () => {
@@ -1388,25 +1304,12 @@ const PostJob = () => {
     }
     setFieldErrors({});
 
-    // 4. Validate each work hour slot: end time must be at least 1 hour after start time
-    for (let i = 0; i < workHoursList.length; i++) {
-      const slot = workHoursList[i];
-      if (slot.startTime && slot.endTime) {
-        const [sh, sm] = slot.startTime.split(':').map(Number);
-        const [eh, em] = slot.endTime.split(':').map(Number);
-        const startMinutes = sh * 60 + sm;
-        const endMinutes = eh * 60 + em;
-        // Handle overnight shifts: if end <= start, add 24h to end
-        const duration = endMinutes > startMinutes
-          ? endMinutes - startMinutes
-          : (endMinutes + 1440) - startMinutes;
-        if (duration < 60) {
-          toast.warning(language === 'vi'
-            ? `Ca làm việc ${i + 1}: Mỗi ca làm việc phải kéo dài tối thiểu 1 tiếng.`
-            : `Shift ${i + 1}: Each work shift must be at least 1 hour.`);
-          return;
-        }
-      }
+    // 4. Validate work hours text is filled
+    if (!formData.workHoursText || !formData.workHoursText.trim()) {
+      toast.warning(language === 'vi'
+        ? 'Vui lòng nhập khung giờ làm việc.'
+        : 'Please enter working hours.');
+      return;
     }
 
     // 5. Validate work date + first shift start time → must be at least 3 hours from now
@@ -1420,28 +1323,8 @@ const PostJob = () => {
       }
 
       // Find the first slot with a startTime to compute shiftStartDateTime
-      const firstSlotWithTime = workHoursList.find(s => s.startTime);
-      if (firstSlotWithTime) {
-        const shiftStartDateTime = new Date(`${formData.workDays}T${firstSlotWithTime.startTime}:00`);
-        const now = new Date();
-        const hoursUntilShift = (shiftStartDateTime - now) / (1000 * 60 * 60);
-        if (hoursUntilShift < 3) {
-          toast.warning(language === 'vi'
-            ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
-            : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.');
-          return;
-        }
-      } else {
-        // No startTime filled: fall back to checking date midnight is >= now + 3h
-        const deadlineStart = new Date(formData.workDays + 'T00:00:00');
-        const threeHoursFromNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
-        if (deadlineStart < threeHoursFromNow) {
-          toast.warning(language === 'vi'
-            ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
-            : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.');
-          return;
-        }
-      }
+      // Since workHoursText is free text, skip time-based 3-hour validation
+      // Only validate that the date itself is not in the past
     }
 
     // 6. Block new job posting if not verified
@@ -2044,23 +1927,17 @@ const PostJob = () => {
                       value={formData.workDays}
                       onChange={(e) => {
                         handleChange(e);
-                        // Real-time: check 3-hour rule with first available startTime
+                        // Clear workDays errors on change (no time-based validation with free text)
                         const selectedDate = e.target.value;
                         if (selectedDate) {
-                          const firstSlot = workHoursList.find(s => s.startTime);
-                          if (firstSlot) {
-                            const shiftStart = new Date(`${selectedDate}T${firstSlot.startTime}:00`);
-                            const hoursLeft = (shiftStart - new Date()) / (1000 * 60 * 60);
-                            if (hoursLeft < 3) {
-                              setFieldErrors(prev => ({
-                                ...prev,
-                                workDays: language === 'vi'
-                                  ? 'Bài đăng phải được tạo trước giờ bắt đầu ca làm ít nhất 3 tiếng. Vui lòng chọn ca làm việc muộn hơn.'
-                                  : 'Job post must be created at least 3 hours before the shift starts. Please choose a later shift time.'
-                              }));
-                            } else {
-                              setFieldErrors(prev => { const n = { ...prev }; delete n.workDays; return n; });
-                            }
+                          const today = new Date().toISOString().split('T')[0];
+                          if (selectedDate < today) {
+                            setFieldErrors(prev => ({
+                              ...prev,
+                              workDays: language === 'vi'
+                                ? 'Hạn nộp hồ sơ không được ở trong quá khứ.'
+                                : 'Application deadline cannot be in the past.'
+                            }));
                           } else {
                             setFieldErrors(prev => { const n = { ...prev }; delete n.workDays; return n; });
                           }
@@ -2089,77 +1966,13 @@ const PostJob = () => {
                         ⚠️ {language === 'vi' ? 'AI không tìm thấy khung giờ làm việc phù hợp, vui lòng điền tay.' : 'AI did not find working hours, please input manually.'}
                       </small>
                     )}
-                    <div style={{ marginTop: '4px' }}>
-                      {workHoursList.map((slot, index) => (
-                        <div key={index} style={{ marginBottom: '16px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
-                          <WorkHoursRow style={{ marginBottom: 0 }}>
-                            <div>
-                              <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Từ' : 'From'}</Label>
-                              <Input
-                                type="time"
-                                value={slot.startTime}
-                                onChange={(e) => handleWorkHourChange(index, 'startTime', e.target.value)}
-                                required
-                              />
-                              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                                {language === 'vi' ? 'Gợi ý: 09:00 SA' : 'e.g. 09:00 AM'}
-                              </span>
-                            </div>
-                            <div>
-                              <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Đến' : 'To'}</Label>
-                              <Input
-                                type="time"
-                                value={slot.endTime}
-                                onChange={(e) => handleWorkHourChange(index, 'endTime', e.target.value)}
-                                required
-                              />
-                              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                                {language === 'vi' ? 'Gợi ý: 06:00 CH' : 'e.g. 06:00 PM'}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <WorkHoursActionButton
-                                type="button"
-                                onClick={addWorkHour}
-                                disabled={workHoursList.length >= 5}
-                                title={language === 'vi' ? 'Thêm khung giờ' : 'Add time slot'}
-                              >
-                                <Plus />
-                              </WorkHoursActionButton>
-                              {slot.isNew && (
-                                <WorkHoursActionButton
-                                  type="button"
-                                  $danger
-                                  onClick={() => removeWorkHour(index)}
-                                  title={language === 'vi' ? 'Xóa khung giờ' : 'Remove time slot'}
-                                >
-                                  <Trash2 />
-                                </WorkHoursActionButton>
-                              )}
-                            </div>
-                          </WorkHoursRow>
-                          <div style={{ marginTop: '12px' }}>
-                            <Label style={{ fontSize: '13px', marginBottom: '8px' }}>{language === 'vi' ? 'Thứ' : 'Days'}</Label>
-                            <Input
-                              type="text"
-                              placeholder={language === 'vi' ? 'Ví dụ: T2 - T6' : 'e.g. Mon - Fri'}
-                              value={slot.daysRaw || (slot.days ? slot.days.join(', ') : '')}
-                              onChange={(e) => {
-                                setWorkHoursList(prev => prev.map((s, i) => i === index ? { ...s, daysRaw: e.target.value } : s));
-                              }}
-                            />
-                            <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                              {language === 'vi' ? 'Gợi ý: T2 - T6 hoặc T2, T4, T7' : 'e.g. Mon-Fri or Mon, Wed, Sat'}
-                            </span>
-                          </div>
-                          {workHourErrors[index] && (
-                            <small style={{ color: '#E24B4A', fontWeight: '600', marginTop: '8px', display: 'block' }}>
-                              ⚠️ {workHourErrors[index]}
-                            </small>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <Input
+                      type="text"
+                      placeholder={language === 'vi' ? 'Nhập khung giờ làm việc' : 'Enter working hours'}
+                      value={formData.workHoursText || ''}
+                      onChange={(e) => handleChange({ target: { name: 'workHoursText', value: e.target.value } })}
+                      required
+                    />
                   </FormGroup>
 
                   <FormGroup>
@@ -2477,9 +2290,9 @@ const PostJob = () => {
               </div>
             </ChecklistItem>
 
-            <ChecklistItem $filled={workHoursList.some(s => s.startTime && s.endTime)} $warning={fieldWarnings.includes('workHours')}>
+            <ChecklistItem $filled={!!(formData.workHoursText && formData.workHoursText.trim())} $warning={fieldWarnings.includes('workHours')}>
               <div className="label-group">
-                {fieldWarnings.includes('workHours') ? <AlertTriangle color="#dc2626" /> : workHoursList.some(s => s.startTime && s.endTime) ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
+                {fieldWarnings.includes('workHours') ? <AlertTriangle color="#dc2626" /> : (formData.workHoursText && formData.workHoursText.trim()) ? <CheckCircle2 color="#059669" /> : <Clock color="#64748b" />}
                 <span>{language === 'vi' ? 'Khung giờ làm việc' : 'Working hours'}</span>
               </div>
             </ChecklistItem>

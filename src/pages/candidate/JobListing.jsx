@@ -7354,19 +7354,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 if (!rulesAccepted || !micPermissionGranted) return;
                 setShowAiRulesModal(false);
 
-                // Request fullscreen mode
-                try {
-                  const elem = document.documentElement;
-                  if (elem.requestFullscreen) {
-                    await elem.requestFullscreen();
-                  } else if (elem.webkitRequestFullscreen) {
-                    await elem.webkitRequestFullscreen();
-                  } else if (elem.msRequestFullscreen) {
-                    await elem.msRequestFullscreen();
-                  }
-                } catch (fsErr) {
-                  console.warn('Fullscreen request failed:', fsErr);
-                }
+                // Request fullscreen mode (DISABLED FOR TESTING)
+                // try {
+                //   const elem = document.documentElement;
+                //   if (elem.requestFullscreen) {
+                //     await elem.requestFullscreen();
+                //   } else if (elem.webkitRequestFullscreen) {
+                //     await elem.webkitRequestFullscreen();
+                //   } else if (elem.msRequestFullscreen) {
+                //     await elem.msRequestFullscreen();
+                //   }
+                // } catch (fsErr) {
+                //   console.warn('Fullscreen request failed:', fsErr);
+                // }
 
                 setAiScreeningStep('interview');
                 startInterviewSession(aiScreeningJob, pendingApplication?.finalCVUrl);

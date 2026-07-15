@@ -2768,8 +2768,14 @@ const JobListing = () => {
     });
   };
 
-  // Visibility and Anti-cheat Monitoring Hook
+  // Visibility and Anti-cheat Monitoring Hook (TEMPORARILY DISABLED FOR TESTING)
   useEffect(() => {
+    // Anti-cheat disabled — no tab-switch detection, no copy/paste block, no fullscreen enforcement
+    setTabSwitchCount(0);
+    setShowTabWarningOverlay(false);
+    return;
+    /* eslint-disable no-unreachable */
+    // --- Original anti-cheat logic below (kept for re-enabling later) ---
     if (!showAiScreeningModal || aiScreeningStep !== 'interview' || interviewFinished) {
       setTabSwitchCount(0);
       setShowTabWarningOverlay(false);
@@ -2858,6 +2864,7 @@ const JobListing = () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
+    /* eslint-enable no-unreachable */
   }, [showAiScreeningModal, aiScreeningStep, interviewFinished, language, showTabWarningOverlay]);
 
   // Clean up speech on close

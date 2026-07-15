@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, AlertCircle, FileText, User, Calendar, Building2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import employerProfileService from '../services/employerProfileService';
 
 const Overlay = styled(motion.div)`
   position: fixed;
@@ -418,38 +419,47 @@ const VerificationApprovalModal = ({
     }
   };
 
-  const handleViewDocument = (doc) => {
+  const handleViewDocument = async (doc) => {
     if (doc.fileData) {
-      const win = window.open('', '_blank');
-      if (win) {
-        win.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>${doc.name}</title>
-              <style>
-                body { 
-                  margin: 0; 
-                  padding: 20px; 
-                  display: flex; 
-                  flex-direction: column;
-                  align-items: center; 
-                  justify-content: center; 
-                  background: #1e293b;
-                }
-                img { 
-                  max-width: 100%; 
-                  height: auto; 
-                  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-                  border-radius: 8px;
-                }
-              </style>
-            </head>
-            <body>
-              <img src="${doc.fileData}" alt="${doc.name}" />
-            </body>
-          </html>
-        `);
+      let dataUrl;
+      if (typeof doc.fileData === 'string') {
+        dataUrl = doc.fileData;
+      } else if (typeof doc.fileData === 'object') {
+        dataUrl = doc.fileData.data || doc.fileData.url || doc.fileData.fileData;
+      }
+
+      if (!dataUrl) {
+        alert(language === 'vi' ? 'Không thể xem tài liệu này.' : 'Cannot view this document.');
+        return;
+      }
+
+      try {
+        if (dataUrl.startsWith('http')) {
+          // S3 URL - need presigned URL
+          const userId = employerProfile?.userId || employerProfile?.id;
+          if (userId) {
+            const viewUrl = await employerProfileService.getVerificationViewUrl(userId, dataUrl);
+            window.open(viewUrl, '_blank');
+          } else {
+            window.open(dataUrl, '_blank');
+          }
+        } else if (dataUrl.startsWith('data:application/pdf')) {
+          const base64 = dataUrl.split(',')[1];
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+          const pdfUrl = URL.createObjectURL(pdfBlob);
+          window.open(pdfUrl, '_blank');
+        } else {
+          window.open(dataUrl, '_blank');
+        }
+      } catch (err) {
+        console.error('Error opening document:', err);
+        // Fallback: try opening directly
+        window.open(dataUrl, '_blank');
       }
     }
   };

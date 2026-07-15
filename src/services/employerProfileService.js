@@ -562,6 +562,28 @@ class EmployerProfileService {
   }
 
   /**
+   * Get a presigned view URL for a verification file stored in S3
+   * @param {string} userId
+   * @param {string} fileUrl - The S3 URL of the file
+   * @returns {string} - Presigned URL valid for 1 hour
+   */
+  async getVerificationViewUrl(userId, fileUrl) {
+    try {
+      const result = await this.makeRequest(`/profile/${userId}/verification/view-url`, {
+        method: 'POST',
+        body: JSON.stringify({ fileUrl })
+      });
+      if (result.success && result.data?.viewUrl) {
+        return result.data.viewUrl;
+      }
+      throw new Error('Failed to get view URL');
+    } catch (error) {
+      console.error('❌ Error getting verification view URL:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get verification status
    */
   async getVerificationStatus(userId) {

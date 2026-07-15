@@ -1,7 +1,7 @@
 // API Gateway Lambda handler for Employer Profile operations
 const employerProfileService = require('./employer-profile.cjs');
 const jwt = require('jsonwebtoken');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 const { CognitoIdentityProviderClient, AdminGetUserCommand } = require('@aws-sdk/client-cognito-identity-provider');
@@ -406,6 +406,37 @@ exports.handler = async (event) => {
         statusCode: 200,
         headers: corsHeaders,
         body: JSON.stringify({ success: true, data: { uploadUrl, fileUrl, s3Key } })
+      };
+    }
+
+    // POST /profile/{userId}/verification/view-url - Get presigned S3 GET URL for viewing a verification file
+    if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/verification/view-url')) {
+      const body = JSON.parse(event.body || '{}');
+      const { fileUrl } = body;
+      if (!fileUrl) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'fileUrl required' }) };
+      }
+      // Extract S3 key from the full URL
+      const bucketDomain = `${VERIFICATION_BUCKET}.s3.ap-southeast-1.amazonaws.com/`;
+      let s3Key = '';
+      if (fileUrl.includes(bucketDomain)) {
+        s3Key = decodeURIComponent(fileUrl.split(bucketDomain)[1]);
+      } else {
+        // Try extracting from path-style URL
+        s3Key = decodeURIComponent(fileUrl.replace(/^https?:\/\/[^/]+\//, ''));
+      }
+      if (!s3Key) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ success: false, message: 'Could not extract S3 key from fileUrl' }) };
+      }
+      const command = new GetObjectCommand({
+        Bucket: VERIFICATION_BUCKET,
+        Key: s3Key
+      });
+      const viewUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: true, data: { viewUrl } })
       };
     }
 

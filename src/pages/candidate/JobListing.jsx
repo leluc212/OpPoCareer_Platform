@@ -5222,17 +5222,17 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       });
       // Don't apply category filter for saved jobs
     } else {
-      // For shift jobs
-      if (jobCategory === 'shift') {
-        // IMPORTANT: Only show shift jobs when work status is ON and location is enabled
-        if (isAvailable && showNearbyJobs) {
-          // Location enabled: only show jobs within radius (strict ≤10km)
-          return nearbyJobs;
-        }
-        // If work status is OFF or location not enabled: hide all shift jobs
-        return [];
-      } else {
-        result = result.filter(job => job.category === jobCategory);
+      // Filter by category
+      result = result.filter(job => job.category === jobCategory);
+
+      // For shift jobs: sort by distance if location is available
+      if (jobCategory === 'shift' && userLocation) {
+        result = result.map(job => ({
+          ...job,
+          distance: (job.lat && job.lng)
+            ? calculateDistance(userLocation.lat, userLocation.lng, job.lat, job.lng)
+            : 9999
+        })).sort((a, b) => a.distance - b.distance);
       }
     }
 
@@ -5436,13 +5436,10 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
 
   const categoryJobs = allJobs.filter(job => job.category === jobCategory);
 
-  // Calculate visible shift jobs count (only when work status + location are enabled)
+  // Calculate visible shift jobs count
   const visibleShiftJobsCount = useMemo(() => {
-    if (isAvailable && showNearbyJobs) {
-      return nearbyJobs.length;
-    }
-    return 0;
-  }, [isAvailable, showNearbyJobs, nearbyJobs]);
+    return allJobs.filter(job => job.category === 'shift').length;
+  }, [allJobs]);
 
 
 
@@ -6037,34 +6034,6 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                         {language === 'vi'
                           ? 'Nhấn vào biểu tượng lưu ở tin tuyển dụng mà bạn quan tâm để thêm vào danh sách.'
                           : 'Click the save icon on any job to add it here.'}
-                      </p>
-                    </>
-                  ) : jobCategory === 'shift' && (!isAvailable || !showNearbyJobs) ? (
-                    <>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
-                      <p style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
-                        {language === 'vi' ? 'Bạn cần bật trạng thái Tìm việc gấp để có thể thao tác.' : 'Enable work status and location to see jobs'}
-                      </p>
-                      <p style={{ fontSize: '15px', color: '#6b7280', marginBottom: '20px' }}>
-                        {language === 'vi'
-                          ? !isAvailable
-                            ? 'Vui lòng bật trạng thái làm việc ở phía trên. '
-                            : `Vui lòng nhấn nút "Tìm việc gần tôi" ở phía trên để tìm các công việc tuyển gấp trong bán kính ${nearbyRadius}km`
-                          : !isAvailable
-                            ? 'Please enable work status above. '
-                            : ''}
-                      </p>
-                    </>
-                  ) : jobCategory === 'shift' && showNearbyJobs && !userLocation ? (
-                    <>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📍</div>
-                      <p style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
-                        {language === 'vi' ? 'Chưa xác định được vị trí' : 'Location Cannot Be Determined'}
-                      </p>
-                      <p style={{ fontSize: '15px', color: '#6b7280' }}>
-                        {language === 'vi'
-                          ? 'Vui lòng cấp quyền truy cập GPS trên trình duyệt để tìm việc gần bạn.'
-                          : 'Please allow GPS access on your browser to find jobs near you.'}
                       </p>
                     </>
                   ) : jobCategory === 'shift' ? (

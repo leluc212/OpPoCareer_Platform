@@ -1610,64 +1610,46 @@ const EmployerProfile = () => {
     localStorage.setItem('companyDocuments', JSON.stringify(updated));
   };
 
-  const handleViewVerificationDocument = (doc) => {
+  const handleViewVerificationDocument = async (doc) => {
     if (doc.fileData) {
-      // Open the image/document in a new window
-      const win = window.open('', '_blank');
-      if (win) {
-        win.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>${doc.name}</title>
-              <style>
-                body { 
-                  margin: 0; 
-                  padding: 20px; 
-                  display: flex; 
-                  flex-direction: column;
-                  align-items: center; 
-                  justify-content: center; 
-                  background: #1e293b;
-                  font-family: system-ui, -apple-system, sans-serif;
-                }
-                img { 
-                  max-width: 100%; 
-                  height: auto; 
-                  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-                  border-radius: 8px;
-                }
-                .info {
-                  background: white;
-                  padding: 16px 24px;
-                  border-radius: 8px;
-                  margin-bottom: 16px;
-                  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-                }
-                .info h2 {
-                  margin: 0 0 12px 0;
-                  color: #1e293b;
-                  font-size: 20px;
-                }
-                .info p {
-                  margin: 4px 0;
-                  color: #64748b;
-                  font-size: 14px;
-                }
-              </style>
-            </head>
-            <body>
-              <div class="info">
-                <h2>${doc.name}</h2>
-                <p><strong>${language === 'vi' ? 'Ngày tải lên' : 'Upload Date'}:</strong> ${doc.uploadDate}</p>
-                ${doc.metadata ? Object.entries(doc.metadata).map(([key, value]) => 
-                  value ? `<p><strong>${key}:</strong> ${value}</p>` : ''
-                ).join('') : ''}
-              </div>
-              <img src="${doc.fileData}" alt="${doc.name}" />
-            </body>
-          </html>
-        `);
+      let dataUrl;
+      if (typeof doc.fileData === 'string') {
+        dataUrl = doc.fileData;
+      } else if (typeof doc.fileData === 'object') {
+        dataUrl = doc.fileData.data || doc.fileData.url || doc.fileData.fileData;
+      }
+
+      if (!dataUrl) {
+        console.error('No viewable data found in document:', doc.fileData);
+        alert(language === 'vi' ? 'Không thể xem tài liệu này. Dữ liệu file không khả dụng.' : 'Cannot view this document. File data is not available.');
+        return;
+      }
+
+      try {
+        // If it's a direct S3 URL (not base64), get a presigned view URL first
+        if (dataUrl.startsWith('http')) {
+          const viewUrl = await employerProfileService.getVerificationViewUrl(user.userId, dataUrl);
+          window.open(viewUrl, '_blank');
+        } else if (dataUrl.startsWith('data:application/pdf')) {
+          // Convert base64 PDF to Blob and open
+          const base64 = dataUrl.split(',')[1];
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+          const pdfUrl = URL.createObjectURL(pdfBlob);
+          window.open(pdfUrl, '_blank');
+        } else if (dataUrl.startsWith('data:')) {
+          // For images data URL, open directly
+          window.open(dataUrl, '_blank');
+        } else {
+          window.open(dataUrl, '_blank');
+        }
+      } catch (err) {
+        console.error('Error opening document:', err);
+        alert(language === 'vi' ? 'Lỗi khi mở tài liệu. Vui lòng thử lại.' : 'Error opening document. Please try again.');
       }
     }
   };

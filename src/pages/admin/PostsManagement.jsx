@@ -1100,8 +1100,8 @@ const PostsManagement = () => {
             console.error('Failed to send approval notification:', e);
           }
         } else {
-          // Soft-delete / mark deleted so it shows as rejected
-          await quickJobService.updateJobStatus(jobId, 'deleted');
+          // Mark as 'rejected' (not 'deleted') so it stays visible in admin list
+          await quickJobService.updateJobStatus(jobId, 'rejected');
           try {
             const recipient = job.employerId || job.employerEmail || job.employer || null;
             if (recipient) await notificationService.createJobRejectedNotification(recipient, job);
@@ -1119,7 +1119,8 @@ const PostsManagement = () => {
             console.error('Failed to send approval notification:', e);
           }
         } else {
-          await jobPostService.updateJobStatus(jobId, 'deleted');
+          // Mark as 'rejected' (not 'deleted') so it stays visible in admin list
+          await jobPostService.updateJobStatus(jobId, 'rejected');
           try {
             const recipient = job.employerId || job.employerEmail || job.employer || null;
             if (recipient) await notificationService.createJobRejectedNotification(recipient, job);

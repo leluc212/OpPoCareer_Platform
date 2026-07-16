@@ -922,6 +922,7 @@ const PostQuickJob = () => {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [profileAddress, setProfileAddress] = useState('');
   const [profileBranches, setProfileBranches] = useState([]);
+  const [branchGpsCache, setBranchGpsCache] = useState({}); // Cache GPS cho branches: { address: {lat, lng} }
   const [profileHasNoAddress, setProfileHasNoAddress] = useState(false);
   const [profileLatLng, setProfileLatLng] = useState({ lat: '', lng: '' }); // GPS của trụ sở chính
 
@@ -944,6 +945,25 @@ const PostQuickJob = () => {
           setProfileHasNoAddress(!address && branches.length === 0);
           // Cache GPS của trụ sở chính để dùng khi NTD chọn lại trụ sở
           setProfileLatLng({ lat: profile.latitude || '', lng: profile.longitude || '' });
+
+          // Pre-geocode branches async (không block UI)
+          if (branches.length > 0) {
+            (async () => {
+              const gpsCache = {};
+              for (const branch of branches) {
+                try {
+                  const geo = await hybridGeocodingService.geocodeAddress(branch);
+                  if (geo?.lat && geo?.lng) {
+                    gpsCache[branch] = { lat: geo.lat.toString(), lng: geo.lng.toString() };
+                  }
+                } catch (_) { /* ignore - will retry at selection/submit time */ }
+              }
+              if (Object.keys(gpsCache).length > 0) {
+                setBranchGpsCache(prev => ({ ...prev, ...gpsCache }));
+                console.log('✅ Pre-geocoded branches GPS:', gpsCache);
+              }
+            })();
+          }
 
           // Auto-fill location: single address → pre-fill + GPS
           if (branches.length === 0 && address) {
@@ -1380,15 +1400,29 @@ const PostQuickJob = () => {
         }
       } catch (err) {
         console.error('Failed to geocode address on submit:', err);
-        setModalType('error');
-        setPaymentInfo({
-          error: true,
-          message: language === 'vi' 
-            ? 'Không thể xác định tọa độ GPS từ địa chỉ cung cấp. Vui lòng chọn địa chỉ cụ thể từ gợi ý.'
-            : 'Could not resolve GPS coordinates from the provided address. Please select a specific address from suggestions.'
-        });
-        setShowModal(true);
-        return;
+        
+        // Thử searchPlaces nếu geocodeAddress thất bại
+        try {
+          const searchResults = await hybridGeocodingService.searchPlaces(formData.location);
+          if (searchResults && searchResults.length > 0 && searchResults[0].lat && searchResults[0].lng) {
+            finalLat = searchResults[0].lat.toString();
+            finalLng = searchResults[0].lng.toString();
+            console.log('✅ GPS resolved via searchPlaces fallback on submit:', finalLat, finalLng);
+          } else {
+            throw new Error('No search results');
+          }
+        } catch (searchErr) {
+          console.error('SearchPlaces fallback also failed:', searchErr);
+          setModalType('error');
+          setPaymentInfo({
+            error: true,
+            message: language === 'vi' 
+              ? 'Không thể xác định tọa độ GPS từ địa chỉ cung cấp. Vui lòng nhập lại và chọn địa chỉ cụ thể từ danh sách gợi ý hiện ra khi bạn gõ.'
+              : 'Could not resolve GPS coordinates from the provided address. Please re-enter and select a specific address from the suggestion list that appears while typing.'
+          });
+          setShowModal(true);
+          return;
+        }
       }
     }
 
@@ -1961,16 +1995,28 @@ const PostQuickJob = () => {
                                 latitude: profileLatLng.lat,
                                 longitude: profileLatLng.lng
                               }));
+                            } else if (branchGpsCache[selected]) {
+                              // Dùng cache GPS đã resolve trước đó
+                              setFormData(prev => ({
+                                ...prev,
+                                location: selected,
+                                latitude: branchGpsCache[selected].lat,
+                                longitude: branchGpsCache[selected].lng
+                              }));
                             } else {
                               setFormData(prev => ({ ...prev, location: selected, latitude: '', longitude: '' }));
                               try {
                                 const geo = await hybridGeocodingService.geocodeAddress(selected);
                                 if (geo?.lat && geo?.lng) {
+                                  const lat = geo.lat.toString();
+                                  const lng = geo.lng.toString();
                                   setFormData(prev => ({
                                     ...prev,
-                                    latitude: geo.lat.toString(),
-                                    longitude: geo.lng.toString()
+                                    latitude: lat,
+                                    longitude: lng
                                   }));
+                                  // Cache kết quả để không phải geocode lại
+                                  setBranchGpsCache(prev => ({ ...prev, [selected]: { lat, lng } }));
                                 }
                               } catch (_) { /* fallback geocode at submit */ }
                             }

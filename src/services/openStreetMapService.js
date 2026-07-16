@@ -61,6 +61,28 @@ class OpenStreetMapService {
       }
     }
 
+    // Thử bỏ các từ viết tắt / rút gọn phổ biến trong tiếng Việt
+    const simplified = base
+      .replace(/\b(Đường|đường|Phường|phường|Quận|quận|Thành phố|TP\.?|Xã|xã|Huyện|huyện|Thị trấn|thị trấn)\s*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (simplified !== base && simplified.length > 5) {
+      variants.push(simplified);
+      if (!simplified.toLowerCase().includes('việt nam')) {
+        variants.push(`${simplified}, Việt Nam`);
+      }
+    }
+
+    // Thử chỉ giữ phần quận/huyện + thành phố (bỏ chi tiết đường/số nhà)
+    const parts = base.split(',').map(p => p.trim());
+    if (parts.length >= 3) {
+      // Lấy 2-3 phần cuối (thường là quận, thành phố)
+      const lastParts = parts.slice(-3).join(', ');
+      variants.push(lastParts);
+      const last2Parts = parts.slice(-2).join(', ');
+      variants.push(last2Parts);
+    }
+
     // Loại bỏ duplicates
     return [...new Set(variants)];
   }
@@ -130,7 +152,28 @@ class OpenStreetMapService {
       }
     }
 
-    // Tất cả biến thể đều thất bại
+    // Tất cả biến thể đều thất bại - thử searchPlaces như fallback cuối cùng
+    try {
+      console.log('🔄 OSM Geocoding: trying searchPlaces as final fallback...');
+      const searchResults = await this.searchPlaces(address);
+      if (searchResults && searchResults.length > 0) {
+        const bestMatch = searchResults[0];
+        const geocodeResult = {
+          lat: bestMatch.lat,
+          lng: bestMatch.lng,
+          formattedAddress: bestMatch.description,
+          components: bestMatch.components || {},
+          placeId: bestMatch.placeId,
+          importance: bestMatch.importance,
+          source: 'search_fallback'
+        };
+        console.log('✅ OSM Geocoding via searchPlaces fallback:', geocodeResult);
+        return geocodeResult;
+      }
+    } catch (searchError) {
+      console.warn('⚠️ OSM searchPlaces fallback also failed:', searchError.message);
+    }
+
     const finalError = new Error('Không tìm thấy địa chỉ phù hợp');
     console.error('❌ OSM Geocoding error (all variants failed):', finalError);
     throw finalError;

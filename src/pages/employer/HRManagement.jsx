@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -3695,6 +3696,8 @@ const HRManagement = () => {
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [changeRequestStatusOverrides, setChangeRequestStatusOverrides] = useState({});
   const changeRequestStatusOverridesRef = useRef({});
+  // Cooldown: skip polling/reload ngay sau khi submit change request (tránh server stale data ghi đè UI)
+  const pollCooldownUntilRef = useRef(0);
 
   const setChangeRequestStatusOverridesSync = (updater) => {
     setChangeRequestStatusOverrides(prev => {
@@ -3712,7 +3715,9 @@ const HRManagement = () => {
   // Load applications when jobs are ready
   useEffect(() => {
     if (allQuickJobs.length > 0) {
-      loadApplicationsFromQuickJobs();
+      // Skip reload nếu vừa submit change request (cooldown)
+      if (Date.now() < pollCooldownUntilRef.current) return;
+      loadApplicationsFromQuickJobs(changeRequestStatusOverridesRef.current);
     }
   }, [allQuickJobs]);
 
@@ -3836,9 +3841,15 @@ const HRManagement = () => {
     };
   }, []);
 
-  const loadApplicationsFromQuickJobs = async (statusOverrides = changeRequestStatusOverrides) => {
+  const loadApplicationsFromQuickJobs = async (statusOverrides = changeRequestStatusOverrides, { isPolling = false } = {}) => {
     try {
-      setLoadingApplications(true);
+      // Skip polling trong cooldown period sau submit (tránh server stale data gây nhấp nháy)
+      if (isPolling && Date.now() < pollCooldownUntilRef.current) {
+        console.log('⏳ Skipping poll — cooldown active');
+        return;
+      }
+      // Chỉ show loading khi load lần đầu, không khi polling (tránh flash UI)
+      if (!isPolling) setLoadingApplications(true);
       console.log('📥 Loading applications from Quick Jobs...');
 
       // applicationService is statically imported at the top of this file
@@ -3921,8 +3932,8 @@ const HRManagement = () => {
         const serverIsChangeApproved = app.status === 'change_approved';
         const serverIsReplaced = app.status === 'ĐÃ_BỊ_THAY_THẾ';
         const serverIsCancelled = app.status === 'ĐÃ_HUỶ' || app.status === 'CANCELLED' || app.status === 'cancelled';
-        if (serverIsChangeApproved || serverIsReplaced || serverIsCancelled || isFinalizedChangeRequest || (serverIsActive && overrideStatus === 'pending_change')) {
-          // Lazily clean up the stale override from state
+        if (serverIsChangeApproved || serverIsReplaced || serverIsCancelled || isFinalizedChangeRequest) {
+          // Lazily clean up the stale override from state — chỉ khi server đã xác nhận trạng thái cuối cùng
           if (overrideEntry !== undefined) {
             setChangeRequestStatusOverridesSync(prev => {
               const next = { ...prev };
@@ -3973,6 +3984,21 @@ const HRManagement = () => {
         }
         // ─────────────────────────────────────────────────────────────────────────
 
+        // Khi server đã xác nhận pending_change → xoá override (không cần optimistic nữa), dùng data server
+        if (app.status === 'pending_change' && overrideEntry !== undefined) {
+          setChangeRequestStatusOverridesSync(prev => {
+            const next = { ...prev };
+            delete next[String(app.applicationId)];
+            return next;
+          });
+          return {
+            ...app,
+            status: 'pending_change',
+            changeRequest: app.changeRequest || app.change_request || overrideChangeReq,
+            change_request: app.change_request || app.changeRequest || overrideChangeReq,
+          };
+        }
+
         if (overrideStatus === 'pending_change' && overrideChangeReq) {
           return {
             ...app,
@@ -3997,12 +4023,28 @@ const HRManagement = () => {
       });
 
       console.log('✅ Loaded applications from DB:', mergedApplications);
-      setRealApplications(mergedApplications);
+      // Chỉ update state nếu data thực sự thay đổi (tránh re-render + nhấp nháy khi polling)
+      setRealApplications(prev => {
+        // So sánh nhanh: nếu số lượng khác hoặc bất kỳ item nào khác status/changeRequest → update
+        if (prev.length !== mergedApplications.length) return mergedApplications;
+        const changed = mergedApplications.some((app, i) => {
+          const old = prev[i];
+          if (!old) return true;
+          return old.applicationId !== app.applicationId
+            || old.status !== app.status
+            || old.changeRequestStatus !== app.changeRequestStatus
+            || JSON.stringify(old.changeRequest) !== JSON.stringify(app.changeRequest)
+            || old.chatMessages?.length !== app.chatMessages?.length
+            || old.confirmedAt !== app.confirmedAt
+            || old.rating !== app.rating;
+        });
+        return changed ? mergedApplications : prev;
+      });
     } catch (error) {
       console.error('❌ Error loading applications:', error);
-      setRealApplications([]);
+      if (!isPolling) setRealApplications([]);
     } finally {
-      setLoadingApplications(false);
+      if (!isPolling) setLoadingApplications(false);
     }
   };
 
@@ -4095,7 +4137,7 @@ const HRManagement = () => {
     const interval = hasPendingChange ? 3000 : 10000;
     const intervalId = setInterval(() => {
       console.log(`🔄 Polling latest applications for chat sync (${interval / 1000}s interval)...`);
-      loadApplicationsFromQuickJobs(changeRequestStatusOverridesRef.current);
+      loadApplicationsFromQuickJobs(changeRequestStatusOverridesRef.current, { isPolling: true });
     }, interval);
 
     return () => clearInterval(intervalId);
@@ -4792,7 +4834,7 @@ const HRManagement = () => {
       setSuccessToastMessage(language === 'vi' ? 'Đã hủy yêu cầu thành công' : 'Request cancelled successfully');
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 3000);
-      loadApplicationsFromQuickJobs().catch(() => { });
+      loadApplicationsFromQuickJobs(changeRequestStatusOverridesRef.current).catch(() => { });
       return;
     }
 
@@ -4854,7 +4896,7 @@ const HRManagement = () => {
 
       // Reload applications to update UI
       await loadQuickJobsFromDynamoDB();
-      await loadApplicationsFromQuickJobs();
+      await loadApplicationsFromQuickJobs(changeRequestStatusOverridesRef.current);
     } catch (err) {
       console.error('Error rejecting replacement worker:', err);
       setErrorNotificationMessage(err.message || 'Error rejecting replacement worker');
@@ -4892,7 +4934,7 @@ const HRManagement = () => {
       }
 
       // Reload applications from Quick Jobs
-      await loadApplicationsFromQuickJobs();
+      await loadApplicationsFromQuickJobs(changeRequestStatusOverridesRef.current);
 
       // Show success message
       console.log('✅ Application rejected successfully');
@@ -5656,15 +5698,13 @@ const HRManagement = () => {
                         {language === 'vi' ? 'Yêu cầu thay đổi nhân sự đang chờ duyệt' : 'Pending Personnel Change Requests'}
                       </ReplacementSectionTitle>
                       <StaffGrid>
-                        <AnimatePresence>
                           {allStaff
                             .filter(staff => staff.status === 'pending_change')
                             .map((staff, index) => (
                               <StaffCard
                                 key={staff.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.15 }}
+                                layout
+                                style={{ opacity: 1, y: 0 }}
                               >
                                 <StaffHeader>
                                   <div>
@@ -5746,7 +5786,6 @@ const HRManagement = () => {
                                 </StaffActions>
                               </StaffCard>
                             ))}
-                        </AnimatePresence>
                       </StaffGrid>
                     </PendingChangeSection>
                   )}
@@ -5783,7 +5822,7 @@ const HRManagement = () => {
                       .map((staff, index) => (
                         <StaffCard
                           key={staff.id}
-                          initial={{ opacity: 0, y: 20 }}
+                          initial={false}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.15 }}
                         >
@@ -7062,22 +7101,40 @@ const HRManagement = () => {
                               { changeRequest: changeReq, changeRequestStatus: 'pending' }
                             );
 
-                            // API thành công → cập nhật UI
-                            setStaffTabFilter('pending_change');
-                            setChangeRequestStatusOverridesSync(prev => ({
-                              ...prev,
-                              [targetAppId]: { status: 'pending_change', changeRequest: changeReq }
-                            }));
-                            await createChangeRequestSubmittedNotification({
+                            // API thành công → cập nhật UI ngay lập tức (flushSync đảm bảo 1 frame duy nhất, không flash)
+                            // Set cooldown 10s: block polling/reload để server kịp đồng bộ, tránh nhấp nháy
+                            pollCooldownUntilRef.current = Date.now() + 10000;
+                            flushSync(() => {
+                              setRealApplications(prev => prev.map(app =>
+                                app.applicationId === changeRequestStaff.applicationId
+                                  ? { ...app, status: 'pending_change', changeRequest: changeReq }
+                                  : app
+                              ));
+                              setStaffTabFilter('pending_change');
+                              setChangeRequestStatusOverridesSync(prev => ({
+                                ...prev,
+                                [targetAppId]: { status: 'pending_change', changeRequest: changeReq }
+                              }));
+                              setChangeRequestStaff(null);
+                              setChangeRequestReason('');
+                              setChangeRequestType('');
+                              setChangeRequestDetailTouched(false);
+                              setSelectedNewWorkerId('');
+                              setAvailableWorkers([]);
+                            });
+                            setSuccessToastMessage('Đã gửi yêu cầu thay đổi nhân viên, chờ admin duyệt');
+                            setShowSuccessToast(true);
+                            setTimeout(() => setShowSuccessToast(false), 3500);
+                            // Gửi notifications ở background — không block UI
+                            createChangeRequestSubmittedNotification({
                               employerId: user?.userId,
                               companyName: user?.companyName || user?.username,
                               candidateName: changeRequestStaff.name,
                               changeRequestType: changeRequestType,
                               changeRequestReason: changeRequestReason.trim(),
                               applicationId: changeRequestStaff.applicationId
-                            });
-                            // Thông báo cho UV biết NTD đã gửi yêu cầu thay đổi
-                            await createCandidateChangeRequestReceivedNotification({
+                            }).catch(e => console.warn('Notification send failed:', e));
+                            createCandidateChangeRequestReceivedNotification({
                               candidateId: changeRequestStaff.candidateId,
                               candidateName: changeRequestStaff.name,
                               companyName: user?.companyName || user?.username,
@@ -7085,21 +7142,7 @@ const HRManagement = () => {
                               changeRequestType: changeRequestType,
                               changeRequestReason: changeRequestReason.trim(),
                               applicationId: changeRequestStaff.applicationId
-                            });
-                            setRealApplications(prev => prev.map(app =>
-                              app.applicationId === changeRequestStaff.applicationId
-                                ? { ...app, status: 'pending_change', changeRequest: changeReq }
-                                : app
-                            ));
-                            setChangeRequestStaff(null);
-                            setChangeRequestReason('');
-                            setChangeRequestType('');
-                            setChangeRequestDetailTouched(false);
-                            setSelectedNewWorkerId('');
-                            setAvailableWorkers([]);
-                            setSuccessToastMessage('Đã gửi yêu cầu thay đổi nhân viên, chờ admin duyệt');
-                            setShowSuccessToast(true);
-                            setTimeout(() => setShowSuccessToast(false), 3500);
+                            }).catch(e => console.warn('Notification send failed:', e));
                           } catch (err) {
                             console.error('❌ Failed to submit cancel request:', err);
                             // Phân biệt lỗi hết hạn thay đổi với lỗi kết nối thông thường

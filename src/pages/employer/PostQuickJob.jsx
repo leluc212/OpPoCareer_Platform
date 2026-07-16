@@ -1954,7 +1954,7 @@ const PostQuickJob = () => {
                           onChange={async (e) => {
                             const selected = e.target.value;
                             setFieldWarnings(prev => prev.filter(w => w !== 'location'));
-                            if (selected === profileAddress) {
+                            if (selected === profileAddress && profileLatLng.lat && profileLatLng.lng) {
                               setFormData(prev => ({
                                 ...prev,
                                 location: selected,

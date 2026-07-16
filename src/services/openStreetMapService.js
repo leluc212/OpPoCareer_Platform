@@ -32,6 +32,40 @@ class OpenStreetMapService {
   }
 
   /**
+   * Chuẩn hóa địa chỉ Việt Nam để tăng khả năng tìm thấy trên Nominatim
+   * @param {string} address - Địa chỉ gốc
+   * @returns {string[]} - Mảng các biến thể địa chỉ để thử
+   */
+  normalizeVietnameseAddress(address) {
+    const variants = [address.trim()];
+
+    // Loại bỏ prefix "Địa điểm X:" nếu có (do dropdown thêm vào)
+    const prefixRemoved = address.replace(/^Địa điểm\s*\d+\s*:\s*/i, '').trim();
+    if (prefixRemoved !== address.trim()) {
+      variants.push(prefixRemoved);
+    }
+
+    const base = prefixRemoved || address.trim();
+
+    // Thêm ", Việt Nam" nếu chưa có để giúp Nominatim xác định quốc gia
+    if (!base.toLowerCase().includes('việt nam') && !base.toLowerCase().includes('vietnam')) {
+      variants.push(`${base}, Việt Nam`);
+    }
+
+    // Thử bỏ số nhà (Nominatim đôi khi không nhận dạng được số nhà VN)
+    const noHouseNumber = base.replace(/^\d+[a-zA-Z]?\s*[,/.-]?\s*/, '').trim();
+    if (noHouseNumber !== base && noHouseNumber.length > 5) {
+      variants.push(noHouseNumber);
+      if (!noHouseNumber.toLowerCase().includes('việt nam')) {
+        variants.push(`${noHouseNumber}, Việt Nam`);
+      }
+    }
+
+    // Loại bỏ duplicates
+    return [...new Set(variants)];
+  }
+
+  /**
    * Chuyển đổi địa chỉ thành tọa độ GPS (Geocoding)
    * @param {string} address - Địa chỉ cần chuyển đổi
    * @returns {Promise<Object>} - {lat, lng, formattedAddress, components}
@@ -41,57 +75,65 @@ class OpenStreetMapService {
       throw new Error('Địa chỉ không được để trống');
     }
 
-    await this.waitForRateLimit();
+    const addressVariants = this.normalizeVietnameseAddress(address);
+    let lastError = null;
 
-    try {
-      console.log('🔍 OSM Geocoding address:', address);
-      
-      const params = new URLSearchParams({
-        q: address,
-        format: 'json',
-        addressdetails: '1',
-        limit: '1',
-        countrycodes: 'vn', // Giới hạn trong Việt Nam
-        'accept-language': 'vi,en'
-      });
-      
-      const url = `${this.searchUrl}?${params}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'OpPoReview-JobPlatform/1.0' // Required by Nominatim
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
+    for (const variant of addressVariants) {
+      await this.waitForRateLimit();
 
-      if (data && data.length > 0) {
-        const result = data[0];
+      try {
+        console.log('🔍 OSM Geocoding address:', variant);
         
-        const geocodeResult = {
-          lat: parseFloat(result.lat),
-          lng: parseFloat(result.lon),
-          formattedAddress: result.display_name,
-          components: this.parseAddressComponents(result.address),
-          placeId: result.place_id,
-          osmType: result.osm_type,
-          osmId: result.osm_id,
-          importance: result.importance
-        };
+        const params = new URLSearchParams({
+          q: variant,
+          format: 'json',
+          addressdetails: '1',
+          limit: '5',
+          countrycodes: 'vn', // Giới hạn trong Việt Nam
+          'accept-language': 'vi,en'
+        });
+        
+        const url = `${this.searchUrl}?${params}`;
+        
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'OpPoReview-JobPlatform/1.0' // Required by Nominatim
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
 
-        console.log('✅ OSM Geocoding successful:', geocodeResult);
-        return geocodeResult;
-      } else {
-        throw new Error('Không tìm thấy địa chỉ phù hợp');
+        if (data && data.length > 0) {
+          const result = data[0];
+          
+          const geocodeResult = {
+            lat: parseFloat(result.lat),
+            lng: parseFloat(result.lon),
+            formattedAddress: result.display_name,
+            components: this.parseAddressComponents(result.address),
+            placeId: result.place_id,
+            osmType: result.osm_type,
+            osmId: result.osm_id,
+            importance: result.importance
+          };
+
+          console.log('✅ OSM Geocoding successful:', geocodeResult);
+          return geocodeResult;
+        }
+      } catch (error) {
+        lastError = error;
+        console.warn(`⚠️ OSM Geocoding attempt failed for "${variant}":`, error.message);
       }
-    } catch (error) {
-      console.error('❌ OSM Geocoding error:', error);
-      throw error;
     }
+
+    // Tất cả biến thể đều thất bại
+    const finalError = new Error('Không tìm thấy địa chỉ phù hợp');
+    console.error('❌ OSM Geocoding error (all variants failed):', finalError);
+    throw finalError;
   }
 
   /**

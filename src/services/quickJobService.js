@@ -194,6 +194,75 @@ class QuickJobService {
   }
 
   /**
+   * ATOMIC: Create quick job AND deduct wallet in a single DynamoDB Transaction.
+   * Guarantees that money is deducted ONLY if the job is successfully created.
+   * If either operation fails, both are rolled back automatically.
+   */
+  async createQuickJobWithPayment(jobData, feeAmount, feeDescription) {
+    try {
+      const { userId, email } = await getAuthInfo();
+      
+      if (!userId) {
+        throw new Error('Authentication required. Please login again.');
+      }
+      
+      let companyName = jobData.companyName;
+      if (!companyName) {
+        const companyInfo = await getCompanyInfo();
+        companyName = companyInfo.companyName;
+      }
+      
+      const jobId = generateQuickJobId();
+      
+      const payload = {
+        idJob: jobId,
+        employerId: userId,
+        employerEmail: email || '',
+        companyName: companyName,
+        title: jobData.title,
+        location: jobData.location,
+        latitude: jobData.latitude ? Math.round(jobData.latitude * 1000000) / 1000000 : null,
+        longitude: jobData.longitude ? Math.round(jobData.longitude * 1000000) / 1000000 : null,
+        jobType: jobData.jobType || 'part-time',
+        hourlyRate: Math.round(jobData.hourlyRate || 0),
+        startTime: jobData.startTime,
+        endTime: jobData.endTime,
+        workHours: jobData.workHours || '',
+        totalHours: Math.round((jobData.totalHours || 0) * 10) / 10,
+        totalSalary: Math.round(jobData.totalSalary || 0),
+        description: jobData.description || '',
+        requirements: jobData.requirements || '',
+        customFields: jobData.customFields || [],
+        status: jobData.status || 'pending',
+        category: 'quick-jobs',
+        applicants: 0,
+        views: 0,
+        workDate: jobData.workDate || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        // Payment fields for atomic transaction
+        feeAmount: Math.round(feeAmount),
+        feeDescription: feeDescription,
+        paymentDetails: jobData.paymentDetails || {}
+      };
+
+      const result = await this.makeRequest('/quick-jobs/create-with-payment', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
+      if (result.success && result.data) {
+        return result.data;
+      }
+
+      throw new Error(result.message || 'Failed to create quick job with payment');
+    } catch (error) {
+      console.error('❌ Error creating quick job with payment:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update existing quick job
    */
   async updateQuickJob(jobId, updates) {

@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key, Attr
@@ -138,7 +139,11 @@ def lambda_handler(event, context):
         
         # --- ROUTING LOGIC (ƯU TIÊN ROUTE TĨNH ĐỂ KHÔNG BỊ NHẦM VỚI {idJob}) ---
         
-        # 1. POST /quick-jobs (Tạo công việc)
+        # 1a. POST /quick-jobs/create-with-payment (ATOMIC: trừ tiền + tạo job cùng lúc)
+        if http_method == 'POST' and normalized_path == '/quick-jobs/create-with-payment':
+            return create_quick_job_with_payment(body, user_id, headers)
+        
+        # 1. POST /quick-jobs (Tạo công việc - legacy, không có trừ tiền)
         if http_method == 'POST' and normalized_path == '/quick-jobs':
             return create_quick_job(body, user_id, headers)
             
@@ -413,6 +418,287 @@ def create_quick_job(body_str, user_id, headers):
                 'message': f'Error creating quick job: {str(e)}'
             })
         }
+
+
+def create_quick_job_with_payment(body_str, user_id, headers):
+    """
+    ATOMIC: Trừ tiền ví NTD VÀ tạo Quick Job trong cùng 1 DynamoDB Transaction.
+    Nếu 1 trong 2 thao tác lỗi, CẢ HAI đều rollback — không mất tiền mà không có job.
+    """
+    try:
+        body = json.loads(body_str) if isinstance(body_str, str) else body_str
+        
+        print(f"[ATOMIC] Creating quick job with payment: {json.dumps(body)}")
+        
+        # Validate required fields
+        required_fields = ['idJob', 'title', 'location', 'hourlyRate', 'startTime', 'endTime', 'description']
+        for field in required_fields:
+            if field not in body:
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'message': f'Missing required field: {field}'
+                    })
+                }
+        
+        # Payment fields
+        employer_id = body.get('employerId', user_id)
+        fee_amount = body.get('feeAmount')
+        fee_description = body.get('feeDescription', 'Phí đăng bài tuyển gấp')
+        
+        if not employer_id or employer_id == 'anonymous':
+            return {
+                'statusCode': 401,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Authentication required. Please login again.'
+                })
+            }
+        
+        if not fee_amount or Decimal(str(fee_amount)) <= 0:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Invalid fee amount'
+                })
+            }
+        
+        fee_amount = Decimal(str(fee_amount))
+        
+        # --- Step 1: Fetch current wallet balance ---
+        employer_profile_table = dynamodb.Table(os.environ.get('EMPLOYER_PROFILE_TABLE', 'EmployerProfiles'))
+        
+        try:
+            emp_response = employer_profile_table.get_item(Key={'userId': employer_id})
+            emp_item = emp_response.get('Item')
+        except Exception as e:
+            print(f"[ATOMIC] Error fetching employer profile: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Không thể truy cập thông tin ví. Vui lòng thử lại.'
+                })
+            }
+        
+        if not emp_item:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Employer profile not found'
+                })
+            }
+        
+        current_balance = emp_item.get('walletBalance', Decimal('0'))
+        if isinstance(current_balance, (int, float)):
+            current_balance = Decimal(str(current_balance))
+        
+        if current_balance < fee_amount:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': f'Số dư không đủ. Số dư hiện tại: {int(current_balance):,} VNĐ, Phí: {int(fee_amount):,} VNĐ'
+                })
+            }
+        
+        # --- Step 2: Prepare job item ---
+        def to_decimal(val, default='0'):
+            try: return Decimal(str(val)) if val is not None else Decimal(default)
+            except: return Decimal(default)
+        
+        now_iso = datetime.utcnow().isoformat() + 'Z'
+        # Vietnam timezone for transaction ID
+        from datetime import timedelta
+        now_vn = datetime.utcnow() + timedelta(hours=7)
+        txn_id = f"TXN-DEBIT-{now_vn.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+        
+        new_balance = current_balance - fee_amount
+        
+        # Build new transaction record
+        transaction_record = {
+            'transactionId': txn_id,
+            'type': 'debit',
+            'amount': fee_amount,
+            'description': fee_description,
+            'timestamp': now_vn.isoformat(),
+            'status': 'completed',
+            'paymentDetails': body.get('paymentDetails', {})
+        }
+        
+        # Prepend to existing transactions
+        existing_transactions = emp_item.get('walletTransactions', [])
+        if existing_transactions is None:
+            existing_transactions = []
+        updated_transactions = [transaction_record] + existing_transactions
+        
+        # Build job item
+        job_item = {
+            'jobID': body['idJob'],
+            'employerId': employer_id,
+            'employerEmail': body.get('employerEmail', ''),
+            'companyName': body.get('companyName', ''),
+            'title': body['title'],
+            'location': body['location'],
+            'latitude': to_decimal(body.get('latitude'), None) if body.get('latitude') else None,
+            'longitude': to_decimal(body.get('longitude'), None) if body.get('longitude') else None,
+            'jobType': body.get('jobType', 'part-time'),
+            'hourlyRate': to_decimal(body.get('hourlyRate')),
+            'startTime': body['startTime'],
+            'endTime': body['endTime'],
+            'workHours': body.get('workHours', ''),
+            'totalHours': to_decimal(body.get('totalHours')),
+            'totalSalary': to_decimal(body.get('totalSalary')),
+            'description': body['description'],
+            'requirements': body.get('requirements', ''),
+            'customFields': body.get('customFields', []),
+            'status': 'pending',
+            'category': 'quick-jobs',
+            'applicants': 0,
+            'views': 0,
+            'workDate': body.get('workDate', ''),
+            'createdAt': body.get('createdAt', now_iso),
+            'updatedAt': body.get('updatedAt', now_iso)
+        }
+        
+        # Remove None values (DynamoDB doesn't accept None)
+        job_item = {k: v for k, v in job_item.items() if v is not None}
+        
+        # --- Step 3: ATOMIC Transaction — deduct wallet AND create job ---
+        dynamodb_client = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION', 'ap-southeast-1'))
+        
+        from boto3.dynamodb.types import TypeSerializer
+        serializer = TypeSerializer()
+        
+        # Serialize job item for transact_write
+        serialized_job = {k: serializer.serialize(v) for k, v in job_item.items()}
+        
+        # Serialize updated transactions list
+        serialized_transactions = serializer.serialize(updated_transactions)
+        serialized_new_balance = serializer.serialize(new_balance)
+        serialized_now = serializer.serialize(now_iso)
+        
+        try:
+            dynamodb_client.transact_write_items(
+                TransactItems=[
+                    {
+                        'Update': {
+                            'TableName': os.environ.get('EMPLOYER_PROFILE_TABLE', 'EmployerProfiles'),
+                            'Key': {
+                                'userId': {'S': employer_id}
+                            },
+                            'UpdateExpression': 'SET walletBalance = :newBal, walletTransactions = :txs, updatedAt = :updatedAt',
+                            'ConditionExpression': 'walletBalance >= :feeAmount',
+                            'ExpressionAttributeValues': {
+                                ':newBal': serialized_new_balance,
+                                ':txs': serialized_transactions,
+                                ':updatedAt': serialized_now,
+                                ':feeAmount': serializer.serialize(fee_amount)
+                            }
+                        }
+                    },
+                    {
+                        'Put': {
+                            'TableName': os.environ.get('TABLE_NAME', 'PostQuickJob'),
+                            'Item': serialized_job,
+                            'ConditionExpression': 'attribute_not_exists(jobID)'
+                        }
+                    }
+                ]
+            )
+        except dynamodb_client.exceptions.TransactionCanceledException as e:
+            reasons = e.response.get('CancellationReasons', [])
+            print(f"[ATOMIC] Transaction cancelled: {reasons}")
+            
+            # Check which condition failed
+            if len(reasons) > 0 and reasons[0].get('Code') == 'ConditionalCheckFailed':
+                return {
+                    'statusCode': 400,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'message': 'Số dư không đủ để thực hiện giao dịch này.'
+                    })
+                }
+            elif len(reasons) > 1 and reasons[1].get('Code') == 'ConditionalCheckFailed':
+                return {
+                    'statusCode': 409,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'success': False,
+                        'message': 'Job ID đã tồn tại. Vui lòng thử lại.'
+                    })
+                }
+            
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': f'Giao dịch thất bại. Tiền chưa bị trừ. Vui lòng thử lại.'
+                })
+            }
+        except Exception as e:
+            print(f"[ATOMIC] TransactWriteItems error: {str(e)}")
+            return {
+                'statusCode': 500,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Lỗi hệ thống. Tiền chưa bị trừ. Vui lòng thử lại.'
+                })
+            }
+        
+        print(f"✅ [ATOMIC] Quick job created AND wallet deducted: {job_item['jobID']}, fee={int(fee_amount)}")
+        
+        # --- Post-creation tasks (non-critical, won't affect the transaction) ---
+        try:
+            from email_service import send_admin_approval_email
+            send_admin_approval_email(job_item, is_quick_job=True)
+        except Exception as email_err:
+            print(f"Warning: Admin email failed (non-critical): {str(email_err)}")
+        
+        # Add idJob alias for API consistency
+        job_item['idJob'] = job_item['jobID']
+        
+        return {
+            'statusCode': 201,
+            'headers': headers,
+            'body': json.dumps({
+                'success': True,
+                'message': 'Quick job created successfully',
+                'data': {
+                    'job': job_item,
+                    'wallet': {
+                        'walletBalance': new_balance,
+                        'transactionId': txn_id
+                    }
+                }
+            }, default=decimal_default)
+        }
+    
+    except Exception as e:
+        print(f"[ATOMIC] Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'statusCode': 500,
+            'headers': headers,
+            'body': json.dumps({
+                'success': False,
+                'message': f'Lỗi hệ thống: {str(e)}'
+            })
+        }
+
 
 def get_all_quick_jobs(headers):
     """Admin route to list ALL non-deleted jobs"""

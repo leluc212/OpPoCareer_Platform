@@ -12,7 +12,7 @@ import quickJobService from '../../services/quickJobService';
 import employerProfileService from '../../services/employerProfileService';
 import hybridGeocodingService from '../../services/hybridGeocodingService';
 import { useAuth } from '../../context/AuthContext';
-import { getWallet, createWalletTransaction } from '../../services/packageCatalogService';
+import { getWallet } from '../../services/packageCatalogService';
 import cvAiService from '../../services/cvAiService';
 import { useToast } from '../../hooks/useToast';
 import Toast from '../../components/Toast';
@@ -1541,35 +1541,8 @@ const PostQuickJob = () => {
     }
 
     let newBalance = 0;
-    let didDeductRealWallet = false;
 
     try {
-      // Deduct fee from wallet (backend database)
-      try {
-        const description = language === 'vi'
-          ? `Nạp tiền - Đăng bài: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VNĐ)`
-          : `Deposit - Post job: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VND)`;
-
-        const result = await createWalletTransaction(
-          employerId,
-          totalFee,
-          'debit',
-          description,
-          {
-            jobTitle: formData.title,
-            hours: calculation.hours,
-            hourlyRate: rate
-          }
-        );
-        newBalance = result.walletBalance || 0;
-        setRealBalance(newBalance);
-        didDeductRealWallet = true;
-      } catch (apiError) {
-        console.warn('⚠️ API wallet debit failed:', apiError);
-        // Re-throw so the outer catch handles it properly
-        throw apiError;
-      }
-
       // Get company name from employer profile
       let companyName = 'Unknown Company';
       try {
@@ -1582,44 +1555,58 @@ const PostQuickJob = () => {
         console.warn('⚠️ Could not get company name from profile:', error);
       }
 
-      // Prepare job data for DynamoDB
+      // Prepare job data
       const jobData = {
         title: formData.title,
         location: formData.location,
         latitude: finalLat ? Math.round(parseFloat(finalLat) * 1000000) / 1000000 : null,
         longitude: finalLng ? Math.round(parseFloat(finalLng) * 1000000) / 1000000 : null,
         jobType: formData.jobType || 'part-time',
-        hourlyRate: Math.round(rate), // Ensure integer
+        hourlyRate: Math.round(rate),
         startTime: validSlots[0].startTime,
         endTime: validSlots[0].endTime,
         workHours: validSlots.map(s => `${s.startTime} - ${s.endTime}`).join(' | '),
-        totalHours: Math.round(calculation.hours * 10) / 10, // Round to 1 decimal place
-        totalSalary: Math.round(totalFee), // Ensure integer
+        totalHours: Math.round(calculation.hours * 10) / 10,
+        totalSalary: Math.round(totalFee),
         description: formData.description || '',
         requirements: formData.requirements || '',
         contactPhone: formData.contactPhone || '',
         customFields: (formData.customFields || [])
           .map(f => ({ label: (f.label || '').trim(), value: (f.value || '').trim() }))
           .filter(f => f.label.length > 0 || f.value.length > 0),
-        companyName: companyName,  // Add company name here
-        status: 'pending',  // Quick jobs require admin approval
-        workDate: formData.workDate || '' // Store work date in workDate attribute
+        companyName: companyName,
+        status: 'pending',
+        workDate: formData.workDate || '',
+        paymentDetails: {
+          jobTitle: formData.title,
+          hours: calculation.hours,
+          hourlyRate: rate
+        }
       };
 
-      console.log('🚀 Submitting quick job to DynamoDB:', jobData);
+      const feeDescription = language === 'vi'
+        ? `Phí đăng bài tuyển gấp: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VNĐ)`
+        : `Quick job posting fee: ${formData.title} (${calculation.hours.toFixed(1)}h x ${rate.toLocaleString('vi-VN')} VND)`;
 
-      // Save to DynamoDB via quickJobService
-      const savedJob = await quickJobService.createQuickJob(jobData);
+      console.log('🚀 Submitting quick job with ATOMIC payment:', jobData);
 
-      console.log('✅ Quick job saved:', savedJob);
+      // ATOMIC: Trừ tiền VÀ tạo job trong cùng 1 DynamoDB Transaction
+      // Nếu 1 trong 2 thao tác lỗi, CẢ HAI đều rollback — không mất tiền mà không có job
+      const result = await quickJobService.createQuickJobWithPayment(jobData, totalFee, feeDescription);
 
-      // Notify admin about new quick job posting
+      const savedJob = result.job || result;
+      newBalance = result.wallet?.walletBalance ?? (currentBalance - totalFee);
+      setRealBalance(newBalance);
+
+      console.log('✅ Quick job saved (atomic):', savedJob);
+
+      // Notify admin about new quick job posting (non-critical)
       try {
         await createJobPendingApprovalNotification({
           employerId,
           companyName: companyName,
           jobTitle: jobData.title,
-          jobId: savedJob.idJob || savedJob.id || 'QJOB',
+          jobId: savedJob.idJob || savedJob.jobID || 'QJOB',
           isQuickJob: true
         });
         console.log('✅ Sent pending approval notification to admin for quick job');
@@ -1645,24 +1632,9 @@ const PostQuickJob = () => {
     } catch (error) {
       console.error('❌ Error creating quick job:', error);
 
-      // Rollback wallet deduction if API had deducted balance
-      if (didDeductRealWallet) {
-        try {
-          const description = language === 'vi'
-            ? `Hoàn tiền - Lỗi đăng bài: ${formData.title}`
-            : `Refund - Job posting error: ${formData.title}`;
-          const result = await createWalletTransaction(
-            employerId,
-            totalFee,
-            'credit',
-            description,
-            { error: error.message }
-          );
-          setRealBalance(result.walletBalance || 0);
-        } catch (refundError) {
-          console.error('❌ Failed to refund wallet balance:', refundError);
-        }
-      }
+      // Không cần rollback thủ công vì DynamoDB Transaction đảm bảo:
+      // - Nếu lỗi → tiền CHƯA bị trừ (atomic rollback)
+      // - Nếu thành công → cả tiền lẫn job đều đã được xử lý
 
       setModalType('error');
       setPaymentInfo({

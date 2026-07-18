@@ -25,8 +25,8 @@ import { createVerificationSession, getKycStatus } from '../../services/ekycServ
 import { useAuth } from '../../context/AuthContext';
 
 // ─── Animations ───────────────────────────────────────────────────────────────
-const spin   = keyframes`from { transform: rotate(0deg); } to { transform: rotate(360deg); }`;
-const float  = keyframes`0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); }`;
+const spin = keyframes`from { transform: rotate(0deg); } to { transform: rotate(360deg); }`;
+const float = keyframes`0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); }`;
 const bounce = keyframes`0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); }`;
 
 // ─── Styled Components ────────────────────────────────────────────────────────
@@ -142,22 +142,22 @@ const LoadingOverlay = styled(motion.div)`
 `;
 
 // ─── Poll interval (ms) ───────────────────────────────────────────────────────
-const POLL_INTERVAL_MS  = 5000;  // kiểm tra mỗi 5 giây
+const POLL_INTERVAL_MS = 5000;  // kiểm tra mỗi 5 giây
 const POLL_MAX_ATTEMPTS = 60;    // tối đa 5 phút
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const CandidateKYC = () => {
-  const { language }      = useLanguage();
-  const navigate          = useNavigate();
-  const [searchParams]    = useSearchParams();
-  const { user }          = useAuth();
-  const pollRef           = useRef(null);
-  const pollCountRef      = useRef(0);
+  const { language } = useLanguage();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const pollRef = useRef(null);
+  const pollCountRef = useRef(0);
 
-  const [phase, setPhase]         = useState('idle');   // idle | creating | redirect | polling | done | failed
-  const [loading, setLoading]     = useState(true);
+  const [phase, setPhase] = useState('idle');   // idle | creating | redirect | polling | done | failed
+  const [loading, setLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState('');
-  const [error, setError]         = useState('');
+  const [error, setError] = useState('');
   const [redirectUrl, setRedirectUrl] = useState('');
   const [pollCount, setPollCount] = useState(0);
 
@@ -253,7 +253,7 @@ const CandidateKYC = () => {
     try {
       // callbackUrl: trang user quay về sau khi hoàn tất trên Didit
       const callbackUrl = `${window.location.origin}/candidate/kyc?status=completed`;
-      const result      = await createVerificationSession(callbackUrl);
+      const result = await createVerificationSession(callbackUrl);
 
       if (!result.success || !result.redirect_url) {
         throw new Error(result.errorMsg || t('Không lấy được link xác minh', 'Could not get verification link'));

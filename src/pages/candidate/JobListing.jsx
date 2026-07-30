@@ -2768,14 +2768,8 @@ const JobListing = () => {
     });
   };
 
-  // Visibility and Anti-cheat Monitoring Hook (TEMPORARILY DISABLED FOR TESTING)
+  // Visibility and Anti-cheat Monitoring Hook
   useEffect(() => {
-    // Anti-cheat disabled — no tab-switch detection, no copy/paste block, no fullscreen enforcement
-    setTabSwitchCount(0);
-    setShowTabWarningOverlay(false);
-    return;
-    /* eslint-disable no-unreachable */
-    // --- Original anti-cheat logic below (kept for re-enabling later) ---
     if (!showAiScreeningModal || aiScreeningStep !== 'interview' || interviewFinished) {
       setTabSwitchCount(0);
       setShowTabWarningOverlay(false);
@@ -2864,7 +2858,6 @@ const JobListing = () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
-    /* eslint-enable no-unreachable */
   }, [showAiScreeningModal, aiScreeningStep, interviewFinished, language, showTabWarningOverlay]);
 
   // Clean up speech on close
@@ -7354,19 +7347,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                 if (!rulesAccepted || !micPermissionGranted) return;
                 setShowAiRulesModal(false);
 
-                // Request fullscreen mode (DISABLED FOR TESTING)
-                // try {
-                //   const elem = document.documentElement;
-                //   if (elem.requestFullscreen) {
-                //     await elem.requestFullscreen();
-                //   } else if (elem.webkitRequestFullscreen) {
-                //     await elem.webkitRequestFullscreen();
-                //   } else if (elem.msRequestFullscreen) {
-                //     await elem.msRequestFullscreen();
-                //   }
-                // } catch (fsErr) {
-                //   console.warn('Fullscreen request failed:', fsErr);
-                // }
+                // Request fullscreen mode
+                try {
+                  const elem = document.documentElement;
+                  if (elem.requestFullscreen) {
+                    await elem.requestFullscreen();
+                  } else if (elem.webkitRequestFullscreen) {
+                    await elem.webkitRequestFullscreen();
+                  } else if (elem.msRequestFullscreen) {
+                    await elem.msRequestFullscreen();
+                  }
+                } catch (fsErr) {
+                  console.warn('Fullscreen request failed:', fsErr);
+                }
 
                 setAiScreeningStep('interview');
                 startInterviewSession(aiScreeningJob, pendingApplication?.finalCVUrl);

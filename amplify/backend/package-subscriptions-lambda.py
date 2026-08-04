@@ -51,6 +51,52 @@ def get_cors_headers():
         'Content-Type': 'application/json; charset=utf-8'
     }
 
+
+def get_claims(event):
+    authorizer = event.get('requestContext', {}).get('authorizer', {})
+    return authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {}) or {}
+
+
+def group_set(claims):
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return {str(group).lower() for group in groups}
+
+
+def body_object(body):
+    if isinstance(body, dict):
+        return body
+    try:
+        return json.loads(body or '{}')
+    except (TypeError, ValueError):
+        return {}
+
+
+def get_public_subscriptions(headers):
+    """Return only non-sensitive fields needed to decorate public job lists."""
+    items = []
+    scan = table.scan()
+    items.extend(scan.get('Items', []))
+    while scan.get('LastEvaluatedKey'):
+        scan = table.scan(ExclusiveStartKey=scan['LastEvaluatedKey'])
+        items.extend(scan.get('Items', []))
+
+    public_items = [
+        {
+            key: item.get(key)
+            for key in ('subscriptionId', 'employerId', 'packageName', 'status', 'approvalStatus', 'expiryDateTime', 'purchaseDateTime')
+            if item.get(key) is not None
+        }
+        for item in items
+        if item.get('status') == 'active' and item.get('approvalStatus') == 'approved'
+    ]
+    return {
+        'statusCode': 200,
+        'headers': headers,
+        'body': json.dumps(public_items, default=decimal_default)
+    }
+
 def lambda_handler(event, context):
     """
     Main Lambda handler for PackageSubscriptions API
@@ -108,6 +154,39 @@ def lambda_handler(event, context):
             'headers': headers,
             'body': json.dumps({'message': 'OK'})
         }
+
+    claims = get_claims(event)
+    caller_id = claims.get('sub')
+    caller_is_admin = 'admin' in group_set(claims)
+    if path == '/subscriptions/public' and http_method == 'GET':
+        return get_public_subscriptions(headers)
+    if path != '/packages' and path != '/wallet/sepay-webhook' and not caller_id:
+        return {'statusCode': 401, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Unauthorized'})}
+
+    requested_body = body_object(body)
+    if '/packages/' in path and http_method == 'PUT' and not caller_is_admin:
+        return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
+    if '/subscriptions/' in path and http_method in {'PUT', 'DELETE'} and not caller_is_admin:
+        return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
+    if path == '/subscriptions' and http_method == 'GET' and not caller_is_admin:
+        return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
+    if '/subscriptions/' in path and http_method == 'GET' and not caller_is_admin and '/subscriptions/employer/' not in path:
+        requested_subscription_id = path_parameters.get('subscriptionId')
+        subscription = table.get_item(Key={'subscriptionId': requested_subscription_id}).get('Item') if requested_subscription_id else None
+        if not subscription or subscription.get('employerId') != caller_id:
+            return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Cannot access another employer subscription'})}
+    if path == '/wallet/withdrawals' and not caller_is_admin:
+        return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
+    if '/wallet/withdrawals/' in path and not caller_is_admin:
+        return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
+    if '/subscriptions/employer/' in path or (path.startswith('/wallet/') and path != '/wallet/withdraw'):
+        requested_id = path_parameters.get('employerId')
+        if requested_id and requested_id != caller_id and not caller_is_admin:
+            return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Cannot access another employer wallet'})}
+    if http_method == 'POST' and path in {'/subscriptions', '/wallet/transaction', '/wallet/withdraw'}:
+        requested_id = requested_body.get('employerId')
+        if requested_id and requested_id != caller_id and not caller_is_admin:
+            return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Cannot act for another employer'})}
     
     try:
         # Route requests

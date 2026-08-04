@@ -318,7 +318,7 @@ def send_recommendation_email(candidate, job, reasons, is_quick_job=False):
                         <!-- Header Banner -->
                         <tr>
                             <td style="background: linear-gradient(135deg, #f8fafc, #eff6ff); border-bottom: 1px solid #e2e8f0; padding: 40px 30px; text-align: center;">
-                                <img src="https://opporeview-cv-storage.s3.ap-southeast-1.amazonaws.com/system/logo.png" alt="Ốp Pờ Logo" style="height: 48px; margin-bottom: 10px; display: inline-block; vertical-align: middle;">
+                                <img src="https://opporeview-cv-storage-prod-2026.s3.ap-southeast-1.amazonaws.com/system/logo.png" alt="Ốp Pờ Logo" style="height: 48px; margin-bottom: 10px; display: inline-block; vertical-align: middle;">
                                 <h1 style="color: #1e3a8a; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: 'Segoe UI', Arial, sans-serif;">Ốp Pờ</h1>
                                 <p style="color: #475569; margin: 4px 0 0 0; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;">Đề xuất việc làm phù hợp cho bạn</p>
                             </td>
@@ -502,7 +502,7 @@ def send_recommendations_email(candidate, jobs_list):
                         <!-- Header Banner -->
                         <tr>
                             <td style="background: linear-gradient(135deg, #f8fafc, #eff6ff); border-bottom: 1px solid #e2e8f0; padding: 40px 30px; text-align: center;">
-                                <img src="https://opporeview-cv-storage.s3.ap-southeast-1.amazonaws.com/system/logo.png" alt="Ốp Pờ Logo" style="height: 48px; margin-bottom: 10px; display: inline-block; vertical-align: middle;">
+                                <img src="https://opporeview-cv-storage-prod-2026.s3.ap-southeast-1.amazonaws.com/system/logo.png" alt="Ốp Pờ Logo" style="height: 48px; margin-bottom: 10px; display: inline-block; vertical-align: middle;">
                                 <h1 style="color: #1e3a8a; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; font-family: 'Segoe UI', Arial, sans-serif;">Ốp Pờ</h1>
                                 <p style="color: #475569; margin: 4px 0 0 0; font-size: 14px; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif;">Đề xuất việc làm phù hợp cho bạn</p>
                             </td>

@@ -2208,7 +2208,7 @@ TUYỆT ĐỐI KHÔNG chuyển sang câu hỏi tiếp theo và không hỏi ch�
 
             timestamp = int(time.time())
             s3_key = f"interviews/{user_id}/{session_id}_{timestamp}.webm"
-            bucket_name = "opporeview-cv-storage"
+            bucket_name = "opporeview-cv-storage-prod-2026"
 
             try:
                 # Presigned PUT URL — browser uploads the audio directly to S3,
@@ -2269,7 +2269,7 @@ TUYỆT ĐỐI KHÔNG chuyển sang câu hỏi tiếp theo và không hỏi ch�
             
             timestamp = int(time.time())
             s3_key = f"interviews/{user_id}/{session_id}_{timestamp}.webm"
-            bucket_name = "opporeview-cv-storage"
+            bucket_name = "opporeview-cv-storage-prod-2026"
             
             try:
                 s3_client.put_object(

@@ -1,17 +1,18 @@
 # add-image-upload-url-route.ps1
-# Creates POST /profile/{userId}/image-upload-url in the EmployerProfileAPI REST API (dlidp35x33)
+# Creates POST /profile/{userId}/image-upload-url in the EmployerProfileAPI REST API
 # and deploys to prod stage.
 # The Lambda already handles this path - only the API Gateway resource is missing.
 
 $ErrorActionPreference = "Stop"
 
-$REST_API_ID  = "dlidp35x33"
+$REST_API_ID  = "fhkig55p32"
 $REGION       = "ap-southeast-1"
-$LAMBDA_ARN   = "arn:aws:lambda:ap-southeast-1:726911960757:function:EmployerProfileAPI"
+$LAMBDA_ARN   = "arn:aws:lambda:ap-southeast-1:589362963105:function:EmployerProfileAPI"
 $INTEGRATION_URI = "arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"
 
-# /profile/{userId} resource ID (confirmed: si8qtl)
-$USER_ID_RESOURCE = "si8qtl"
+$resources = aws apigateway get-resources --rest-api-id $REST_API_ID --region $REGION | ConvertFrom-Json
+$USER_ID_RESOURCE = ($resources.items | Where-Object { $_.path -eq "/profile/{userId}" }).id
+if (-not $USER_ID_RESOURCE) { throw "Resource /profile/{userId} not found in API $REST_API_ID" }
 
 Write-Host "========================================"
 Write-Host " Add POST /profile/{userId}/image-upload-url"
@@ -125,4 +126,4 @@ Write-Host "  Deployed to prod"
 
 Write-Host ""
 Write-Host "Done! Route is live:"
-Write-Host "  POST https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod/profile/{userId}/image-upload-url"
+Write-Host "  POST https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod/profile/{userId}/image-upload-url"

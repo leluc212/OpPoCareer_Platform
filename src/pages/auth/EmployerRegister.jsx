@@ -966,7 +966,7 @@ const EmployerRegister = () => {
     try {
       const API_BASE = import.meta.env.VITE_CHECK_EMAIL_API
         || import.meta.env.VITE_CANDIDATE_API_URL
-        || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+        || 'https://5p2egon6w0.execute-api.ap-southeast-1.amazonaws.com';
       const res = await fetch(
         `${API_BASE}/auth/check-email?email=${encodeURIComponent(form.email.trim().toLowerCase())}`,
         { method: 'GET', headers: { 'Content-Type': 'application/json' } }

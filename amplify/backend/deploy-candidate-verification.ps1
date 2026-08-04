@@ -8,6 +8,7 @@ $LAMBDA_NAME   = "candidate-profile-api-handler"
 $REGION        = "ap-southeast-1"
 $ZIP_FILE      = "candidate-profile-lambda.zip"
 $PYTHON_FILE   = "candidate-profile-lambda.py"
+$HANDLER_FILE  = "candidate-api-lambda.py"
 
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "  Deploy Candidate Verification Lambda   " -ForegroundColor Cyan
@@ -23,8 +24,11 @@ if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
 Write-Host "`n[1/3] Packaging $PYTHON_FILE -> $ZIP_FILE ..." -ForegroundColor Yellow
 if (Test-Path $ZIP_FILE) { Remove-Item $ZIP_FILE -Force }
 
-# Use Compress-Archive (PowerShell built-in)
-Compress-Archive -Path $PYTHON_FILE -DestinationPath $ZIP_FILE -Force
+# The live handler is candidate-api-lambda.lambda_handler. Include both module
+# names so the API and profile routes share the same implementation.
+Copy-Item $PYTHON_FILE $HANDLER_FILE -Force
+Compress-Archive -Path $PYTHON_FILE,$HANDLER_FILE -DestinationPath $ZIP_FILE -Force
+Remove-Item $HANDLER_FILE -Force
 Write-Host "      Package created: $ZIP_FILE" -ForegroundColor Green
 
 # 3. Update Lambda function code

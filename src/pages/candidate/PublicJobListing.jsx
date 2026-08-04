@@ -14,6 +14,7 @@ import {
   Calendar, Users, Globe, FileText, LogIn, Bookmark, Sparkles
 } from 'lucide-react';
 import adminEmployerService from '../../services/adminEmployerService';
+import { getOptionalAuthHeaders } from '../../services/authHeaders.js';
 
 const fadeUp = keyframes`
   from { opacity: 0; transform: translateY(16px); }
@@ -742,7 +743,9 @@ const PublicJobListing = () => {
       try {
         const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
         if (!API_ENDPOINT) return;
-        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
+          headers: await getOptionalAuthHeaders()
+        });
         if (response.ok) {
           const data = await response.json();
           // Filter active and approved Hot Search packages

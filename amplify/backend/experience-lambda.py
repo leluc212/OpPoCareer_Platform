@@ -1,7 +1,7 @@
 """
 CandidateExperiences Lambda Handler
 Table: CandidateExperiences  (PK: candidateId, SK: experienceId)
-S3 bucket: opporeview-cv-storage / prefix: experience-proofs/
+S3 bucket: opporeview-cv-storage-prod-2026 / prefix: experience-proofs/
 
 Routes:
   POST   /candidate/experience           → create experience (candidate)
@@ -29,7 +29,7 @@ EXPERIENCE_TABLE = 'CandidateExperiences'
 CANDIDATE_TABLE  = 'CandidateProfiles'
 NOTIFICATIONS_TABLE = 'Notifications'
 
-S3_BUCKET        = 'opporeview-cv-storage'
+S3_BUCKET        = 'opporeview-cv-storage-prod-2026'
 S3_PREFIX        = 'experience-proofs'
 
 SENDER_EMAIL     = 'noreply@oppocareer.com'
@@ -652,25 +652,35 @@ def lambda_handler(event, context):
 
     # GET /admin/experiences
     if method == 'GET' and path == '/admin/experiences':
+        if not caller_admin:
+            return resp(403, {'success': False, 'message': 'Admin role required'})
         return handle_get_all_experiences(event)
 
     # GET /admin/experiences/{id}
     if method == 'GET' and path.startswith('/admin/experiences/') and not path.endswith('/approve') and not path.endswith('/reject'):
+        if not caller_admin:
+            return resp(403, {'success': False, 'message': 'Admin role required'})
         exp_id = path.split('/')[-1]
         return handle_get_experience_detail(exp_id)
 
     # PUT /admin/experiences/{id}/approve
     if method == 'PUT' and path.endswith('/approve'):
+        if not caller_admin:
+            return resp(403, {'success': False, 'message': 'Admin role required'})
         exp_id = path.split('/')[-2]
         return handle_approve_experience(event, exp_id)
 
     # PUT /admin/experiences/{id}/reject
     if method == 'PUT' and path.endswith('/reject'):
+        if not caller_admin:
+            return resp(403, {'success': False, 'message': 'Admin role required'})
         exp_id = path.split('/')[-2]
         return handle_reject_experience(event, exp_id)
 
     # GET /employer/candidate/{candidateId}/experience  – approved only
     if method == 'GET' and path.startswith('/employer/candidate/') and path.endswith('/experience'):
+        if not caller_id:
+            return resp(401, {'success': False, 'message': 'Unauthorized'})
         cand_id = path.split('/')[-2]
         if not cand_id:
             return resp(400, {'success': False, 'message': 'candidateId is required'})

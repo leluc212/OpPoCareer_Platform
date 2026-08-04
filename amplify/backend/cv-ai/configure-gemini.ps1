@@ -2,7 +2,7 @@ param(
     [string]$Region = "ap-southeast-1",
     [string]$SecretName = "opporeview/gemini",
     [string]$Model = "gemini-3.1-flash-lite",
-    [string]$ApiId = "sd7ds72m8g",
+    [string]$ApiId = "mrag7hkw11",
     [string]$JwtAuthorizerId = "46klga",
     [string]$AllowedOrigins = "http://localhost:3000,https://opporeview.github.io"
 )

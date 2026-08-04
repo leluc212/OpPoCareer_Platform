@@ -17,10 +17,17 @@ def get_cors_headers():
 
 dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
-BUCKET_NAME = 'opporeview-cv-storage'
+BUCKET_NAME = 'opporeview-cv-storage-prod-2026'
 applications_table = dynamodb.Table('StandardApplications')
 jobs_table = dynamodb.Table('PostStandardJob')
 quick_jobs_table = dynamodb.Table('PostQuickJob')
+
+
+def cognito_groups(claims):
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return {str(group).lower() for group in groups}
 
 def lambda_handler(event, context):
     print(f"📥 Received event: {json.dumps(event)}")
@@ -57,9 +64,9 @@ def lambda_handler(event, context):
         candidate_email = claims.get('email')
         
         # If no authorizer, allow GET for admin/public access
-        if not candidate_id and http_method == 'GET':
-            candidate_id = 'anonymous'
-            candidate_email = 'anonymous@example.com'
+        groups = cognito_groups(claims)
+        caller_is_admin = 'admin' in groups
+        caller_is_employer = 'employer' in groups or caller_is_admin
         
         # ✅ Return 401 with CORS headers (not just reject at authorizer level)
         if not candidate_id and http_method != 'OPTIONS':
@@ -72,52 +79,70 @@ def lambda_handler(event, context):
         
         # GET /applications - Get all applications (Admin)
         elif http_method == 'GET' and (normalized_path == '/applications' or normalized_path == '/applications/'):
+            if not caller_is_admin:
+                return create_response(403, {'error': 'Admin role required'})
             print(f"✅ Matched get all applications route: {normalized_path}")
             return get_all_applications(create_response)
         
         # GET /applications/candidate/{candidateId} - Get candidate's applications
         elif http_method == 'GET' and normalized_path.startswith('/applications/candidate/'):
             requested_candidate_id = normalized_path.split('/')[-1]
+            if not caller_is_admin and requested_candidate_id != candidate_id:
+                return create_response(403, {'error': 'Cannot read another candidate applications'})
             print(f"✅ Matched candidate applications route: requested_candidate_id={requested_candidate_id}, auth_candidate_id={candidate_id}")
             return get_candidate_applications(requested_candidate_id or candidate_id, create_response)
         
         # GET /applications/job/{jobId} - Get applications for a job (employer only)
         elif http_method == 'GET' and normalized_path.startswith('/applications/job/'):
+            if not caller_is_employer:
+                return create_response(403, {'error': 'Employer role required'})
             job_id = path.split('/')[-1]
             print(f"✅ Matched job applications route: job_id={job_id}")
             return get_job_applications(job_id, candidate_id, create_response)
         
         # GET /applications/change-requests - Admin: list all pending_change applications
         elif http_method == 'GET' and normalized_path == '/applications/change-requests':
+            if not caller_is_admin:
+                return create_response(403, {'error': 'Admin role required'})
             print(f"✅ Matched list change requests route")
             return list_change_requests(create_response)
 
         # GET /applications/available-workers/{jobId} - Employer: get available workers for replacement
         elif http_method == 'GET' and normalized_path.startswith('/applications/available-workers/'):
+            if not caller_is_employer:
+                return create_response(403, {'error': 'Employer role required'})
             job_id = normalized_path.split('/')[-1]
             print(f"✅ Matched available workers route: job_id={job_id}")
             return get_available_workers(job_id, create_response)
 
         # PUT /applications/{applicationId}/approve-change - Admin: approve change request
         elif http_method == 'PUT' and normalized_path.endswith('/approve-change'):
+            if not caller_is_admin:
+                return create_response(403, {'error': 'Admin role required'})
             application_id = normalized_path.split('/')[-2]
             print(f"✅ Matched approve change request route: application_id={application_id}")
             return approve_change_request(event, application_id, create_response)
 
         # PUT /applications/{applicationId}/reject-change - Admin: reject change request
         elif http_method == 'PUT' and normalized_path.endswith('/reject-change'):
+            if not caller_is_admin:
+                return create_response(403, {'error': 'Admin role required'})
             application_id = normalized_path.split('/')[-2]
             print(f"✅ Matched reject change request route: application_id={application_id}")
             return reject_change_request(event, application_id, create_response)
 
         # PUT /applications/{applicationId}/status - Update application status (employer only)
         elif http_method == 'PUT' and normalized_path.endswith('/status'):
+            if not caller_is_employer:
+                return create_response(403, {'error': 'Employer role required'})
             application_id = path.split('/')[-2]
             print(f"✅ Matched update application status route: application_id={application_id}")
             return update_application_status(event, application_id, candidate_id, create_response)
 
         # PUT /applications/{applicationId}/reject-replacement - Employer: reject replacement worker
         elif http_method == 'PUT' and normalized_path.endswith('/reject-replacement'):
+            if not caller_is_employer:
+                return create_response(403, {'error': 'Employer role required'})
             application_id = normalized_path.split('/')[-2]
             print(f"✅ Matched reject replacement route: application_id={application_id}")
             return reject_replacement_worker(event, application_id, candidate_id, create_response)

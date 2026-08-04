@@ -3,7 +3,7 @@
 
 import { getIdToken } from './authHeaders.js';
 
-const API_BASE_URL = import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod';
+const API_BASE_URL = import.meta.env.VITE_EMPLOYER_API_URL || 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod';
 
 /**
  * Admin Employer Service

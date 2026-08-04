@@ -12,8 +12,7 @@
 
 $REGION        = "ap-southeast-1"
 $FUNCTION_NAME = "ekyc-handler"         # Giữ tên cũ để không cần đổi API Gateway routes
-$API_ID        = "sd7ds72m8g"           # HTTP API Gateway dùng chung
-$AUTHORIZER_ID = "w7g6id"              # CognitoAuthorizer
+$API_ID        = "mrag7hkw11"           # HTTP API Gateway của account mới
 $ZIP_FILE      = "didit-ekyc-handler.zip"
 
 Write-Host "📦 Đóng gói didit-ekyc-handler.py vào zip..."
@@ -168,8 +167,7 @@ if (-not $sessionExists) {
         --api-id $API_ID `
         --route-key "POST /ekyc/session" `
         --target "integrations/$INTEGRATION_ID" `
-        --authorization-type JWT `
-        --authorizer-id $AUTHORIZER_ID `
+        --authorization-type NONE `
         --region $REGION
 
     aws apigatewayv2 create-route `
@@ -196,6 +194,6 @@ Write-Host ""
 Write-Host "⚠️  Checklist sau deploy:"
 Write-Host "  1. Cập nhật DIDIT_WORKFLOW_ID trong Lambda env vars"
 Write-Host "  2. Đăng ký URL webhook với Didit:"
-Write-Host "     https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod/ekyc/webhook/didit"
+Write-Host "     https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod/ekyc/webhook/didit"
 Write-Host "  3. Test tạo session thành công"
 Write-Host "  4. Giữ Lambda ekyc-handler cũ (VNPT) trong git branch riêng để rollback"

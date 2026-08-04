@@ -1,4 +1,5 @@
 // Notification API Service - DynamoDB Backend
+import { getAuthHeaders } from './authHeaders.js';
 
 const API_ENDPOINT = import.meta.env.VITE_NOTIFICATIONS_API;
 
@@ -9,7 +10,9 @@ const API_ENDPOINT = import.meta.env.VITE_NOTIFICATIONS_API;
  */
 export const getNotifications = async (userId, role) => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`);
+    const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`, {
+      headers: await getAuthHeaders()
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch notifications');
     }
@@ -29,7 +32,9 @@ export const getNotifications = async (userId, role) => {
  */
 export const getUnreadCount = async (userId, role) => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/notifications/unread/${userId}?role=${role}`);
+    const response = await fetch(`${API_ENDPOINT}/notifications/unread/${userId}?role=${role}`, {
+      headers: await getAuthHeaders()
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch unread count');
     }
@@ -50,6 +55,7 @@ export const createNotification = async (notification) => {
     const response = await fetch(`${API_ENDPOINT}/notifications`, {
       method: 'POST',
       headers: {
+        ...(await getAuthHeaders()),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(notification)
@@ -76,6 +82,7 @@ export const markAsRead = async (notificationId) => {
     const response = await fetch(`${API_ENDPOINT}/notifications/${notificationId}`, {
       method: 'PUT',
       headers: {
+        ...(await getAuthHeaders()),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ read: true })
@@ -100,7 +107,8 @@ export const markAsRead = async (notificationId) => {
 export const markAllAsRead = async (userId, role) => {
   try {
     const response = await fetch(`${API_ENDPOINT}/notifications/mark-all-read/${userId}?role=${role}`, {
-      method: 'PUT'
+      method: 'PUT',
+      headers: await getAuthHeaders()
     });
     
     if (!response.ok) {
@@ -121,7 +129,8 @@ export const markAllAsRead = async (userId, role) => {
 export const deleteNotification = async (notificationId) => {
   try {
     const response = await fetch(`${API_ENDPOINT}/notifications/${notificationId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: await getAuthHeaders()
     });
     
     if (!response.ok) {

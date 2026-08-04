@@ -37,7 +37,7 @@
       "Action": [
         "s3:GetObject"
       ],
-      "Resource": "arn:aws:s3:::opporeview-cv-storage/*"
+      "Resource": "arn:aws:s3:::opporeview-cv-storage-prod-2026/*"
     }
   ]
 }

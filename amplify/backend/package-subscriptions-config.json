@@ -1,7 +1,7 @@
 ﻿{
     "region":  "ap-southeast-1",
-    "apiId":  "p0nd7frlhg",
+    "apiId":  "u7lp3ox2e5",
     "tableName":  "PackageSubscriptions",
     "lambdaName":  "package-subscriptions-handler",
-    "apiEndpoint":  "https://p0nd7frlhg.execute-api.ap-southeast-1.amazonaws.com"
+    "apiEndpoint":  "https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com"
 }

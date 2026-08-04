@@ -8,7 +8,7 @@
         "s3:PutObject",
         "s3:PutObjectAcl"
       ],
-      "Resource": "arn:aws:s3:::opporeview-cv-storage/feedback-images/*"
+      "Resource": "arn:aws:s3:::opporeview-cv-storage-prod-2026/feedback-images/*"
     }
   ]
 }

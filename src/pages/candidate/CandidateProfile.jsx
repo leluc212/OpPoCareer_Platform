@@ -1154,6 +1154,7 @@ const CandidateProfile = () => {
         // Get Cognito email
         const session = await fetchAuthSession();
         const email = session.tokens?.idToken?.payload?.email;
+        const cognitoName = session.tokens?.idToken?.payload?.name || '';
         
         if (email) {
           setCognitoEmail(email);
@@ -1168,17 +1169,35 @@ const CandidateProfile = () => {
             const profile = await candidateProfileService.getMyProfile();
             
             if (profile) {
+              const profilePatch = {};
+              if (!profile.fullName?.trim() && cognitoName?.trim()) {
+                profilePatch.fullName = cognitoName.trim();
+              }
+              if (!profile.email?.trim() && email?.trim()) {
+                profilePatch.email = email.trim();
+              }
+
+              const resolvedProfile = Object.keys(profilePatch).length
+                ? { ...profile, ...profilePatch }
+                : profile;
+
+              if (Object.keys(profilePatch).length) {
+                candidateProfileService.updateProfile(profilePatch).catch((err) => {
+                  console.warn('Could not backfill missing Cognito profile fields:', err);
+                });
+              }
+
               // Profile exists in DynamoDB, use it
               const profileData = {
-                fullName: profile.fullName || '',
-                email: profile.email, // Always use DynamoDB email (which is from Cognito)
-                phone: profile.phone || '',
-                location: profile.location || '',
-                cccd: profile.cccd ? String(profile.cccd) : '',
-                dateOfBirth: profile.dateOfBirth || '',
-                title: profile.title || '',
-                bio: profile.bio || '',
-                socialLinks: profile.socialLinks || {
+                fullName: resolvedProfile.fullName || '',
+                email: resolvedProfile.email || email, // Always prefer stored email; fall back to Cognito
+                phone: resolvedProfile.phone || '',
+                location: resolvedProfile.location || '',
+                cccd: resolvedProfile.cccd ? String(resolvedProfile.cccd) : '',
+                dateOfBirth: resolvedProfile.dateOfBirth || '',
+                title: resolvedProfile.title || '',
+                bio: resolvedProfile.bio || '',
+                socialLinks: resolvedProfile.socialLinks || {
                   facebook: '',
                   instagram: '',
                   zalo: '',
@@ -1192,23 +1211,23 @@ const CandidateProfile = () => {
               // Update locked fields
               const locked = {
                 email: true, // Always locked
-                cccd: !!profile.cccd,
-                dateOfBirth: !!profile.dateOfBirth
+                cccd: !!resolvedProfile.cccd,
+                dateOfBirth: !!resolvedProfile.dateOfBirth
               };
               setIsLockedFields(locked);
               
               // Load skills
-              if (profile.skills && profile.skills.length > 0) {
-                setSkills(profile.skills);
+              if (resolvedProfile.skills && resolvedProfile.skills.length > 0) {
+                setSkills(resolvedProfile.skills);
               }
               
               // Load profile image
-              if (profile.profileImage) {
-                setProfileImage(profile.profileImage);
+              if (resolvedProfile.profileImage) {
+                setProfileImage(resolvedProfile.profileImage);
               }
 
               // Load eKYC status
-              if (profile.kycCompleted || profile.kycStatus === 'VERIFIED') {
+              if (resolvedProfile.kycCompleted || resolvedProfile.kycStatus === 'VERIFIED') {
                 setKycCompleted(true);
               }
               

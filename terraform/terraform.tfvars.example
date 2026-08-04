@@ -1,0 +1,16 @@
+# AWS Region
+aws_region = "ap-southeast-1"
+
+# Environment Name
+environment = "prod"
+
+# Globally Unique S3 Bucket Name
+s3_bucket_name = "opporeview-cv-storage-prod-2026"
+
+# Admin Email Address for system alerts
+admin_email = "admin@opporeview.com"
+
+# VietQR Payment Credentials
+vietqr_bank_id      = "MB"
+vietqr_account_no   = "0123456789"
+vietqr_account_name = "CONG%20TY%20OP%20PO"

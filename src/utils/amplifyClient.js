@@ -24,12 +24,15 @@ const redirectUri = window.location.hostname === 'localhost'
   ? 'http://localhost:3000/'
   : 'https://oppocareer.com/';
 
+const USER_POOL_ID = import.meta.env.VITE_USER_POOL_ID || 'ap-southeast-1_LUa2Zfjtv';
+const USER_POOL_CLIENT_ID = import.meta.env.VITE_USER_POOL_CLIENT_ID || '4g1ssfgjmnuveblss1a7e0v7ob';
+
 // Configure Amplify v6 with proper storage and OAuth settings
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: 'ap-southeast-1_ShCajkmJd',
-      userPoolClientId: '2mv7qt4gpmq03dmlm0or9724n8',
+      userPoolId: USER_POOL_ID,
+      userPoolClientId: USER_POOL_CLIENT_ID,
       loginWith: {
         email: true,
         oauth: {
@@ -65,5 +68,5 @@ export default { Amplify, Auth };
 
 // Export OAuth constants for non-hardcoded usage
 export const OAUTH_DOMAIN = 'opporeview.auth.ap-southeast-1.amazoncognito.com';
-export const OAUTH_CLIENT_ID = '2mv7qt4gpmq03dmlm0or9724n8';
+export const OAUTH_CLIENT_ID = USER_POOL_CLIENT_ID;
 export const OAUTH_REDIRECT_URI = redirectUri;

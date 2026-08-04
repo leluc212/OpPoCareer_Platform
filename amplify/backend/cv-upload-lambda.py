@@ -19,10 +19,22 @@ def get_cors_headers():
         'Content-Type': 'application/json'
     }
 
-BUCKET_NAME = 'opporeview-cv-storage'
+BUCKET_NAME = 'opporeview-cv-storage-prod-2026'
 ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx']
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 MAX_CV_COUNT = 3  # Maximum 3 CVs per user
+
+
+def get_verified_claims(event):
+    authorizer = event.get('requestContext', {}).get('authorizer', {}) or {}
+    return authorizer.get('jwt', {}).get('claims', {}) or authorizer.get('claims', {}) or {}
+
+
+def is_admin_claims(claims):
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return any(str(group).lower() == 'admin' for group in groups)
 
 def lambda_handler(event, context):
     print(f"Event: {json.dumps(event)}")
@@ -41,6 +53,16 @@ def lambda_handler(event, context):
             'headers': headers,
             'body': json.dumps({'message': 'OK'})
         }
+
+    claims = get_verified_claims(event)
+    caller_id = claims.get('sub')
+    caller_is_admin = is_admin_claims(claims)
+    if not caller_id:
+        return {
+            'statusCode': 401,
+            'headers': headers,
+            'body': json.dumps({'error': 'Unauthorized'})
+        }
     
     try:
         path = event.get('rawPath', event.get('path', ''))
@@ -49,11 +71,23 @@ def lambda_handler(event, context):
         # GET /cv/{userId} - Get all CVs for user
         if http_method == 'GET' and '/cv/' in path:
             user_id = path.split('/cv/')[-1].replace('/prod', '').strip('/')
+            if user_id != caller_id and not caller_is_admin:
+                return {
+                    'statusCode': 403,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Cannot read another user CVs'})
+                }
             return get_cv_list(user_id, headers)
         
         # POST /cv/upload - Upload new CV
         elif http_method == 'POST' and path.endswith('/upload'):
             body = json.loads(event.get('body', '{}'))
+            if body.get('userId') != caller_id and not caller_is_admin:
+                return {
+                    'statusCode': 403,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Cannot upload CV for another user'})
+                }
             return upload_cv(body, headers)
         
         # DELETE /cv/{userId}/{cvId} - Delete specific CV
@@ -61,6 +95,13 @@ def lambda_handler(event, context):
             parts = path.split('/cv/')[-1].replace('/prod', '').strip('/').split('/')
             user_id = parts[0]
             cv_id = parts[1] if len(parts) > 1 else None
+
+            if user_id != caller_id and not caller_is_admin:
+                return {
+                    'statusCode': 403,
+                    'headers': headers,
+                    'body': json.dumps({'error': 'Cannot delete another user CVs'})
+                }
             
             if cv_id:
                 return delete_specific_cv(user_id, cv_id, headers)

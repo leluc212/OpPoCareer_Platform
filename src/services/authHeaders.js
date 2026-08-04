@@ -8,7 +8,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 
 // Cognito User Pool Client ID — used to scan localStorage for the idToken
 // when the Amplify session object returns a non-JWT value.
-const USER_POOL_CLIENT_ID = '2mv7qt4gpmq03dmlm0or9724n8';
+const USER_POOL_CLIENT_ID = import.meta.env.VITE_USER_POOL_CLIENT_ID || '4g1ssfgjmnuveblss1a7e0v7ob';
 
 /**
  * Decode a JWT and return its payload, or null on failure.
@@ -70,6 +70,33 @@ function extractJwtString(idToken) {
     `⚠️ [getIdToken] Could not extract valid JWT from Amplify token object`
   );
   return null;
+}
+
+/**
+ * Returns a valid Cognito access token for WebSocket/API calls that need the
+ * server-side user lookup endpoint. The normal REST APIs use the ID token.
+ */
+export async function getAccessToken() {
+  try {
+    const session = await fetchAuthSession();
+    const accessToken = extractJwtString(session?.tokens?.accessToken);
+    if (accessToken && !isTokenExpired(accessToken)) return accessToken;
+
+    const refreshed = await fetchAuthSession({ forceRefresh: true });
+    const refreshedToken = extractJwtString(refreshed?.tokens?.accessToken);
+    return refreshedToken && !isTokenExpired(refreshedToken) ? refreshedToken : null;
+  } catch (err) {
+    console.warn('[getAccessToken] Unable to read access token:', err?.message);
+    return null;
+  }
+}
+
+/** Returns auth headers when available without failing public/anonymous views. */
+export async function getOptionalAuthHeaders() {
+  const token = await getIdToken();
+  return token
+    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+    : { 'Content-Type': 'application/json' };
 }
 
 /**

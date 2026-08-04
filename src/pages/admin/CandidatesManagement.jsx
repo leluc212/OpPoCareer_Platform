@@ -28,6 +28,7 @@ import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
+import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import ExperienceManagement from './ExperienceManagement';
 import { getAllExperiences } from '../../services/experienceService';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -625,6 +626,7 @@ const StatusBadge = styled.span`
 
 const CandidatesManagement = () => {
   const { language } = useLanguage();
+  const notificationBadges = useAdminNotificationBadges();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -1141,8 +1143,8 @@ const CandidatesManagement = () => {
           >
             <Zap size={18} style={{ marginRight: '8px' }} />
             {language === 'vi' ? 'Duyệt Tuyển Gấp' : 'Quick Job Approvals'}
-            {verifications.filter(v => v.verificationStatus === 'SUBMITTED').length > 0 && (
-              <TabBadge>{verifications.filter(v => v.verificationStatus === 'SUBMITTED').length}</TabBadge>
+            {notificationBadges.candidateVerifications > 0 && (
+              <TabBadge>{notificationBadges.candidateVerifications}</TabBadge>
             )}
           </Tab>
           <Tab

@@ -32,7 +32,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const REGION      = 'ap-southeast-1';
-const USER_POOL_ID = 'ap-southeast-1_ShCajkmJd';
+const USER_POOL_ID = 'ap-southeast-1_LUa2Zfjtv';
 
 const client = new CognitoIdentityProviderClient({ region: REGION });
 

@@ -4,10 +4,12 @@
 #   PUT /applications/{applicationId}/reject-change
 $ErrorActionPreference = "Continue"
 
-$API_ID      = "l1636ie205"
-$INTEGRATION = "jjduf5i"     # ApplicationLambda integration
-$AUTHORIZER  = "w7g6id"      # CognitoAuthorizer
+$API_ID      = "1v4xboca50"
 $REGION      = "ap-southeast-1"
+
+$integrations = aws apigatewayv2 get-integrations --api-id $API_ID --region $REGION | ConvertFrom-Json
+$INTEGRATION = ($integrations.Items | Where-Object { $_.IntegrationUri -match "function:ApplicationLambda/" } | Select-Object -First 1).IntegrationId
+if (-not $INTEGRATION) { throw "ApplicationLambda integration not found in API $API_ID" }
 
 $ROUTES = @(
     "PUT /applications/{applicationId}/approve-change",
@@ -26,8 +28,7 @@ foreach ($routeKey in $ROUTES) {
         --api-id $API_ID `
         --route-key $routeKey `
         --target "integrations/$INTEGRATION" `
-        --authorization-type JWT `
-        --authorizer-id $AUTHORIZER `
+        --authorization-type NONE `
         --region $REGION 2>&1
 
     if ($LASTEXITCODE -eq 0) {

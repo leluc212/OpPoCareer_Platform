@@ -9,9 +9,10 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 // CORS must be enabled there for this to work.
 const API_BASE_URL = import.meta.env.DEV
   ? '/api-profile'
-  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod');
-// Switch to xyp4wkszi7 for listing as well, as sd7ds72m8g is IAM-locked and xyp4wkszi7's Lambda returns the full list
-const CANDIDATE_LIST_API_URL = import.meta.env.DEV ? '/api' : 'https://xyp4wkszi7.execute-api.ap-southeast-1.amazonaws.com/prod';
+  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod');
+const CANDIDATE_LIST_API_URL = import.meta.env.DEV
+  ? '/api'
+  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 /**
  * Get authentication token from Amplify
@@ -57,6 +58,30 @@ const decodeToken = (token) => {
     console.error('Error decoding token:', error);
     return null;
   }
+};
+
+const getCognitoProfileFallback = async () => {
+  try {
+    const session = await fetchAuthSession();
+    const payload = session.tokens?.idToken?.payload || {};
+    return {
+      userId: payload.sub || '',
+      email: payload.email || '',
+      fullName: payload.name || payload.given_name || payload['custom:fullName'] || ''
+    };
+  } catch {
+    return { userId: '', email: '', fullName: '' };
+  }
+};
+
+const mergeCognitoProfileFallback = (profile, fallback = {}) => {
+  if (!profile) return profile;
+
+  return {
+    ...profile,
+    email: profile.email?.trim?.() ? profile.email : fallback.email || profile.email || '',
+    fullName: profile.fullName?.trim?.() ? profile.fullName : fallback.fullName || profile.fullName || ''
+  };
 };
 
 /**
@@ -160,7 +185,23 @@ class CandidateProfileService {
           const result = await this.makeRequest(`/profile/${userId}`, { suppress404Warning: true });
           if (result.success && result.data) {
             console.log('✅ Profile loaded from DynamoDB:', result.data);
-            return result.data;
+            const fallback = await getCognitoProfileFallback();
+            const mergedProfile = mergeCognitoProfileFallback(result.data, fallback);
+
+            const patch = {};
+            if (mergedProfile.fullName && mergedProfile.fullName !== result.data.fullName) {
+              patch.fullName = mergedProfile.fullName;
+            }
+            if (mergedProfile.email && mergedProfile.email !== result.data.email) {
+              patch.email = mergedProfile.email;
+            }
+            if (Object.keys(patch).length) {
+              this.updateProfile(patch).catch((err) => {
+                console.warn('Could not backfill Cognito profile fields into DynamoDB:', err);
+              });
+            }
+
+            return mergedProfile;
           }
           return null;
         } catch (firstError) {
@@ -218,7 +259,9 @@ class CandidateProfileService {
   async getProfile(userId) {
     try {
       const result = await this.makeRequest(`/profile/${userId}`);
-      return result.success ? result.data : null;
+      if (!result.success || !result.data) return null;
+      const fallback = await getCognitoProfileFallback();
+      return mergeCognitoProfileFallback(result.data, fallback.userId === userId ? fallback : {});
     } catch (error) {
       if (error.message.includes('not found') || error.message.includes('404')) {
         return null;
@@ -549,7 +592,7 @@ class CandidateProfileService {
   async getAllCandidates() {
     return this.fetchResiliently({
       path: '/api-lambda-candidates/candidates',
-      defaultUrl: 'https://gvxkjnavgu4lelloct5chgyjaa0jmyab.lambda-url.ap-southeast-1.on.aws/candidates',
+      defaultUrl: `${import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod'}/candidates`,
       serviceName: 'CandidateService'
     });
   }

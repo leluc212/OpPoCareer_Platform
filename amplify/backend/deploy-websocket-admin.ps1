@@ -18,8 +18,10 @@ $STAGE        = "prod"
 
 # Tên các resource
 $CONNECTIONS_TABLE = "AdminWebSocketConnections"
-$APPLICATIONS_TABLE = "Applications"
-$LAMBDA_ROLE_NAME  = "ws-admin-lambda-role"
+$APPLICATIONS_TABLE = "StandardApplications"
+# Reuse the migrated execution role so all Admin WebSocket Lambdas use the
+# same account-local DynamoDB, CloudWatch and API Gateway permissions.
+$LAMBDA_ROLE_NAME  = "OpPoReviewLegacyLambdaExecutionRole-prod"
 $CONNECT_LAMBDA    = "ws-admin-connect"
 $DISCONNECT_LAMBDA = "ws-admin-disconnect"
 $BROADCAST_LAMBDA  = "ws-admin-stream-broadcast"
@@ -121,11 +123,17 @@ if ($connectExists) {
         --role $ROLE_ARN `
         --handler lambda_function.lambda_handler `
         --zip-file fileb://ws-connect.zip `
-        --environment "Variables={CONNECTIONS_TABLE=$CONNECTIONS_TABLE}" `
+        --environment "Variables={CONNECTIONS_TABLE=$CONNECTIONS_TABLE,USER_POOL_ID=ap-southeast-1_LUa2Zfjtv}" `
         --timeout 10 `
         --region $REGION | Out-Null
     Write-Host "✅ Đã tạo Lambda $CONNECT_LAMBDA"
 }
+
+# Keep the Cognito pool explicit on both newly-created and existing Lambdas.
+aws lambda update-function-configuration `
+    --function-name $CONNECT_LAMBDA `
+    --environment "Variables={CONNECTIONS_TABLE=$CONNECTIONS_TABLE,USER_POOL_ID=ap-southeast-1_LUa2Zfjtv}" `
+    --region $REGION | Out-Null
 
 Write-Host ""
 Write-Host "=== BƯỚC 4: Deploy Lambda ws-admin-disconnect ===" -ForegroundColor Cyan

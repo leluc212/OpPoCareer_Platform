@@ -12,6 +12,7 @@ import { Bell, Clock, X, AlertTriangle, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../hooks/useToast';
 import Toast from './Toast';
+import { getAuthHeaders } from '../services/authHeaders.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SUBS_API    = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API?.replace(/\/$/, '') ?? '';
@@ -144,7 +145,9 @@ export default function PackageExpiryModal({ notification, onClose, onRenewed })
       setLoading(true);
       setFetchError(null);
       try {
-        const subRes = await fetch(`${SUBS_API}/subscriptions/${subscriptionId}`);
+        const subRes = await fetch(`${SUBS_API}/subscriptions/${subscriptionId}`, {
+          headers: await getAuthHeaders()
+        });
         if (!subRes.ok) throw new Error('Không lấy được gói dịch vụ');
         const subJson = await subRes.json();
         if (cancelled) return;
@@ -199,7 +202,10 @@ export default function PackageExpiryModal({ notification, onClose, onRenewed })
       try {
         await fetch(`${NOTIF_API}/notifications/${notification.notificationId}`, {
           method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            ...(await getAuthHeaders()),
+            'Content-Type': 'application/json'
+          },
           body:    JSON.stringify({ read: true, dismissedAt: new Date().toISOString() }),
         });
       } catch { /* silent */ }

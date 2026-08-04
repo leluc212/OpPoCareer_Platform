@@ -19,7 +19,7 @@ def get_cors_headers():
         'Content-Type': 'application/json'
     }
 
-BUCKET_NAME = 'opporeview-cv-storage'
+BUCKET_NAME = 'opporeview-cv-storage-prod-2026'
 ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx']
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 MAX_CV_COUNT = 3  # Maximum 3 CVs per user

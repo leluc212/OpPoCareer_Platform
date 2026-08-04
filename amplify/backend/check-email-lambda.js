@@ -15,7 +15,7 @@
 const { CognitoIdentityProviderClient, ListUsersCommand } = require('@aws-sdk/client-cognito-identity-provider');
 
 const REGION        = process.env.AWS_REGION      || 'ap-southeast-1';
-const USER_POOL_ID  = process.env.USER_POOL_ID    || 'ap-southeast-1_ShCajkmJd';
+const USER_POOL_ID  = process.env.USER_POOL_ID    || 'ap-southeast-1_LUa2Zfjtv';
 
 const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
 

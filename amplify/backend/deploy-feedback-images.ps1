@@ -9,7 +9,7 @@ $LAMBDA_NAME = "candidate-profile-api-handler"
 $REGION      = "ap-southeast-1"
 $ZIP_FILE    = "candidate-profile-lambda.zip"
 $PYTHON_FILE = "candidate-profile-lambda.py"
-$BUCKET      = "opporeview-cv-storage"
+$BUCKET      = "opporeview-cv-storage-prod-2026"
 
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "  Deploy Feedback Image Upload Support   " -ForegroundColor Cyan

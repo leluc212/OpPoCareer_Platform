@@ -1291,6 +1291,8 @@ const EmployerWallet = () => {
           bankName: withdrawBankName,
           accountNumber: withdrawAccountNumber,
           accountName: withdrawAccountName,
+          withdrawalId: result?.requestId,
+          requestId: result?.requestId,
         });
       } catch (notifErr) {
         console.warn('Notification error (withdrawal request):', notifErr.message);

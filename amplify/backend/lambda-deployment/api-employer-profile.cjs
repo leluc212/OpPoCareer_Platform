@@ -16,7 +16,7 @@ const cognitoClient = new CognitoIdentityProviderClient({ region: 'ap-southeast-
 const getCognitoEmail = async (username) => {
   try {
     const command = new AdminGetUserCommand({
-      UserPoolId: 'ap-southeast-1_ShCajkmJd',
+      UserPoolId: 'ap-southeast-1_LUa2Zfjtv',
       Username: username
     });
     const userDetails = await cognitoClient.send(command);
@@ -109,7 +109,7 @@ const sendVerificationEmail = async (employerEmail, cognitoEmail, companyName) =
     console.error('❌ Error sending verification email via SES:', err);
   }
 };
-const VERIFICATION_BUCKET = 'opporeview-cv-storage';
+const VERIFICATION_BUCKET = 'opporeview-cv-storage-prod-2026';
 const VERIFICATION_PREFIX = 'employer-verification';
 const COMPANY_IMAGES_PREFIX = 'employer-images';
 
@@ -171,6 +171,12 @@ exports.handler = async (event) => {
 
   try {
     const userId = getUserIdFromToken(event);
+    const claims = event.requestContext?.authorizer?.claims || event.requestContext?.authorizer?.jwt?.claims || {};
+    const groups = claims['cognito:groups'] || [];
+    const normalizedGroups = Array.isArray(groups)
+      ? groups.map((group) => String(group).toLowerCase())
+      : String(groups).replace(/[\[\]]/g, '').split(',').map((group) => group.trim().toLowerCase()).filter(Boolean);
+    const isAdmin = normalizedGroups.includes('admin');
     let pathUserId = event.pathParameters?.userId;
 
     // Fallback parsing for API Gateway wildcard proxy routing
@@ -204,6 +210,22 @@ exports.handler = async (event) => {
           success: false, 
           message: 'Unauthorized - no valid token' 
         })
+      };
+    }
+
+    const requestPath = event.path || event.rawPath || '';
+    if (requestPath.includes('/admin/') && !isAdmin) {
+      return {
+        statusCode: 403,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: false, message: 'Admin role required' })
+      };
+    }
+    if (requestPath.includes('/profile/') && pathUserId && pathUserId !== userId && !isAdmin) {
+      return {
+        statusCode: 403,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: false, message: 'Access denied' })
       };
     }
 

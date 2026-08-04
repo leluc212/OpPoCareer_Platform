@@ -1,4 +1,4 @@
-const S3_BUCKET_NAME = import.meta.env.VITE_S3_BUCKET_NAME || 'opporeview-cv-storage';
+const S3_BUCKET_NAME = import.meta.env.VITE_S3_BUCKET_NAME || 'opporeview-cv-storage-prod-2026';
 const S3_REGION = import.meta.env.VITE_S3_REGION || 'ap-southeast-1';
 const S3_BASE_URL = import.meta.env.VITE_S3_ASSETS_URL || `https://${S3_BUCKET_NAME}.s3.${S3_REGION}.amazonaws.com`;
 

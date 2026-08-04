@@ -10,7 +10,7 @@ $ZIP_FILE     = "experience-lambda.zip"
 $ROLE_NAME    = "OpPoExperienceLambdaRole"
 $API_NAME     = "OpPoExperienceAPI"
 $TABLE_NAME   = "CandidateExperiences"
-$S3_BUCKET    = "opporeview-cv-storage"
+$S3_BUCKET    = "opporeview-cv-storage-prod-2026"
 
 Write-Host "🚀 Deploying Experience Lambda to region $REGION ..." -ForegroundColor Cyan
 

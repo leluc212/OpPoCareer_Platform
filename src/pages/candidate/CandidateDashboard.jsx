@@ -1440,14 +1440,14 @@ const CandidateDashboard = () => {
       // Fetch employer profiles to get companyLogo for job cards
       const uniqueEmployerIds = [...new Set(allJobs.map(j => j.employerId).filter(Boolean))];
       if (uniqueEmployerIds.length > 0) {
-        const API_BASE = import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod';
+        const API_BASE = import.meta.env.VITE_EMPLOYER_API_URL || 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod';
         const { fetchAuthSession } = await import('aws-amplify/auth');
         let token = null;
         try {
           const session = await fetchAuthSession();
           const raw = session?.tokens?.idToken;
           token = raw ? (typeof raw === 'string' ? raw : raw.toString()) : null;
-        } catch (_) {}
+        } catch (_) { }
 
         if (token) {
           const profileResults = await Promise.all(

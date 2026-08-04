@@ -1,4 +1,5 @@
 // Notification Service for Package Subscriptions
+import { getAuthHeaders } from './authHeaders.js';
 
 const API_ENDPOINT = import.meta.env.VITE_NOTIFICATIONS_API;
 
@@ -55,7 +56,9 @@ export const getAllNotifications = async () => {
   }
 
   try {
-    const response = await fetch(`${API_ENDPOINT}/notifications`);
+    const response = await fetch(`${API_ENDPOINT}/notifications`, {
+      headers: await getAuthHeaders()
+    });
     if (!response.ok) {
       circuitBreaker.recordFailure();
       throw new Error(`Failed to fetch notifications (HTTP ${response.status})`);
@@ -86,7 +89,9 @@ export const getNotifications = async (userId, role) => {
 
   try {
     // Use /notifications/user/{userId}?role=... endpoint which uses GSI query (faster & paginated)
-    const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`);
+    const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`, {
+      headers: await getAuthHeaders()
+    });
     if (!response.ok) {
       circuitBreaker.recordFailure();
       throw new Error(`Failed to fetch notifications (HTTP ${response.status})`);
@@ -1104,6 +1109,7 @@ const saveNotification = async (notification) => {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
+        ...(await getAuthHeaders()),
         'Content-Type': 'application/json; charset=utf-8',
         'Accept': 'application/json'
       },
@@ -1171,7 +1177,17 @@ const saveNotification = async (notification) => {
 /**
  * Notify admin when employer submits a withdrawal request
  */
-export const createWithdrawalRequestNotification = async ({ employerId, companyName, amount, bankName, accountNumber, accountName }) => {
+export const createWithdrawalRequestNotification = async ({
+  employerId,
+  companyName,
+  amount,
+  bankName,
+  accountNumber,
+  accountName,
+  withdrawalId,
+  requestId
+}) => {
+  const resolvedRequestId = requestId || withdrawalId || '';
   const notification = {
     type: 'withdrawal_request',
     title: 'Yêu cầu rút tiền mới',
@@ -1182,10 +1198,19 @@ export const createWithdrawalRequestNotification = async ({ employerId, companyN
     recipientRole: 'admin',
     senderId: employerId,
     senderName: companyName || employerId,
-    data: { employerId, companyName, amount, bankName, accountNumber, accountName },
+    data: {
+      employerId,
+      companyName,
+      amount,
+      bankName,
+      accountNumber,
+      accountName,
+      withdrawalId: resolvedRequestId,
+      requestId: resolvedRequestId
+    },
     icon: 'banknote',
     color: '#f59e0b',
-    actionUrl: '/admin/employers',
+    actionUrl: `/admin/wallet?tab=withdrawals&type=employer${resolvedRequestId ? `&requestId=${encodeURIComponent(resolvedRequestId)}` : ''}`,
     actionText: 'Xem yêu cầu',
     actionTextEn: 'View Request'
   };
@@ -1296,6 +1321,7 @@ export const markAsRead = async (notificationId) => {
     const response = await fetch(`${API_ENDPOINT}/notifications/${notificationId}`, {
       method: 'PUT',
       headers: {
+        ...(await getAuthHeaders()),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ read: true })
@@ -1318,7 +1344,8 @@ export const markAsRead = async (notificationId) => {
 export const markAllAsRead = async (userId, role) => {
   try {
     const response = await fetch(`${API_ENDPOINT}/notifications/mark-all-read/${userId}?role=${role}`, {
-      method: 'PUT'
+      method: 'PUT',
+      headers: await getAuthHeaders()
     });
 
     if (!response.ok) {
@@ -1338,7 +1365,8 @@ export const markAllAsRead = async (userId, role) => {
 export const deleteNotification = async (notificationId) => {
   try {
     const response = await fetch(`${API_ENDPOINT}/notifications/${notificationId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: await getAuthHeaders()
     });
 
     if (!response.ok) {
@@ -1360,6 +1388,7 @@ export const setNotificationDeleted = async (notificationId, deleted) => {
     const response = await fetch(`${API_ENDPOINT}/notifications/${notificationId}`, {
       method: 'PUT',
       headers: {
+        ...(await getAuthHeaders()),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ deleted: !!deleted })
@@ -1384,6 +1413,7 @@ export const clearAllNotifications = async (userId, role) => {
     const response = await fetch(`${API_ENDPOINT}/notifications/clear-all`, {
       method: 'DELETE',
       headers: {
+        ...(await getAuthHeaders()),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ recipientId: userId, recipientRole: role })
@@ -1425,7 +1455,7 @@ export const createCandidateWithdrawalRequestNotification = async (request) => {
     },
     icon: 'dollar-sign',
     color: '#3b82f6',
-    actionUrl: '/admin/candidates',
+    actionUrl: `/admin/wallet?tab=withdrawals&type=candidate${request.id ? `&requestId=${encodeURIComponent(request.id)}` : ''}`,
     actionText: 'Xem chi tiết',
     actionTextEn: 'View Details'
   };

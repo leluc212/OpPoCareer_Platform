@@ -15,7 +15,7 @@ import { useState, useRef, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_CHECK_EMAIL_API
   || import.meta.env.VITE_CANDIDATE_API_URL
-  || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+  || 'https://5p2egon6w0.execute-api.ap-southeast-1.amazonaws.com';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

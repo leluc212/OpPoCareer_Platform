@@ -1,7 +1,7 @@
 # Configure S3 CORS for banner image uploads from the browser
 # Run this once after creating the S3 bucket or when CORS errors appear
 
-$BucketName = "opporeview-cv-storage"
+$BucketName = "opporeview-cv-storage-prod-2026"
 $Region     = "ap-southeast-1"
 
 $CorsConfig = @"

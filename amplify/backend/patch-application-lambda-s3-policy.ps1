@@ -36,7 +36,7 @@ Write-Host "`n[2/4] Writing policy document..." -ForegroundColor Yellow
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject"],
-      "Resource": "arn:aws:s3:::opporeview-cv-storage/*"
+      "Resource": "arn:aws:s3:::opporeview-cv-storage-prod-2026/*"
     }
   ]
 }
@@ -69,5 +69,5 @@ Remove-Item $POLICY_FILE -Force -ErrorAction SilentlyContinue
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "DONE. ApplicationLambda can now generate" -ForegroundColor Green
-Write-Host "valid presigned URLs for opporeview-cv-storage." -ForegroundColor Green
+Write-Host "valid presigned URLs for opporeview-cv-storage-prod-2026." -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan

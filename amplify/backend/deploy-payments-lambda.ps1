@@ -24,7 +24,7 @@ if ($LASTEXITCODE -eq 0) {
         --zip-file "fileb://$ZIP_FILE" `
         --region $REGION `
         --timeout 30 `
-        --environment "Variables={PAYMENTS_TABLE=Payments,EMPLOYERS_TABLE=EmployerProfiles,USER_PACKAGES_TABLE=UserPackages,VIETQR_BANK_ID=MB,VIETQR_ACCOUNT_NO=0123456789,VIETQR_ACCOUNT_NAME=CONG%20TY%20OP%20PO}"
+        --environment "Variables={PAYMENTS_TABLE=Payment,EMPLOYERS_TABLE=EmployerProfiles,USER_PACKAGES_TABLE=PackageSubscriptions,VIETQR_BANK_ID=MB,VIETQR_ACCOUNT_NO=0123456789,VIETQR_ACCOUNT_NAME=CONG%20TY%20OP%20PO}"
 }
 
 Write-Host "✅ Done!"

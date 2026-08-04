@@ -8,6 +8,7 @@ import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, 
 import { useLanguage } from '../../context/LanguageContext';
 import { createPackagePurchaseRequestNotification } from '../../services/notificationService';
 import { getDefaultPackageCatalog, getPackageCatalog } from '../../services/packageCatalogService';
+import { getAuthHeaders } from '../../services/authHeaders.js';
 
 // ─── Animations ───────────────────────────────────────────────
 const rotateBorder = keyframes`
@@ -765,7 +766,10 @@ const Subscription = () => {
     };
     const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      headers: {
+        ...(await getAuthHeaders()),
+        'Content-Type': 'application/json; charset=utf-8'
+      },
       body: JSON.stringify(purchaseData)
     });
     if (!response.ok) {

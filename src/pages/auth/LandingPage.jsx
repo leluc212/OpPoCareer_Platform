@@ -11,6 +11,7 @@ import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { s3Images } from '../../utils/s3Images';
 import { imgUrl } from '../../utils/assetUrl';
 import jobPostService from '../../services/jobPostService';
+import { getOptionalAuthHeaders } from '../../services/authHeaders.js';
 
 const LandingContainer = styled.div`
   min-height: 80vh;
@@ -3023,7 +3024,9 @@ const LandingPage = ({ children }) => {
       try {
         const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
         if (!API_ENDPOINT) return;
-        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
+          headers: await getOptionalAuthHeaders()
+        });
         if (response.ok) {
           const data = await response.json();
           const activeHotSearchEmployerIds = new Set(

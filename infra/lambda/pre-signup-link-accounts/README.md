@@ -60,7 +60,7 @@ Script sẽ tự động:
 3. Tạo IAM Role với đúng permissions
 4. Tạo / cập nhật Lambda function (Node.js 20.x)
 5. Cấp quyền Cognito invoke Lambda
-6. Gắn Lambda vào Pre sign-up trigger của User Pool `ap-southeast-1_ShCajkmJd`
+6. Gắn Lambda vào Pre sign-up trigger của User Pool `ap-southeast-1_LUa2Zfjtv`
 
 ---
 
@@ -91,12 +91,12 @@ Sau đó thêm Inline Policy (tên: `CognitoLinkAccounts`):
     {
       "Effect": "Allow",
       "Action": "cognito-idp:ListUsers",
-      "Resource": "arn:aws:cognito-idp:ap-southeast-1:<ACCOUNT_ID>:userpool/ap-southeast-1_ShCajkmJd"
+      "Resource": "arn:aws:cognito-idp:ap-southeast-1:<ACCOUNT_ID>:userpool/ap-southeast-1_LUa2Zfjtv"
     },
     {
       "Effect": "Allow",
       "Action": "cognito-idp:AdminLinkProviderForUser",
-      "Resource": "arn:aws:cognito-idp:ap-southeast-1:<ACCOUNT_ID>:userpool/ap-southeast-1_ShCajkmJd"
+      "Resource": "arn:aws:cognito-idp:ap-southeast-1:<ACCOUNT_ID>:userpool/ap-southeast-1_LUa2Zfjtv"
     }
   ]
 }
@@ -116,7 +116,7 @@ Upload file zip vừa tạo ở bước 1. Đặt handler: `index.handler`. Time
 
 ### Bước 4: Gắn Lambda vào User Pool
 
-Vào **Cognito Console → User Pools → ap-southeast-1_ShCajkmJd → User pool properties → Lambda triggers**:
+Vào **Cognito Console → User Pools → ap-southeast-1_LUa2Zfjtv → User pool properties → Lambda triggers**:
 - Scroll xuống phần **Authentication**
 - Chọn **Pre sign-up** → Chọn Lambda `PreSignUpLinkAccounts`
 - Save

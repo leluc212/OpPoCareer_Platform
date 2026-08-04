@@ -19,7 +19,7 @@
 $ErrorActionPreference = "Stop"
 
 $Region     = "ap-southeast-1"
-$UserPoolId = "ap-southeast-1_ShCajkmJd"
+$UserPoolId = "ap-southeast-1_LUa2Zfjtv"
 $UsersTable = "Users"
 
 # ── Known duplicate pairs (from duplicate-google-users-report.json) ─────────

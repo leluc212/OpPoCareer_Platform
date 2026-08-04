@@ -29,6 +29,18 @@ def decimal_default(obj):
         return list(obj)
     raise TypeError
 
+
+def get_claims(event):
+    authorizer = event.get('requestContext', {}).get('authorizer', {})
+    return authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {}) or {}
+
+
+def is_admin(claims):
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return any(str(group).lower() == 'admin' for group in groups)
+
 def lambda_handler(event, context):
     print('Event:', json.dumps(event))
     
@@ -46,6 +58,12 @@ def lambda_handler(event, context):
                 'headers': headers,
                 'body': json.dumps({'message': 'OK'})
             }
+
+        claims = get_claims(event)
+        caller_id = claims.get('sub')
+        caller_is_admin = is_admin(claims)
+        if not caller_id:
+            return {'statusCode': 401, 'headers': headers, 'body': json.dumps({'error': 'Unauthorized'})}
         
         # GET /notifications - Get all notifications or filter by query params
         if http_method == 'GET' and path == '/notifications':
@@ -55,6 +73,8 @@ def lambda_handler(event, context):
             if 'recipientId' in query_params and 'recipientRole' in query_params:
                 recipient_id = query_params['recipientId']
                 recipient_role = query_params['recipientRole']
+                if recipient_id != caller_id and not caller_is_admin:
+                    return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
                 
                 # Scan and filter (or use GSI if available)
                 response = table.scan()
@@ -69,6 +89,8 @@ def lambda_handler(event, context):
                 ]
             else:
                 # Get all notifications
+                if not caller_is_admin:
+                    return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Admin role required'})}
                 response = table.scan()
                 items = response.get('Items', [])
             
@@ -88,6 +110,8 @@ def lambda_handler(event, context):
             # Get query parameters
             query_params = event.get('queryStringParameters') or {}
             role = query_params.get('role', 'employer')
+            if user_id != caller_id and not caller_is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
             
             # Paginated query to get ALL results
             items = []
@@ -142,6 +166,8 @@ def lambda_handler(event, context):
             # Get query parameters
             query_params = event.get('queryStringParameters') or {}
             role = query_params.get('role', 'employer')
+            if user_id != caller_id and not caller_is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
             
             try:
                 response = table.query(
@@ -185,6 +211,9 @@ def lambda_handler(event, context):
                     'headers': headers,
                     'body': json.dumps({'error': 'Notification not found'}, ensure_ascii=False)
                 }
+
+            if item.get('recipientId') != caller_id and not caller_is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
             
             return {
                 'statusCode': 200,
@@ -203,6 +232,10 @@ def lambda_handler(event, context):
                     body = json.loads(body_str)
                 else:
                     body = json.loads(body_str.decode('utf-8'))
+
+                sender_id = body.get('senderId')
+                if not caller_is_admin and sender_id not in {None, '', 'system', caller_id}:
+                    return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'error': 'Invalid sender'})}
                 
                 print(f"📦 Parsed body: {json.dumps(body, ensure_ascii=False)}")
                 
@@ -303,6 +336,11 @@ def lambda_handler(event, context):
         # PUT /notifications/{notificationId} - Update notification (mark as read/deleted)
         if http_method == 'PUT' and path.startswith('/notifications/') and path.count('/') == 2:
             notification_id = path.split('/notifications/')[-1]
+            existing = table.get_item(Key={'notificationId': notification_id}).get('Item')
+            if not existing:
+                return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'error': 'Notification not found'})}
+            if existing.get('recipientId') != caller_id and not caller_is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
             body = json.loads(event.get('body', '{}'))
             
             # Build update expression
@@ -344,6 +382,8 @@ def lambda_handler(event, context):
         # PUT /notifications/mark-all-read/{userId} - Mark all as read
         if http_method == 'PUT' and '/notifications/mark-all-read/' in path:
             user_id = path.split('/notifications/mark-all-read/')[-1].split('?')[0]
+            if user_id != caller_id and not caller_is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
             
             # Get query parameters
             query_params = event.get('queryStringParameters') or {}
@@ -389,6 +429,11 @@ def lambda_handler(event, context):
         # DELETE /notifications/{notificationId} - Delete notification
         if http_method == 'DELETE' and path.startswith('/notifications/') and path.count('/') == 2:
             notification_id = path.split('/notifications/')[-1]
+            existing = table.get_item(Key={'notificationId': notification_id}).get('Item')
+            if not existing:
+                return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'error': 'Notification not found'})}
+            if existing.get('recipientId') != caller_id and not caller_is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Forbidden'})}
             
             # Soft delete
             table.update_item(

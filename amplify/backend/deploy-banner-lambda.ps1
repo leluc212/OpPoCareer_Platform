@@ -20,7 +20,7 @@ $AccountId      = (aws sts get-caller-identity --query Account --output text)
 $FunctionName   = "BannerManagementLambda"
 $RoleName       = "BannerLambdaRole"
 $TableName      = "Banners"
-$S3Bucket       = "opporeview-cv-storage"
+$S3Bucket       = "opporeview-cv-storage-prod-2026"
 $ZipFile        = "banner-lambda.zip"
 $ApiName        = "BannerAPI"
 

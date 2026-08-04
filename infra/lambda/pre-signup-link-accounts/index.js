@@ -1,7 +1,7 @@
 /**
  * Pre Sign-Up Lambda Trigger — Auto-link Google accounts to existing email/password accounts
  *
- * Cognito User Pool: ap-southeast-1_ShCajkmJd (OpPoWebUserPool)
+ * Cognito User Pool: ap-southeast-1_LUa2Zfjtv (OpPoWebUserPool)
  * Region: ap-southeast-1
  *
  * Problem solved:

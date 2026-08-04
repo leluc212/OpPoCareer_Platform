@@ -1,5 +1,5 @@
 // CV Upload Service
-const API_BASE_URL_PROD = 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod';
+const API_BASE_URL_PROD = import.meta.env.VITE_CV_UPLOAD_API_URL || 'https://w2yc3x4mw8.execute-api.ap-southeast-1.amazonaws.com/prod';
 const API_BASE_URL = import.meta.env.DEV ? '/api-cv' : API_BASE_URL_PROD;
 
 import { getIdToken } from './authHeaders.js';
@@ -52,7 +52,7 @@ export const uploadCV = async (userId, file) => {
     });
 
     // Upload to API - Nhắm thẳng vào Production để debug chính xác
-    const uploadUrl = API_BASE_URL_PROD + '/cv/upload';
+    const uploadUrl = API_BASE_URL + '/cv/upload';
     console.log('📤 [cvUploadService] Sending request to:', uploadUrl);
     
     // Get auth token if available
@@ -115,7 +115,7 @@ export const getCVInfo = async (userId) => {
       console.warn('⚠️ [cvUploadService] Could not get auth token for getCVInfo:', authError);
     }
 
-    const response = await fetch(`${API_BASE_URL_PROD}/cv/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/cv/${userId}`, {
       method: 'GET',
       headers
     });
@@ -165,10 +165,10 @@ export const deleteCV = async (userId, cvId = null) => {
     const encodedCvId = cvId ? encodeURIComponent(cvId) : null;
     
     // Direct production hit - NOTE: This will likely fail with CORS for DELETE
-    // until CORS is enabled for DELETE method on the v56v542h8f API Gateway.
+    // until CORS is enabled for DELETE method on the CV upload API Gateway.
     const url = encodedCvId 
-      ? `${API_BASE_URL_PROD}/cv/${userId}/${encodedCvId}`
-      : `${API_BASE_URL_PROD}/cv/${userId}`;
+      ? `${API_BASE_URL}/cv/${userId}/${encodedCvId}`
+      : `${API_BASE_URL}/cv/${userId}`;
     
     console.log('🗑️ [cvUploadService] deleteCV called');
     console.log('🗑️ [cvUploadService] URL:', url);

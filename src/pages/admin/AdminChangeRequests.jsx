@@ -7,6 +7,7 @@ import {
   AlertCircle, RefreshCw, Wifi, WifiOff, Search, Filter, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import applicationService from '../../services/applicationService';
+import { getAccessToken } from '../../services/authHeaders.js';
 import {
   createWorkerReplacedNotification,
   createChangeRequestApprovedNotification,
@@ -169,11 +170,17 @@ const AdminChangeRequests = () => {
     setNewCardIds(prev => { const next = new Set(prev); next.delete(applicationId); return next; });
   }, []);
 
-  const connectWebSocket = useCallback(() => {
+  const connectWebSocket = useCallback(async () => {
     if (!WS_ENDPOINT) return;
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
     setWsStatus('connecting');
-    const ws = new WebSocket(WS_ENDPOINT);
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      setWsStatus('disconnected');
+      return;
+    }
+    const separator = WS_ENDPOINT.includes('?') ? '&' : '?';
+    const ws = new WebSocket(`${WS_ENDPOINT}${separator}access_token=${encodeURIComponent(accessToken)}`);
     wsRef.current = ws;
     ws.onopen = () => { setWsStatus('connected'); wsRetryCount.current = 0; };
     ws.onmessage = (event) => {

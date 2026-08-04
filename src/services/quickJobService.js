@@ -5,7 +5,9 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import employerProfileService from './employerProfileService';
 
 // API base URL - stage prefix MUST be /prod as verified from other services
-const API_BASE_URL = 'https://6zw89pkuxb.execute-api.ap-southeast-1.amazonaws.com/prod';
+const API_BASE_URL = import.meta.env.DEV
+  ? '/api-quick-jobs'
+  : (import.meta.env.VITE_QUICK_JOB_API_URL || 'https://i3ce0izl59.execute-api.ap-southeast-1.amazonaws.com');
 
 /**
  * Generate random quick job ID

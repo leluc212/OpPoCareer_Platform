@@ -33,7 +33,7 @@ The script prompts for the key without displaying it, creates or updates the
 
 ```powershell
 .\deploy-cv-ai-lambda.ps1 `
-  -ApiId sd7ds72m8g `
+  -ApiId mrag7hkw11 `
   -JwtAuthorizerId 46klga `
   -StageName prod `
   -AllowedOrigins "http://localhost:3000,https://opporeview.github.io"
@@ -42,7 +42,7 @@ The script prompts for the key without displaying it, creates or updates the
 Frontend production configuration:
 
 ```env
-VITE_CV_AI_API_URL=https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod
+VITE_CV_AI_API_URL=https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod
 ```
 
 ## AI interviewer media demo
@@ -63,7 +63,7 @@ Or pass them directly:
 
 ```powershell
 .\deploy-cv-ai-lambda.ps1 `
-  -ApiId sd7ds72m8g `
+  -ApiId mrag7hkw11 `
   -JwtAuthorizerId 46klga `
   -InterviewMediaServiceUrl "https://your-media-service.example.com/render" `
   -InterviewMediaApiKey "replace-with-demo-token"

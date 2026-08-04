@@ -42,6 +42,8 @@ import {
   createProfileChangeApprovedNotification,
   createProfileChangeRejectedNotification
 } from '../../services/notificationService';
+import { getAuthHeaders } from '../../services/authHeaders.js';
+import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 
 const PageContainer = styled.div``;
 
@@ -722,6 +724,7 @@ const EmployersManagement = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+  const notificationBadges = useAdminNotificationBadges();
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -796,7 +799,7 @@ const EmployersManagement = () => {
 
     setGranting(true);
     try {
-      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u28w4m6yb7.execute-api.ap-southeast-1.amazonaws.com/prod';
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
       
       const targetEmp = employers.find(e => e.id === selectedEmployerId);
       const companyName = targetEmp?.companyName || 'Nhà tuyển dụng';
@@ -814,6 +817,7 @@ const EmployersManagement = () => {
       const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
         method: 'POST',
         headers: {
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json; charset=utf-8'
         },
         body: JSON.stringify(purchaseData)
@@ -831,6 +835,7 @@ const EmployersManagement = () => {
       const approveResponse = await fetch(`${API_ENDPOINT}/subscriptions/${subscriptionId}`, {
         method: 'PUT',
         headers: {
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -894,8 +899,10 @@ const EmployersManagement = () => {
   const loadPurchases = async () => {
     try {
       setLoadingPurchases(true);
-      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u28w4m6yb7.execute-api.ap-southeast-1.amazonaws.com/prod';
-      const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
+      const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
+        headers: await getAuthHeaders()
+      });
       
       if (!response.ok) {
         throw new Error('Failed to fetch subscriptions');
@@ -1025,9 +1032,11 @@ const EmployersManagement = () => {
     try {
       console.log('🔄 Approving purchase:', purchaseId);
       
-      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u28w4m6yb7.execute-api.ap-southeast-1.amazonaws.com/prod';
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
       
-      const responseSub = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`);
+      const responseSub = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
+        headers: await getAuthHeaders()
+      });
       if (!responseSub.ok) {
         throw new Error('Failed to fetch subscription details');
       }
@@ -1045,6 +1054,7 @@ const EmployersManagement = () => {
       const response = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
         method: 'PUT',
         headers: {
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -1110,10 +1120,11 @@ const EmployersManagement = () => {
 
   const handleLockPurchase = async (purchaseId) => {
     try {
-      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u28w4m6yb7.execute-api.ap-southeast-1.amazonaws.com/prod';
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
       const response = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
         method: 'PUT',
         headers: {
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ status: 'locked' })
@@ -1141,10 +1152,11 @@ const EmployersManagement = () => {
 
   const handleUnlockPurchase = async (purchaseId) => {
     try {
-      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u28w4m6yb7.execute-api.ap-southeast-1.amazonaws.com/prod';
+      const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
       const response = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
         method: 'PUT',
         headers: {
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ status: 'active' })
@@ -1987,7 +1999,7 @@ const EmployersManagement = () => {
               >
                 <RefreshCw size={20} />
                 {language === 'vi' ? 'Yêu cầu thay đổi ứng viên' : 'Change Candidate Requests'}
-                {!viewedTabs.change_requests && pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
+                {notificationBadges.employerChangeRequests > 0 && <TabBadge>{notificationBadges.employerChangeRequests}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'profile_changes'}
@@ -1999,7 +2011,7 @@ const EmployersManagement = () => {
               >
                 <Edit size={20} />
                 {language === 'vi' ? 'Yêu cầu chỉnh sửa hồ sơ' : 'Profile Change Requests'}
-                {!viewedTabs.profile_changes && pendingProfileChangesCount > 0 && <TabBadge>{pendingProfileChangesCount}</TabBadge>}
+                {notificationBadges.employerProfileChanges > 0 && <TabBadge>{notificationBadges.employerProfileChanges}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'features'}
@@ -2011,7 +2023,7 @@ const EmployersManagement = () => {
               >
                 <Briefcase size={20} />
                 {language === 'vi' ? 'Chức năng của Nhà tuyển dụng' : 'Employer Features'}
-                {!viewedTabs.features && pendingQuickJobCount > 0 && <TabBadge>{pendingQuickJobCount}</TabBadge>}
+                {notificationBadges.employerQuickJobs > 0 && <TabBadge>{notificationBadges.employerQuickJobs}</TabBadge>}
               </MainTabButton>
             </MainTabsContainer>
 
@@ -2051,9 +2063,9 @@ const EmployersManagement = () => {
                 >
                   <Zap size={16} style={{ marginRight: '6px' }} />
                   {language === 'vi' ? 'Chức năng tuyển gấp' : 'Urgent Recruiting'}
-                  {!viewedTabs.quick_jobs && pendingQuickJobCount > 0 && (
+                  {notificationBadges.employerQuickJobs > 0 && (
                     <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>
-                      {pendingQuickJobCount}
+                      {notificationBadges.employerQuickJobs}
                     </TabBadge>
                   )}
                 </SubTabButton>

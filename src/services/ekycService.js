@@ -5,7 +5,7 @@
  *   - VNPT: bearer token expire 8h, cần refresh định kỳ, upload ảnh base64
  *   - Didit: session-based flow — tạo session → redirect user → nhận kết quả qua webhook
  *
- * Endpoint: https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod
+ * Endpoint: VITE_EKYC_API_URL
  * Override bằng env var VITE_EKYC_API_URL nếu cần.
  *
  * [VNPT CODE GỐC — ĐÃ COMMENT LẠI ĐỂ ROLLBACK NẾU CẦN]
@@ -16,7 +16,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 
 const API_BASE =
   import.meta.env.VITE_EKYC_API_URL ||
-  'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod';
+  'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod';
 
 // ─── Auth header (Cognito JWT — giữ nguyên cho các route yêu cầu JWT) ────────
 const getAuthHeaders = async () => {

@@ -1,0 +1,41 @@
+aws_region  = "ap-southeast-1"
+environment = "prod"
+
+# S3 bucket names are global. Keep empty only if the old bucket names are no
+# longer present anywhere. Usually you should override at least opporeview_media.
+s3_bucket_name_overrides = {
+  opporeview_media = "opporeview-cv-storage-prod-2026"
+  sam_source       = "sam-src-589362963105-ap-southeast-1"
+  cdk_assets       = "cdk-hnb659fds-assets-589362963105-ap-southeast-1"
+  cloudtrail_logs  = "cloudbank-redteam-589362963105-cloudtrail-logs"
+  synthetic_data   = "cloudbank-redteam-589362963105-synthetic-data"
+}
+
+# Fill locally. Do not commit real values.
+google_client_id     = ""
+google_client_secret = ""
+
+# Fill locally if you want Terraform to own Lambda env vars.
+# Sensitive values will still be stored in Terraform state.
+lambda_environment = {
+  "payments-handler" = {
+    PAYMENTS_TABLE        = "Payment"
+    USER_PACKAGES_TABLE  = "PackageSubscriptions"
+    EMPLOYERS_TABLE      = "EmployerProfiles"
+    VIETQR_BANK_ID       = ""
+    VIETQR_ACCOUNT_NO    = ""
+    VIETQR_ACCOUNT_NAME  = ""
+    SEPAY_WEBHOOK_SECRET = ""
+  }
+
+  "check-email-provider" = {
+    AUTH_OTP_TABLE_NAME   = "OppoAuthOtp"
+    AUTH_OTP_SOURCE_EMAIL = ""
+    USER_POOL_ID          = ""
+  }
+
+  "user-role-handler" = {
+    USERS_TABLE_NAME = "OpPoWebTable"
+    USER_POOL_ID     = ""
+  }
+}

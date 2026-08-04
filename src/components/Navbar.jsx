@@ -11,7 +11,7 @@ import { getNotifications, markAsRead, createChatMessageNotification } from '../
 import RelativeTime from './RelativeTime';
 import UrgentJobAlertModal from './UrgentJobAlertModal';
 import { s3Images } from '../utils/s3Images';
-import { getIdToken } from '../services/authHeaders';
+import { getIdToken, getOptionalAuthHeaders } from '../services/authHeaders';
 
 const NavbarContainer = styled.nav`
   height: 80px;
@@ -908,7 +908,9 @@ const Navbar = ({ showSearch = true }) => {
       try {
         const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
         if (!API_ENDPOINT) return;
-        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
+          headers: await getOptionalAuthHeaders()
+        });
         if (response.ok) {
           const data = await response.json();
           const activeHotSearchEmployerIds = new Set(
@@ -1618,6 +1620,7 @@ const Navbar = ({ showSearch = true }) => {
         setUnreadCount(prev => Math.max(0, prev - 1));
         
         await markAsRead(notification.notificationId);
+        window.dispatchEvent(new Event('notificationsChanged'));
 
         // Re-fetch from DB to confirm
         const freshNotifs = await getNotifications(userId, effectiveUser.role);
@@ -1626,6 +1629,25 @@ const Navbar = ({ showSearch = true }) => {
       }
     } catch (err) {
       console.error('Error marking as read:', err);
+    }
+
+    // Withdrawal requests belong to the Admin Wallet. Route directly to the
+    // matching owner tab, including the request id when the notification has it.
+    if (notification && (
+      notification.type === 'withdrawal_request' ||
+      notification.type === 'candidate_withdrawal_request'
+    )) {
+      const notifData = typeof notification.data === 'string'
+        ? (() => { try { return JSON.parse(notification.data); } catch { return {}; } })()
+        : (notification.data || {});
+      const withdrawalType = notification.type === 'candidate_withdrawal_request'
+        ? 'candidate'
+        : 'employer';
+      const requestId = notifData?.withdrawalId || notifData?.requestId || notification.requestId;
+      const params = new URLSearchParams({ tab: 'withdrawals', type: withdrawalType });
+      if (requestId) params.set('requestId', String(requestId));
+      navigate(`/admin/wallet?${params.toString()}`);
+      return;
     }
 
     // If notification has actionUrl, navigate directly to it

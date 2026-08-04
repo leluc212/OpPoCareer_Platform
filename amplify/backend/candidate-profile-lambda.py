@@ -6,8 +6,9 @@ from datetime import datetime
 
 dynamodb = boto3.resource('dynamodb', region_name='ap-southeast-1')
 table = dynamodb.Table('CandidateProfiles')
+applications_table = dynamodb.Table('StandardApplications')
 s3_client = boto3.client('s3', region_name='ap-southeast-1')
-S3_BUCKET = 'opporeview-cv-storage'
+S3_BUCKET = 'opporeview-cv-storage-prod-2026'
 
 
 def get_cors_headers():
@@ -46,6 +47,50 @@ def float_to_decimal(obj):
     return obj
 
 
+def get_verified_claims(event):
+    """Read claims injected by the API Gateway Cognito JWT authorizer."""
+    authorizer = event.get('requestContext', {}).get('authorizer', {})
+    return authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {}) or {}
+
+
+def is_admin_claims(claims):
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return any(str(group).lower() == 'admin' for group in groups)
+
+
+def is_employer_claims(claims):
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return any(str(group).lower() == 'employer' for group in groups)
+
+
+def employer_has_candidate_application(employer_id, candidate_id):
+    """Allow an employer to read only candidates who applied to that employer."""
+    if not employer_id or not candidate_id:
+        return False
+
+    scan_kwargs = {
+        'FilterExpression': 'candidateId = :candidate_id AND employerId = :employer_id',
+        'ExpressionAttributeValues': {
+            ':candidate_id': candidate_id,
+            ':employer_id': employer_id
+        },
+        'ProjectionExpression': 'candidateId, employerId'
+    }
+
+    while True:
+        result = applications_table.scan(**scan_kwargs)
+        if result.get('Items'):
+            return True
+        last_key = result.get('LastEvaluatedKey')
+        if not last_key:
+            return False
+        scan_kwargs['ExclusiveStartKey'] = last_key
+
+
 
 def lambda_handler(event, context):
     print('Event:', json.dumps(event))
@@ -54,6 +99,13 @@ def lambda_handler(event, context):
     http_method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', 'GET')
     if http_method == 'OPTIONS':
         return response(200, {})
+
+    claims = get_verified_claims(event)
+    caller_id = claims.get('sub')
+    caller_is_admin = is_admin_claims(claims)
+    caller_is_employer = is_employer_claims(claims)
+    if not caller_id:
+        return response(401, {'success': False, 'message': 'Unauthorized'})
 
     # Get path
     path = event.get('path') or event.get('rawPath', '')
@@ -66,7 +118,20 @@ def lambda_handler(event, context):
 
     try:
         # ─── Verification routes (must come before profile routes) ────────────────
-        if '/candidate/verification-request' in path or '/admin/candidate-verifications' in path:
+        if '/admin/candidate-verifications' in path and not caller_is_admin:
+            return response(403, {'success': False, 'message': 'Admin role required'})
+
+        if '/candidate/verification-request' in path:
+            try:
+                verification_body = json.loads(event.get('body') or '{}')
+                requested_id = verification_body.get('userId') or verification_body.get('candidateId')
+                if requested_id and requested_id != caller_id and not caller_is_admin:
+                    return response(403, {'success': False, 'message': 'Cannot submit verification for another user'})
+            except (TypeError, ValueError):
+                pass
+            return handle_verification_routes(event, http_method, path, path_params)
+
+        if '/admin/candidate-verifications' in path:
             return handle_verification_routes(event, http_method, path, path_params)
 
         # Check if feedback route
@@ -85,6 +150,8 @@ def lambda_handler(event, context):
 
                 
             if http_method == 'GET':
+                if not caller_is_admin:
+                    return response(403, {'success': False, 'message': 'Admin role required'})
                 if feedback_id:
                     # GET /feedback/{id}
                     result = feedbacks_table.get_item(Key={'id': feedback_id})
@@ -156,6 +223,8 @@ def lambda_handler(event, context):
                 return response(200, {'success': True, 'data': item})
                 
             elif http_method == 'PUT' and feedback_id:
+                if not caller_is_admin:
+                    return response(403, {'success': False, 'message': 'Admin role required'})
                 # PUT /feedback/{id} - Mark as read / update
                 body = json.loads(event.get('body') or '{}')
                 status = body.get('status', 'read')
@@ -170,6 +239,8 @@ def lambda_handler(event, context):
                 return response(200, {'success': True, 'data': result.get('Attributes', {})})
                 
             elif http_method == 'DELETE' and feedback_id:
+                if not caller_is_admin:
+                    return response(403, {'success': False, 'message': 'Admin role required'})
                 # DELETE /feedback/{id} - Delete feedback
                 feedbacks_table.delete_item(Key={'id': feedback_id})
                 return response(200, {'success': True, 'message': 'Feedback deleted'})
@@ -179,6 +250,8 @@ def lambda_handler(event, context):
 
         # GET /candidates - List all candidates (admin)
         if http_method == 'GET' and '/candidates' in path and not user_id:
+            if not caller_is_admin:
+                return response(403, {'success': False, 'message': 'Admin role required'})
             result = table.scan()
             items = result.get('Items', [])
             # Handle DynamoDB pagination
@@ -189,6 +262,12 @@ def lambda_handler(event, context):
 
         # Profile routes
         if http_method == 'GET' and user_id:
+            can_read_as_employer = (
+                caller_is_employer
+                and employer_has_candidate_application(caller_id, user_id)
+            )
+            if user_id != caller_id and not caller_is_admin and not can_read_as_employer:
+                return response(403, {'success': False, 'message': 'Cannot read another user profile'})
             # GET /profile/{userId}
             result = table.get_item(Key={'userId': user_id})
             item = result.get('Item')
@@ -201,9 +280,11 @@ def lambda_handler(event, context):
             body = float_to_decimal(json.loads(event.get('body') or '{}'))
             if not user_id:
                 # Get userId from body or token
-                user_id = body.get('userId')
+                user_id = body.get('userId') or caller_id
             if not user_id:
                 return response(400, {'success': False, 'message': 'userId is required'})
+            if user_id != caller_id and not caller_is_admin:
+                return response(403, {'success': False, 'message': 'Cannot modify another user profile'})
  
             timestamp = datetime.utcnow().isoformat() + 'Z'
 
@@ -275,6 +356,8 @@ def lambda_handler(event, context):
                 return response(200, {'success': True, 'data': item})
  
         elif http_method == 'PUT' and user_id:
+            if user_id != caller_id and not caller_is_admin:
+                return response(403, {'success': False, 'message': 'Cannot modify another user profile'})
             # Fetch existing profile to compare active status
             try:
                 prev_profile_resp = table.get_item(Key={'userId': user_id})
@@ -371,6 +454,8 @@ def lambda_handler(event, context):
             return response(200, {'success': True, 'data': updated_profile})
  
         elif http_method == 'DELETE' and user_id:
+            if user_id != caller_id and not caller_is_admin:
+                return response(403, {'success': False, 'message': 'Cannot delete another user profile'})
             # DELETE /profile/{userId} - Soft delete
             table.update_item(
                 Key={'userId': user_id},

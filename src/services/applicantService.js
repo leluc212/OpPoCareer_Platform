@@ -1,18 +1,17 @@
 // Applicant Service
-// Lấy danh sách ứng viên từ DynamoDB qua API Gateway xyp4wkszi7 (COGNITO_USER_POOLS authorizer)
-// Route: GET /api -> proxy đến xyp4wkszi7.execute-api.../prod/candidates
+// Lay danh sach ung vien tu DynamoDB qua CandidateProfileAPI.
 
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-// DEV: dùng Vite proxy /api -> xyp4wkszi7/prod/candidates (Cognito-authorized)
+// DEV: dung Vite proxy /api -> CandidateProfileAPI /candidates.
 // PROD: gọi thẳng endpoint
 const API_BASE_URL = import.meta.env.DEV
   ? '/api'
-  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://xyp4wkszi7.execute-api.ap-southeast-1.amazonaws.com/prod/candidates');
+  : `${import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod'}/candidates`;
 
 /**
  * Lấy Cognito ID Token từ Amplify session
- * Endpoint xyp4wkszi7 dùng COGNITO_USER_POOLS authorizer nên BẮT BUỘC phải có token
+ * CandidateProfileAPI dung COGNITO_USER_POOLS authorizer nen bat buoc phai co token.
  */
 const getAuthToken = async () => {
   try {
@@ -50,7 +49,7 @@ const applicantService = {
     try {
       console.log('📡 [ApplicantService] Đang tải dữ liệu ứng viên từ DynamoDB...');
 
-      // xyp4wkszi7 dùng Cognito authorizer -> phải gửi Bearer token
+      // CandidateProfileAPI dung Cognito authorizer -> phai gui Bearer token.
       const token = await getAuthToken();
       const headers = { 'Content-Type': 'application/json' };
       if (token) {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -16,6 +17,7 @@ import {
 } from '../../services/notificationService';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useToast } from '../../hooks/useToast';
+import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import Toast from '../../components/Toast';
 import {
   Wallet as WalletIcon,
@@ -73,6 +75,22 @@ const TabButton = styled.button`
   &:hover {
     color: ${props => props.theme.colors.primary};
   }
+`;
+
+const TabBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 7px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 `;
 
 const WithdrawTableWrapper = styled.div`
@@ -1338,9 +1356,27 @@ const ReceiptCard = styled(motion.div)`
   }
 `;
 
+const getWalletRouteParams = (search) => {
+  const params = new URLSearchParams(search);
+  const tab = params.get('tab');
+  const type = params.get('type');
+
+  return {
+    tab: ['overview', 'escrow', 'withdrawals'].includes(tab) ? tab : null,
+    type: ['employer', 'candidate'].includes(type) ? type : null,
+    requestId: params.get('requestId') || ''
+  };
+};
+
+const getWithdrawalRowId = (requestId) => (
+  `withdrawal-request-${String(requestId).replace(/[^a-zA-Z0-9_-]/g, '-')}`
+);
+
 const AdminWallet = () => {
   const { language } = useLanguage();
   const toast = useToast();
+  const location = useLocation();
+  const notificationBadges = useAdminNotificationBadges();
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'escrow' | 'withdrawals'
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -1359,6 +1395,7 @@ const AdminWallet = () => {
   const [withdrawRequests, setWithdrawRequests] = useState([]);
   const [candidateWithdrawRequests, setCandidateWithdrawRequests] = useState([]);
   const [withdrawTypeTab, setWithdrawTypeTab] = useState('employer'); // 'employer' | 'candidate'
+  const [highlightedWithdrawalId, setHighlightedWithdrawalId] = useState('');
   const [withdrawSearch, setWithdrawSearch] = useState('');
   const [withdrawStatusFilter, setWithdrawStatusFilter] = useState('all');
   const [withdrawWeekFilter, setWithdrawWeekFilter] = useState(false);
@@ -1367,6 +1404,19 @@ const AdminWallet = () => {
   useEffect(() => {
     setWithdrawCurrentPage(1);
   }, [withdrawTypeTab]);
+
+  useEffect(() => {
+    const route = getWalletRouteParams(location.search);
+    if (route.tab) setActiveTab(route.tab);
+    if (route.type) setWithdrawTypeTab(route.type);
+    setHighlightedWithdrawalId(route.requestId);
+
+    if (route.tab === 'withdrawals') {
+      setWithdrawSearch('');
+      setWithdrawStatusFilter('all');
+      setWithdrawWeekFilter(false);
+    }
+  }, [location.search]);
 
   // Escrow specific states
   const [escrowJobs, setEscrowJobs] = useState([]);
@@ -1790,6 +1840,47 @@ const AdminWallet = () => {
   const candWithdrawStartIndex = (withdrawCurrentPage - 1) * candWithdrawItemsPerPage;
   const currentCandWithdrawRequests = filteredCandidateWithdrawRequests.slice(candWithdrawStartIndex, candWithdrawStartIndex + candWithdrawItemsPerPage);
 
+  // Put a deep-linked request on the correct pagination page before scrolling to it.
+  useEffect(() => {
+    if (activeTab !== 'withdrawals' || !highlightedWithdrawalId) return;
+
+    const requests = withdrawTypeTab === 'employer'
+      ? filteredWithdrawRequests
+      : filteredCandidateWithdrawRequests;
+    const index = requests.findIndex(req => String(req.id) === String(highlightedWithdrawalId));
+    if (index < 0) return;
+
+    const itemsPerPage = withdrawTypeTab === 'employer'
+      ? withdrawItemsPerPage
+      : candWithdrawItemsPerPage;
+    setWithdrawCurrentPage(Math.floor(index / itemsPerPage) + 1);
+  }, [
+    activeTab,
+    withdrawTypeTab,
+    highlightedWithdrawalId,
+    filteredWithdrawRequests,
+    filteredCandidateWithdrawRequests
+  ]);
+
+  useEffect(() => {
+    if (isLoading || activeTab !== 'withdrawals' || !highlightedWithdrawalId) return;
+
+    const timer = setTimeout(() => {
+      const row = document.getElementById(getWithdrawalRowId(highlightedWithdrawalId));
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [
+    isLoading,
+    activeTab,
+    withdrawTypeTab,
+    highlightedWithdrawalId,
+    withdrawCurrentPage,
+    currentWithdrawRequests.length,
+    currentCandWithdrawRequests.length
+  ]);
+
   const getWithdrawStatusText = (status) => {
     switch(status) {
       case 'approved': return language === 'vi' ? 'Đã duyệt' : 'Approved';
@@ -2171,6 +2262,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                 onClick={() => setActiveTab('withdrawals')}
               >
                 {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
+                {notificationBadges.wallet > 0 && <TabBadge>{notificationBadges.wallet}</TabBadge>}
               </TabButton>
             </TabNavigation>
 
@@ -2593,6 +2685,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                     }}
                   >
                     {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
+                    {notificationBadges.walletEmployer > 0 && <TabBadge>{notificationBadges.walletEmployer}</TabBadge>}
                   </button>
                   <button
                     onClick={() => { setWithdrawTypeTab('candidate'); setWithdrawSearch(''); }}
@@ -2610,6 +2703,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                     }}
                   >
                     {language === 'vi' ? 'Ứng viên' : 'Candidate'}
+                    {notificationBadges.walletCandidate > 0 && <TabBadge>{notificationBadges.walletCandidate}</TabBadge>}
                   </button>
                 </div>
 
@@ -2689,7 +2783,13 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                         const initials = getCompanyInitials(req.companyName);
  
                         return (
-                          <tr key={req.id}>
+                          <tr
+                            id={getWithdrawalRowId(req.id)}
+                            key={req.id}
+                            style={String(req.id) === String(highlightedWithdrawalId)
+                              ? { backgroundColor: '#fff7ed', boxShadow: 'inset 4px 0 0 #f59e0b' }
+                              : undefined}
+                          >
                             <td>
                               <WithdrawCompanyInfo>
                                 <WithdrawCompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>

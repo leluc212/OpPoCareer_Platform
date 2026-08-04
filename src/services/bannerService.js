@@ -9,9 +9,9 @@
 
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-const API_BASE_URL = import.meta.env.VITE_BANNER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod';
+const API_BASE_URL = import.meta.env.VITE_BANNER_API_URL || 'https://9eubdtwarg.execute-api.ap-southeast-1.amazonaws.com/prod';
 const S3_BASE_URL = import.meta.env.VITE_S3_ASSETS_URL || 
-  `https://${import.meta.env.VITE_S3_BUCKET_NAME || 'opporeview-cv-storage'}.s3.ap-southeast-1.amazonaws.com`;
+  `https://${import.meta.env.VITE_S3_BUCKET_NAME || 'opporeview-cv-storage-prod-2026'}.s3.ap-southeast-1.amazonaws.com`;
 
 export const MAX_ACTIVE_BANNERS = 5;
 

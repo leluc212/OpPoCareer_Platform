@@ -7,10 +7,11 @@
       "Principal": "*",
       "Action": "s3:GetObject",
       "Resource": [
-        "arn:aws:s3:::opporeview-cv-storage/banner/*",
-        "arn:aws:s3:::opporeview-cv-storage/poster/*",
-        "arn:aws:s3:::opporeview-cv-storage/system/*",
-        "arn:aws:s3:::opporeview-cv-storage/feedback-images/*"
+        "arn:aws:s3:::opporeview-cv-storage-prod-2026/banner/*",
+        "arn:aws:s3:::opporeview-cv-storage-prod-2026/poster/*",
+        "arn:aws:s3:::opporeview-cv-storage-prod-2026/system/*",
+        "arn:aws:s3:::opporeview-cv-storage-prod-2026/feedback-images/*",
+        "arn:aws:s3:::opporeview-cv-storage-prod-2026/employer-images/*"
       ]
     }
   ]

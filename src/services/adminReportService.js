@@ -3,8 +3,9 @@ import adminEmployerService from './adminEmployerService';
 import jobPostService from './jobPostService';
 import quickJobService from './quickJobService';
 import applicationService from './applicationService';
+import { getOptionalAuthHeaders } from './authHeaders.js';
 
-const SUBSCRIPTIONS_API_URL = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u28w4m6yb7.execute-api.ap-southeast-1.amazonaws.com/prod';
+const SUBSCRIPTIONS_API_URL = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
 
 class AdminReportService {
   /**
@@ -60,7 +61,9 @@ class AdminReportService {
    */
   async getAllSubscriptions() {
     try {
-      const response = await fetch(`${SUBSCRIPTIONS_API_URL}/subscriptions`);
+      const response = await fetch(`${SUBSCRIPTIONS_API_URL}/subscriptions`, {
+        headers: await getOptionalAuthHeaders()
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

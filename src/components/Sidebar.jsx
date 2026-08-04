@@ -5,6 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { s3Images } from '../utils/s3Images';
 import notificationService from '../services/notificationService';
+import { getAdminNotificationBadgeCounts } from '../utils/adminNotificationBadges';
 import jobPostService from '../services/jobPostService';
 import quickJobService from '../services/quickJobService';
 import applicationService from '../services/applicationService';
@@ -349,7 +350,7 @@ const Sidebar = ({ role, onHoverChange }) => {
   const [standardPendingCount, setStandardPendingCount] = useState(Sidebar._cachedCounts?.standardPendingCount || 0);
   const [quickPendingCount, setQuickPendingCount] = useState(Sidebar._cachedCounts?.quickPendingCount || 0);
   const [adminBadges, setAdminBadges] = useState(Sidebar._cachedCounts?.adminBadges || {
-    employers: 0, candidates: 0, posts: 0, wallet: 0, notifications: 0, reports: 0, changeRequests: 0
+    employers: 0, candidates: 0, posts: 0, packages: 0, wallet: 0, notifications: 0, reports: 0, changeRequests: 0
   });
 
   // Sync counts to static cache so next mount has instant values
@@ -379,6 +380,7 @@ const Sidebar = ({ role, onHoverChange }) => {
             feedbackService.getAllFeedbacks().catch(() => [])
           ]);
           const unreadNotifs = notifs.filter(n => !n.read);
+          const notificationBadgeCounts = getAdminNotificationBadgeCounts(notifs);
           
           const reportsCount = (feedbacksRaw || []).filter(item => item.status === 'unread').length;
           
@@ -426,13 +428,14 @@ const Sidebar = ({ role, onHoverChange }) => {
           
           if (active) {
             setAdminBadges({
-              employers: employersCount,
-              candidates: candidatesCount,
-              posts: postsCount,
-              wallet: walletCount,
+              employers: notificationBadgeCounts.employers,
+              candidates: notificationBadgeCounts.candidates,
+              posts: notificationBadgeCounts.posts,
+              packages: notificationBadgeCounts.packages,
+              wallet: notificationBadgeCounts.wallet,
               notifications: totalUnreadCount,
-              reports: reportsCount,
-              changeRequests: pendingChangeCount
+              reports: notificationBadgeCounts.reports || reportsCount,
+              changeRequests: notificationBadgeCounts.changeRequests
             });
             setUnreadNotifications(totalUnreadCount);
           }
@@ -719,6 +722,8 @@ const Sidebar = ({ role, onHoverChange }) => {
                   badgeCount = adminBadges.candidates;
                 } else if (link.to === '/admin/posts') {
                   badgeCount = adminBadges.posts;
+                } else if (link.to === '/admin/packages') {
+                  badgeCount = adminBadges.packages;
                 } else if (link.to === '/admin/wallet') {
                   badgeCount = adminBadges.wallet;
                 } else if (link.to === '/admin/notifications') {

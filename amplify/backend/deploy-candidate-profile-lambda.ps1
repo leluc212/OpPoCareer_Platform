@@ -1,7 +1,7 @@
 # Deploy candidate-profile-lambda to AWS and wire up API Gateway route
 $REGION = "ap-southeast-1"
 $FUNCTION_NAME = "candidate-profile-handler"
-$API_ID = "sd7ds72m8g"
+$API_ID = "mrag7hkw11"
 $ZIP_FILE = "candidate-profile-lambda.zip"
 
 Write-Host "📦 Zipping Lambda..."

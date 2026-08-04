@@ -3,7 +3,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 
 const API_BASE = import.meta.env.DEV
   ? '/api-payments'
-  : (import.meta.env.VITE_PAYMENTS_API_URL || 'https://es3yq2niph.execute-api.ap-southeast-1.amazonaws.com/prod');
+  : (import.meta.env.VITE_PAYMENTS_API_URL || 'https://ygabt1q860.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 /** @returns {Promise<string|null>} */
 async function getToken() {

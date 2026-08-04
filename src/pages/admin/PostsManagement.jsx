@@ -10,6 +10,7 @@ import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import { Button } from '../../components/FormElements';
 import notificationService from '../../services/notificationService';
+import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import {
   createChangeRequestApprovedNotification,
   createChangeRequestRejectedNotification,
@@ -674,6 +675,7 @@ const PageEllipsis = styled.span`
 
 const PostsManagement = () => {
   const { language } = useLanguage();
+  const notificationBadges = useAdminNotificationBadges();
   const [activeTab, setActiveTab] = useState('urgent');
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
@@ -1341,6 +1343,11 @@ const PostsManagement = () => {
             }}>
               {standardJobs.length}
             </span>
+            {notificationBadges.posts > 0 && (
+              <span style={{ marginLeft: '4px', padding: '2px 7px', background: '#ef4444', color: 'white', borderRadius: '12px', fontSize: '11px', fontWeight: '700' }}>
+                {notificationBadges.posts}
+              </span>
+            )}
           </Tab>
           <Tab
             $active={activeTab === 'urgent'}

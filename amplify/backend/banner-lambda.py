@@ -6,7 +6,7 @@ DynamoDB table: Banners
   PK: bannerId (String)
   Attributes: title, imageUrl, linkUrl, isActive, order, createdAt, updatedAt
 
-S3 bucket: opporeview-cv-storage  (folder: banner/)
+S3 bucket: opporeview-cv-storage-prod-2026  (folder: banner/)
 
 Expected API Gateway routes (proxy integration):
   GET    /banners                  → list all
@@ -35,7 +35,7 @@ class DecimalEncoder(json.JSONEncoder):
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 BANNERS_TABLE = os.environ.get('BANNERS_TABLE', 'Banners')
-S3_BUCKET     = os.environ.get('S3_BUCKET', 'opporeview-cv-storage')
+S3_BUCKET     = os.environ.get('S3_BUCKET', 'opporeview-cv-storage-prod-2026')
 S3_REGION     = os.environ.get('S3_REGION', 'ap-southeast-1')
 MAX_ACTIVE    = int(os.environ.get('MAX_ACTIVE_BANNERS', '5'))
 
@@ -194,6 +194,15 @@ def upload_image(body):
 
 # ── Main handler ───────────────────────────────────────────────────────────────
 
+def is_admin_event(event):
+    authorizer = event.get('requestContext', {}).get('authorizer', {})
+    claims = authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {}) or {}
+    groups = claims.get('cognito:groups', []) or []
+    if isinstance(groups, str):
+        groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
+    return any(str(group).lower() == 'admin' for group in groups)
+
+
 def handler(event, context):
     method = event.get('httpMethod', 'GET').upper()
     path   = event.get('path', '/banners')
@@ -212,6 +221,9 @@ def handler(event, context):
     # OPTIONS preflight
     if method == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS_HEADERS, 'body': ''}
+
+    if method != 'GET' and not is_admin_event(event):
+        return err('Admin role required', 403)
 
     # Route
     if path.rstrip('/').endswith('/upload') and method == 'POST':

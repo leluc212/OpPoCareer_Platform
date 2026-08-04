@@ -15,7 +15,7 @@ $paramsFile = "cors-gw-params-temp.json"
 $paramsContent | Out-File -FilePath $paramsFile -Encoding utf8 -NoNewline
 
 # REST API (EmployerProfileAPI / JobPostAPI)
-$REST_API_ID = "dlidp35x33"
+$REST_API_ID = "fhkig55p32"
 
 # Gateway Response types that need CORS headers
 $ResponseTypes = @(

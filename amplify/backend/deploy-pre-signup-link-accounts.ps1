@@ -22,7 +22,7 @@ $ErrorActionPreference = "Stop"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 $Region       = "ap-southeast-1"
-$UserPoolId   = "ap-southeast-1_ShCajkmJd"
+$UserPoolId   = "ap-southeast-1_LUa2Zfjtv"
 $FunctionName = "PreSignUpLinkAccounts"
 $RoleName     = "PreSignUpLinkAccountsRole"
 $LambdaDir    = "infra\lambda\pre-signup-link-accounts"

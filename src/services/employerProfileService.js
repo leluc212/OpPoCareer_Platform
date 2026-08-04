@@ -7,7 +7,7 @@ import { getIdToken } from './authHeaders.js';
 // API base URL - use Vite proxy in dev to avoid CORS, direct URL in production
 const API_BASE_URL = import.meta.env.DEV
   ? '/api-employer'
-  : (import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod');
+  : (import.meta.env.VITE_EMPLOYER_API_URL || 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 /**
  * Get authentication token — delegates to shared authHeaders utility which

@@ -8,8 +8,7 @@
 
 $REGION        = "ap-southeast-1"
 $FUNCTION_NAME = "ekyc-handler"
-$API_ID        = "sd7ds72m8g"       # API Gateway HTTP API — dùng chung với candidate profile
-$AUTHORIZER_ID = "w7g6id"           # CognitoAuthorizer — JWT verify bằng Cognito User Pool
+$API_ID        = "mrag7hkw11"       # API Gateway HTTP API của account mới
 $ZIP_FILE      = "ekyc-handler.zip"
 
 Write-Host "📦 Updating ekyc_handler.py inside zip..."
@@ -91,27 +90,24 @@ $INTEGRATION_ID = (aws apigatewayv2 create-integration `
     --query "IntegrationId" --output text)
 Write-Host "✅ Integration ID: $INTEGRATION_ID"
 
-# ── Routes — POST/GET routes yêu cầu Cognito JWT, OPTIONS không cần ───────────
-Write-Host "🛣️  Creating routes with Cognito authorizer..."
+# ── Routes — API hiện để Lambda tự kiểm tra Bearer token ──────────────────────
+Write-Host "🛣️  Creating routes with Lambda-side authentication..."
 # POST /ekyc/ocr — yêu cầu đăng nhập
 aws apigatewayv2 create-route --api-id $API_ID --route-key "POST /ekyc/ocr" `
     --target "integrations/$INTEGRATION_ID" `
-    --authorization-type JWT `
-    --authorizer-id $AUTHORIZER_ID `
+    --authorization-type NONE `
     --region $REGION
 
 # POST /ekyc/verify-face — yêu cầu đăng nhập
 aws apigatewayv2 create-route --api-id $API_ID --route-key "POST /ekyc/verify-face" `
     --target "integrations/$INTEGRATION_ID" `
-    --authorization-type JWT `
-    --authorizer-id $AUTHORIZER_ID `
+    --authorization-type NONE `
     --region $REGION
 
 # GET /ekyc/status/{userId} — yêu cầu đăng nhập
 aws apigatewayv2 create-route --api-id $API_ID --route-key "GET /ekyc/status/{userId}" `
     --target "integrations/$INTEGRATION_ID" `
-    --authorization-type JWT `
-    --authorizer-id $AUTHORIZER_ID `
+    --authorization-type NONE `
     --region $REGION
 
 # OPTIONS — không cần auth (CORS preflight)
@@ -140,7 +136,7 @@ Write-Host "=================================================="
 Write-Host "  eKYC Lambda deployed successfully!"
 Write-Host ""
 Write-Host "  Endpoint base:"
-Write-Host "  https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com"
+Write-Host "  https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com"
 Write-Host "  /prod/ekyc/ocr"
 Write-Host "  /prod/ekyc/verify-face"
 Write-Host "  /prod/ekyc/status/{userId}"

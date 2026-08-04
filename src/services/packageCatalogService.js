@@ -1,4 +1,5 @@
 import { cloneDefaultPackageCatalog } from '../data/packageCatalog';
+import { getAuthHeaders, getOptionalAuthHeaders } from './authHeaders.js';
 
 // Primary API endpoint (set in env after deploy). In development you can set
 // `VITE_PACKAGE_SUBSCRIPTIONS_PROXY_BASE=/api-packages` and configure the
@@ -93,7 +94,9 @@ export const getPackageCatalog = async () => {
   }
 
   try {
-    const response = await fetch(`${base.replace(/\/$/, '')}/packages`);
+    const response = await fetch(`${base.replace(/\/$/, '')}/packages`, {
+      headers: await getOptionalAuthHeaders()
+    });
     if (!response.ok) {
       console.warn('Package catalog fetch returned non-OK response', response.status);
       return cloneDefaultPackageCatalog();
@@ -121,6 +124,7 @@ export const updatePackageCatalogItem = async (packageItem) => {
   const response = await fetch(url, {
     method: 'PUT',
     headers: {
+      ...(await getAuthHeaders()),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(packageItem)
@@ -144,7 +148,9 @@ export const getWallet = async (employerId) => {
   }
 
   const url = `${base.replace(/\/$/, '')}/wallet/${encodeURIComponent(employerId)}`;
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: await getAuthHeaders()
+  });
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
     throw new Error(errorBody.message || 'Failed to fetch wallet info');
@@ -164,6 +170,7 @@ export const withdrawWallet = async (employerId, amount, bankName, accountNumber
   const response = await fetch(url, {
     method: 'POST',
     headers: {
+      ...(await getAuthHeaders()),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -193,7 +200,9 @@ export const getWithdrawalRequests = async () => {
   }
 
   const url = `${base.replace(/\/$/, '')}/wallet/withdrawals`;
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: await getAuthHeaders()
+  });
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
     throw new Error(errorBody.message || 'Failed to fetch withdrawal requests');
@@ -213,6 +222,7 @@ export const updateWithdrawalStatus = async (requestId, status) => {
   const response = await fetch(url, {
     method: 'PUT',
     headers: {
+      ...(await getAuthHeaders()),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ status })
@@ -237,6 +247,7 @@ export const createWalletTransaction = async (employerId, amount, type, descript
   const response = await fetch(url, {
     method: 'POST',
     headers: {
+      ...(await getAuthHeaders()),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({

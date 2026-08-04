@@ -11,9 +11,9 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 
 const REGION = process.env.AWS_REGION || 'ap-southeast-1';
-const PAYMENTS_TABLE = process.env.PAYMENTS_TABLE || 'Payment';
-const EMPLOYERS_TABLE = process.env.EMPLOYERS_TABLE || 'EmployerProfiles';
-const USER_PACKAGES_TABLE = process.env.USER_PACKAGES_TABLE || 'PackageSubscriptions';
+const PAYMENTS_TABLE = (process.env.PAYMENTS_TABLE || 'Payment').trim();
+const EMPLOYERS_TABLE = (process.env.EMPLOYERS_TABLE || 'EmployerProfiles').trim();
+const USER_PACKAGES_TABLE = (process.env.USER_PACKAGES_TABLE || 'PackageSubscriptions').trim();
 
 // VietQR config — set via env vars
 const BANK_ID = process.env.VIETQR_BANK_ID || 'MB';

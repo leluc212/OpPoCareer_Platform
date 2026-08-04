@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Deploy check-email-provider Lambda + thêm route vào API Gateway sd7ds72m8g
+# Deploy check-email-provider Lambda + thêm route vào API Gateway mrag7hkw11
 #
 # Usage (từ thư mục amplify/backend/):
 #   .\deploy-check-email-lambda.ps1
@@ -15,7 +15,7 @@ $ErrorActionPreference = "Continue"
 
 $REGION        = "ap-southeast-1"
 $FUNCTION_NAME = "check-email-provider"
-$API_ID        = "sd7ds72m8g"      # Candidate/eKYC HTTP API — dùng chung
+$API_ID        = "mrag7hkw11"      # Candidate/eKYC HTTP API — account mới
 $ZIP_FILE      = "check-email-lambda.zip"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -72,7 +72,7 @@ if ($LASTEXITCODE -ne 0) {
         "Statement": [{
             "Effect": "Allow",
             "Action": ["cognito-idp:ListUsers"],
-            "Resource": "arn:aws:cognito-idp:ap-southeast-1:*:userpool/ap-southeast-1_ShCajkmJd"
+            "Resource": "arn:aws:cognito-idp:ap-southeast-1:*:userpool/ap-southeast-1_LUa2Zfjtv"
         }]
     }'
     
@@ -105,7 +105,7 @@ if ($LASTEXITCODE -eq 0) {
         --runtime nodejs18.x `
         --timeout 10 `
         --memory-size 128 `
-        --environment "Variables={USER_POOL_ID=ap-southeast-1_ShCajkmJd}" `
+        --environment "Variables={USER_POOL_ID=ap-southeast-1_LUa2Zfjtv}" `
         --region $REGION | Out-Null
     
     Write-Host "  ✅ Lambda updated!" -ForegroundColor Green
@@ -123,7 +123,7 @@ if ($LASTEXITCODE -eq 0) {
         --zip-file "fileb://$ZIP_FILE" `
         --timeout 10 `
         --memory-size 128 `
-        --environment "Variables={USER_POOL_ID=ap-southeast-1_ShCajkmJd}" `
+        --environment "Variables={USER_POOL_ID=ap-southeast-1_LUa2Zfjtv}" `
         --region $REGION | Out-Null
     
     if ($LASTEXITCODE -eq 0) {
@@ -222,11 +222,11 @@ Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  ✅ Deployment COMPLETE!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Endpoint:" -ForegroundColor Cyan
-Write-Host "  https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod/auth/check-email?email=test@example.com" -ForegroundColor White
+Write-Host "  https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod/auth/check-email?email=test@example.com" -ForegroundColor White
 Write-Host ""
 Write-Host "  Thêm vào .env:" -ForegroundColor Yellow
-Write-Host "  VITE_CHECK_EMAIL_API=https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod" -ForegroundColor White
+Write-Host "  VITE_CHECK_EMAIL_API=https://5p2egon6w0.execute-api.ap-southeast-1.amazonaws.com" -ForegroundColor White
 Write-Host ""
 Write-Host "  Test:" -ForegroundColor Yellow
-Write-Host "  curl 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod/auth/check-email?email=YOUR_EMAIL'" -ForegroundColor White
+Write-Host "  curl 'https://5p2egon6w0.execute-api.ap-southeast-1.amazonaws.com/auth/check-email?email=YOUR_EMAIL'" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor Cyan

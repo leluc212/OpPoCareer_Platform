@@ -1,17 +1,26 @@
 # add-verification-view-url-route.ps1
 # Creates the /profile/{userId}/verification and /profile/{userId}/verification/view-url
-# resources in the EmployerProfileAPI REST API (dlidp35x33) and deploys to prod stage.
+# resources in the EmployerProfileAPI REST API and deploys to prod stage.
 # The Lambda already handles this path - only the API Gateway resources are missing.
 
 $ErrorActionPreference = "Stop"
 
-$REST_API_ID  = "dlidp35x33"
+$REST_API_ID  = "fhkig55p32"
 $REGION       = "ap-southeast-1"
-$LAMBDA_ARN   = "arn:aws:lambda:ap-southeast-1:726911960757:function:EmployerProfileAPI"
+$LAMBDA_ARN   = "arn:aws:lambda:ap-southeast-1:589362963105:function:EmployerProfileAPI"
+$POOL_ARN     = "arn:aws:cognito-idp:ap-southeast-1:589362963105:userpool/ap-southeast-1_LUa2Zfjtv"
 $INTEGRATION_URI = "arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"
 
-# /profile/{userId} resource ID (confirmed: si8qtl)
-$USER_ID_RESOURCE = "si8qtl"
+$AUTHORIZER_ID = aws apigateway get-authorizers `
+    --rest-api-id $REST_API_ID `
+    --region $REGION `
+    --query "items[?type=='COGNITO_USER_POOLS' && contains(providerARNs, '$POOL_ARN')].id | [0]" `
+    --output text
+if (-not $AUTHORIZER_ID -or $AUTHORIZER_ID -eq 'None') { throw "Cognito authorizer for the new user pool was not found" }
+
+$resources = aws apigateway get-resources --rest-api-id $REST_API_ID --region $REGION | ConvertFrom-Json
+$USER_ID_RESOURCE = ($resources.items | Where-Object { $_.path -eq "/profile/{userId}" }).id
+if (-not $USER_ID_RESOURCE) { throw "Resource /profile/{userId} not found in API $REST_API_ID" }
 
 Write-Host "========================================"
 Write-Host " Add POST /profile/{userId}/verification/view-url"
@@ -96,13 +105,14 @@ if (-not $VIEW_URL_RESOURCE_ID) {
     exit 1
 }
 
-# ---- Step 3: Create POST method (auth: NONE - Lambda handles its own auth) --
-Write-Host "[3/7] Creating POST method on view-url (authorizationType=NONE)..."
+# ---- Step 3: Create POST method (Cognito auth) ------------------------------
+Write-Host "[3/7] Creating POST method on view-url (Cognito authorizer)..."
 aws apigateway put-method `
     --rest-api-id $REST_API_ID `
     --resource-id $VIEW_URL_RESOURCE_ID `
     --http-method POST `
-    --authorization-type NONE `
+    --authorization-type COGNITO_USER_POOLS `
+    --authorizer-id $AUTHORIZER_ID `
     --region $REGION | Out-Null
 Write-Host "  POST method created"
 
@@ -155,7 +165,7 @@ Write-Host "  OPTIONS/CORS method created"
 
 # ---- Step 6: Grant API Gateway permission to invoke the Lambda --------------
 Write-Host "[6/7] Adding Lambda invoke permission for API Gateway..."
-$ACCOUNT_ID = "726911960757"
+$ACCOUNT_ID = (aws sts get-caller-identity --query "Account" --output text)
 $SOURCE_ARN = "arn:aws:execute-api:${REGION}:${ACCOUNT_ID}:${REST_API_ID}/*/POST/profile/*/verification/view-url"
 
 aws lambda add-permission `
@@ -179,6 +189,6 @@ Write-Host "  Deployed to prod"
 
 Write-Host ""
 Write-Host "Done! Route is live:" -ForegroundColor Green
-Write-Host "  POST https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod/profile/{userId}/verification/view-url"
+Write-Host "  POST https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod/profile/{userId}/verification/view-url"
 Write-Host ""
 Write-Host "Also check if /profile/{userId}/verification/upload-url needs to be added (same pattern)." -ForegroundColor Yellow

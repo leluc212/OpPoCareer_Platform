@@ -2,7 +2,11 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { getAuthHeaders, getIdToken } from './authHeaders.js';
 
 // HTTP API uses the $default stage, so the invoke URL must NOT include /prod.
-const API_BASE_URL = 'https://l1636ie205.execute-api.ap-southeast-1.amazonaws.com';
+const API_BASE_URL = import.meta.env.VITE_APPLICATION_API_URL || 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com';
+const applicationUrl = (path = '') => {
+  if (!import.meta.env.DEV) return `${API_BASE_URL}/applications${path}`;
+  return `/api-applications${path}`;
+};
 
 /**
  * Submit a job application
@@ -18,7 +22,7 @@ export async function submitApplication(jobId, cvUrl, cvFilename, cvS3Key, extra
     
     const headers = await getAuthHeaders();
     
-    const response = await fetch(`${API_BASE_URL}/applications`, {
+    const response = await fetch(applicationUrl(), {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -76,8 +80,8 @@ export async function getMyCandidateApplications() {
     // Try Vite proxy first in dev mode to avoid CORS
     const urls = import.meta.env.DEV
       ? [
-          `${API_BASE_URL}/applications/candidate/${userId}`,
-          `/api-applications/candidate/${userId}`
+          applicationUrl(`/candidate/${userId}`),
+          `${API_BASE_URL}/applications/candidate/${userId}`
         ]
       : [`${API_BASE_URL}/applications/candidate/${userId}`];
     
@@ -125,8 +129,8 @@ export async function getCandidateApplications(candidateId) {
     const headers = await getAuthHeaders();
     const urls = import.meta.env.DEV
       ? [
-          `${API_BASE_URL}/applications/candidate/${candidateId}`,
-          `/api-applications/candidate/${candidateId}`
+          applicationUrl(`/candidate/${candidateId}`),
+          `${API_BASE_URL}/applications/candidate/${candidateId}`
         ]
       : [`${API_BASE_URL}/applications/candidate/${candidateId}`];
       
@@ -178,7 +182,7 @@ export async function getJobApplications(jobId) {
       }
 
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/applications/job/${jobId}`, {
+      const response = await fetch(applicationUrl(`/job/${jobId}`), {
         method: 'GET',
         headers
       });
@@ -230,7 +234,7 @@ export async function updateApplicationStatus(applicationId, status, extraFields
     
     const headers = await getAuthHeaders();
     
-    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/status`, {
+    const response = await fetch(applicationUrl(`/${applicationId}/status`), {
       method: 'PUT',
       headers,
       body: JSON.stringify({ 
@@ -266,7 +270,7 @@ export async function rejectReplacementWorker(applicationId) {
     console.log('📤 Rejecting replacement worker for:', applicationId);
     const headers = await getAuthHeaders();
     const url = import.meta.env.DEV
-      ? `/api-applications/${applicationId}/reject-replacement`
+      ? applicationUrl(`/${applicationId}/reject-replacement`)
       : `${API_BASE_URL}/applications/${applicationId}/reject-replacement`;
       
     const response = await fetch(url, {
@@ -353,7 +357,7 @@ const applicationService = {
    */
   async getAllApplications() {
     return fetchResiliently({
-      path: '/api-lambda-applications/applications',
+      path: import.meta.env.DEV ? '/api-applications' : `${API_BASE_URL}/applications`,
       serviceName: 'ApplicationService'
     });
   },
@@ -389,8 +393,8 @@ const applicationService = {
       // In prod, route through an API Gateway or server-side proxy instead of calling
       // the Lambda Function URL directly (direct calls are CORS-blocked in browsers).
       const url = import.meta.env.DEV
-        ? `/api-lambda-applications/applications/available-workers/${jobId}`
-        : `/api-lambda-applications/applications/available-workers/${jobId}`;
+        ? `/api-applications/available-workers/${jobId}`
+        : `${API_BASE_URL}/applications/available-workers/${jobId}`;
       const response = await fetch(url, { method: 'GET', headers });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();

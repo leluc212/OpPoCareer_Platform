@@ -37,6 +37,14 @@ public/candidate-profiles-data.json
 .env.test
 .env.*.local
 
+# Local Terraform state/plans/vars can contain secrets and account-specific IDs
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+tfplan
+terraform-old-mirror/.terraform/
+
 # Local log files and text dumps (containing potential JWTs/PII)
 *.txt
 *.json

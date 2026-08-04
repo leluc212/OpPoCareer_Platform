@@ -24,7 +24,7 @@ import { getActiveBanners } from '../../services/bannerService';
 import { getTopSpotlightEmployerIds, filterTopSpotlightJobs } from '../../services/topSpotlightService';
 import TopSpotlightJobCard from '../../components/TopSpotlightJobCard';
 import VerticalAdBanner from '../../components/VerticalAdBanner';
-import { getAuthHeaders } from '../../services/authHeaders';
+import { getAuthHeaders, getOptionalAuthHeaders } from '../../services/authHeaders';
 import { getIdToken } from '../../services/authHeaders';
 import { requestInterviewMedia } from '../../services/interviewMediaService';
 import * as applicationService from '../../services/applicationService';
@@ -2443,7 +2443,7 @@ const JobListing = () => {
       const token = await getIdToken();
       if (!token) return null;
       
-      const response = await fetch(`${import.meta.env.VITE_EMPLOYER_API_URL || 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod'}/profile/${employerId}`, {
+      const response = await fetch(`${import.meta.env.VITE_EMPLOYER_API_URL || 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod'}/profile/${employerId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -3879,7 +3879,9 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
       try {
         const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
         if (!API_ENDPOINT) return;
-        const response = await fetch(`${API_ENDPOINT}/subscriptions`);
+        const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
+          headers: await getOptionalAuthHeaders()
+        });
         if (!response.ok) return;
         const data = await response.json();
         const now = Date.now();

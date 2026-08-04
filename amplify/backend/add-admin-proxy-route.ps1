@@ -1,9 +1,13 @@
-# PowerShell script to create the {proxy+} resource under /admin/employers in AWS API Gateway (dlidp35x33)
-$REST_API_ID = "dlidp35x33"
-$PARENT_RESOURCE_ID = "20nixs" # /admin/employers
+# PowerShell script to create the {proxy+} resource under /admin/employers
+# in the EmployerProfileAPI REST API of the new account.
+$REST_API_ID = "fhkig55p32"
 $REGION = "ap-southeast-1"
-$LAMBDA_ARN = "arn:aws:lambda:ap-southeast-1:726911960757:function:EmployerProfileAPI"
+$LAMBDA_ARN = "arn:aws:lambda:ap-southeast-1:589362963105:function:EmployerProfileAPI"
 $INTEGRATION_URI = "arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/$LAMBDA_ARN/invocations"
+
+$resources = aws apigateway get-resources --rest-api-id $REST_API_ID --region $REGION | ConvertFrom-Json
+$PARENT_RESOURCE_ID = ($resources.items | Where-Object { $_.path -eq "/admin/employers" }).id
+if (-not $PARENT_RESOURCE_ID) { throw "Resource /admin/employers not found in API $REST_API_ID" }
 
 Write-Host "Creating {proxy+} resource under /admin/employers in API Gateway..."
 $resource = aws apigateway create-resource `

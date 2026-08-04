@@ -9,10 +9,10 @@ cognito = boto3.client('cognito-idp')
 dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE_NAME', 'Users'))
 
-# GSI name on the Users table that indexes by email.
-# If the GSI does not exist, find_user_by_email will raise and we fall through
-# to the normal sub-based upsert (fail-open).
-EMAIL_GSI = os.environ.get('EMAIL_GSI_NAME', 'email-index')
+# The migrated Users table uses `id` as its partition key and `Email-index` as
+# the email lookup index. Keep both configurable for local/test tables.
+USER_KEY = os.environ.get('USERS_TABLE_KEY', 'id')
+EMAIL_GSI = os.environ.get('EMAIL_GSI_NAME', 'Email-index')
 
 
 def get_headers():
@@ -120,30 +120,34 @@ def upsert_user(user_id, email, role):
     resolved_user_id = user_id
     if email:
         existing = find_user_by_email(email)
-        if existing and existing.get('userId') and existing['userId'] != user_id:
+        existing_id = (existing.get(USER_KEY) or existing.get('id') or existing.get('userId')) if existing else None
+        if existing_id and existing_id != user_id:
             print(
                 f'[user-role-lambda] Found existing record for email {email} '
-                f'(userId: {existing["userId"]}). Using existing userId instead of {user_id}.'
+                f'(id: {existing_id}). Using existing id instead of {user_id}.'
             )
-            resolved_user_id = existing['userId']
+            resolved_user_id = existing_id
 
     print(f'[user-role-lambda] Upserting userId={resolved_user_id} email={email}')
 
     users_table.update_item(
-        Key={'userId': resolved_user_id},
+        Key={USER_KEY: resolved_user_id},
         UpdateExpression=(
-            'SET #role = :role, '
+            'SET #userId = :userId, '
+            '#role = :role, '
             '#email = if_not_exists(#email, :email), '
             '#updatedAt = :updatedAt, '
             '#createdAt = if_not_exists(#createdAt, :createdAt)'
         ),
         ExpressionAttributeNames={
+            '#userId':    'userId',
             '#role':      'role',
             '#email':     'email',
             '#updatedAt': 'updatedAt',
             '#createdAt': 'createdAt',
         },
         ExpressionAttributeValues={
+            ':userId':    resolved_user_id,
             ':role':      role,
             ':email':     email or '',
             ':updatedAt': now,

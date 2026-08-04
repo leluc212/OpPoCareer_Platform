@@ -1,11 +1,13 @@
 # PowerShell script to add GET /applications/available-workers/{jobId} route to API Gateway HTTP API
 $ErrorActionPreference = "Continue"
 
-$API_ID       = "l1636ie205"
-$INTEGRATION  = "jjduf5i"     # ApplicationLambda integration
-$AUTHORIZER   = "w7g6id"      # CognitoAuthorizer
+$API_ID       = "1v4xboca50"
 $REGION       = "ap-southeast-1"
 $ROUTE_KEY    = "GET /applications/available-workers/{jobId}"
+
+$integrations = aws apigatewayv2 get-integrations --api-id $API_ID --region $REGION | ConvertFrom-Json
+$INTEGRATION = ($integrations.Items | Where-Object { $_.IntegrationUri -match "function:ApplicationLambda/" } | Select-Object -First 1).IntegrationId
+if (-not $INTEGRATION) { throw "ApplicationLambda integration not found in API $API_ID" }
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Adding route: $ROUTE_KEY" -ForegroundColor Cyan
@@ -16,8 +18,7 @@ $result = aws apigatewayv2 create-route `
     --api-id $API_ID `
     --route-key $ROUTE_KEY `
     --target "integrations/$INTEGRATION" `
-    --authorization-type JWT `
-    --authorizer-id $AUTHORIZER `
+    --authorization-type NONE `
     --region $REGION
 
 if ($LASTEXITCODE -eq 0) {

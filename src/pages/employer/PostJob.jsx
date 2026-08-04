@@ -1428,7 +1428,7 @@ const PostJob = () => {
         console.log('📤 Sending request with employer info:', payload);
 
         // Use direct API (CORS is fixed)
-        const apiUrl = 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod/jobs';
+        const apiUrl = `${import.meta.env.VITE_EMPLOYER_API_URL || 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod'}/jobs`;
 
         console.log('🔗 API URL:', apiUrl);
 

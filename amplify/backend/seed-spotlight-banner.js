@@ -9,8 +9,8 @@
  * Ảnh poster đã có sẵn trên S3: poster/phucloctho.jpg
  */
 
-const API_URL = 'https://35djy3cnxb.execute-api.ap-southeast-1.amazonaws.com/prod';
-const S3_BASE = 'https://opporeview-cv-storage.s3.ap-southeast-1.amazonaws.com';
+const API_URL = 'https://9eubdtwarg.execute-api.ap-southeast-1.amazonaws.com/prod';
+const S3_BASE = 'https://opporeview-cv-storage-prod-2026.s3.ap-southeast-1.amazonaws.com';
 
 const spotlightBanner = {
   title: 'Phúc Lộc Thọ - Tuyển Nhân Viên Phục Vụ',

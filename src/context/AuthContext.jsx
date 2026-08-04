@@ -145,6 +145,7 @@ export const AuthProvider = ({ children }) => {
             const userData = JSON.parse(savedUser);
             userData.userId = userIdFromToken; // Override with token userId
             userData.email = emailFromToken; // Override with token email
+            userData.name = session.tokens.idToken.payload.name || userData.name || emailFromToken?.split('@')[0] || '';
             userData.username = currentUser.username; // Override with current username
             
             // Kiểm tra nếu Google user đã có role cố định (không cho đổi vai trò)
@@ -288,6 +289,7 @@ export const AuthProvider = ({ children }) => {
               username: currentUser.username,
               userId: session.tokens.idToken.payload.sub,
               email: session.tokens.idToken.payload.email,
+              name: session.tokens.idToken.payload.name || session.tokens.idToken.payload.email?.split('@')[0] || '',
               role: userRole,
               approved: true
             };
@@ -507,7 +509,7 @@ export const AuthProvider = ({ children }) => {
               // Check candidate profile first
               const { default: candidateProfileService } = await import('../services/candidateProfileService');
               // Temporarily store tokens so services can auth
-              const tempClientId = '2mv7qt4gpmq03dmlm0or9724n8';
+              const tempClientId = import.meta.env.VITE_USER_POOL_CLIENT_ID || '4g1ssfgjmnuveblss1a7e0v7ob';
               const tempUsername = idPayload['cognito:username'] || idPayload.email?.split('@')[0] || idPayload.sub;
               const tempBase = `CognitoIdentityServiceProvider.${tempClientId}.${tempUsername}`;
               localStorage.setItem(`${tempBase}.idToken`, tokens.id_token || '');
@@ -560,7 +562,7 @@ export const AuthProvider = ({ children }) => {
 
         // Also write tokens into Amplify-compatible storage keys so fetchAuthSession() works
         try {
-          const clientId = '2mv7qt4gpmq03dmlm0or9724n8';
+          const clientId = import.meta.env.VITE_USER_POOL_CLIENT_ID || '4g1ssfgjmnuveblss1a7e0v7ob';
           const username = userData.username || userData.userId || idPayload.sub;
           const base = `CognitoIdentityServiceProvider.${clientId}.${username}`;
           localStorage.setItem(`${base}.idToken`, tokens.id_token || '');

@@ -22,6 +22,7 @@ import DynamicTranslate from '../../components/DynamicTranslate';
 import Modal from '../../components/Modal';
 import CompanyProfileSetupModal from '../../components/CompanyProfileSetupModal';
 import PackageExpiryModal from '../../components/PackageExpiryModal';
+import { getAuthHeaders } from '../../services/authHeaders.js';
 import { ProfileDetailModal } from './Applications';
 import {
   Briefcase,
@@ -518,7 +519,9 @@ const EmployerDashboard = () => {
     let cancelled = false;
     const fetchExpiryNotif = async () => {
       try {
-        const res = await fetch(`${NOTIF_API}/notifications/user/${userId}?role=employer`);
+        const res = await fetch(`${NOTIF_API}/notifications/user/${userId}?role=employer`, {
+          headers: await getAuthHeaders()
+        });
         if (!res.ok) return;
         const data = await res.json();
         const list = Array.isArray(data) ? data : [];

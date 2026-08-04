@@ -11,7 +11,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api-cv-ai': {
-        target: process.env.CV_AI_PROXY_TARGET || 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: process.env.CV_AI_PROXY_TARGET || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-cv-ai/, ''),
         secure: true,
@@ -25,7 +25,7 @@ export default defineConfig({
       },
       // Lambda Function URL proxies (bypasses browser CORS)
       '/api-payments': {
-        target: 'https://es3yq2niph.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: 'https://ygabt1q860.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-payments/, ''),
         secure: true,
@@ -38,7 +38,7 @@ export default defineConfig({
         }
       },
       '/api-employer': {
-        target: 'https://dlidp35x33.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-employer/, ''),
         secure: true,
@@ -50,43 +50,50 @@ export default defineConfig({
         }
       },
       '/api-lambda-candidates': {
-        target: 'https://gvxkjnavgu4lelloct5chgyjaa0jmyab.lambda-url.ap-southeast-1.on.aws',
+        target: 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-lambda-candidates/, ''),
         secure: true,
         configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.removeHeader('authorization');
-            proxyReq.removeHeader('Authorization');
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
           });
         }
       },
       '/api-lambda-applications': {
-        target: 'https://65fnfwjx5m7iq5ilmoj5ea7nwq0cespm.lambda-url.ap-southeast-1.on.aws',
+        target: 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-lambda-applications/, ''),
         secure: true,
         configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.removeHeader('authorization');
-            proxyReq.removeHeader('Authorization');
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
           });
         }
       },
       '/api-cv': {
-        target: 'https://v56v542h8f.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: 'https://w2yc3x4mw8.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-cv/, ''),
         secure: true,
         configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // API Gateway protects every CV route with the Cognito JWT authorizer.
+            // Vite's changeOrigin can drop the browser Authorization header, so
+            // explicitly forward the Bearer token to the upstream API.
             proxyReq.removeHeader('authorization');
             proxyReq.removeHeader('Authorization');
+            const auth = req.headers.authorization || req.headers.Authorization;
+            if (auth) proxyReq.setHeader('Authorization', auth);
           });
         }
       },
       '/api-applications': {
-        target: 'https://l1636ie205.execute-api.ap-southeast-1.amazonaws.com',
+        target: 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-applications/, '/applications'),
         secure: false,
@@ -102,7 +109,7 @@ export default defineConfig({
         }
       },
       '/api-report': {
-        target: 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-report/, ''),
         secure: false,
@@ -114,13 +121,13 @@ export default defineConfig({
           });
         }
       },
-      // Candidate profile API (sd7ds72m8g). The API Gateway currently returns NO CORS
+      // Candidate profile API. The API Gateway currently returns NO CORS
       // headers, so authenticated browser requests (which trigger a preflight because of
       // the Authorization header) are blocked. Routing through this same-origin dev proxy
       // avoids CORS entirely so candidate profiles load/save in local development.
       // NOTE: This only fixes DEV. In production the API Gateway CORS must be re-enabled.
       '/api-profile': {
-        target: 'https://sd7ds72m8g.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-profile/, ''),
         secure: false,
@@ -134,9 +141,35 @@ export default defineConfig({
       },
       // eKYC Mock Server (local dev) — đổi target thành API Gateway khi deploy AWS
       '/api-ekyc': {
-        target: 'http://localhost:3001',
+        target: 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-ekyc/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
+          });
+        }
+      },
+      '/api-packages': {
+        target: 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-packages/, ''),
+        secure: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
+          });
+        }
+      },
+      '/api-quick-jobs': {
+        target: 'https://i3ce0izl59.execute-api.ap-southeast-1.amazonaws.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-quick-jobs/, ''),
+        secure: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             if (req.headers.authorization) {
@@ -149,7 +182,7 @@ export default defineConfig({
       // (bao gồm cả /api-applications, /api-cv, v.v.). Vite proxy dùng first-match,
       // nên các rule cụ thể hơn phải đứng trước rule chung '/api'.
       '/api': {
-        target: 'https://xyp4wkszi7.execute-api.ap-southeast-1.amazonaws.com/prod',
+        target: 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/candidates'),
         secure: true,

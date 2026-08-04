@@ -11,6 +11,8 @@
  * The caller passes in the already-loaded jobs array to avoid duplicate fetches.
  */
 
+import { getOptionalAuthHeaders } from './authHeaders.js';
+
 const SUBS_API = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
 
 /**
@@ -21,7 +23,9 @@ export const getTopSpotlightEmployerIds = async () => {
   if (!SUBS_API) return new Set();
 
   try {
-    const res = await fetch(`${SUBS_API.replace(/\/$/, '')}/subscriptions`);
+    const res = await fetch(`${SUBS_API.replace(/\/$/, '')}/subscriptions/public`, {
+      headers: await getOptionalAuthHeaders()
+    });
     if (!res.ok) return new Set();
 
     const data = await res.json();

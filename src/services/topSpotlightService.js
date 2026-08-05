@@ -13,7 +13,8 @@
 
 import { getOptionalAuthHeaders } from './authHeaders.js';
 
-const SUBS_API = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+const SUBS_API = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
+  || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
 
 /**
  * Returns the Set of employer IDs that have an active + approved Top Spotlight subscription

@@ -1,5 +1,7 @@
 
-const API_URL = import.meta.env.VITE_TRANSLATE_API || import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_TRANSLATE_API
+  || import.meta.env.VITE_API_URL
+  || 'https://zloutnmxhz3vrz5lh5nqbqlyla0stfhs.lambda-url.ap-southeast-1.on.aws/';
 
 /**
  * Service to handle dynamic translations using the Hybrid Translation backend.

@@ -31,8 +31,12 @@ import * as applicationService from '../../services/applicationService';
 import adminEmployerService from '../../services/adminEmployerService';
 import { formatShiftString } from '../../utils/formatDays';
 
-const CV_AI_API_BASE_URL =
-  (import.meta.env.VITE_CV_AI_API_URL || '/api-cv-ai').replace(/\/$/, '');
+const CV_AI_API_BASE_URL = (
+  import.meta.env.VITE_CV_AI_API_URL
+  || (import.meta.env.DEV
+    ? '/api-cv-ai'
+    : 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod')
+).replace(/\/$/, '');
 
 
 // Animations
@@ -3877,7 +3881,8 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
   useEffect(() => {
     const loadSubscriptions = async () => {
       try {
-        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
+          || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
         if (!API_ENDPOINT) return;
         const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
           headers: await getOptionalAuthHeaders()

@@ -1019,7 +1019,8 @@ const Subscription = () => {
 
   // ── Helper: gọi API tạo subscription ──────────────────────────────────────
   const createSubscription = async (employerId, companyName, paymentMethod) => {
-    const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+    const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
+      || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
     const purchaseData = {
       employerId,
       companyName,

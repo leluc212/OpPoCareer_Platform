@@ -8,7 +8,8 @@
 
 import { getAuthHeaders } from './authHeaders';
 
-const BASE = import.meta.env.VITE_EXPERIENCE_API_URL || '';
+const BASE = import.meta.env.VITE_EXPERIENCE_API_URL
+  || 'https://6fgpp0z6k3.execute-api.ap-southeast-1.amazonaws.com/prod';
 
 async function request(path, options = {}) {
   const headers = await getAuthHeaders();

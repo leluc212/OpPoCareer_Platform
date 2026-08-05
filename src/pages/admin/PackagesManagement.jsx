@@ -1132,7 +1132,8 @@ const PackagesManagement = () => {
     const loadSubscriptions = async () => {
       try {
         setLoading(true);
-        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+        const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
+          || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
         const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
           headers: await getAuthHeaders()
         });

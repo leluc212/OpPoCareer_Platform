@@ -1,6 +1,7 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-const API_BASE_URL = import.meta.env.VITE_USER_ROLE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_USER_ROLE_API_URL
+  || 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com';
 
 async function getAuthToken() {
   const session = await fetchAuthSession();

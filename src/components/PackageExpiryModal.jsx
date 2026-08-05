@@ -15,8 +15,10 @@ import Toast from './Toast';
 import { getAuthHeaders } from '../services/authHeaders.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SUBS_API    = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API?.replace(/\/$/, '') ?? '';
-const NOTIF_API   = import.meta.env.VITE_NOTIFICATIONS_API?.replace(/\/$/, '') ?? '';
+const SUBS_API    = (import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
+  || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com').replace(/\/$/, '');
+const NOTIF_API   = (import.meta.env.VITE_NOTIFICATIONS_API
+  || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com').replace(/\/$/, '');
 const EMPLOYER_API = import.meta.env.VITE_EMPLOYER_API_URL
   || (import.meta.env.DEV
     ? '/api-employer'

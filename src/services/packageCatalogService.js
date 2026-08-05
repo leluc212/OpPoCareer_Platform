@@ -4,7 +4,8 @@ import { getAuthHeaders, getOptionalAuthHeaders } from './authHeaders.js';
 // Primary API endpoint (set in env after deploy). In development you can set
 // `VITE_PACKAGE_SUBSCRIPTIONS_PROXY_BASE=/api-packages` and configure the
 // dev server proxy to forward `/api-packages` to the real API to avoid CORS.
-const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API;
+const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
+  || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
 const DEV_PROXY_BASE = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_PROXY_BASE || '/api-packages';
 
 const normalizeNumber = (value) => {

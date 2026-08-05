@@ -1,7 +1,10 @@
 // Notification API Service - DynamoDB Backend
 import { getAuthHeaders } from './authHeaders.js';
 
-const API_ENDPOINT = import.meta.env.VITE_NOTIFICATIONS_API;
+const API_ENDPOINT = (
+  import.meta.env.VITE_NOTIFICATIONS_API
+  || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com'
+).replace(/\/$/, '');
 
 /**
  * Get all notifications for a user

@@ -513,7 +513,8 @@ const EmployerDashboard = () => {
     const sessionKey = `pkgExpiryModalShown_${userId}`;
     if (sessionStorage.getItem(sessionKey)) return;
 
-    const NOTIF_API = import.meta.env.VITE_NOTIFICATIONS_API?.replace(/\/$/, '');
+    const NOTIF_API = (import.meta.env.VITE_NOTIFICATIONS_API
+      || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com').replace(/\/$/, '');
     if (!NOTIF_API) return;
 
     let cancelled = false;

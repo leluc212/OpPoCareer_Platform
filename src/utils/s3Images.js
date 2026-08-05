@@ -1,6 +1,7 @@
 const S3_BUCKET_NAME = import.meta.env.VITE_S3_BUCKET_NAME || 'opporeview-cv-storage-prod-2026';
 const S3_REGION = import.meta.env.VITE_S3_REGION || 'ap-southeast-1';
 const S3_BASE_URL = import.meta.env.VITE_S3_ASSETS_URL || `https://${S3_BUCKET_NAME}.s3.${S3_REGION}.amazonaws.com`;
+const S3_ASSET_VERSION = import.meta.env.VITE_S3_ASSET_VERSION || '20260805';
 
 export const s3Images = {
   banner: {
@@ -23,7 +24,9 @@ export const s3Images = {
     phucloctho: `${S3_BASE_URL}/poster/phucloctho.jpg`
   },
   system: {
-    logo: `${S3_BASE_URL}/system/logo.png`,
+    // Version the logo URL so browsers do not reuse a cached response from
+    // before the bucket CORS configuration was corrected.
+    logo: `${S3_BASE_URL}/system/logo.png?v=${S3_ASSET_VERSION}`,
     logoPlt: `${S3_BASE_URL}/system/logoplt.png`,
     mascot: `${S3_BASE_URL}/system/mascot.png`,
     linhvat: `${S3_BASE_URL}/system/linhvat.png`,

@@ -514,7 +514,7 @@ const EmployerDashboard = () => {
     if (sessionStorage.getItem(sessionKey)) return;
 
     const NOTIF_API = (import.meta.env.VITE_NOTIFICATIONS_API
-      || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com').replace(/\/$/, '');
+      || (import.meta.env.DEV ? '/api-notifications' : 'https://o8dkf6kx7b.execute-api.ap-southeast-1.amazonaws.com')).replace(/\/$/, '');
     if (!NOTIF_API) return;
 
     let cancelled = false;

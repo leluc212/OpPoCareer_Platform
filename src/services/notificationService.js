@@ -3,7 +3,7 @@ import { getAuthHeaders } from './authHeaders.js';
 
 const API_ENDPOINT = (
   import.meta.env.VITE_NOTIFICATIONS_API
-  || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com'
+  || (import.meta.env.DEV ? '/api-notifications' : 'https://o8dkf6kx7b.execute-api.ap-southeast-1.amazonaws.com')
 ).replace(/\/$/, '');
 
 const NOTIFICATION_REQUEST_TIMEOUT_MS = 10000;
@@ -106,9 +106,6 @@ export const getNotifications = async (userId, role) => {
   try {
     const headers = await getAuthHeaders();
 
-    // The production RecipientIndex can return an empty result even when the
-    // matching records are present in the Notifications table. Try the GSI
-    // route first, then use the API's recipient filter (scan) as a fallback.
     let list = [];
     let primaryError = null;
 
@@ -126,7 +123,7 @@ export const getNotifications = async (userId, role) => {
       primaryError = error;
     }
 
-    if (list.length === 0) {
+    if (primaryError) {
       try {
         const fallbackResponse = await fetchNotificationApi(
           `${API_ENDPOINT}/notifications?recipientId=${encodeURIComponent(userId)}&recipientRole=${encodeURIComponent(role)}`,

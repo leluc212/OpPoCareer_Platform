@@ -178,6 +178,18 @@ export default defineConfig({
           });
         }
       },
+      '/api-notifications': {
+        target: 'https://o8dkf6kx7b.execute-api.ap-southeast-1.amazonaws.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-notifications/, ''),
+        secure: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const auth = req.headers['authorization'] || req.headers['Authorization'];
+            if (auth) proxyReq.setHeader('Authorization', auth);
+          });
+        }
+      },
       // QUAN TRỌNG: '/api' phải đứng CUỐI CÙNG vì nó match tất cả path bắt đầu bằng /api
       // (bao gồm cả /api-applications, /api-cv, v.v.). Vite proxy dùng first-match,
       // nên các rule cụ thể hơn phải đứng trước rule chung '/api'.

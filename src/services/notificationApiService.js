@@ -3,7 +3,7 @@ import { getAuthHeaders } from './authHeaders.js';
 
 const API_ENDPOINT = (
   import.meta.env.VITE_NOTIFICATIONS_API
-  || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com'
+  || (import.meta.env.DEV ? '/api-notifications' : 'https://o8dkf6kx7b.execute-api.ap-southeast-1.amazonaws.com')
 ).replace(/\/$/, '');
 
 /**

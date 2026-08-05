@@ -751,15 +751,19 @@ const EmployerDashboard = () => {
         // Tổng ứng viên: dùng field applicants tích lũy từ mỗi job (giống Profile)
         const totalApplicationsCount = allStandard.reduce((sum, j) => sum + (j.applicants || 0), 0);
 
-        // Fetch applications for ALL standard jobs - batched (dùng cho recent list và month comparison)
-        const batchSize = 5;
+        // Fetch applications for standard jobs that have applicants or are active - throttled to prevent 503 errors
+        const jobsWithApps = allStandard.filter(job => (job.applicants || 0) > 0 || job.status === 'active');
+        const batchSize = 2;
         const appsResults = [];
-        for (let i = 0; i < allStandard.length; i += batchSize) {
-          const batch = allStandard.slice(i, i + batchSize);
+        for (let i = 0; i < jobsWithApps.length; i += batchSize) {
+          const batch = jobsWithApps.slice(i, i + batchSize);
           const batchResults = await Promise.all(
             batch.map(job => getJobApplications(job.idJob || job.id).catch(() => []))
           );
           appsResults.push(...batchResults);
+          if (i + batchSize < jobsWithApps.length) {
+            await new Promise(r => setTimeout(r, 100));
+          }
         }
         const rawAllApplications = appsResults.flat();
         

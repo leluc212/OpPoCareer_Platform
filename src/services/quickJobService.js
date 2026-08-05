@@ -106,9 +106,9 @@ class QuickJobService {
         ...options.headers
       };
       
-      const isPublicGet = options.method === 'GET' || !options.method;
-      
-      if (token && !isPublicGet) {
+      // The admin list endpoint requires Cognito auth even for GET requests.
+      // Sending the token is also safe for public GET endpoints.
+      if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 

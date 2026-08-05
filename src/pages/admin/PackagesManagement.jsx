@@ -5,7 +5,6 @@ import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import { useLanguage } from '../../context/LanguageContext';
 import { createPackageApprovedNotification } from '../../services/notificationService';
-import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import { getDefaultPackageCatalog, getPackageCatalog, updatePackageCatalogItem } from '../../services/packageCatalogService';
 import { translationService } from '../../services/translationService';
 import { getAuthHeaders } from '../../services/authHeaders.js';
@@ -1071,7 +1070,6 @@ const PreviewText = styled.div`
 
 const PackagesManagement = () => {
   const { language } = useLanguage();
-  const notificationBadges = useAdminNotificationBadges();
 
   // Dữ liệu gói dịch vụ đã mua - Load từ API
   const [purchases, setPurchases] = useState([]);
@@ -1491,11 +1489,6 @@ const PackagesManagement = () => {
         <PageHeader>
           <h1>
             {language === 'vi' ? 'Quản Lý Gói Dịch Vụ' : 'Package Management'}
-            {notificationBadges.packages > 0 && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px', marginLeft: '10px', padding: '2px 7px', borderRadius: '999px', background: '#ef4444', color: 'white', fontSize: '12px', verticalAlign: 'middle' }}>
-                {notificationBadges.packages}
-              </span>
-            )}
           </h1>
           <p>{language === 'vi' ? 'Quản lý gói dịch vụ của nhà tuyển dụng F&B' : 'Manage F&B employer service packages'}</p>
         </PageHeader>

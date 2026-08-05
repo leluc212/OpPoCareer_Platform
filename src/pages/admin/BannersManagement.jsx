@@ -578,7 +578,7 @@ const ToastBar = styled(motion.div)`
   position: fixed;
   bottom: 28px;
   right: 28px;
-  z-index: 2000;
+  z-index: 110000;
   background: ${p => p.$type === 'error' ? '#ef4444' : '#10b981'};
   color: white;
   padding: 12px 20px;

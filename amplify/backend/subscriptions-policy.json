@@ -9,13 +9,16 @@
         "dynamodb:UpdateItem",
         "dynamodb:DeleteItem",
         "dynamodb:Query",
-        "dynamodb:Scan"
+        "dynamodb:Scan",
+        "dynamodb:TransactWriteItems"
       ],
       "Resource": [
         "arn:aws:dynamodb:ap-southeast-1:589362963105:table/PackageSubscriptions",
         "arn:aws:dynamodb:ap-southeast-1:589362963105:table/PackageSubscriptions/index/*",
         "arn:aws:dynamodb:ap-southeast-1:589362963105:table/Notifications",
-        "arn:aws:dynamodb:ap-southeast-1:589362963105:table/Notifications/index/*"
+        "arn:aws:dynamodb:ap-southeast-1:589362963105:table/Notifications/index/*",
+        "arn:aws:dynamodb:ap-southeast-1:589362963105:table/EmployerProfiles",
+        "arn:aws:dynamodb:ap-southeast-1:589362963105:table/EmployerProfiles/index/*"
       ]
     }
   ]

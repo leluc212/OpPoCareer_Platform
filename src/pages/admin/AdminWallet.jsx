@@ -8,7 +8,7 @@ import { Button, Input } from '../../components/FormElements';
 import adminReportService from '../../services/adminReportService';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
-import { getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
+import { getWallet, getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
 import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
 import {
@@ -1388,6 +1388,7 @@ const AdminWallet = () => {
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [netProfit, setNetProfit] = useState(0);
+  const [adminWalletBalance, setAdminWalletBalance] = useState(null);
   const [transactionCount, setTransactionCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState('');
 
@@ -1433,13 +1434,18 @@ const AdminWallet = () => {
     try {
       setIsLoading(true);
       
-      const [subscriptions, realJobs, apps, withdrawalRequests, candidateData] = await Promise.all([
+      const [subscriptions, realJobs, apps, withdrawalRequests, candidateData, platformWallet] = await Promise.all([
         adminReportService.getAllSubscriptions().catch(() => []),
         quickJobService.getAllQuickJobs().catch(() => []),
         applicationService.getAllApplications().catch(() => []),
         getWithdrawalRequests().catch(() => []),
-        candidateProfileService.getAllCandidates().catch(() => [])
+        candidateProfileService.getAllCandidates().catch(() => []),
+        getWallet('admin').catch(() => null)
       ]);
+
+      setAdminWalletBalance(
+        platformWallet?.walletBalance == null ? null : Number(platformWallet.walletBalance)
+      );
 
       // 1. Process Subscription Purchases as Income Transactions
       const subscriptionTransactions = subscriptions
@@ -2293,6 +2299,12 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                         <Clock />
                         {language === 'vi' ? `Cập nhật lần cuối: ${lastUpdated}` : `Last updated: ${lastUpdated}`}
                       </div>
+                      {adminWalletBalance != null && (
+                        <div style={{ marginTop: '8px', color: 'rgba(255,255,255,0.86)', fontSize: '12px' }}>
+                          {language === 'vi' ? 'Số dư ví admin thực tế: ' : 'Actual admin wallet balance: '}
+                          {formatCurrency(adminWalletBalance)}
+                        </div>
+                      )}
                     </div>
                     <WalletIcon className="wallet-icon" />
                   </div>

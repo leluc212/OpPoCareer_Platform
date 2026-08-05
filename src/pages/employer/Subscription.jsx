@@ -4,10 +4,9 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import employerProfileService from '../../services/employerProfileService';
-import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, Clock, CheckCircle, Mail, Phone } from 'lucide-react';
+import { Check, Zap, Star, Rocket, Sparkles, X, HelpCircle, CreditCard, Shield, Clock, CheckCircle, AlertCircle, Banknote, Copy } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
-import { createPackagePurchaseRequestNotification } from '../../services/notificationService';
-import { getDefaultPackageCatalog, getPackageCatalog } from '../../services/packageCatalogService';
+import { getDefaultPackageCatalog, getPackageCatalog, getWallet } from '../../services/packageCatalogService';
 import { getAuthHeaders } from '../../services/authHeaders.js';
 
 // ─── Animations ───────────────────────────────────────────────
@@ -433,6 +432,7 @@ const InfoNote = styled.div`
   font-size: 13px;
   color: #92400E;
   line-height: 1.6;
+  text-wrap: balance;
 `;
 
 const ModalFooter = styled.div`
@@ -458,6 +458,11 @@ const CancelButton = styled.button`
     border-color: #CBD5E1;
     background: #F8FAFC;
   }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;
 
 const ConfirmButton = styled.button`
@@ -475,6 +480,13 @@ const ConfirmButton = styled.button`
     background: #1e3a8a;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 `;
 
@@ -605,6 +617,221 @@ const ErrorMessage = styled.p`
   margin-bottom: 28px;
 `;
 
+const InsufficientBalanceSummary = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: -6px 0 24px;
+
+  > div {
+    min-width: 0;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    text-align: left;
+  }
+
+  span {
+    display: block;
+    margin-bottom: 5px;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  strong {
+    display: block;
+    color: #1e293b;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  > div:last-child strong {
+    color: #d97706;
+  }
+
+  @media (max-width: 420px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const DepositModalContent = styled.div`
+  width: 90%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+`;
+
+const DepositStepHint = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+
+  svg { flex: 0 0 auto; margin-top: 1px; }
+`;
+
+const DepositSectionLabel = styled.div`
+  margin: 0 0 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+`;
+
+const DepositQuickOptions = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+`;
+
+const DepositQuickButton = styled.button`
+  min-width: 0;
+  padding: 10px 8px;
+  color: ${p => p.$selected ? '#1e40af' : '#475569'};
+  background: ${p => p.$selected ? '#eff6ff' : '#fff'};
+  border: 1px solid ${p => p.$selected ? '#2563eb' : '#e2e8f0'};
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: #2563eb;
+    color: #1e40af;
+    background: #eff6ff;
+  }
+`;
+
+const DepositAmountField = styled.div`
+  position: relative;
+  margin-bottom: 6px;
+`;
+
+const DepositAmountInput = styled.input`
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 58px 12px 14px;
+  color: #1e293b;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  outline: none;
+  font-size: 16px;
+  font-weight: 700;
+
+  &:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+`;
+
+const DepositCurrency = styled.span`
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+`;
+
+const DepositAmountHint = styled.div`
+  min-height: 18px;
+  margin-bottom: 16px;
+  color: #64748b;
+  font-size: 12px;
+`;
+
+const DepositQrLayout = styled.div`
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+`;
+
+const DepositQrImage = styled.img`
+  display: block;
+  width: 170px;
+  height: 170px;
+  object-fit: contain;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+`;
+
+const DepositPaymentDetails = styled.div`
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+`;
+
+const DepositPaymentRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12px;
+
+  &:last-child { border-bottom: none; padding-bottom: 0; }
+
+  .label { color: #64748b; flex: 0 0 auto; }
+  .value { color: #1e293b; font-weight: 700; text-align: right; word-break: break-word; }
+`;
+
+const DepositCopyButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 5px;
+  padding: 3px 6px;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 0;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+`;
+
+const DepositPollingStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+`;
+
 const PACKAGE_ICONS = {
   star: Star,
   zap: Zap,
@@ -624,7 +851,20 @@ const Subscription = () => {
   const [showDurationModal, setShowDurationModal] = React.useState(false);
   const [showSuccessModal, setShowSuccessModal] = React.useState(false);
   const [showInsufficientBalanceModal, setShowInsufficientBalanceModal] = React.useState(false);
-  const [lastPaymentMethod, setLastPaymentMethod] = React.useState('contact'); // 'wallet' | 'contact'
+  const [isPurchasing, setIsPurchasing] = React.useState(false);
+  const [walletBalance, setWalletBalance] = React.useState(null);
+  const [walletCode, setWalletCode] = React.useState('');
+  const [isLoadingWalletBalance, setIsLoadingWalletBalance] = React.useState(false);
+  const [purchaseIdempotencyKey, setPurchaseIdempotencyKey] = React.useState('');
+  const [showDepositModal, setShowDepositModal] = React.useState(false);
+  const [depositStep, setDepositStep] = React.useState(1);
+  const [depositRawAmount, setDepositRawAmount] = React.useState('');
+  const [depositEmployerId, setDepositEmployerId] = React.useState('');
+  const [depositBaselineBalance, setDepositBaselineBalance] = React.useState(null);
+  const [isDepositWalletLoading, setIsDepositWalletLoading] = React.useState(false);
+  const [depositSuccess, setDepositSuccess] = React.useState(false);
+  const [depositError, setDepositError] = React.useState('');
+  const [copiedDepositField, setCopiedDepositField] = React.useState('');
   // 'loading' | 'verified' | 'pending' | 'not_submitted'
   const [verificationState, setVerificationState] = React.useState('loading');
   const [showNotVerifiedModal, setShowNotVerifiedModal] = React.useState(false);
@@ -734,6 +974,29 @@ const Subscription = () => {
     setShowDurationModal(true);
   };
 
+  const parseAmount = (value) => Number(String(value || '').replace(/[^0-9]/g, '')) || 0;
+  const formatAmount = (value) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
+  const selectedPackageAmount = parseAmount(selectedDuration?.amount);
+  const knownWalletBalance = walletBalance == null ? 0 : Number(walletBalance);
+  const amountToTopUp = Math.max(1000, selectedPackageAmount - knownWalletBalance);
+  const parsedDepositAmount = parseAmount(depositRawAmount);
+  const depositQuickAmounts = Array.from(new Set([
+    amountToTopUp,
+    100000,
+    200000,
+    500000
+  ])).filter((amount) => amount > 0).slice(0, 4);
+
+  const fetchDepositWallet = async () => {
+    const { employerId } = await getEmployerInfo();
+    const wallet = await getWallet(employerId);
+    const currentBalance = Number(wallet?.walletBalance ?? 0);
+    setDepositEmployerId(employerId);
+    setWalletCode(wallet?.walletCode || '');
+    setWalletBalance(currentBalance);
+    return { employerId, wallet, currentBalance };
+  };
+
   // ── Helper: lấy employerId và companyName ──────────────────────────────────
   const getEmployerInfo = async () => {
     let employerId = 'unknown';
@@ -760,9 +1023,11 @@ const Subscription = () => {
     const purchaseData = {
       employerId,
       companyName,
+      packageId: selectedPackage.packageId,
       packageName: selectedPackage.packageName,
       duration: selectedDuration.duration,
-      paymentMethod
+      paymentMethod,
+      idempotencyKey: purchaseIdempotencyKey
     };
     const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
       method: 'POST',
@@ -774,81 +1039,173 @@ const Subscription = () => {
     });
     if (!response.ok) {
       const errorMsg = await response.json().catch(() => ({}));
-      throw new Error(errorMsg.message || 'Thất bại. Vui lòng thử lại.');
+      const error = new Error(errorMsg.message || 'Thất bại. Vui lòng thử lại.');
+      error.status = response.status;
+      error.code = errorMsg.code;
+      throw error;
     }
     return response.json();
   };
 
-  // ── Nút "Mua gói": luôn gửi yêu cầu liên hệ (contact request) → admin duyệt
-  const handlePurchase = async () => {
-    if (!selectedPackage || !selectedDuration) {
-      alert(vi ? 'Vui lòng chọn gói và thời hạn sử dụng.' : 'Please select a package and duration.');
-      return;
-    }
-    const packagePrice = parseInt(selectedDuration.amount.replace(/[^0-9]/g, ''));
-    const { employerId, companyName } = await getEmployerInfo();
+  const createPurchaseIdempotencyKey = () => (
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `purchase-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+
+  // Open a confirmation step before any money-changing request is made.
+  const openPurchaseConfirmation = async () => {
+    if (!selectedPackage || !selectedDuration) return;
+    setPurchaseIdempotencyKey(createPurchaseIdempotencyKey());
+    setWalletBalance(null);
+    setIsLoadingWalletBalance(true);
+    setShowDurationModal(false);
+    setShowConfirmModal(true);
 
     try {
-      const result = await createSubscription(employerId, companyName, 'contact');
-      const apiSubscriptionId = result.data?.subscriptionId;
-      console.log('📨 Contact request created:', result);
-
-      // Tạo notification cho admin duyệt
-      try {
-        await createPackagePurchaseRequestNotification({
-          subscriptionId: apiSubscriptionId,
-          employerId,
-          companyName,
-          packageName: selectedPackage.packageName,
-          duration: selectedDuration.duration,
-          price: packagePrice
-        });
-      } catch (notifError) {
-        console.error('❌ Failed to create admin notification:', notifError);
-      }
-
-      setLastPaymentMethod('contact');
-      setShowDurationModal(false);
-      setShowSuccessModal(true);
-      window.dispatchEvent(new Event('storage'));
+      const { employerId } = await getEmployerInfo();
+      const wallet = await getWallet(employerId);
+      setDepositEmployerId(employerId);
+      setWalletCode(wallet?.walletCode || '');
+      setWalletBalance(Number(wallet?.walletBalance ?? 0));
     } catch (error) {
-      console.error('❌ Error sending purchase request:', error);
-      alert(error.message || (vi ? 'Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.' : 'Error sending request. Please try again.'));
+      // The server performs the authoritative balance check at purchase time.
+      console.warn('Unable to pre-load wallet balance for confirmation:', error);
+    } finally {
+      setIsLoadingWalletBalance(false);
     }
   };
 
-  // ── Nút "Gửi yêu cầu mở gói" (chỉ dùng khi thiếu tiền): contact → admin duyệt
-  const handleSendContactRequest = async () => {
-    if (!selectedPackage || !selectedDuration) return;
-    const packagePrice = parseInt(selectedDuration.amount.replace(/[^0-9]/g, ''));
-    const { employerId, companyName } = await getEmployerInfo();
+  const openDepositModal = async () => {
+    setShowInsufficientBalanceModal(false);
+    setDepositStep(1);
+    setDepositSuccess(false);
+    setDepositError('');
+    setCopiedDepositField('');
+    setDepositRawAmount(String(amountToTopUp));
+    setDepositBaselineBalance(null);
+    setShowDepositModal(true);
+    setIsDepositWalletLoading(true);
+
     try {
-      const result = await createSubscription(employerId, companyName, 'contact');
-      const apiSubscriptionId = result.data?.subscriptionId;
-      console.log('📨 Contact request created:', result);
+      const { currentBalance } = await fetchDepositWallet();
+      setDepositBaselineBalance(currentBalance);
+      setDepositRawAmount(String(Math.max(1000, selectedPackageAmount - currentBalance)));
+    } catch (error) {
+      console.error('Unable to load wallet for deposit:', error);
+      setDepositError(vi ? 'Không thể tải thông tin ví. Vui lòng thử lại.' : 'Unable to load wallet details. Please try again.');
+    } finally {
+      setIsDepositWalletLoading(false);
+    }
+  };
 
-      // Tạo notification cho admin duyệt
-      try {
-        await createPackagePurchaseRequestNotification({
-          subscriptionId: apiSubscriptionId,
-          employerId,
-          companyName,
-          packageName: selectedPackage.packageName,
-          duration: selectedDuration.duration,
-          price: packagePrice
-        });
-      } catch (notifError) {
-        console.error('❌ Failed to create admin notification:', notifError);
+  const closeDepositModal = () => {
+    if (depositSuccess) return;
+    setShowDepositModal(false);
+    setDepositStep(1);
+    setDepositError('');
+    setShowInsufficientBalanceModal(false);
+  };
+
+  const handleDepositAmountInput = (event) => {
+    setDepositRawAmount(event.target.value.replace(/\D/g, ''));
+    setDepositError('');
+  };
+
+  const handleCreateDepositQr = async () => {
+    if (parsedDepositAmount < 1000 || isDepositWalletLoading) {
+      setDepositError(vi ? 'Vui lòng nhập số tiền từ 1.000 VND.' : 'Enter an amount of at least 1,000 VND.');
+      return;
+    }
+
+    setDepositError('');
+    setIsDepositWalletLoading(true);
+    try {
+      let loadedWalletCode = walletCode;
+      if (!depositEmployerId || !walletCode) {
+        const { wallet, currentBalance } = await fetchDepositWallet();
+        setDepositBaselineBalance(currentBalance);
+        loadedWalletCode = wallet?.walletCode || '';
       }
+      if (!loadedWalletCode) {
+        throw new Error('Wallet details are unavailable');
+      }
+      setDepositStep(2);
+    } catch (error) {
+      console.error('Unable to create deposit QR:', error);
+      setDepositError(vi ? 'Chưa thể tạo mã nạp tiền. Vui lòng thử lại.' : 'Unable to create the deposit code. Please try again.');
+    } finally {
+      setIsDepositWalletLoading(false);
+    }
+  };
 
-      setLastPaymentMethod('contact');
-      setShowInsufficientBalanceModal(false);
+  const handleCopyDeposit = (text, field) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    setCopiedDepositField(field);
+    setTimeout(() => setCopiedDepositField(''), 1800);
+  };
+
+  // Check for the bank transfer and return the user to the package confirmation
+  // as soon as the wallet balance is updated.
+  React.useEffect(() => {
+    if (!showDepositModal || depositStep !== 2 || !depositEmployerId) return undefined;
+
+    let completed = false;
+    const baseline = Number(depositBaselineBalance ?? walletBalance ?? 0);
+    const checkDeposit = async () => {
+      try {
+        const wallet = await getWallet(depositEmployerId);
+        const nextBalance = Number(wallet?.walletBalance ?? 0);
+        if (!completed && nextBalance > baseline) {
+          completed = true;
+          setWalletBalance(nextBalance);
+          setDepositSuccess(true);
+          setTimeout(() => {
+            setShowDepositModal(false);
+            setDepositStep(1);
+            setDepositSuccess(false);
+            setShowConfirmModal(true);
+            setPurchaseIdempotencyKey(createPurchaseIdempotencyKey());
+          }, 1800);
+        }
+      } catch (error) {
+        console.warn('Unable to check deposit status:', error);
+      }
+    };
+
+    checkDeposit();
+    const intervalId = setInterval(checkDeposit, 5000);
+    return () => clearInterval(intervalId);
+  }, [showDepositModal, depositStep, depositEmployerId, depositBaselineBalance]);
+
+  // ── Nút xác nhận mua gói: wallet debit + admin credit happen on the server
+  const handlePurchase = async () => {
+    if (!selectedPackage || !selectedDuration || isPurchasing) return;
+    setIsPurchasing(true);
+
+    try {
+      const { employerId, companyName } = await getEmployerInfo();
+      const result = await createSubscription(employerId, companyName, 'wallet');
+      console.log('✅ Wallet package purchase completed:', result);
+
+      setShowConfirmModal(false);
       setShowSuccessModal(true);
       window.dispatchEvent(new Event('storage'));
-      setTimeout(() => { setShowSuccessModal(false); setSelectedPackage(null); setSelectedDuration(null); }, 3000);
     } catch (error) {
-      console.error('❌ Error sending contact request:', error);
-      alert(vi ? 'Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.' : 'Error sending request. Please try again.');
+      console.error('❌ Error purchasing package:', error);
+      const isInsufficientBalance = error.status === 402
+        || error.code === 'INSUFFICIENT_BALANCE'
+        || /insufficient|số dư.*không đủ|không đủ.*thanh toán/i.test(error.message || '');
+      if (isInsufficientBalance) {
+        setShowConfirmModal(false);
+        setShowInsufficientBalanceModal(true);
+      } else {
+        alert(error.message || (vi ? 'Có lỗi xảy ra khi mua gói. Vui lòng thử lại.' : 'Unable to purchase package. Please try again.'));
+      }
+    } finally {
+      setIsPurchasing(false);
     }
   };
 
@@ -1023,12 +1380,12 @@ const Subscription = () => {
 
         </Inner>
 
-        {/* Purchase/Open Request Modal */}
+        {/* Package duration selection modal */}
         {showDurationModal && selectedPackage && (
           <ModalOverlay onClick={() => setShowDurationModal(false)}>
             <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
               <ModalHeader>
-                <h3>{vi ? 'Yêu cầu mở gói dịch vụ' : 'Request Service Package'}</h3>
+                <h3>{vi ? 'Chọn gói dịch vụ' : 'Select Service Package'}</h3>
                 <CloseButton onClick={() => setShowDurationModal(false)}>
                   <X />
                 </CloseButton>
@@ -1076,7 +1433,7 @@ const Subscription = () => {
                   </DurationOptions>
                 </div>
 
-                {/* Contact & Support Info */}
+                {/* Wallet payment information */}
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -1089,21 +1446,17 @@ const Subscription = () => {
                   marginBottom: '20px'
                 }}>
                   <div style={{ fontWeight: '700', color: '#1e40af', fontSize: '13.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Clock size={16} /> {vi ? 'Chúng tôi sẽ liên hệ bạn' : 'We will contact you'}
+                    <Shield size={16} /> {vi ? 'Thanh toán trực tiếp từ ví' : 'Pay directly from your wallet'}
                   </div>
                   <div style={{ fontSize: '13px', color: '#475569', lineHeight: '1.5' }}>
                     {vi
-                      ? 'Sau khi bạn gửi yêu cầu, đội ngũ hỗ trợ của chúng tôi sẽ liên hệ qua số điện thoại đã đăng ký để hỗ trợ kích hoạt gói dịch vụ.'
-                      : 'After you submit the request, our support team will contact you via your registered phone number to assist in activating the service.'}
+                      ? 'Bạn sẽ thanh toán bằng số dư trong ví. Gói sẽ được kích hoạt ngay sau khi thanh toán thành công.'
+                      : 'You will pay with your wallet balance. Your package will be activated as soon as the payment is complete.'}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #DBEAFE', paddingTop: '10px', marginTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderTop: '1px solid #DBEAFE', paddingTop: '10px', marginTop: '4px', fontSize: '12.5px', color: '#475569' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#475569' }}>
-                      <Mail size={14} style={{ color: '#1e40af' }} />
-                      <span>oppohiringplatform@gmail.com</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#475569' }}>
-                      <Phone size={14} style={{ color: '#10B981' }} />
-                      <strong>0563 518 922</strong>
+                      <CreditCard size={14} style={{ color: '#1e40af' }} />
+                      <span>{vi ? 'Giao dịch được ghi nhận trong lịch sử ví.' : 'The transaction will appear in your wallet history.'}</span>
                     </div>
                   </div>
                 </div>
@@ -1115,13 +1468,71 @@ const Subscription = () => {
                   </CancelButton>
                   <ConfirmButton
                     type="button"
-                    onClick={handlePurchase}
+                    onClick={openPurchaseConfirmation}
                     style={{ background: selectedPackage.color, padding: '8px 20px', fontSize: '13.5px' }}
                   >
-                    {vi ? 'Mua gói' : 'Purchase'}
+                    {vi ? 'Tiếp tục' : 'Continue'}
                   </ConfirmButton>
                 </div>
               </ModalBody>
+            </ModalContent>
+          </ModalOverlay>
+        )}
+
+        {/* Final confirmation modal: no charge is made until the employer confirms. */}
+        {showConfirmModal && selectedPackage && selectedDuration && (
+          <ModalOverlay onClick={() => !isPurchasing && setShowConfirmModal(false)}>
+            <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+              <ModalHeader>
+                <h3>{vi ? 'Xác nhận mua gói' : 'Confirm package purchase'}</h3>
+                <CloseButton onClick={() => !isPurchasing && setShowConfirmModal(false)}>
+                  <X />
+                </CloseButton>
+              </ModalHeader>
+              <ModalBody>
+                <PackageInfo>
+                  <selectedPackage.Icon size={40} color={selectedPackage.color} />
+                  <div>
+                    <h4>{selectedPackage.name}</h4>
+                    <p>{selectedPackage.subtitle}</p>
+                  </div>
+                </PackageInfo>
+
+                <PurchaseDetails>
+                  <DetailRow>
+                    <span>{vi ? 'Thời hạn' : 'Duration'}</span>
+                    <strong>{selectedDuration.duration}</strong>
+                  </DetailRow>
+                  <DetailRow>
+                    <span>{vi ? 'Số tiền thanh toán' : 'Payment amount'}</span>
+                    <strong style={{ color: selectedPackage.color }}>{selectedDuration.amount}</strong>
+                  </DetailRow>
+                  <DetailRow>
+                    <span>{vi ? 'Số dư hiện tại' : 'Current balance'}</span>
+                    <strong>
+                      {isLoadingWalletBalance
+                        ? (vi ? 'Đang kiểm tra…' : 'Checking…')
+                        : walletBalance == null
+                          ? (vi ? 'Sẽ kiểm tra lại khi xác nhận' : 'Checked again on confirmation')
+                          : `${walletBalance.toLocaleString('vi-VN')} VND`}
+                    </strong>
+                  </DetailRow>
+                </PurchaseDetails>
+
+                <InfoNote>
+                  {vi
+                    ? 'Kiểm tra lại thông tin gói trước khi mua.'
+                    : 'Review your package details before purchasing.'}
+                </InfoNote>
+              </ModalBody>
+              <ModalFooter>
+                <CancelButton type="button" disabled={isPurchasing} onClick={() => setShowConfirmModal(false)}>
+                  {vi ? 'Hủy' : 'Cancel'}
+                </CancelButton>
+                <ConfirmButton type="button" disabled={isPurchasing} onClick={handlePurchase}>
+                  {isPurchasing ? (vi ? 'Đang xử lý…' : 'Processing…') : (vi ? 'Đồng ý mua' : 'Confirm purchase')}
+                </ConfirmButton>
+              </ModalFooter>
             </ModalContent>
           </ModalOverlay>
         )}
@@ -1142,17 +1553,174 @@ const Subscription = () => {
                 <CheckCircle size={60} />
               </SuccessIcon>
               <SuccessTitle>
-                {vi ? 'Yêu cầu mua gói của bạn thành công!' : 'Your package request was successful!'}
+                {vi ? 'Mua gói thành công!' : 'Package purchased successfully!'}
               </SuccessTitle>
               <SuccessMessage>
                 {vi
-                  ? 'Ốp Pờ sẽ liên lạc với bạn sớm nhất để hỗ trợ kích hoạt gói dịch vụ.'
-                  : 'OpPo will contact you as soon as possible to help activate your service package.'}
+                  ? 'Gói đã được kích hoạt ngay. Số tiền đã trừ khỏi ví của bạn và chuyển vào ví admin.'
+                  : 'Your package is active. The amount was deducted from your wallet and credited to the admin wallet.'}
               </SuccessMessage>
               <SuccessButton onClick={() => { setShowSuccessModal(false); setSelectedPackage(null); setSelectedDuration(null); }}>
                 {vi ? 'Đóng' : 'Close'}
               </SuccessButton>
             </SuccessModalContent>
+          </ModalOverlay>
+        )}
+
+        {/* Inline wallet top-up flow */}
+        {showDepositModal && selectedPackage && selectedDuration && (
+          <ModalOverlay onClick={(event) => {
+            if (event.target === event.currentTarget && !depositSuccess) closeDepositModal();
+          }}>
+            <DepositModalContent onClick={(event) => event.stopPropagation()}>
+              {depositSuccess ? (
+                <div style={{ padding: '36px 24px', textAlign: 'center' }}>
+                  <SuccessIcon
+                    initial={{ scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    style={{ width: '76px', height: '76px', marginBottom: '18px' }}
+                  >
+                    <CheckCircle size={44} />
+                  </SuccessIcon>
+                  <h3 style={{ margin: '0 0 8px', color: '#1e293b', fontSize: '21px' }}>
+                    {vi ? 'Nạp tiền thành công!' : 'Deposit successful!'}
+                  </h3>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '14px', lineHeight: 1.6 }}>
+                    {vi ? 'Số dư đã được cập nhật. Bạn có thể tiếp tục mua gói.' : 'Your balance has been updated. You can continue purchasing the package.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <ModalHeader>
+                    <h3>{vi ? 'Nạp tiền vào ví' : 'Top up your wallet'}</h3>
+                    <CloseButton onClick={closeDepositModal}>
+                      <X />
+                    </CloseButton>
+                  </ModalHeader>
+                  <ModalBody style={{ maxHeight: 'calc(90vh - 150px)', overflowY: 'auto' }}>
+                    {depositStep === 1 ? (
+                      <>
+                        <DepositStepHint>
+                          <Banknote size={17} />
+                          <span>
+                            {vi
+                              ? `Bạn có thể nạp tối thiểu ${formatAmount(amountToTopUp)} để tiếp tục mua gói.`
+                              : `Top up at least ${formatAmount(amountToTopUp)} to continue with this package.`}
+                          </span>
+                        </DepositStepHint>
+
+                        <DepositSectionLabel>{vi ? 'Chọn nhanh' : 'Quick select'}</DepositSectionLabel>
+                        <DepositQuickOptions>
+                          {depositQuickAmounts.map((amount) => (
+                            <DepositQuickButton
+                              key={amount}
+                              type="button"
+                              $selected={parsedDepositAmount === amount}
+                              onClick={() => {
+                                setDepositRawAmount(String(amount));
+                                setDepositError('');
+                              }}
+                            >
+                              {Number(amount).toLocaleString('vi-VN')}
+                            </DepositQuickButton>
+                          ))}
+                        </DepositQuickOptions>
+
+                        <DepositSectionLabel>{vi ? 'Số tiền muốn nạp' : 'Amount to deposit'}</DepositSectionLabel>
+                        <DepositAmountField>
+                          <DepositAmountInput
+                            type="text"
+                            inputMode="numeric"
+                            value={depositRawAmount ? Number(depositRawAmount).toLocaleString('vi-VN') : ''}
+                            placeholder="0"
+                            onChange={handleDepositAmountInput}
+                            autoFocus
+                          />
+                          <DepositCurrency>VND</DepositCurrency>
+                        </DepositAmountField>
+                        <DepositAmountHint>
+                          {depositError || (vi ? 'Tối thiểu 1.000 VND' : 'Minimum 1,000 VND')}
+                        </DepositAmountHint>
+                      </>
+                    ) : (
+                      <>
+                        <DepositStepHint>
+                          <Clock size={17} />
+                          <span>
+                            {vi ? 'Quét mã QR bằng ứng dụng ngân hàng và chuyển đúng số tiền bên dưới.' : 'Scan the QR code in your banking app and transfer the exact amount shown below.'}
+                          </span>
+                        </DepositStepHint>
+                        <DepositQrLayout>
+                          <DepositQrImage
+                            src={`https://img.vietqr.io/image/MB-0777799991702-compact.png?amount=${parsedDepositAmount}&addInfo=${encodeURIComponent(`OPPOWALLET ${walletCode}`)}&accountName=${encodeURIComponent('NGUYEN THI THUY DUNG')}`}
+                            alt="VietQR"
+                          />
+                          <DepositPaymentDetails>
+                            <DepositPaymentRow>
+                              <span className="label">{vi ? 'Ngân hàng' : 'Bank'}</span>
+                              <span className="value">MBBank</span>
+                            </DepositPaymentRow>
+                            <DepositPaymentRow>
+                              <span className="label">{vi ? 'Số tài khoản' : 'Account number'}</span>
+                              <span className="value">
+                                0777799991702
+                                <DepositCopyButton type="button" onClick={() => handleCopyDeposit('0777799991702', 'account')}>
+                                  <Copy size={11} /> {copiedDepositField === 'account' ? (vi ? 'Đã chép' : 'Copied') : (vi ? 'Chép' : 'Copy')}
+                                </DepositCopyButton>
+                              </span>
+                            </DepositPaymentRow>
+                            <DepositPaymentRow>
+                              <span className="label">{vi ? 'Số tiền' : 'Amount'}</span>
+                              <span className="value" style={{ color: '#059669' }}>{formatAmount(parsedDepositAmount)}</span>
+                            </DepositPaymentRow>
+                            <DepositPaymentRow>
+                              <span className="label">{vi ? 'Nội dung' : 'Reference'}</span>
+                              <span className="value">
+                                {`OPPOWALLET ${walletCode}`}
+                                <DepositCopyButton type="button" onClick={() => handleCopyDeposit(`OPPOWALLET ${walletCode}`, 'reference')}>
+                                  <Copy size={11} /> {copiedDepositField === 'reference' ? (vi ? 'Đã chép' : 'Copied') : (vi ? 'Chép' : 'Copy')}
+                                </DepositCopyButton>
+                              </span>
+                            </DepositPaymentRow>
+                          </DepositPaymentDetails>
+                        </DepositQrLayout>
+                        <DepositPollingStatus>
+                          <Clock size={15} />
+                          <span>{vi ? 'Đang chờ xác nhận giao dịch. Số dư sẽ tự động cập nhật sau khi chuyển khoản thành công.' : 'Waiting for the transfer. Your balance will update automatically after the payment is received.'}</span>
+                        </DepositPollingStatus>
+                      </>
+                    )}
+                  </ModalBody>
+                  <ModalFooter>
+                    {depositStep === 1 ? (
+                      <>
+                        <CancelButton type="button" onClick={closeDepositModal}>
+                          {vi ? 'Hủy' : 'Cancel'}
+                        </CancelButton>
+                        <ConfirmButton
+                          type="button"
+                          onClick={handleCreateDepositQr}
+                          disabled={isDepositWalletLoading || parsedDepositAmount < 1000}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}
+                        >
+                          <Banknote size={16} />
+                          {isDepositWalletLoading ? (vi ? 'Đang tải…' : 'Loading…') : (vi ? 'Tạo mã QR' : 'Create QR code')}
+                        </ConfirmButton>
+                      </>
+                    ) : (
+                      <>
+                        <CancelButton type="button" onClick={() => setDepositStep(1)}>
+                          {vi ? 'Đổi số tiền' : 'Change amount'}
+                        </CancelButton>
+                        <ConfirmButton type="button" onClick={closeDepositModal}>
+                          {vi ? 'Đóng' : 'Close'}
+                        </ConfirmButton>
+                      </>
+                    )}
+                  </ModalFooter>
+                </>
+              )}
+            </DepositModalContent>
           </ModalOverlay>
         )}
 
@@ -1169,31 +1737,36 @@ const Subscription = () => {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', boxShadow: '0 10px 30px rgba(245,158,11,0.3)' }}
               >
-                <X size={60} />
+                <AlertCircle size={54} />
               </ErrorIcon>
               <ErrorTitle>
-                {vi ? 'Số dư không đủ!' : 'Insufficient Balance!'}
+                {vi ? 'Số dư ví chưa đủ' : 'Wallet balance is too low'}
               </ErrorTitle>
               <ErrorMessage>
                 {vi
-                  ? `Bạn cần ${selectedDuration?.amount} để mua gói này. Vui lòng nạp thêm tiền vào ví để tiếp tục.`
-                  : `You need ${selectedDuration?.amount} to purchase this package. Please top up your wallet to continue.`}
+                  ? `Số dư hiện tại chưa đủ để thanh toán gói ${selectedDuration?.amount}. Bạn có thể nạp thêm tiền ngay tại đây rồi tiếp tục mua gói.`
+                  : `Your current balance is not enough for the ${selectedDuration?.amount} package. Top up here and continue your purchase.`}
               </ErrorMessage>
-              <ModalFooter style={{ justifyContent: 'center', borderTop: 'none', paddingTop: 0, flexDirection: 'column', gap: '10px' }}>
-                <ConfirmButton onClick={() => {
-                  setShowInsufficientBalanceModal(false);
-                  navigate('/employer/wallet');
-                }}>
-                  {vi ? 'Nạp tiền ngay' : 'Top Up Now'}
-                </ConfirmButton>
-                <button
-                  type="button"
-                  onClick={() => setShowInsufficientBalanceModal(false)}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '13px', cursor: 'pointer', padding: '4px' }}
-                >
+              <InsufficientBalanceSummary>
+                <div>
+                  <span>{vi ? 'Số dư hiện tại' : 'Current balance'}</span>
+                  <strong>{walletBalance == null ? (vi ? 'Đang cập nhật' : 'Updating') : formatAmount(walletBalance)}</strong>
+                </div>
+                <div>
+                  <span>{vi ? 'Cần nạp thêm' : 'Top up needed'}</span>
+                  <strong>{formatAmount(amountToTopUp)}</strong>
+                </div>
+              </InsufficientBalanceSummary>
+              <ModalFooter style={{ justifyContent: 'center', borderTop: 'none', padding: 0, flexWrap: 'wrap' }}>
+                <CancelButton onClick={() => setShowInsufficientBalanceModal(false)}>
                   {vi ? 'Để sau' : 'Later'}
-                </button>
+                </CancelButton>
+                <ConfirmButton onClick={openDepositModal} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+                  <Banknote size={16} />
+                  {vi ? 'Nạp tiền ngay' : 'Top up now'}
+                </ConfirmButton>
               </ModalFooter>
             </InsufficientBalanceModalContent>
           </ModalOverlay>

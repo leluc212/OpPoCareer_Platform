@@ -43,7 +43,6 @@ import {
   createProfileChangeRejectedNotification
 } from '../../services/notificationService';
 import { getAuthHeaders } from '../../services/authHeaders.js';
-import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 
 const PageContainer = styled.div``;
 
@@ -724,7 +723,6 @@ const EmployersManagement = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
-  const notificationBadges = useAdminNotificationBadges();
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1977,7 +1975,7 @@ const EmployersManagement = () => {
               >
                 <Award size={20} />
                 {language === 'vi' ? 'Xác thực nhà tuyển dụng' : 'Employer Verification'}
-                {!viewedTabs.verification && pendingVerificationCount > 0 && <TabBadge>{pendingVerificationCount}</TabBadge>}
+                {pendingVerificationCount > 0 && <TabBadge>{pendingVerificationCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'all_employers'}
@@ -1999,7 +1997,7 @@ const EmployersManagement = () => {
               >
                 <RefreshCw size={20} />
                 {language === 'vi' ? 'Yêu cầu thay đổi ứng viên' : 'Change Candidate Requests'}
-                {notificationBadges.employerChangeRequests > 0 && <TabBadge>{notificationBadges.employerChangeRequests}</TabBadge>}
+                {pendingChangeCount > 0 && <TabBadge>{pendingChangeCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'profile_changes'}
@@ -2011,7 +2009,7 @@ const EmployersManagement = () => {
               >
                 <Edit size={20} />
                 {language === 'vi' ? 'Yêu cầu chỉnh sửa hồ sơ' : 'Profile Change Requests'}
-                {notificationBadges.employerProfileChanges > 0 && <TabBadge>{notificationBadges.employerProfileChanges}</TabBadge>}
+                {pendingProfileChangesCount > 0 && <TabBadge>{pendingProfileChangesCount}</TabBadge>}
               </MainTabButton>
               <MainTabButton
                 $active={mainTab === 'features'}
@@ -2023,7 +2021,7 @@ const EmployersManagement = () => {
               >
                 <Briefcase size={20} />
                 {language === 'vi' ? 'Chức năng của Nhà tuyển dụng' : 'Employer Features'}
-                {notificationBadges.employerQuickJobs > 0 && <TabBadge>{notificationBadges.employerQuickJobs}</TabBadge>}
+                {pendingQuickJobCount > 0 && <TabBadge>{pendingQuickJobCount}</TabBadge>}
               </MainTabButton>
             </MainTabsContainer>
 
@@ -2036,7 +2034,7 @@ const EmployersManagement = () => {
                 >
                   <FileText size={16} style={{ marginRight: '6px' }} />
                   {language === 'vi' ? 'Xác thực hồ sơ' : 'Profile Verifications'}
-                  {!viewedTabs.verifications && pendingVerificationCount > 0 && <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>{pendingVerificationCount}</TabBadge>}
+                  {pendingVerificationCount > 0 && <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>{pendingVerificationCount}</TabBadge>}
                 </SubTabButton>
                 <SubTabButton
                   $active={activeTab === 'pending'}
@@ -2063,9 +2061,9 @@ const EmployersManagement = () => {
                 >
                   <Zap size={16} style={{ marginRight: '6px' }} />
                   {language === 'vi' ? 'Chức năng tuyển gấp' : 'Urgent Recruiting'}
-                  {notificationBadges.employerQuickJobs > 0 && (
+                  {pendingQuickJobCount > 0 && (
                     <TabBadge style={{ padding: '1px 5px', fontSize: '10px', height: '15px', minWidth: '15px' }}>
-                      {notificationBadges.employerQuickJobs}
+                      {pendingQuickJobCount}
                     </TabBadge>
                   )}
                 </SubTabButton>
@@ -3888,7 +3886,7 @@ const EmployersManagement = () => {
       {/* ── Toast thông báo thay thế alert() ─────────────────────────────── */}
       {empToast && (
         <div style={{
-          position: 'fixed', top: '24px', right: '24px', zIndex: 9999,
+          position: 'fixed', top: '24px', right: '24px', zIndex: 110000,
           padding: '14px 20px', borderRadius: '12px', maxWidth: '420px',
           background: empToast.type === 'success'
             ? 'linear-gradient(135deg, #10B981, #059669)'

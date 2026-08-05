@@ -1937,7 +1937,7 @@ const CandidatesManagement = () => {
       {/* Bug 3 fix: Toast thông báo thay thế alert() — hiển thị góc trên phải */}
       {adminToast && (
         <div style={{
-          position: 'fixed', top: '24px', right: '24px', zIndex: 9999,
+          position: 'fixed', top: '24px', right: '24px', zIndex: 110000,
           padding: '14px 20px', borderRadius: '12px', maxWidth: '380px',
           background: adminToast.type === 'success'
             ? 'linear-gradient(135deg, #10B981, #059669)'

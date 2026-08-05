@@ -10,7 +10,6 @@ import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import { Button } from '../../components/FormElements';
 import notificationService from '../../services/notificationService';
-import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import {
   createChangeRequestApprovedNotification,
   createChangeRequestRejectedNotification,
@@ -675,7 +674,6 @@ const PageEllipsis = styled.span`
 
 const PostsManagement = () => {
   const { language } = useLanguage();
-  const notificationBadges = useAdminNotificationBadges();
   const [activeTab, setActiveTab] = useState('urgent');
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState([]);
@@ -1210,6 +1208,11 @@ const PostsManagement = () => {
     rejected: currentJobs.filter(j => j.status === 'rejected').length,
   };
 
+  // Badges represent actionable moderation requests only, not total posts or
+  // stale unread notifications.
+  const pendingStandardJobsCount = standardJobs.filter(job => job.status === 'pending').length;
+  const pendingUrgentJobsCount = urgentJobs.filter(job => job.status === 'pending').length;
+
   const totalApplications = currentJobs.reduce((sum, job) => sum + job.applications, 0);
   const totalCVSent = currentJobs.reduce((sum, job) => sum + job.cvSent, 0);
 
@@ -1332,20 +1335,9 @@ const PostsManagement = () => {
           >
             <Briefcase />
             {language === 'vi' ? 'Công việc Tiêu chuẩn' : 'Standard Jobs'}
-            <span style={{
-              marginLeft: '4px',
-              padding: '2px 8px',
-              background: activeTab === 'longterm' ? '#1e40af' : '#64748b',
-              color: 'white',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: '600'
-            }}>
-              {standardJobs.length}
-            </span>
-            {notificationBadges.posts > 0 && (
+            {pendingStandardJobsCount > 0 && (
               <span style={{ marginLeft: '4px', padding: '2px 7px', background: '#ef4444', color: 'white', borderRadius: '12px', fontSize: '11px', fontWeight: '700' }}>
-                {notificationBadges.posts}
+                {pendingStandardJobsCount}
               </span>
             )}
           </Tab>
@@ -1360,17 +1352,11 @@ const PostsManagement = () => {
           >
             <Zap />
             {language === 'vi' ? 'Công việc Tuyển gấp' : 'Urgent Jobs'}
-            <span style={{
-              marginLeft: '4px',
-              padding: '2px 8px',
-              background: activeTab === 'urgent' ? '#1e40af' : '#64748b',
-              color: 'white',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: '600'
-            }}>
-              {urgentJobs.length}
-            </span>
+            {pendingUrgentJobsCount > 0 && (
+              <span style={{ marginLeft: '4px', padding: '2px 7px', background: '#ef4444', color: 'white', borderRadius: '12px', fontSize: '11px', fontWeight: '700' }}>
+                {pendingUrgentJobsCount}
+              </span>
+            )}
           </Tab>
 
         </TabContainer>
@@ -2059,7 +2045,7 @@ const PostsManagement = () => {
         {/* Toast thông báo cho change request actions */}
         {crToast && (
           <div style={{
-            position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+            position: 'fixed', bottom: '24px', right: '24px', zIndex: 110000,
             padding: '14px 20px', borderRadius: '12px', maxWidth: '360px',
             background: crToast.type === 'success'
               ? 'linear-gradient(135deg, #10B981, #059669)'

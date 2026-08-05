@@ -1,11 +1,14 @@
 import json
 import boto3
 import os
+import hashlib
+import html
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import uuid
 import re
 from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 from email_service import send_email
 
@@ -19,8 +22,10 @@ notifications_table_name = os.environ.get('NOTIFICATIONS_TABLE', 'Notifications'
 notifications_table = dynamodb.Table(notifications_table_name)
 employer_profile_table_name = os.environ.get('EMPLOYER_PROFILE_TABLE', 'EmployerProfiles')
 employer_profile_table = dynamodb.Table(employer_profile_table_name)
+admin_wallet_id = os.environ.get('ADMIN_WALLET_ID', 'admin')
 withdrawal_requests_table_name = os.environ.get('WITHDRAWAL_REQUESTS_TABLE', 'WithdrawalRequests')
 withdrawal_requests_table = dynamodb.Table(withdrawal_requests_table_name)
+serializer = TypeSerializer()
 
 VN_TZ = timezone(timedelta(hours=7))
 
@@ -201,7 +206,7 @@ def lambda_handler(event, context):
             return update_package(package_id, body, headers)
 
         elif http_method == 'POST' and path == '/subscriptions':
-            return create_subscription(body, headers)
+            return create_wallet_subscription(body, headers, caller_id, caller_is_admin)
         
         elif http_method == 'GET' and path == '/subscriptions':
             return get_all_subscriptions(headers)
@@ -772,7 +777,269 @@ def process_expired_subscriptions():
 
     return expired_count
 
+def _serialize_dynamodb_item(item):
+    return {key: serializer.serialize(value) for key, value in item.items()}
+
+
+def _purchase_notification(subscription, recipient_id, recipient_role, now_dt):
+    package_name = subscription['packageName']
+    duration = subscription['duration']
+    amount = subscription['price']
+    company_name = subscription['companyName']
+    if recipient_role == 'admin':
+        title = 'Mua gói dịch vụ thành công'
+        message = f'{company_name} đã mua gói {package_name} ({duration}) với giá {int(amount):,} VND.'
+        action_url = '/admin/wallet'
+        action_text = 'Xem ví admin'
+    else:
+        title = 'Gói dịch vụ đã được kích hoạt'
+        message = f'Gói {package_name} ({duration}) của bạn đã được kích hoạt. Đã thanh toán {int(amount):,} VND.'
+        action_url = '/employer/subscription'
+        action_text = 'Xem gói của tôi'
+
+    return {
+        'notificationId': f"NOTIF-{now_dt.strftime('%Y%m%d')}-{uuid.uuid4().hex[:12].upper()}",
+        'type': 'package_purchase_completed',
+        'title': title,
+        'titleEn': title,
+        'message': message,
+        'messageEn': message,
+        'recipientId': recipient_id,
+        'recipientRole': recipient_role,
+        'senderId': 'system',
+        'senderName': 'OpPoReview',
+        'data': {
+            'subscriptionId': subscription['subscriptionId'],
+            'packageName': package_name,
+            'duration': duration,
+            'price': amount,
+            'paymentMethod': 'wallet',
+            'status': 'active'
+        },
+        'read': False,
+        'deleted': False,
+        'createdAt': now_dt.isoformat(),
+        'updatedAt': now_dt.isoformat(),
+        'icon': 'check-circle',
+        'color': '#10b981',
+        'actionUrl': action_url,
+        'actionText': action_text,
+        'actionTextEn': action_text
+    }
+
+
+def _send_purchase_confirmation_emails(subscription, employer_email):
+    safe_company = html.escape(str(subscription['companyName']))
+    safe_package = html.escape(str(subscription['packageName']))
+    safe_duration = html.escape(str(subscription['duration']))
+    safe_id = html.escape(str(subscription['subscriptionId']))
+    formatted_amount = f"{int(subscription['price']):,} VND"
+    admin_email = os.environ.get('ADMIN_EMAIL', 'admin@opporeview.com')
+
+    admin_subject = f"[OpPoReview] Package purchased by {subscription['companyName']}"
+    admin_html = f"""
+    <html><body>
+      <h3>Package purchase completed</h3>
+      <p><strong>Employer:</strong> {safe_company}</p>
+      <p><strong>Package:</strong> {safe_package} ({safe_duration})</p>
+      <p><strong>Amount:</strong> {formatted_amount}</p>
+      <p><strong>Subscription ID:</strong> {safe_id}</p>
+      <p>The amount was deducted from the employer wallet and credited to the admin wallet.</p>
+    </body></html>
+    """
+    try:
+        send_email(admin_email, admin_subject, admin_html)
+    except Exception as email_error:
+        print(f"Warning: failed to send admin package email: {email_error}")
+
+    if employer_email:
+        employer_subject = f"[OpPoReview] Your {subscription['packageName']} package is active"
+        employer_html = f"""
+        <html><body>
+          <h3>Package activated successfully</h3>
+          <p>Your package purchase has been completed:</p>
+          <ul>
+            <li><strong>Package:</strong> {safe_package} ({safe_duration})</li>
+            <li><strong>Amount:</strong> {formatted_amount}</li>
+            <li><strong>Subscription ID:</strong> {safe_id}</li>
+            <li><strong>Status:</strong> Active</li>
+          </ul>
+          <p>The payment was deducted from your employer wallet.</p>
+        </body></html>
+        """
+        try:
+            send_email(employer_email, employer_subject, employer_html)
+        except Exception as email_error:
+            print(f"Warning: failed to send employer package email: {email_error}")
+
+
+def create_wallet_subscription(body_str, headers, caller_id=None, caller_is_admin=False):
+    """Charge an employer wallet and activate a package atomically."""
+    try:
+        body = json.loads(body_str) if isinstance(body_str, str) else (body_str or {})
+        if not isinstance(body, dict):
+            return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Invalid request body.'})}
+
+        payment_method = body.get('paymentMethod', 'wallet')
+        is_admin_granted = payment_method == 'admin_granted'
+        if is_admin_granted and not caller_is_admin:
+            return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required.'})}
+
+        # Never trust employerId/companyName from a normal employer request.
+        employer_id = body.get('employerId') if caller_is_admin else caller_id
+        if not employer_id:
+            return {'statusCode': 401, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Unauthorized.'})}
+        if employer_id == admin_wallet_id and not is_admin_granted:
+            return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Invalid employer wallet.'})}
+
+        package_name = str(body.get('packageName', '')).strip()
+        duration = str(body.get('duration', '')).strip()
+        price = get_package_price(package_name, duration)
+        if not package_name or not duration or price <= 0:
+            return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Invalid package or duration.'})}
+        price_decimal = Decimal(str(price))
+
+        idempotency_key = str(body.get('idempotencyKey') or uuid.uuid4()).strip()
+        if len(idempotency_key) > 128:
+            return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Invalid idempotency key.'})}
+        request_hash = hashlib.sha256(f'{employer_id}:{idempotency_key}'.encode('utf-8')).hexdigest()[:24].upper()
+        subscription_id = f'SUB-{request_hash}'
+
+        # A retry of a successful request returns the existing record and never
+        # charges the employer twice.
+        existing = table.get_item(Key={'subscriptionId': subscription_id}).get('Item')
+        if existing:
+            if existing.get('employerId') == employer_id and existing.get('packageName') == package_name and existing.get('duration') == duration:
+                return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'idempotent': True, 'message': 'Subscription already processed.', 'data': existing}, default=decimal_default)}
+            return {'statusCode': 409, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Idempotency key already used.'})}
+
+        emp_item = employer_profile_table.get_item(Key={'userId': employer_id}).get('Item')
+        if not emp_item:
+            return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Employer profile not found.'})}
+
+        if not is_admin_granted and not caller_is_admin and not emp_item.get('isVerified', False):
+            verification_status = emp_item.get('verificationStatus', '')
+            message = 'Employer verification is still pending.' if verification_status == 'pending' else 'Employer account must be verified before purchasing a package.'
+            return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': message})}
+
+        now_dt = get_vn_now()
+        expiry_dt = calculate_expiry_datetime(duration, now_dt)
+        company_name = emp_item.get('companyName') or emp_item.get('businessName') or body.get('companyName') or 'Employer'
+        employer_email = emp_item.get('email') or emp_item.get('contactEmail')
+        item = {
+            'subscriptionId': subscription_id,
+            'employerId': employer_id,
+            'companyName': company_name,
+            'packageName': package_name,
+            'duration': duration,
+            'price': price_decimal,
+            'purchaseDate': format_vn_date(now_dt),
+            'purchaseDateTime': now_dt.isoformat(),
+            'expiryDate': format_vn_date(expiry_dt),
+            'expiryDateTime': expiry_dt.isoformat(),
+            'status': 'active',
+            'approvalStatus': 'approved',
+            'createdAt': now_dt.isoformat(),
+            'updatedAt': now_dt.isoformat(),
+            'paymentMethod': 'admin_granted' if is_admin_granted else 'wallet'
+        }
+
+        # Preserve the existing admin-grant workflow without moving money.
+        if is_admin_granted:
+            table.put_item(Item=item, ConditionExpression='attribute_not_exists(subscriptionId)')
+            return {'statusCode': 201, 'headers': headers, 'body': json.dumps({'success': True, 'message': 'Subscription created.', 'data': item}, default=decimal_default)}
+
+        balance = emp_item.get('walletBalance', Decimal('0'))
+        if not isinstance(balance, Decimal):
+            balance = Decimal(str(balance or 0))
+        if balance < price_decimal:
+            return {'statusCode': 402, 'headers': headers, 'body': json.dumps({'success': False, 'code': 'INSUFFICIENT_BALANCE', 'message': 'Insufficient wallet balance for this package.'})}
+
+        debit_id = f"TXN-BUY-{now_dt.strftime('%Y%m%d')}-{uuid.uuid4().hex[:10].upper()}"
+        credit_id = f"TXN-ADMIN-CREDIT-{now_dt.strftime('%Y%m%d')}-{uuid.uuid4().hex[:10].upper()}"
+        debit_transaction = {
+            'transactionId': debit_id,
+            'type': 'debit',
+            'amount': price_decimal,
+            'description': f'Package purchase {package_name} ({duration})',
+            'timestamp': now_dt.isoformat(),
+            'status': 'completed',
+            'paymentDetails': {'subscriptionId': subscription_id, 'packageName': package_name, 'duration': duration, 'idempotencyKey': idempotency_key}
+        }
+        credit_transaction = {
+            'transactionId': credit_id,
+            'type': 'credit',
+            'amount': price_decimal,
+            'description': f'Package revenue from {company_name}',
+            'timestamp': now_dt.isoformat(),
+            'status': 'completed',
+            'paymentDetails': {'subscriptionId': subscription_id, 'employerId': employer_id, 'debitTransactionId': debit_id, 'packageName': package_name, 'duration': duration}
+        }
+        admin_notification = _purchase_notification(item, admin_wallet_id, 'admin', now_dt)
+        employer_notification = _purchase_notification(item, employer_id, 'employer', now_dt)
+        values = {
+            ':amount': serializer.serialize(price_decimal),
+            ':zero': serializer.serialize(Decimal('0')),
+            ':emptyTransactions': serializer.serialize([]),
+            ':debitTransaction': serializer.serialize([debit_transaction]),
+            ':creditTransaction': serializer.serialize([credit_transaction]),
+            ':now': serializer.serialize(now_dt.isoformat()),
+            ':platformWallet': serializer.serialize('platform')
+        }
+        transaction_items = [
+            {'Update': {
+                'TableName': employer_profile_table_name,
+                'Key': {'userId': serializer.serialize(employer_id)},
+                'UpdateExpression': 'SET walletBalance = walletBalance - :amount, walletTransactions = list_append(:debitTransaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :now',
+                'ConditionExpression': 'attribute_exists(userId) AND walletBalance >= :amount',
+                'ExpressionAttributeValues': values
+            }},
+            {'Update': {
+                'TableName': employer_profile_table_name,
+                'Key': {'userId': serializer.serialize(admin_wallet_id)},
+                'UpdateExpression': 'SET walletBalance = if_not_exists(walletBalance, :zero) + :amount, walletTransactions = list_append(:creditTransaction, if_not_exists(walletTransactions, :emptyTransactions)), walletType = :platformWallet, updatedAt = :now',
+                'ExpressionAttributeValues': values
+            }},
+            {'Put': {'TableName': table_name, 'Item': _serialize_dynamodb_item(item), 'ConditionExpression': 'attribute_not_exists(subscriptionId)'}},
+            {'Put': {'TableName': notifications_table_name, 'Item': _serialize_dynamodb_item(admin_notification), 'ConditionExpression': 'attribute_not_exists(notificationId)'}},
+            {'Put': {'TableName': notifications_table_name, 'Item': _serialize_dynamodb_item(employer_notification), 'ConditionExpression': 'attribute_not_exists(notificationId)'}}
+        ]
+
+        try:
+            dynamodb.meta.client.transact_write_items(TransactItems=transaction_items)
+        except ClientError as transaction_error:
+            error_code = transaction_error.response.get('Error', {}).get('Code')
+            if error_code == 'TransactionCanceledException':
+                retry_item = table.get_item(Key={'subscriptionId': subscription_id}).get('Item')
+                if retry_item:
+                    return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'success': True, 'idempotent': True, 'message': 'Subscription already processed.', 'data': retry_item}, default=decimal_default)}
+                fresh_profile = employer_profile_table.get_item(Key={'userId': employer_id}).get('Item', {})
+                fresh_balance = fresh_profile.get('walletBalance', Decimal('0'))
+                if not isinstance(fresh_balance, Decimal):
+                    fresh_balance = Decimal(str(fresh_balance or 0))
+                if fresh_balance < price_decimal:
+                    return {'statusCode': 402, 'headers': headers, 'body': json.dumps({'success': False, 'code': 'INSUFFICIENT_BALANCE', 'message': 'Insufficient wallet balance for this package.'})}
+            raise
+
+        # Email is sent only after the money transaction commits. A temporary
+        # email outage cannot leave the wallet debited without an active package.
+        _send_purchase_confirmation_emails(item, employer_email)
+        final_profile = employer_profile_table.get_item(Key={'userId': employer_id}, ProjectionExpression='walletBalance').get('Item', {})
+        item['walletBalance'] = final_profile.get('walletBalance', balance - price_decimal)
+        print(f'Package purchased atomically: {subscription_id}')
+        return {'statusCode': 201, 'headers': headers, 'body': json.dumps({'success': True, 'message': 'Package purchased and activated successfully.', 'data': item}, default=decimal_default)}
+    except ClientError as error:
+        print(f'Error creating wallet subscription: {error}')
+        return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Unable to complete package purchase.'})}
+    except Exception as error:
+        print(f'Error creating wallet subscription: {error}')
+        return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Unable to complete package purchase.'})}
+
+
 def create_subscription(body_str, headers):
+    # Kept only for backward-compatible imports; all API traffic is routed to
+    # create_wallet_subscription above so no contact/pending purchase can be created.
+    return create_wallet_subscription(body_str, headers)
     """Create new subscription request and process payment via wallet"""
     try:
         body = json.loads(body_str) if isinstance(body_str, str) else body_str
@@ -1121,7 +1388,15 @@ def get_employer_wallet(employer_id, headers):
                 })
             }
             
-        wallet_info = get_or_create_wallet(employer_id)
+        # The reserved admin wallet is a platform ledger and must not be
+        # auto-created as a normal employer profile by a read request.
+        if employer_id == admin_wallet_id:
+            wallet_info = employer_profile_table.get_item(Key={'userId': employer_id}).get('Item', {})
+            wallet_info.setdefault('walletBalance', Decimal('0'))
+            wallet_info.setdefault('walletTransactions', [])
+            wallet_info.setdefault('walletCode', '')
+        else:
+            wallet_info = get_or_create_wallet(employer_id)
         
         return {
             'statusCode': 200,

@@ -1,6 +1,9 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-const API_BASE_URL = import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod';
+// Keep local feedback requests same-origin to avoid CORS preflight failures.
+const API_BASE_URL = import.meta.env.DEV
+  ? '/api-lambda-candidates'
+  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 const getAuthToken = async () => {
   try {

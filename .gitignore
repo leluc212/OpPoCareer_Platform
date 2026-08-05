@@ -44,6 +44,7 @@ public/candidate-profiles-data.json
 *.tfplan
 tfplan
 terraform-old-mirror/.terraform/
+terraform/.terraform/
 
 # Local log files and text dumps (containing potential JWTs/PII)
 *.txt
@@ -63,4 +64,3 @@ amplify/backend/*.json
 !amplify/backend/*config.json
 !amplify/backend/package.json
 !amplify/backend/package-lock.json
-

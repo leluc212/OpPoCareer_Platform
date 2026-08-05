@@ -7,7 +7,8 @@ const ToastContainer = styled(motion.div)`
   position: fixed;
   top: 24px;
   right: 24px;
-  z-index: 9999;
+  /* Always stay above modal overlays so errors are visible to the user. */
+  z-index: 110000;
   display: flex;
   flex-direction: column;
   gap: 12px;

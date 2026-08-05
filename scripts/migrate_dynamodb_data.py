@@ -83,7 +83,7 @@ def export_tables(session, region, target_tables):
 
     for target_name in target_tables:
         file_path = os.path.join(BACKUP_DIR, f"{target_name}.json")
-        
+
         # Find exact match or fuzzy match (e.g. Users-xxx or Applications)
         actual_name = target_name
         if target_name not in existing_tables:

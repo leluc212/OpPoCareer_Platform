@@ -397,9 +397,7 @@ const Sidebar = ({ role, onHoverChange }) => {
           const getPendingCount = (list) => {
             return (list || []).filter(job => {
               const status = typeof job.status === 'string' ? job.status.trim().toLowerCase() : '';
-              const isApproved = ['active', 'approved', 'ai-approved'].includes(status);
-              const isRejected = ['closed', 'deleted', 'rejected'].includes(status);
-              return !isApproved && !isRejected;
+              return status === 'pending';
             }).length;
           };
           const pendingStandardCount = getPendingCount(standardList);
@@ -430,7 +428,7 @@ const Sidebar = ({ role, onHoverChange }) => {
             setAdminBadges({
               employers: notificationBadgeCounts.employers,
               candidates: notificationBadgeCounts.candidates,
-              posts: notificationBadgeCounts.posts,
+              posts: pendingStandardCount + pendingQuickCount,
               packages: notificationBadgeCounts.packages,
               wallet: notificationBadgeCounts.wallet,
               notifications: totalUnreadCount,
@@ -722,8 +720,6 @@ const Sidebar = ({ role, onHoverChange }) => {
                   badgeCount = adminBadges.candidates;
                 } else if (link.to === '/admin/posts') {
                   badgeCount = adminBadges.posts;
-                } else if (link.to === '/admin/packages') {
-                  badgeCount = adminBadges.packages;
                 } else if (link.to === '/admin/wallet') {
                   badgeCount = adminBadges.wallet;
                 } else if (link.to === '/admin/notifications') {

@@ -1,7 +1,12 @@
 import { getAuthHeaders } from './authHeaders';
 
-const API_BASE_URL =
-  (import.meta.env.VITE_CV_AI_API_URL || '/api-cv-ai').replace(/\/$/, '');
+// Vite's proxy only exists during local development; production uses API Gateway.
+const API_BASE_URL = (
+  import.meta.env.VITE_CV_AI_API_URL
+  || (import.meta.env.DEV
+    ? '/api-cv-ai'
+    : 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod')
+).replace(/\/$/, '');
 
 const toApiCv = (cvData) => ({
   full_name: cvData.fullName || '',

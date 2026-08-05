@@ -4,7 +4,11 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 // API base URL - dùng Vite proxy để tránh CORS khi dev local
-const API_BASE_URL = import.meta.env.VITE_EMPLOYER_API_URL || '/api-employer';
+// Vite's proxy only exists during local development; production uses API Gateway.
+const API_BASE_URL = import.meta.env.VITE_EMPLOYER_API_URL
+  || (import.meta.env.DEV
+    ? '/api-employer'
+    : 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 /**
  * Generate random job ID

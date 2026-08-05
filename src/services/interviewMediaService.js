@@ -1,6 +1,11 @@
 import { getAuthHeaders } from './authHeaders.js';
 
-const API_BASE_URL = (import.meta.env.VITE_CV_AI_API_URL || '/api-cv-ai').replace(/\/$/, '');
+const API_BASE_URL = (
+  import.meta.env.VITE_CV_AI_API_URL
+  || (import.meta.env.DEV
+    ? '/api-cv-ai'
+    : 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod')
+).replace(/\/$/, '');
 const DIRECT_MEDIA_API_BASE_URL = (import.meta.env.VITE_INTERVIEW_MEDIA_API_URL || '').replace(/\/$/, '');
 
 const unavailableMedia = (message = 'Interview media is unavailable.') => ({

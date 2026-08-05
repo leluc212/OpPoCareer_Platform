@@ -17,7 +17,10 @@ import { getAuthHeaders } from '../services/authHeaders.js';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SUBS_API    = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API?.replace(/\/$/, '') ?? '';
 const NOTIF_API   = import.meta.env.VITE_NOTIFICATIONS_API?.replace(/\/$/, '') ?? '';
-const EMPLOYER_API = import.meta.env.VITE_EMPLOYER_API_URL || '/api-employer';
+const EMPLOYER_API = import.meta.env.VITE_EMPLOYER_API_URL
+  || (import.meta.env.DEV
+    ? '/api-employer'
+    : 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

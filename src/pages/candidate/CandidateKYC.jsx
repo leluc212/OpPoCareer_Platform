@@ -175,7 +175,7 @@ const CandidateKYC = () => {
           setPhase('done');
         } else {
           // Kiểm tra xem user vừa quay về từ Didit chưa (có ?status=completed trong URL)
-          const urlStatus = searchParams.get('status');
+          const urlStatus = searchParams.get('status')?.toLowerCase();
           if (urlStatus === 'completed' || urlStatus === 'approved') {
             // Bắt đầu poll để chờ webhook update DynamoDB
             setPhase('polling');

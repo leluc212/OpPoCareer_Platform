@@ -13,6 +13,21 @@ const applicationApiHealth = {
   lastWarningAt: 0
 };
 
+let lastApplicationApiCallTime = 0;
+const MIN_APPLICATION_API_INTERVAL = 80;
+
+async function throttleApplicationApiCall() {
+  const now = Date.now();
+  const timeSinceLast = now - lastApplicationApiCallTime;
+  if (timeSinceLast < MIN_APPLICATION_API_INTERVAL) {
+    const delay = MIN_APPLICATION_API_INTERVAL - timeSinceLast;
+    lastApplicationApiCallTime = now + delay;
+    await new Promise(r => setTimeout(r, delay));
+  } else {
+    lastApplicationApiCallTime = now;
+  }
+}
+
 /**
  * Submit a job application
  * @param {string} jobId - Job ID
@@ -176,6 +191,8 @@ export async function getJobApplications(jobId) {
   if (Date.now() < applicationApiHealth.cooldownUntil) {
     return [];
   }
+
+  await throttleApplicationApiCall();
 
   const maxRetries = 0;
   let lastError;

@@ -3054,16 +3054,17 @@ const Applications = () => {
         setIsLoadingApplications(true);
         console.log('📥 Loading applications from DynamoDB...');
 
-        // Get all applications for all employer's jobs
+        // Get applications for employer's active or applicant jobs - batched
+        const targetJobs = jobPosts.filter(job => (job.applicants || 0) > 0 || job.status === 'active');
+        const batchSize = 3;
         const allApplications = [];
 
-        for (const job of jobPosts) {
-          try {
-            const jobApplications = await applicationService.getJobApplications(job.idJob);
-            allApplications.push(...jobApplications);
-          } catch (error) {
-            console.error(`Error loading applications for job ${job.idJob}:`, error);
-          }
+        for (let i = 0; i < targetJobs.length; i += batchSize) {
+          const batch = targetJobs.slice(i, i + batchSize);
+          const batchResults = await Promise.all(
+            batch.map(job => applicationService.getJobApplications(job.idJob).catch(() => []))
+          );
+          allApplications.push(...batchResults.flat());
         }
 
         console.log('✅ Loaded applications:', allApplications);

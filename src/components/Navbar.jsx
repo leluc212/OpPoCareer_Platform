@@ -1408,7 +1408,7 @@ const Navbar = ({ showSearch = true }) => {
       if (document.visibilityState === 'visible') {
         loadEmployerChats();
       }
-    }, 3000);
+    }, 30000);
 
     const handleFocus = () => loadEmployerChats();
     window.addEventListener('focus', handleFocus);

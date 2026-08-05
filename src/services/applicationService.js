@@ -8,6 +8,11 @@ const applicationUrl = (path = '') => {
   return `/api-applications${path}`;
 };
 
+const applicationApiHealth = {
+  cooldownUntil: 0,
+  lastWarningAt: 0
+};
+
 /**
  * Submit a job application
  * @param {string} jobId - Job ID
@@ -168,7 +173,11 @@ export async function getJobApplications(jobId) {
   if (!jobId) {
     return [];
   }
-  const maxRetries = 2;
+  if (Date.now() < applicationApiHealth.cooldownUntil) {
+    return [];
+  }
+
+  const maxRetries = 0;
   let lastError;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -188,9 +197,14 @@ export async function getJobApplications(jobId) {
       });
 
       if (response.status === 503 || response.status === 502) {
-        // Service unavailable - retry
-        lastError = new Error(`Service unavailable (${response.status})`);
-        continue;
+        // Stop hammering a degraded API. The caller will retry on its normal
+        // polling cycle after a short cooldown.
+        applicationApiHealth.cooldownUntil = Date.now() + 30000;
+        if (Date.now() - applicationApiHealth.lastWarningAt > 30000) {
+          applicationApiHealth.lastWarningAt = Date.now();
+          console.warn(`Application API temporarily unavailable (${response.status}); retrying later.`);
+        }
+        return [];
       }
 
       if (!response.ok) {
@@ -198,6 +212,7 @@ export async function getJobApplications(jobId) {
         throw new Error(error.error || `Failed to get job applications (${response.status})`);
       }
 
+      applicationApiHealth.cooldownUntil = 0;
       const data = await response.json();
       console.log('✅ Loaded job applications:', data);
       return data.applications || [];

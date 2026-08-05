@@ -427,6 +427,18 @@ const LoadingState = styled(motion.div)`
   }
 `;
 
+const RetryButton = styled.button`
+  margin-top: 14px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 10px;
+  background: #1e40af;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+`;
+
 const UndoToastWrap = styled(motion.div)`
   position: fixed;
   right: 24px;
@@ -622,6 +634,8 @@ const EmployerNotifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const requestInFlightRef = useRef(false);
   const [undoInfo, setUndoInfo] = useState(null);
   const undoTimerRef = useRef(null);
 
@@ -654,6 +668,9 @@ const EmployerNotifications = () => {
       return;
     }
     
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+
     try {
       // CRITICAL FIX: Ensure we use UUID from Cognito, not email
       let userId = effectiveUser.userId || effectiveUser.id;
@@ -706,10 +723,14 @@ const EmployerNotifications = () => {
       }));
       
       setNotifications(transformedNotifs);
+      setLoadError(null);
       setLoading(false);
     } catch (error) {
       console.error('❌ [EmployerNotifications] Error loading notifications:', error);
+      setLoadError(error);
       setLoading(false);
+    } finally {
+      requestInFlightRef.current = false;
     }
   }, [user, language]); // Dependencies: user and language
 
@@ -979,6 +1000,18 @@ const EmployerNotifications = () => {
           >
             <div className="spinner"></div>
             <p>{language === 'vi' ? 'Đang tải thông báo...' : 'Loading notifications...'}</p>
+          </LoadingState>
+        ) : loadError ? (
+          <LoadingState
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <AlertCircle size={48} color="#dc2626" />
+            <p>Không thể tải thông báo lúc này.</p>
+            <RetryButton type="button" onClick={loadNotifications}>
+              Thử lại
+            </RetryButton>
           </LoadingState>
         ) : filteredNotifications.length > 0 ? (
           <NotificationsGrid>

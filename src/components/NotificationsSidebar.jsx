@@ -223,8 +223,8 @@ const NotificationsSidebar = () => {
   useEffect(() => {
     loadNotifications();
     
-    // Poll every 3 seconds for faster updates
-    const interval = setInterval(loadNotifications, 3000);
+    // Poll periodically without hammering the notification API.
+    const interval = setInterval(loadNotifications, 30000);
     
     // Listen for storage events (triggered when new notification is created)
     const handleStorageChange = () => {
@@ -241,7 +241,10 @@ const NotificationsSidebar = () => {
   }, [user]);
 
   const loadNotifications = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     
     try {
       // For employer/candidate, use userId (Cognito sub) which matches employerId in notifications

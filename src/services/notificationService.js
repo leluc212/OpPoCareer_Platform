@@ -6,6 +6,19 @@ const API_ENDPOINT = (
   || 'https://iuo7ofruu6.execute-api.ap-southeast-1.amazonaws.com'
 ).replace(/\/$/, '');
 
+const NOTIFICATION_REQUEST_TIMEOUT_MS = 10000;
+
+const fetchNotificationApi = async (url, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), NOTIFICATION_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 // Debug: Log API endpoint on module load (chỉ log 1 lần)
 console.log('🔧 notificationService.js loaded, API_ENDPOINT:', API_ENDPOINT ? '✅ configured' : '❌ missing');
 
@@ -59,7 +72,7 @@ export const getAllNotifications = async () => {
   }
 
   try {
-    const response = await fetch(`${API_ENDPOINT}/notifications`, {
+    const response = await fetchNotificationApi(`${API_ENDPOINT}/notifications`, {
       headers: await getAuthHeaders()
     });
     if (!response.ok) {
@@ -96,30 +109,40 @@ export const getNotifications = async (userId, role) => {
     // The production RecipientIndex can return an empty result even when the
     // matching records are present in the Notifications table. Try the GSI
     // route first, then use the API's recipient filter (scan) as a fallback.
-    const response = await fetch(
-      `${API_ENDPOINT}/notifications/user/${encodeURIComponent(userId)}?role=${encodeURIComponent(role)}`,
-      { headers }
-    );
-    if (!response.ok) {
-      circuitBreaker.recordFailure();
-      throw new Error(`Failed to fetch notifications (HTTP ${response.status})`);
-    }
-    circuitBreaker.recordSuccess();
+    let list = [];
+    let primaryError = null;
 
-    const data = await response.json();
-    let list = Array.isArray(data) ? data : [];
-
-    if (list.length === 0) {
-      const fallbackResponse = await fetch(
-        `${API_ENDPOINT}/notifications?recipientId=${encodeURIComponent(userId)}&recipientRole=${encodeURIComponent(role)}`,
+    try {
+      const response = await fetchNotificationApi(
+        `${API_ENDPOINT}/notifications/user/${encodeURIComponent(userId)}?role=${encodeURIComponent(role)}`,
         { headers }
       );
-      if (fallbackResponse.ok) {
+      if (!response.ok) {
+        throw new Error(`Primary notifications endpoint failed (HTTP ${response.status})`);
+      }
+      const data = await response.json();
+      list = Array.isArray(data) ? data : [];
+    } catch (error) {
+      primaryError = error;
+    }
+
+    if (list.length === 0) {
+      try {
+        const fallbackResponse = await fetchNotificationApi(
+          `${API_ENDPOINT}/notifications?recipientId=${encodeURIComponent(userId)}&recipientRole=${encodeURIComponent(role)}`,
+          { headers }
+        );
+        if (!fallbackResponse.ok) {
+          throw new Error(`Fallback notifications endpoint failed (HTTP ${fallbackResponse.status})`);
+        }
         const fallbackData = await fallbackResponse.json();
         list = Array.isArray(fallbackData) ? fallbackData : [];
+      } catch (fallbackError) {
+        throw primaryError || fallbackError;
       }
     }
 
+    circuitBreaker.recordSuccess();
     return list.filter(n => n.type !== 'chat_message');
   } catch (error) {
     circuitBreaker.recordFailure();

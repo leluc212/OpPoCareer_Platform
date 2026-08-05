@@ -94,10 +94,10 @@ export const getS3UrlByFilename = (filename) => {
   if (!filename) return null;
   const cleanName = filename.replace(/^\//, '').split('/').pop(); // get only the base filename
   const s3Path = filenameToS3Path[cleanName];
-  if (s3Path) {
-    return `${S3_BASE_URL}/${s3Path}`;
-  }
-  return null;
+  if (!s3Path) return null;
+
+  const version = cleanName === 'logo.png' ? `?v=${S3_ASSET_VERSION}` : '';
+  return `${S3_BASE_URL}/${s3Path}${version}`;
 };
 
 /**

@@ -91,17 +91,35 @@ export const getNotifications = async (userId, role) => {
   }
 
   try {
-    // Use /notifications/user/{userId}?role=... endpoint which uses GSI query (faster & paginated)
-    const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`, {
-      headers: await getAuthHeaders()
-    });
+    const headers = await getAuthHeaders();
+
+    // The production RecipientIndex can return an empty result even when the
+    // matching records are present in the Notifications table. Try the GSI
+    // route first, then use the API's recipient filter (scan) as a fallback.
+    const response = await fetch(
+      `${API_ENDPOINT}/notifications/user/${encodeURIComponent(userId)}?role=${encodeURIComponent(role)}`,
+      { headers }
+    );
     if (!response.ok) {
       circuitBreaker.recordFailure();
       throw new Error(`Failed to fetch notifications (HTTP ${response.status})`);
     }
     circuitBreaker.recordSuccess();
+
     const data = await response.json();
-    const list = data || [];
+    let list = Array.isArray(data) ? data : [];
+
+    if (list.length === 0) {
+      const fallbackResponse = await fetch(
+        `${API_ENDPOINT}/notifications?recipientId=${encodeURIComponent(userId)}&recipientRole=${encodeURIComponent(role)}`,
+        { headers }
+      );
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        list = Array.isArray(fallbackData) ? fallbackData : [];
+      }
+    }
+
     return list.filter(n => n.type !== 'chat_message');
   } catch (error) {
     circuitBreaker.recordFailure();

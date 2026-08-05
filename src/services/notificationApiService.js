@@ -13,14 +13,30 @@ const API_ENDPOINT = (
  */
 export const getNotifications = async (userId, role) => {
   try {
-    const response = await fetch(`${API_ENDPOINT}/notifications/user/${userId}?role=${role}`, {
-      headers: await getAuthHeaders()
-    });
+    const headers = await getAuthHeaders();
+    const response = await fetch(
+      `${API_ENDPOINT}/notifications/user/${encodeURIComponent(userId)}?role=${encodeURIComponent(role)}`,
+      { headers }
+    );
     if (!response.ok) {
       throw new Error('Failed to fetch notifications');
     }
     const data = await response.json();
-    const list = data || [];
+    let list = Array.isArray(data) ? data : [];
+
+    // RecipientIndex may be stale in production. Fall back to the recipient
+    // filter route, which reads the source table directly.
+    if (list.length === 0) {
+      const fallbackResponse = await fetch(
+        `${API_ENDPOINT}/notifications?recipientId=${encodeURIComponent(userId)}&recipientRole=${encodeURIComponent(role)}`,
+        { headers }
+      );
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        list = Array.isArray(fallbackData) ? fallbackData : [];
+      }
+    }
+
     return list.filter(n => n.type !== 'chat_message');
   } catch (error) {
     console.error('Error fetching notifications:', error);

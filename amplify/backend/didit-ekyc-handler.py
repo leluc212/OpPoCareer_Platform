@@ -427,9 +427,12 @@ def handle_create_session(event, user_id: str | None):
         })
 
     except RuntimeError as e:
+        print(f'[Didit] handle_create_session Didit API error: {e}')
         return resp(502, {'success': False, 'errorMsg': str(e)})
     except Exception as e:
-        print(f'[Didit] handle_create_session error: {e}')
+        import traceback
+        print(f'[Didit] handle_create_session unexpected error: {type(e).__name__}: {e}')
+        print(traceback.format_exc())
         return resp(500, {'success': False, 'errorMsg': 'Lỗi nội bộ. Vui lòng thử lại.'})
 
 

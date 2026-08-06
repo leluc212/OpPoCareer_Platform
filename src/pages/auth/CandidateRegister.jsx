@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-// aws-amplify will be loaded dynamically where needed to avoid Vite prebundle
-// export-shape issues (some builds don't expose default/named exports consistently).
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { s3Images } from '../../utils/s3Images';
+import { Auth } from '../../utils/amplifyClient';
+
 
 /* ═══════════════════════════════════════════════════════════════
    KEYFRAMES
@@ -844,9 +844,6 @@ const CandidateRegister = () => {
     setEmailCheckStatus(null);
 
     try {
-      // Import Auth functions from amplifyClient (v6 compatible)
-      const { Auth } = await import('../../utils/amplifyClient');
-
       console.log('Calling signUp for candidate:', form.email);
 
       // AWS Amplify v6 signUp syntax with role in user attributes

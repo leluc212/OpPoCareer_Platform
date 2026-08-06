@@ -3018,57 +3018,75 @@ const LandingPage = ({ children }) => {
     downloadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  // Load subscriptions to identify employers with active Hot Search package
+  // Load subscriptions & job suggestions in background after initial paint frame
   useEffect(() => {
-    const loadHotSearchSubscriptions = async () => {
+    let isCanceled = false;
+
+    const fetchBackgroundData = async () => {
+      if (isCanceled) return;
+
+      // 1. Hot search subscriptions
       try {
         const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
           || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
-        if (!API_ENDPOINT) return;
-        const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
-          headers: await getOptionalAuthHeaders()
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const activeHotSearchEmployerIds = new Set(
-            data
-              .filter(sub => 
-                sub.packageName === 'Hot Search' && 
-                sub.status === 'active' && 
-                sub.approvalStatus === 'approved'
-              )
-              .map(sub => sub.employerId)
-          );
-          setHotSearchEmployerIds(activeHotSearchEmployerIds);
+        if (API_ENDPOINT) {
+          const response = await fetch(`${API_ENDPOINT}/subscriptions/public`, {
+            headers: await getOptionalAuthHeaders()
+          });
+          if (response.ok && !isCanceled) {
+            const data = await response.json();
+            const activeHotSearchEmployerIds = new Set(
+              data
+                .filter(sub => 
+                  sub.packageName === 'Hot Search' && 
+                  sub.status === 'active' && 
+                  sub.approvalStatus === 'approved'
+                )
+                .map(sub => sub.employerId)
+            );
+            setHotSearchEmployerIds(activeHotSearchEmployerIds);
+          }
         }
       } catch (err) {
         console.error('Error loading hot search subscriptions:', err);
       }
+
+      // 2. Active job titles
+      try {
+        const jobs = await jobPostService.getAllActiveJobs();
+        if (isCanceled) return;
+        const titles = [];
+        const companies = [];
+        const seen = new Set();
+        jobs.forEach(j => {
+          if (j.title && !seen.has(j.title)) {
+            titles.push({ label: j.title, type: 'job', employerId: j.employerId });
+            seen.add(j.title);
+          }
+          if (j.company && !seen.has(j.company)) {
+            companies.push({ label: j.company, type: 'company', employerId: j.employerId });
+            seen.add(j.company);
+          }
+        });
+        setAllJobTitles([...titles, ...companies]);
+      } catch (err) {
+        console.error('Error loading active jobs for suggestions:', err);
+      }
     };
 
-    loadHotSearchSubscriptions();
-  }, []);
-
-  // Load all jobs for search suggestions on landing page
-  useEffect(() => {
-    jobPostService.getAllActiveJobs().then(jobs => {
-      const titles = [];
-      const companies = [];
-      const seen = new Set();
-      jobs.forEach(j => {
-        if (j.title && !seen.has(j.title)) {
-          titles.push({ label: j.title, type: 'job', employerId: j.employerId });
-          seen.add(j.title);
-        }
-        if (j.company && !seen.has(j.company)) {
-          companies.push({ label: j.company, type: 'company', employerId: j.employerId });
-          seen.add(j.company);
-        }
-      });
-      setAllJobTitles([...titles, ...companies]);
-    }).catch((err) => {
-      console.error('Error loading active jobs for suggestions:', err);
-    });
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(fetchBackgroundData, { timeout: 2000 });
+      return () => {
+        isCanceled = true;
+        window.cancelIdleCallback(idleId);
+      };
+    } else {
+      const timerId = setTimeout(fetchBackgroundData, 400);
+      return () => {
+        isCanceled = true;
+        clearTimeout(timerId);
+      };
+    }
   }, []);
 
   // Click outside search input suggestion box handler

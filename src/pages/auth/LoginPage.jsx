@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { s3Images } from '../../utils/s3Images';
+import { Auth } from '../../utils/amplifyClient';
+
 
 /* ═══════════════════════════════════════════════════
    KEYFRAMES
@@ -130,6 +133,7 @@ const Left = styled(motion.div)`
   padding: 56px 52px;
   overflow: hidden;
   transition: background 0.6s ease;
+  will-change: background-position;
 
   @media (max-width: 960px) { display: none; }
 `;
@@ -152,6 +156,8 @@ const Orb = styled.div`
   animation-delay: ${p => p.$d || 0}s;
   pointer-events: none;
   filter: blur(${p => p.$blur || 0}px);
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 `;
 
 const Scan = styled.div`
@@ -671,9 +677,6 @@ const LoginPage = () => {
     setEmailProviderStatus(null);
 
     try {
-      // Import Auth functions from amplifyClient (v6 compatible)
-      const { Auth } = await import('../../utils/amplifyClient');
-      
       // First, try to sign out any existing session
       try {
         await Auth.signOut();
@@ -695,7 +698,6 @@ const LoginPage = () => {
       // Check if sign in is complete or needs additional steps
       if (result.isSignedIn) {
         // Get user's Cognito groups from access token
-        const { fetchAuthSession } = await import('aws-amplify/auth');
         const session = await fetchAuthSession();
         const userGroups = session.tokens?.accessToken?.payload['cognito:groups'] || [];
         
@@ -724,7 +726,7 @@ const LoginPage = () => {
             role: 'admin', 
             approved: true 
           });
-          navigate('/admin/dashboard');
+          navigate('/admin/dashboard', { replace: true });
           return;
         }
         
@@ -770,14 +772,13 @@ const LoginPage = () => {
         
         const sp = new URLSearchParams(location.search);
         const rd = sp.get('redirect');
-        const BASE = import.meta.env.BASE_URL || '/';
         if (rd) {
           const target = rd.replace(/^\/+/, '');
-          window.location.replace(`${BASE}${target}`);
+          navigate(`/${target}`, { replace: true });
           return;
         }
         const dashboardPath = roleToUse === 'admin' ? 'admin/dashboard' : roleToUse === 'employer' ? 'employer/dashboard' : 'candidate/dashboard';
-        window.location.replace(`${BASE}${dashboardPath}`);
+        navigate(`/${dashboardPath}`, { replace: true });
       } else if (result.nextStep) {
         // Additional steps required (OTP, MFA, new password, etc.)
         console.log('Additional step required:', result.nextStep.signInStep);

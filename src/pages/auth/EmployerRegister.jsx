@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-// load aws-amplify dynamically where needed to handle ESM/CJS export differences
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes, css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { s3Images } from '../../utils/s3Images';
+import { Auth } from '../../utils/amplifyClient';
+
 
 /* ────────────────────────────────────────────────────────────────────
    KEYFRAMES
@@ -989,9 +990,6 @@ const EmployerRegister = () => {
     const errs = validateStep2();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     try {
-      // Import Auth functions from amplifyClient (v6 compatible)
-      const { Auth } = await import('../../utils/amplifyClient');
-
       console.log('Calling signUp for employer:', form.email);
 
       // AWS Amplify v6 signUp syntax with role in user attributes
@@ -1047,7 +1045,6 @@ const EmployerRegister = () => {
       } else if (err.name === 'UsernameExistsException' || err.message?.includes('User already') || err.message?.includes('already exists')) {
         // Try to resend OTP — if user is unconfirmed, redirect to OTP page
         try {
-          const { Auth } = await import('../../utils/amplifyClient');
           await Auth.resendSignUpCode({ username: form.email });
           navigate('/verify-otp', {
             state: {

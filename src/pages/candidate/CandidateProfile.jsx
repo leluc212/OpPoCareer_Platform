@@ -12,6 +12,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import CVUpload from '../../components/CVUpload';
 import WorkExperienceSection from '../../components/WorkExperienceSection';
 import candidateProfileService from '../../services/candidateProfileService';
+import { getKycStatus } from '../../services/ekycService';
 import applicationService from '../../services/applicationService';
 import { 
   Upload, 
@@ -1226,9 +1227,22 @@ const CandidateProfile = () => {
                 setProfileImage(resolvedProfile.profileImage);
               }
 
-              // Load eKYC status
-              if (resolvedProfile.kycCompleted || resolvedProfile.kycStatus === 'VERIFIED') {
+              // Load eKYC status — check both profile data AND direct eKYC API
+              // (webhook may have updated DB after profile was cached, or fields may differ)
+              const profileKycDone = resolvedProfile.kycCompleted || resolvedProfile.kycStatus === 'VERIFIED';
+              if (profileKycDone) {
                 setKycCompleted(true);
+              } else {
+                // Fallback: query eKYC status directly in case webhook updated DB
+                // but profile lambda returned stale/incomplete data
+                const userId = session.tokens?.idToken?.payload?.sub;
+                if (userId) {
+                  getKycStatus(userId).then(kycRes => {
+                    if (kycRes?.kycCompleted || kycRes?.kycStatus === 'VERIFIED') {
+                      setKycCompleted(true);
+                    }
+                  }).catch(() => { /* silent — non-critical */ });
+                }
               }
               
               console.log('✅ Profile loaded from DynamoDB');

@@ -36,7 +36,7 @@ Amplify.configure({
       loginWith: {
         email: true,
         oauth: {
-          domain: 'opporeview.auth.ap-southeast-1.amazoncognito.com',
+          domain: 'oppocareer.auth.ap-southeast-1.amazoncognito.com',
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [redirectUri],
           redirectSignOut: [redirectUri],
@@ -67,6 +67,6 @@ export { Amplify };
 export default { Amplify, Auth };
 
 // Export OAuth constants for non-hardcoded usage
-export const OAUTH_DOMAIN = 'opporeview.auth.ap-southeast-1.amazoncognito.com';
+export const OAUTH_DOMAIN = 'oppocareer.auth.ap-southeast-1.amazoncognito.com';
 export const OAUTH_CLIENT_ID = USER_POOL_CLIENT_ID;
 export const OAUTH_REDIRECT_URI = redirectUri;

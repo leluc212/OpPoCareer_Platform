@@ -25,6 +25,7 @@ import {
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import candidateProfileService from '../services/candidateProfileService';
+import { getKycStatus } from '../services/ekycService';
 import employerProfileService from '../services/employerProfileService';
 import feedbackService from '../services/feedbackService';
 import { useToast } from '../hooks/useToast';
@@ -716,6 +717,14 @@ export default function FloatingSupportBar() {
             }
             if (profile.kycCompleted || profile.kycStatus === 'VERIFIED') {
               setKycCompleted(true);
+            } else {
+              // Fallback: query eKYC API trực tiếp — phòng trường hợp webhook
+              // cập nhật DB sau khi profile đã được load (user chưa reload trang)
+              getKycStatus(user.userId).then(kycRes => {
+                if (kycRes?.kycCompleted || kycRes?.kycStatus === 'VERIFIED') {
+                  setKycCompleted(true);
+                }
+              }).catch(() => { /* silent */ });
             }
           }
         } catch (err) {

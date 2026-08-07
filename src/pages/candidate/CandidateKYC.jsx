@@ -180,8 +180,14 @@ const CandidateKYC = () => {
           setPhase('done');
         } else if (returnedFromDidit || checkResult) {
           // Từ callback Didit hoặc từ nút "Kiểm tra kết quả" trên profile → poll ngay
-          setPhase('polling');
-        } else if (res?.diditSessionId && ['IN_PROGRESS', 'IN_REVIEW', 'RESUBMITTED'].includes(res?.kycStatus)) {
+          // Chỉ poll nếu đã có session active (diditSessionId)
+          if (res?.diditSessionId) {
+            setPhase('polling');
+          } else {
+            // Chưa có session → hiện trang bắt đầu xác minh (không báo lỗi)
+            setPhase('idle');
+          }
+        } else if (res?.diditSessionId && ['PENDING', 'IN_PROGRESS', 'IN_REVIEW', 'RESUBMITTED'].includes(res?.kycStatus)) {
           // User đã thực sự bắt đầu xác minh trên Didit (không chỉ tạo session)
           // nhưng tab này không nhận callback → tự động poll.
           setPhase('polling');
@@ -310,18 +316,38 @@ const CandidateKYC = () => {
         stopPolling();
         setPhase('failed');
         setError(t('Xác minh không thành công. Vui lòng thử lại.', 'Verification failed. Please try again.'));
-      } else if (res?.kycStatus === 'EXPIRED' || (!res?.kycStatus || res?.kycStatus === 'PENDING')) {
-        // Session hết hạn hoặc PENDING (chưa xác minh lần nào / session cũ expired)
-        // → reset về idle để tạo session mới
+      } else if (res?.kycStatus === 'EXPIRED') {
+        // Session hết hạn → reset về idle để tạo session mới
         stopPolling();
         setPhase('idle');
         setError(t(
-          'Phiên xác minh đã hết hạn hoặc chưa bắt đầu. Vui lòng nhấn "Bắt đầu xác minh" để tạo phiên mới.',
-          'Verification session expired or not started. Please click "Start Verification" to create a new session.'
+          'Phiên xác minh đã hết hạn. Vui lòng nhấn "Bắt đầu xác minh" để tạo phiên mới.',
+          'Verification session expired. Please click "Start Verification" to create a new session.'
+        ));
+      } else if (res?.diditSessionId && ['PENDING', 'IN_PROGRESS', 'IN_REVIEW', 'RESUBMITTED'].includes(res?.kycStatus)) {
+        // User ĐÃ tạo session và đang trong quá trình xác minh
+        // → chuyển sang polling để tự động check
+        if (phase !== 'polling') {
+          setError('');
+          setPhase('polling');
+          startPolling();
+        } else {
+          setError(t(
+            'Hệ thống Didit đang xử lý. Vui lòng đợi thêm 1–2 phút rồi nhấn kiểm tra lại.',
+            'Didit is processing. Please wait 1–2 minutes and check again.'
+          ));
+        }
+      } else if (!res?.diditSessionId || !res?.kycStatus || res?.kycStatus === 'PENDING') {
+        // Chưa có session active hoặc chưa bắt đầu xác minh lần nào
+        // → reset về idle để user tạo session mới
+        stopPolling();
+        setPhase('idle');
+        setError(t(
+          'Chưa có phiên xác minh hoặc phiên đã hết hạn. Vui lòng nhấn "Bắt đầu xác minh" để tạo phiên mới.',
+          'No active verification session. Please click "Start Verification" to create a new session.'
         ));
       } else {
-        // Chưa có kết quả — Didit webhook thường mất 30 giây đến vài phút.
-        // Nếu đang ở phase idle (tab gốc không nhận callback), chuyển sang polling để tự động check.
+        // Các trạng thái khác (edge case) → chuyển sang polling
         if (phase !== 'polling') {
           setError('');
           setPhase('polling');

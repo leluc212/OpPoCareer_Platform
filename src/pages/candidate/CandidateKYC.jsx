@@ -11,7 +11,7 @@
  * trong CandidateKYC.VNPT_LEGACY.jsx để rollback nếu cần.
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -150,6 +150,7 @@ const CandidateKYC = () => {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuth();
   const pollRef = useRef(null);
   const pollCountRef = useRef(0);
@@ -167,21 +168,33 @@ const CandidateKYC = () => {
   useEffect(() => {
     if (!user?.userId) { setLoading(false); return; }
 
+    const urlStatus = searchParams.get('status')?.toLowerCase();
+    const returnedFromDidit = urlStatus === 'completed' || urlStatus === 'approved';
+    const checkResult = location.state?.checkResult === true;
+
     const check = async () => {
       try {
         setLoadingMsg(t('Đang kiểm tra trạng thái xác thực…', 'Checking verification status…'));
         const res = await getKycStatus(user.userId);
         if (res?.kycCompleted || res?.kycStatus === 'VERIFIED') {
           setPhase('done');
-        } else {
-          // Kiểm tra xem user vừa quay về từ Didit chưa (có ?status=completed trong URL)
-          const urlStatus = searchParams.get('status')?.toLowerCase();
-          if (urlStatus === 'completed' || urlStatus === 'approved') {
-            // Bắt đầu poll để chờ webhook update DynamoDB
-            setPhase('polling');
-            startPolling();
-          }
+        } else if (returnedFromDidit || checkResult) {
+          // Từ callback Didit hoặc từ nút "Kiểm tra kết quả" trên profile → poll ngay
+          setPhase('polling');
+        } else if (res?.diditSessionId && ['IN_PROGRESS', 'IN_REVIEW', 'RESUBMITTED'].includes(res?.kycStatus)) {
+          // User đã thực sự bắt đầu xác minh trên Didit (không chỉ tạo session)
+          // nhưng tab này không nhận callback → tự động poll.
+          setPhase('polling');
+        } else if (res?.kycStatus === 'FAILED' || res?.kycStatus === 'EXPIRED') {
+          // Xác minh thất bại hoặc hết hạn → quay về idle để tạo session mới
+          setPhase('idle');
+          setError(res?.kycStatus === 'EXPIRED'
+            ? t('Phiên xác minh đã hết hạn. Vui lòng bắt đầu lại.', 'Verification session expired. Please start again.')
+            : t('Xác minh không thành công. Vui lòng thử lại.', 'Verification failed. Please try again.')
+          );
         }
+        // PENDING hoặc không có session active → giữ nguyên phase idle (mặc định)
+        // để user có thể nhấn "Bắt đầu xác minh" tạo session mới
       } catch (err) {
         console.error('[CandidateKYC] Lỗi kiểm tra KYC status:', err);
       } finally {
@@ -194,6 +207,13 @@ const CandidateKYC = () => {
     return () => stopPolling();
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Khi phase chuyển sang 'polling' từ useEffect (return from Didit), bắt đầu poll
+  useEffect(() => {
+    if (phase === 'polling' && !pollRef.current) {
+      startPolling();
+    }
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Polling sau khi user quay về từ Didit ────────────────────────────────
   const startPolling = useCallback(() => {
     if (pollRef.current) return; // đã đang poll
@@ -205,11 +225,9 @@ const CandidateKYC = () => {
 
       if (pollCountRef.current > POLL_MAX_ATTEMPTS) {
         stopPolling();
-        setError(t(
-          'Chưa nhận được kết quả xác minh. Vui lòng kiểm tra lại sau vài phút.',
-          'Verification result not received yet. Please check again in a few minutes.'
-        ));
-        setPhase('idle');
+        // Không reset về idle hay show error cứng — giữ phase polling để user có thể manual check
+        // chỉ dừng auto-poll, user thấy nút "Kiểm tra ngay" vẫn hoạt động
+        setPollCount(POLL_MAX_ATTEMPTS); // freeze counter ở max
         return;
       }
 
@@ -292,11 +310,28 @@ const CandidateKYC = () => {
         stopPolling();
         setPhase('failed');
         setError(t('Xác minh không thành công. Vui lòng thử lại.', 'Verification failed. Please try again.'));
-      } else {
+      } else if (res?.kycStatus === 'EXPIRED' || (!res?.kycStatus || res?.kycStatus === 'PENDING')) {
+        // Session hết hạn hoặc PENDING (chưa xác minh lần nào / session cũ expired)
+        // → reset về idle để tạo session mới
+        stopPolling();
+        setPhase('idle');
         setError(t(
-          'Chưa có kết quả. Didit cần vài phút để xử lý. Vui lòng thử lại sau.',
-          'No result yet. Didit needs a few minutes. Please try again shortly.'
+          'Phiên xác minh đã hết hạn hoặc chưa bắt đầu. Vui lòng nhấn "Bắt đầu xác minh" để tạo phiên mới.',
+          'Verification session expired or not started. Please click "Start Verification" to create a new session.'
         ));
+      } else {
+        // Chưa có kết quả — Didit webhook thường mất 30 giây đến vài phút.
+        // Nếu đang ở phase idle (tab gốc không nhận callback), chuyển sang polling để tự động check.
+        if (phase !== 'polling') {
+          setError('');
+          setPhase('polling');
+          startPolling();
+        } else {
+          setError(t(
+            'Hệ thống Didit đang xử lý. Vui lòng đợi thêm 1–2 phút rồi nhấn kiểm tra lại.',
+            'Didit is processing. Please wait 1–2 minutes and check again.'
+          ));
+        }
       }
     } catch (e) {
       setError(e.message || t('Lỗi kiểm tra. Vui lòng thử lại.', 'Check error. Please try again.'));
@@ -486,11 +521,13 @@ const CandidateKYC = () => {
 
             <PollStatus>
               <RefreshCw size={18} className="spin" />
-              {t(
-                `Đang kiểm tra kết quả… (${pollCount}/${POLL_MAX_ATTEMPTS})`,
-                `Checking result… (${pollCount}/${POLL_MAX_ATTEMPTS})`
-              )}
-            </PollStatus>
+              {pollCount >= POLL_MAX_ATTEMPTS
+                ? t('Đã hết thời gian tự động kiểm tra. Nhấn "Kiểm tra ngay" để thử lại.', 'Auto-check timed out. Click "Check now" to retry.')
+                : t(
+                    `Đang kiểm tra kết quả… (${pollCount}/${POLL_MAX_ATTEMPTS})`,
+                    `Checking result… (${pollCount}/${POLL_MAX_ATTEMPTS})`
+                  )
+              }            </PollStatus>
 
             <Button
               $variant="secondary"
@@ -510,10 +547,34 @@ const CandidateKYC = () => {
                   border: '2px solid #e2e8f0', borderRadius: 10,
                   fontSize: 13, color: '#64748b', cursor: 'pointer', fontWeight: 600,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  marginBottom: 8,
                 }}
               >
                 <ExternalLink size={14} />
                 {t('Mở lại trang Didit', 'Reopen Didit page')}
+              </button>
+            )}
+
+            {/* Nút bắt đầu lại — hiện khi poll timeout hoặc không có redirectUrl */}
+            {(pollCount >= POLL_MAX_ATTEMPTS || !redirectUrl) && (
+              <button
+                onClick={() => {
+                  stopPolling();
+                  setPhase('idle');
+                  setRedirectUrl('');
+                  setError('');
+                  setPollCount(0);
+                }}
+                style={{
+                  width: '100%', padding: '10px', background: 'none',
+                  border: '2px solid #f59e0b', borderRadius: 10,
+                  fontSize: 13, color: '#d97706', cursor: 'pointer', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <Shield size={14} />
+                {t('Bắt đầu xác minh lại từ đầu', 'Start verification over')}
               </button>
             )}
           </StatusCard>

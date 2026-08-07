@@ -370,7 +370,12 @@ def lambda_handler(event, context):
             body = float_to_decimal(json.loads(event.get('body') or '{}'))
             body.pop('userId', None)
             body.pop('createdAt', None)
-            body['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+            now_iso = datetime.utcnow().isoformat() + 'Z'
+            body['updatedAt'] = now_iso
+
+            # Guarantee createdAt is preserved or populated for new/legacy profiles
+            if not prev_profile.get('createdAt'):
+                body['createdAt'] = now_iso
 
             # ── Guard: protect eKYC-verified fields from being overwritten by stale frontend data ─
             if prev_profile.get('provider') == 'DIDIT' and prev_profile.get('kycCompleted') is True:

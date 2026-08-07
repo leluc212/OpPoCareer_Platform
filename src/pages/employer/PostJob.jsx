@@ -1366,115 +1366,35 @@ const PostJob = () => {
         await jobPostService.updateJobPost(jobId, cleanFormData);
         console.log('✅ Job post updated successfully');
       } else {
-        // Get authenticated user info
-        const session = await fetchAuthSession();
-        let employerId = 'anonymous';
-        let employerEmail = 'anonymous@example.com';
-        let employerName = language === 'vi' ? 'Công ty' : 'Company';
+        const createdJob = await jobPostService.createJobPost(cleanFormData);
+        console.log('✅ Job post created successfully with ID:', createdJob?.idJob);
 
-        if (session && session.tokens) {
-          const idTokenPayload = session.tokens.idToken?.payload;
-          employerId = idTokenPayload?.sub || 'anonymous';
-          employerEmail = idTokenPayload?.email || 'anonymous@example.com';
+        const employerId = createdJob?.employerId || 'anonymous';
+        const employerName = createdJob?.employerName || 'Employer';
 
-          // Try to get company name from EmployerProfile
-          try {
-            const profile = await employerProfileService.getMyProfile();
-            if (profile && profile.companyName) {
-              employerName = profile.companyName;
-              console.log('✅ Got company name from profile:', employerName);
-            } else {
-              // Fallback to email username
-              employerName = employerEmail.split('@')[0];
-              console.log('⚠️ No company name in profile, using email username');
-            }
-          } catch (error) {
-            console.warn('⚠️ Could not load employer profile:', error);
-            employerName = employerEmail.split('@')[0];
-          }
-
-          console.log('✅ User authenticated:', { employerId, employerEmail, employerName });
-        } else {
-          console.warn('⚠️ No authentication session - using anonymous');
+        try {
+          await createJobPendingApprovalNotification({
+            employerId,
+            companyName: employerName,
+            jobTitle: cleanFormData.title,
+            jobId: createdJob?.idJob,
+            isQuickJob: false
+          });
+          console.log('✅ Sent pending approval notification to admin');
+        } catch (notifErr) {
+          console.warn('⚠️ Failed to send notification to admin:', notifErr);
         }
-
-        // Generate job ID
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let randomStr = '';
-        for (let i = 0; i < 5; i++) {
-          randomStr += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        const jobId = `JOB-${year}${month}${day}-${randomStr}`;
-
-        const payload = {
-          idJob: jobId,
-          employerId: employerId,
-          employerEmail: employerEmail,
-          employerName: employerName,
-          ...cleanFormData,
-          // Require admin moderation for standard jobs
-          status: 'pending',
-          applicants: 0,
-          views: 0,
-          responseRate: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        console.log('📤 Sending request with employer info:', payload);
-
-        // Use direct API (CORS is fixed)
-        const apiUrl = `${import.meta.env.VITE_EMPLOYER_API_URL || 'https://fhkig55p32.execute-api.ap-southeast-1.amazonaws.com/prod'}/jobs`;
-
-        console.log('🔗 API URL:', apiUrl);
-
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(payload),
-          mode: 'cors'
-        });
-
-        console.log('📥 Response status:', response.status);
-
-        const result = await response.json();
-        console.log('📥 Response data:', result);
-
-        if (response.ok) {
-          console.log('✅ Job post created successfully with ID:', result.data.idJob);
-          try {
-            await createJobPendingApprovalNotification({
-              employerId,
-              companyName: employerName,
-              jobTitle: cleanFormData.title,
-              jobId: result.data.idJob || jobId,
-              isQuickJob: false
-            });
-            console.log('✅ Sent pending approval notification to admin');
-          } catch (notifErr) {
-            console.warn('⚠️ Failed to send notification to admin:', notifErr);
-          }
-          try {
-            await createJobPendingNotificationForEmployer({
-              employerId,
-              companyName: employerName,
-              jobTitle: cleanFormData.title,
-              jobId: result.data.idJob || jobId,
-              isQuickJob: false
-            });
-            console.log('✅ Sent pending approval notification to employer');
-          } catch (notifErr) {
-            console.warn('⚠️ Failed to send notification to employer:', notifErr);
-          }
-        } else {
-          throw new Error('API request failed: ' + response.status);
+        try {
+          await createJobPendingNotificationForEmployer({
+            employerId,
+            companyName: employerName,
+            jobTitle: cleanFormData.title,
+            jobId: createdJob?.idJob,
+            isQuickJob: false
+          });
+          console.log('✅ Sent pending approval notification to employer');
+        } catch (notifErr) {
+          console.warn('⚠️ Failed to send notification to employer:', notifErr);
         }
       }
 
@@ -1491,9 +1411,9 @@ const PostJob = () => {
       navigate('/employer/standard-jobs');
     } catch (error) {
       console.error('❌ Error saving job post:', error);
-      toast.error(language === 'vi'
+      toast.error(error.message || (language === 'vi'
         ? 'Có lỗi xảy ra khi lưu tin tuyển dụng. Vui lòng thử lại.'
-        : 'Error saving job post. Please try again.');
+        : 'Error saving job post. Please try again.'));
     }
   };
 

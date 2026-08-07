@@ -1,0 +1,11 @@
+# Report: Các Ứng Viên Bị Duplicate Trong Database (CandidateProfiles)
+Tổng số ứng viên trong `CandidateProfiles`: **62**
+Tổng số nhóm email bị trùng lặp: **5**
+
+| STT | Email | Số lượng bản ghi trùng | Chi tiết Ứng Viên (userId, Tên, SĐT, Ngày tạo, Active) |
+|---|---|---|---|
+| 1 | `anhthuvt2233@gmail.com` | **3** | - **userId**: `a91ac5bc-4091-707d-e1a2-725a393cac77` | **Tên**: NGUYỄN THỊ ANH THƯ | **SĐT**: N/A | **Ngày tạo**: 2026-07-02T16:18:18.512367Z | **Active**: False<br>- **userId**: `79ba859c-20b1-70d1-e4ab-01ef084012c4` | **Tên**: Nguyễn Thị Ốp Pờ | **SĐT**: N/A | **Ngày tạo**: 2026-07-06T13:30:31.679497Z | **Active**: False<br>- **userId**: `19ca750c-a051-70eb-3bb8-7ab5b0025a06` | **Tên**: Nguyễn Thị Ốp Pờ | **SĐT**: N/A | **Ngày tạo**: 2026-07-06T13:30:31.679497Z | **Active**: False |
+| 2 | `dsky29179@gmail.com` | **2** | - **userId**: `e92a05ec-30b1-70c7-bff5-bd3e486c40ea` | **Tên**: N/A | **SĐT**: N/A | **Ngày tạo**: 2026-06-12T10:30:30.622814Z | **Active**: True<br>- **userId**: `994a450c-1091-7094-38dd-8d6f4ae73963` | **Tên**: Sky David | **SĐT**: N/A | **Ngày tạo**: 2026-06-12T10:30:30.622814Z | **Active**: True |
+| 3 | `tthinhpham04@gmail.com` | **2** | - **userId**: `793a057c-e0d1-707f-86ec-243fa213ccd3` | **Tên**: tthinhpham04 | **SĐT**: N/A | **Ngày tạo**: 2026-06-27T13:54:24.549173Z | **Active**: True<br>- **userId**: `493a952c-60a1-7017-f8be-bcc7559eee20` | **Tên**: tthinhpham04 | **SĐT**: N/A | **Ngày tạo**: 2026-06-27T13:54:24.549173Z | **Active**: True |
+| 4 | `oppo.hiringplatform@gmail.com` | **2** | - **userId**: `09fa350c-8071-70ab-9673-804bedc99aa7` | **Tên**: Ngọc Minh | **SĐT**: N/A | **Ngày tạo**: 2026-07-14T09:29:29.656354Z | **Active**: True<br>- **userId**: `490a951c-7021-707f-7b73-fb2082cb2a71` | **Tên**: Ngọc Minh | **SĐT**: N/A | **Ngày tạo**: 2026-07-14T09:29:29.656354Z | **Active**: True |
+| 5 | `ontrieuluan98@gmail.com` | **2** | - **userId**: `79aaa5dc-e081-708c-72d4-86b2b87c9f11` | **Tên**: Luân Triệu | **SĐT**: N/A | **Ngày tạo**: 2026-06-13T13:45:38.703321Z | **Active**: True<br>- **userId**: `894a759c-5001-70c9-a926-03200ce51d78` | **Tên**: N/A | **SĐT**: N/A | **Ngày tạo**: 2026-06-13T13:45:38.703321Z | **Active**: True |

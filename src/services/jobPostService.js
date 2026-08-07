@@ -2,6 +2,8 @@
 // Table: PostStandardJob
 
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { getIdToken } from './authHeaders.js';
+import employerProfileService from './employerProfileService.js';
 
 // API base URL - dùng Vite proxy để tránh CORS khi dev local
 // Vite's proxy only exists during local development; production uses API Gateway.
@@ -31,26 +33,14 @@ const generateJobId = () => {
 };
 
 /**
- * Get authentication token from Amplify Cognito
+ * Get authentication token from Amplify Cognito using shared authHeaders utility
  */
 const getAuthToken = async () => {
   try {
-    const session = await fetchAuthSession();
-    
-    if (!session || !session.tokens) {
-      return null;
-    }
-    
-    const idToken = session.tokens.idToken;
-    if (!idToken) {
-      return null;
-    }
-    
-    let tokenString = typeof idToken === 'string' ? idToken : idToken.toString();
-    tokenString = tokenString.trim().replace(/[\r\n\t]/g, '');
-    
-    return tokenString;
+    const token = await getIdToken();
+    return token;
   } catch (error) {
+    console.warn('⚠️ getAuthToken failed:', error?.message);
     return null;
   }
 };
@@ -92,7 +82,7 @@ class JobPostService {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, requestOptions);
 
       if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({ message: 'Request failed' }));
+        const errorBody = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
         throw new Error(errorBody.message || `HTTP ${response.status}`);
       }
 
@@ -103,7 +93,7 @@ class JobPostService {
           error.message.includes('CORS') ||
           error.message.includes('NetworkError') ||
           error.name === 'TypeError') {
-        throw new Error('Cannot connect to API.');
+        throw new Error('Không thể kết nối đến máy chủ API.');
       }
       throw error;
     }
@@ -118,11 +108,23 @@ class JobPostService {
       
       let userId = 'anonymous';
       let employerEmail = 'anonymous@example.com';
+      let employerName = 'Company';
       
       if (session && session.tokens) {
         const idTokenPayload = session.tokens.idToken?.payload;
         userId = idTokenPayload?.sub || 'anonymous';
         employerEmail = idTokenPayload?.email || 'anonymous@example.com';
+
+        try {
+          const profile = await employerProfileService.getMyProfile();
+          if (profile && profile.companyName) {
+            employerName = profile.companyName;
+          } else {
+            employerName = employerEmail.split('@')[0];
+          }
+        } catch (e) {
+          employerName = employerEmail.split('@')[0];
+        }
       }
 
       // Generate unique job ID
@@ -132,13 +134,14 @@ class JobPostService {
         idJob: jobId,
         employerId: userId,
         employerEmail: employerEmail,
+        employerName: employerName,
         title: jobData.title,
         location: jobData.location,
         latitude: jobData.latitude || null,
         longitude: jobData.longitude || null,
         jobType: jobData.jobType,
         workDays: jobData.workDays,
-        workHours: jobData.workHours,
+        workHours: jobData.workHours || jobData.workHoursText || '',
         salary: jobData.salary || null,
         salaryUnit: jobData.salaryUnit || 'hour',
         tags: jobData.tags || '',
@@ -168,7 +171,7 @@ class JobPostService {
         return result.data;
       }
 
-      throw new Error('Failed to create job post');
+      throw new Error(result.message || 'Failed to create job post');
     } catch (error) {
       console.error('❌ Error creating job post:', error);
       throw error;
@@ -311,23 +314,23 @@ class JobPostService {
   /**
    * Get all job posts (admin view)
    */
-   async getAllJobPosts() {
-     try {
-       let result;
-       try {
-         result = await this.makeRequest('/jobs');
-       } catch (e) {
-         result = await this.makeRequest('/jobs/');
-       }
+  async getAllJobPosts() {
+    try {
+      let result;
+      try {
+        result = await this.makeRequest('/jobs');
+      } catch (e) {
+        result = await this.makeRequest('/jobs/');
+      }
 
-       if (result && result.success && result.data) {
-         return result.data;
-       }
+      if (result && result.success && result.data) {
+        return result.data;
+      }
 
-       return [];
-     } catch (error) {
-       return this.getAllActiveJobs();
-     }
+      return [];
+    } catch (error) {
+      return this.getAllActiveJobs();
+    }
   }
 }
 

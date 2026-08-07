@@ -880,7 +880,9 @@ const CandidatesManagement = () => {
             phone: item.phone || 'No phone',
             ekycVerified: item.kycCompleted || item.ekycStatus === 'verified' || false,
             approvalStatus: (item.kycCompleted || item.ekycStatus === 'verified') ? 'approved' : 'pending',
-            joined: item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : 'Incomplete setup',
+            joined: item.createdAt 
+              ? new Date(item.createdAt).toISOString().split('T')[0] 
+              : (item.updatedAt ? new Date(item.updatedAt).toISOString().split('T')[0] : 'N/A'),
             location: item.location || 'Unknown',
             title: item.title || 'Candidate',
             createdAt: item.createdAt // Keep raw for processing

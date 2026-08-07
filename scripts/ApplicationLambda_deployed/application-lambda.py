@@ -83,7 +83,7 @@ def lambda_handler(event, context):
         
         # GET /applications/job/{jobId} - Get applications for a job (employer only)
         elif http_method == 'GET' and normalized_path.startswith('/applications/job/'):
-            job_id = path.split('/')[-1]
+            job_id = normalized_path.split('/')[-1]
             print(f"✅ Matched job applications route: job_id={job_id}")
             return get_job_applications(job_id, candidate_id, create_response)
         

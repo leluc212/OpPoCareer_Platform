@@ -255,7 +255,7 @@ def lambda_handler(event, context):
         elif http_method == 'GET' and normalized_path.startswith('/applications/job/'):
             if not caller_is_employer:
                 return create_response(403, {'error': 'Employer role required'})
-            job_id = path.split('/')[-1]
+            job_id = normalized_path.split('/')[-1]
             print(f"✅ Matched job applications route: job_id={job_id}")
             return get_job_applications(job_id, candidate_id, create_response)
         

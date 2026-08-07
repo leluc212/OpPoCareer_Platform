@@ -168,7 +168,7 @@ export default defineConfig({
       '/api-quick-jobs': {
         target: 'https://i3ce0izl59.execute-api.ap-southeast-1.amazonaws.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-quick-jobs/, ''),
+        rewrite: (path) => path.replace(/^\/api-quick-jobs/, '/prod'),
         secure: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {

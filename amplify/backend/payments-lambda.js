@@ -2,12 +2,14 @@
 'use strict';
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { createHash } = require('crypto');
 const {
   DynamoDBDocumentClient,
   PutCommand,
   GetCommand,
   UpdateCommand,
   QueryCommand,
+  ScanCommand,
 } = require('@aws-sdk/lib-dynamodb');
 
 const REGION = process.env.AWS_REGION || 'ap-southeast-1';
@@ -237,6 +239,120 @@ async function getPayment(paymentId) {
   });
 }
 
+/**
+ * Wallet deposits use a short employer code, for example:
+ * "OPPOWALLET OP7K2A". Keep this separate from package payment codes
+ * (OPPO_XXXXXXXX), because both webhook endpoints may receive SePay events.
+ * @param {string} content
+ * @returns {string|null}
+ */
+function extractWalletCode(content) {
+  const match = String(content || '').match(/OPPOWALLET[\s:_-]*(OP[A-Z0-9]{4})/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+/**
+ * Find an employer wallet by its public transfer code.
+ * @param {string} walletCode
+ * @returns {Promise<Record<string, any>|null>}
+ */
+async function findEmployerByWalletCode(walletCode) {
+  let ExclusiveStartKey;
+  do {
+    const params = {
+      TableName: EMPLOYERS_TABLE,
+      FilterExpression: '#walletCode = :walletCode',
+      ExpressionAttributeNames: { '#walletCode': 'walletCode' },
+      ExpressionAttributeValues: { ':walletCode': walletCode },
+    };
+    if (ExclusiveStartKey) params.ExclusiveStartKey = ExclusiveStartKey;
+
+    const result = await db.send(new ScanCommand(params));
+    if (result.Items?.length) return result.Items[0];
+    ExclusiveStartKey = result.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+
+  return null;
+}
+
+/**
+ * Credit an Employer wallet atomically and idempotently.
+ * @param {{ walletCode: string; amount: number; transactionId: string; body: Record<string, any>; content: string }} input
+ */
+async function creditEmployerWallet({ walletCode, amount, transactionId, body, content }) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res(400, { error: 'Invalid transfer amount' });
+  }
+
+  const profile = await findEmployerByWalletCode(walletCode);
+  if (!profile?.userId) {
+    console.warn('⚠️ Wallet not found for walletCode:', walletCode);
+    return res(200, { success: false, message: 'Wallet code not found' });
+  }
+
+  const sepayId = String(
+    transactionId
+    || createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 32)
+  );
+  const now = new Date().toISOString();
+  const transactionRecord = {
+    transactionId: `TXN-DEPOSIT-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    type: 'credit',
+    amount,
+    description: `Nạp tiền tự động qua SePay (GD: ${sepayId})`,
+    timestamp: now,
+    status: 'completed',
+    paymentDetails: {
+      sourceType: 'wallet_deposit',
+      sepayId,
+      gateway: body.gateway || '',
+      transactionDate: body.transactionDate || '',
+      referenceCode: body.referenceCode || '',
+      content,
+    },
+  };
+
+  try {
+    await db.send(new UpdateCommand({
+      TableName: EMPLOYERS_TABLE,
+      Key: { userId: profile.userId },
+      UpdateExpression: 'SET walletBalance = if_not_exists(walletBalance, :zero) + :amount, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), walletDepositIds = list_append(:depositId, if_not_exists(walletDepositIds, :emptyDepositIds)), updatedAt = :now',
+      ConditionExpression: 'attribute_not_exists(walletDepositIds) OR NOT contains(walletDepositIds, :sepayId)',
+      ExpressionAttributeValues: {
+        ':zero': 0,
+        ':amount': amount,
+        ':transaction': [transactionRecord],
+        ':emptyTransactions': [],
+        ':depositId': [sepayId],
+        ':emptyDepositIds': [],
+        ':sepayId': sepayId,
+        ':now': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    }));
+  } catch (error) {
+    if (error.name === 'ConditionalCheckFailedException') {
+      console.log('ℹ️ Wallet transaction already processed:', sepayId);
+      return res(200, { success: true, message: 'Already processed' });
+    }
+    throw error;
+  }
+
+  const fresh = await db.send(new GetCommand({
+    TableName: EMPLOYERS_TABLE,
+    Key: { userId: profile.userId },
+    ConsistentRead: true,
+  }));
+  console.log(`✅ Wallet credited: ${amount} to employer ${profile.userId}`);
+  return res(200, {
+    success: true,
+    data: {
+      walletBalance: fresh.Item?.walletBalance || 0,
+      transactionId: transactionRecord.transactionId,
+    },
+  });
+}
+
 // ─────────────────────────────────────────────
 // WEBHOOK — SePay
 // ─────────────────────────────────────────────
@@ -265,6 +381,23 @@ async function handleWebhook(event) {
   const transactionId = body.referenceCode || body.transactionId || body.id || '';
 
   if (!content) return res(400, { error: 'Missing content' });
+
+  // Accept wallet deposits on this legacy webhook too. This covers existing
+  // SePay configurations that still point to /payment/webhook instead of the
+  // dedicated /wallet/sepay-webhook route.
+  const walletCode = extractWalletCode(content);
+  if (walletCode) {
+    if (String(body.transferType || 'in').toLowerCase() !== 'in') {
+      return res(200, { success: true, message: 'Ignored outgoing transfer' });
+    }
+    return await creditEmployerWallet({
+      walletCode,
+      amount: incomingAmount,
+      transactionId,
+      body,
+      content,
+    });
+  }
 
   // Extract transferCode from content — support both OPPO_XXXXXXXX and OPPO XXXXXXXX and OPPOXXXXXXXX
   const match = content.match(/OPPO[_\s-]?([A-F0-9]{8})/i);

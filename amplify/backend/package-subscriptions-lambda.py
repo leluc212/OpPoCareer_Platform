@@ -62,6 +62,26 @@ def get_claims(event):
     return authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {}) or {}
 
 
+def get_sepay_webhook_token(event):
+    """Read the SePay token from either the legacy query string or its API-key header."""
+    query_params = event.get('queryStringParameters') or {}
+    token = query_params.get('token')
+    if token:
+        return str(token).strip()
+
+    raw_headers = event.get('headers') or {}
+    normalized_headers = {str(key).lower(): value for key, value in raw_headers.items()}
+    authorization = str(normalized_headers.get('authorization') or '').strip()
+    if authorization:
+        return re.sub(r'^\s*(?:apikey|bearer)\s+', '', authorization, flags=re.IGNORECASE).strip()
+
+    return str(
+        normalized_headers.get('x-api-key')
+        or normalized_headers.get('x-sepay-key')
+        or ''
+    ).strip()
+
+
 def group_set(claims):
     groups = claims.get('cognito:groups', []) or []
     if isinstance(groups, str):
@@ -245,8 +265,7 @@ def lambda_handler(event, context):
             return withdraw_wallet(body, headers, caller_id, caller_is_admin)
             
         elif http_method == 'POST' and path == '/wallet/sepay-webhook':
-            query_params = event.get('queryStringParameters') or {}
-            token = query_params.get('token')
+            token = get_sepay_webhook_token(event)
             return handle_sepay_webhook(body, token, headers)
         
         else:
@@ -1909,7 +1928,11 @@ def extract_wallet_code(content):
 def handle_sepay_webhook(body_str, token, headers):
     try:
         # Check token
-        expected_token = os.environ.get('SEPAY_WEBHOOK_TOKEN', 'oppo_secure_sepay_token_2026')
+        expected_token = (
+            os.environ.get('SEPAY_WEBHOOK_TOKEN')
+            or os.environ.get('SEPAY_WEBHOOK_SECRET')
+            or 'oppo_secure_sepay_token_2026'
+        )
         if token != expected_token:
             print(f"Unauthorized Webhook Access: Invalid token received: {token}")
             return {
@@ -1933,7 +1956,7 @@ def handle_sepay_webhook(body_str, token, headers):
                 'body': json.dumps({'success': True, 'message': 'Ignored transferType out'})
             }
             
-        content = body.get('content', '')
+        content = str(body.get('content') or body.get('description') or '').strip()
         wallet_code = extract_wallet_code(content)
         
         if not wallet_code:
@@ -1983,7 +2006,7 @@ def handle_sepay_webhook(body_str, token, headers):
                 json.dumps(body, sort_keys=True, default=str).encode('utf-8')
             ).hexdigest()[:32]
                 
-        transfer_amount = Decimal(str(body.get('transferAmount', 0)))
+        transfer_amount = Decimal(str(body.get('transferAmount') or body.get('amount') or 0))
         if transfer_amount <= 0:
             print(f"Invalid transfer amount: {transfer_amount}")
             return {

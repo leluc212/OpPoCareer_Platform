@@ -1013,7 +1013,7 @@ const PostQuickJob = () => {
       if (!employerId || employerId === 'mock_employer_id') return;
       try {
         const wallet = await getWallet(employerId);
-        setRealBalance(wallet.walletBalance || 0);
+        setRealBalance(Number(wallet.walletBalance) || 0);
         setWalletCode(wallet.walletCode || '');
       } catch (err) {
         console.error('Error fetching wallet balance:', err);
@@ -1029,8 +1029,8 @@ const PostQuickJob = () => {
       intervalId = setInterval(async () => {
         try {
           const wallet = await getWallet(employerId);
-          const newBal = wallet.walletBalance || 0;
-          if (newBal > realBalance) {
+          const newBal = Number(wallet.walletBalance) || 0;
+          if (newBal > Number(realBalance)) {
             setRealBalance(newBal);
             setDepositSuccess(true);
             clearInterval(intervalId);
@@ -1553,7 +1553,7 @@ const PostQuickJob = () => {
     try {
       if (employerId && employerId !== 'mock_employer_id') {
         const wallet = await getWallet(employerId);
-        currentBalance = wallet.walletBalance || 0;
+        currentBalance = Number(wallet.walletBalance) || 0;
         setRealBalance(currentBalance);
       }
     } catch (err) {

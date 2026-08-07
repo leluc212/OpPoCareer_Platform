@@ -9,6 +9,7 @@ import adminReportService from '../../services/adminReportService';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import { getWallet, getWithdrawalRequests, updateWithdrawalStatus } from '../../services/packageCatalogService';
+import { getStoredEscrowDistribution } from '../../utils/escrow';
 import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
 import {
@@ -1469,14 +1470,38 @@ const AdminWallet = () => {
           };
         });
 
-      // 2. Process Escrow Commission (15%) from Completed Applications of Quick Jobs as Income Transactions
+      // 2. Prefer the platform escrow ledger. The application-derived value is
+      // only a legacy fallback for records created before escrow ledgering.
+      const ledgerCommissionTransactions = (platformWallet?.walletTransactions || [])
+        .filter(tx => tx?.type === 'credit' && tx.paymentDetails?.sourceType === 'escrow_distribution' && Number(tx.amount) > 0)
+        .map(tx => ({
+          id: tx.transactionId,
+          type: 'income',
+          title: language === 'vi' ? 'Hoa hồng escrow (15%)' : 'Escrow platform commission (15%)',
+          meta: language === 'vi' ? 'Ví nền tảng' : 'Platform ledger',
+          amount: Number(tx.amount),
+          date: new Date(tx.timestamp || Date.now()).toLocaleDateString('vi-VN'),
+          time: new Date(tx.timestamp || Date.now()).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          status: 'completed',
+          rawDate: tx.timestamp || new Date().toISOString(),
+          sourceApplicationId: tx.paymentDetails.sourceApplicationId
+        }));
+      const ledgerApplicationIds = new Set(
+        ledgerCommissionTransactions.map(tx => tx.sourceApplicationId).filter(Boolean)
+      );
+
       const completedApps = apps.filter(app => app.status === 'completed');
-      const commissionTransactions = completedApps
+      const commissionTransactions = [
+        ...ledgerCommissionTransactions,
+        ...completedApps.filter(app => (
+          !ledgerApplicationIds.has(app.applicationId)
+          && !app.escrowPendingAt
+          && !app.escrowReleasePendingAt
+        ))
         .map(app => {
           const job = realJobs.find(j => String(j.idJob || j.id || j.jobID) === String(app.jobId));
           const totalAmount = job ? (Number(job.totalSalary) || (Number(job.hourlyRate || 0) * Number(job.totalHours || 0)) || 0) : 0;
-          const candidateAmount = Math.round(totalAmount * 0.85);
-          const adminCommission = totalAmount - candidateAmount;
+          const { platformAmount: adminCommission } = getStoredEscrowDistribution(totalAmount, app);
 
           if (adminCommission <= 0) return null;
 
@@ -1494,7 +1519,7 @@ const AdminWallet = () => {
             rawDate: app.candidateConfirmedAt || app.updatedAt || app.createdAt || new Date().toISOString()
           };
         })
-        .filter(Boolean);
+      ].filter(Boolean);
 
       // 3. Process Withdrawal Requests (both employer and candidate) as Expense Transactions
       const withdrawalTransactions = (Array.isArray(withdrawalRequests) ? withdrawalRequests : []).map(w => {
@@ -1537,8 +1562,13 @@ const AdminWallet = () => {
         .reduce((sum, tx) => sum + tx.amount, 0);
 
       const netPlatformBalance = sumIncome - sumExpenses;
+      const actualPlatformBalance = platformWallet?.walletBalance == null
+        ? null
+        : Number(platformWallet.walletBalance);
 
-      setBalance(netPlatformBalance);
+      // The platform wallet is the source of truth after escrow ledgering;
+      // keep the calculated value only for legacy deployments/data.
+      setBalance(Number.isFinite(actualPlatformBalance) ? actualPlatformBalance : netPlatformBalance);
       setTotalIncome(sumIncome);
       setTotalExpenses(sumExpenses);
       setNetProfit(sumIncome - sumExpenses);

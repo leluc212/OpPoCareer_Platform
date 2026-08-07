@@ -3,7 +3,7 @@ import boto3
 import os
 import uuid
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from boto3.dynamodb.conditions import Key, Attr
 
 # Initialize DynamoDB client
@@ -522,9 +522,19 @@ def create_quick_job_with_payment(body_str, user_id, headers):
         now_vn = datetime.utcnow() + timedelta(hours=7)
         txn_id = f"TXN-DEBIT-{now_vn.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
         
-        new_balance = current_balance - fee_amount
+        candidate_share = (fee_amount * Decimal('0.85')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        platform_share = fee_amount - candidate_share
         
         # Build new transaction record
+        payment_details = dict(body.get('paymentDetails') or {})
+        payment_details.update({
+            'sourceType': 'escrow_hold',
+            'escrowStatus': 'held',
+            'jobId': body['idJob'],
+            'escrowTotalAmount': fee_amount,
+            'escrowCandidateAmount': candidate_share,
+            'escrowPlatformAmount': platform_share
+        })
         transaction_record = {
             'transactionId': txn_id,
             'type': 'debit',
@@ -532,14 +542,8 @@ def create_quick_job_with_payment(body_str, user_id, headers):
             'description': fee_description,
             'timestamp': now_vn.isoformat(),
             'status': 'completed',
-            'paymentDetails': body.get('paymentDetails', {})
+            'paymentDetails': payment_details
         }
-        
-        # Prepend to existing transactions
-        existing_transactions = emp_item.get('walletTransactions', [])
-        if existing_transactions is None:
-            existing_transactions = []
-        updated_transactions = [transaction_record] + existing_transactions
         
         # Build job item
         job_item = {
@@ -582,10 +586,9 @@ def create_quick_job_with_payment(body_str, user_id, headers):
         # Serialize job item for transact_write
         serialized_job = {k: serializer.serialize(v) for k, v in job_item.items()}
         
-        # Serialize updated transactions list
-        serialized_transactions = serializer.serialize(updated_transactions)
-        serialized_new_balance = serializer.serialize(new_balance)
         serialized_now = serializer.serialize(now_iso)
+        serialized_transaction = serializer.serialize([transaction_record])
+        serialized_empty_transactions = serializer.serialize([])
         
         try:
             dynamodb_client.transact_write_items(
@@ -596,11 +599,13 @@ def create_quick_job_with_payment(body_str, user_id, headers):
                             'Key': {
                                 'userId': {'S': employer_id}
                             },
-                            'UpdateExpression': 'SET walletBalance = :newBal, walletTransactions = :txs, updatedAt = :updatedAt',
-                            'ConditionExpression': 'walletBalance >= :feeAmount',
+                            # Use DynamoDB arithmetic/list functions so a
+                            # concurrent deposit or debit cannot be lost.
+                            'UpdateExpression': 'SET walletBalance = walletBalance - :feeAmount, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :updatedAt',
+                            'ConditionExpression': 'attribute_exists(userId) AND walletBalance >= :feeAmount',
                             'ExpressionAttributeValues': {
-                                ':newBal': serialized_new_balance,
-                                ':txs': serialized_transactions,
+                                ':transaction': serialized_transaction,
+                                ':emptyTransactions': serialized_empty_transactions,
                                 ':updatedAt': serialized_now,
                                 ':feeAmount': serializer.serialize(fee_amount)
                             }
@@ -660,6 +665,12 @@ def create_quick_job_with_payment(body_str, user_id, headers):
         
         print(f"✅ [ATOMIC] Quick job created AND wallet deducted: {job_item['jobID']}, fee={int(fee_amount)}")
         
+        fresh_wallet = employer_profile_table.get_item(
+            Key={'userId': employer_id},
+            ConsistentRead=True
+        ).get('Item', {})
+        new_balance = fresh_wallet.get('walletBalance', Decimal('0'))
+
         # --- Post-creation tasks (non-critical, won't affect the transaction) ---
         try:
             from email_service import send_admin_approval_email

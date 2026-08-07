@@ -433,6 +433,14 @@ const FInput = styled.input`
   ${p => p.$on && !p.$err && css`box-shadow: 0 0 0 3px ${p.$ac || 'rgba(14,57,149,0.1)'};`}
   ${p => p.$err && css`box-shadow: 0 0 0 3px rgba(239,68,68,0.1);`}
   &::placeholder { color: transparent; }
+  /* Fix Chrome autofill overlay */
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 50px #f8faff inset;
+    -webkit-text-fill-color: #0f172a;
+    transition: background-color 5000s ease-in-out 0s;
+  }
 `;
 const FErr = styled.p`
   font-size: 11.5px; color: #ef4444; margin-top: 4px; font-weight: 500;
@@ -552,18 +560,39 @@ const FootNote = styled.div`
 /* Floating label input component */
 function FI({ id, name, type = 'text', label, value, onChange, error, iconL, iconR, onToggle, accent }) {
   const [focused, setFocused] = useState(false);
-  const up = focused || !!value;
+  const [hasAutofill, setHasAutofill] = useState(false);
+  const inputRef = React.useRef(null);
+
+  // Detect browser autofill via animation trick
+  const handleAnimationStart = (e) => {
+    if (e.animationName === 'onAutoFillStart') {
+      setHasAutofill(true);
+    } else if (e.animationName === 'onAutoFillCancel') {
+      setHasAutofill(false);
+    }
+  };
+
+  const up = focused || !!value || hasAutofill;
+
   return (
     <FieldWrap>
+      <style>{`
+        @keyframes onAutoFillStart { from {} to {} }
+        @keyframes onAutoFillCancel { from {} to {} }
+        input:-webkit-autofill { animation-name: onAutoFillStart; }
+        input:not(:-webkit-autofill) { animation-name: onAutoFillCancel; }
+      `}</style>
       {iconL && <FIconL $on={focused} $c={accent}>{iconL}</FIconL>}
       <FInput
+        ref={inputRef}
         id={id} name={name} type={type}
         value={value} onChange={onChange}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        onAnimationStart={handleAnimationStart}
         $ic={!!iconL} $ir={!!iconR}
         $on={focused} $err={!!error} $ac={accent ? `${accent}22` : undefined}
-        autoComplete="off"
+        autoComplete={name === 'email' ? 'email' : name === 'password' ? 'current-password' : 'off'}
       />
       <FLabel htmlFor={id} $up={up} $ic={!!iconL} $err={!!error} $ac={accent}>{label}</FLabel>
       {iconR && <FIconR type="button" onClick={onToggle} $c={accent}>{iconR}</FIconR>}

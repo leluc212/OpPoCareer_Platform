@@ -1547,7 +1547,7 @@ const EmployersManagement = () => {
         approvalStatus: item.approvalStatus || 'pending',
         quickJobStatus: item.quickJobStatus || 'not_requested',
         profileCompletion: item.profileCompletion || 0,
-        createdAt: item.createdAt || '',
+        createdAt: item.createdAt || item.updatedAt || '',
         updatedAt: item.updatedAt || '',
         verificationStatus: item.verificationStatus || null,
         verificationSubmittedAt: item.verificationSubmittedAt || null
@@ -1841,11 +1841,12 @@ const EmployersManagement = () => {
 
       return matchesTab && matchesSearch && matchesFilters;
     })
-    // Mới nhất lên đầu theo createdAt
+    // Mới nhất lên đầu theo createdAt, tiebreaker theo id để thứ tự ổn định
     .sort((a, b) => {
       const ta = a.createdAt || '';
       const tb = b.createdAt || '';
-      return tb.localeCompare(ta);
+      if (tb !== ta) return tb.localeCompare(ta);
+      return (a.id || '').localeCompare(b.id || '');
     });
   }, [employers, searchTerm, filters, activeTab]);
 
@@ -1866,7 +1867,8 @@ const EmployersManagement = () => {
       .sort((a, b) => {
         const ta = a.updatedAt || a.createdAt || '';
         const tb = b.updatedAt || b.createdAt || '';
-        return tb.localeCompare(ta);
+        if (tb !== ta) return tb.localeCompare(ta);
+        return (a.applicationId || a.id || '').localeCompare(b.applicationId || b.id || '');
       });
   }, [changeRequests, searchTerm]);
 
@@ -2697,6 +2699,12 @@ const EmployersManagement = () => {
                   <tbody>
                     {profileChangeRequests
                       .filter(r => r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW')
+                      .sort((a, b) => {
+                        const dateA = a.pendingProfileChanges?.submittedAt ? new Date(a.pendingProfileChanges.submittedAt).getTime() : 0;
+                        const dateB = b.pendingProfileChanges?.submittedAt ? new Date(b.pendingProfileChanges.submittedAt).getTime() : 0;
+                        if (dateB !== dateA) return dateB - dateA;
+                        return (a.userId || '').localeCompare(b.userId || '');
+                      })
                       .map((employer, index) => {
                         const colorScheme = getColorScheme(index);
                         const initials = getCompanyInitials(employer.companyName);

@@ -885,7 +885,7 @@ const CandidatesManagement = () => {
               : (item.updatedAt ? new Date(item.updatedAt).toISOString().split('T')[0] : 'N/A'),
             location: item.location || 'Unknown',
             title: item.title || 'Candidate',
-            createdAt: item.createdAt // Keep raw for processing
+            createdAt: item.createdAt || item.updatedAt || null // Keep raw for processing, fallback to updatedAt
           }));
         setCandidates(transformedData);
       }
@@ -945,11 +945,20 @@ const CandidatesManagement = () => {
     return 'warning';
   };
 
-  const filteredCandidates = candidates.filter(candidate => {
-    const matchesSearch = candidate.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      candidate.email.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
-  });
+  const filteredCandidates = candidates
+    .filter(candidate => {
+      const matchesSearch = candidate.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        candidate.email.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      // Sort newest first by createdAt (fallback to updatedAt)
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (dateB !== dateA) return dateB - dateA;
+      // Tiebreaker: sort by id to keep stable order across pages
+      return (a.id || '').localeCompare(b.id || '');
+    });
 
   const filteredWithdrawRequests = [];
   const currentWithdrawRequests = [];
@@ -1688,6 +1697,11 @@ const CandidatesManagement = () => {
                   </td></tr>
                 ) : verifications
                     .filter(v => !searchTerm || v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.email.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .sort((a, b) => {
+                      const dateA = a.verificationSubmittedAt ? new Date(a.verificationSubmittedAt).getTime() : 0;
+                      const dateB = b.verificationSubmittedAt ? new Date(b.verificationSubmittedAt).getTime() : 0;
+                      return dateB - dateA;
+                    })
                     .map((v, index) => {
                       const colorScheme = getColorScheme(index);
                       const initials = getCandidateInitials(v.name);
@@ -1805,6 +1819,11 @@ const CandidatesManagement = () => {
                   </tr>
                 ) : deletionRequests
                     .filter(d => !searchTerm || d.name.toLowerCase().includes(searchTerm.toLowerCase()) || d.email.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .sort((a, b) => {
+                      const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+                      const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+                      return dateB - dateA;
+                    })
                     .slice(startIndex, endIndex)
                     .map((d, index) => {
                       const colorScheme = getColorScheme(index);

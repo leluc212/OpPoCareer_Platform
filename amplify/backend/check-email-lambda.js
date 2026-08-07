@@ -101,23 +101,35 @@ exports.handler = async (event) => {
       return res(200, { exists: false }, corsHeaders);
     }
 
-    // Xác định provider: username bắt đầu bằng "Google_" → Google
+    // Xác định provider và trạng thái xác thực
     // Một email có thể có nhiều user nếu đã link — ưu tiên kiểm tra native trước
-    let hasNative = false;
-    let hasGoogle = false;
+    let hasConfirmedNative    = false;
+    let hasUnconfirmedNative  = false;
+    let hasGoogle             = false;
 
     for (const u of users) {
       const username = (u.Username || '').toLowerCase();
       if (username.startsWith('google_')) {
         hasGoogle = true;
       } else {
-        hasNative = true;
+        // Native user — kiểm tra trạng thái xác thực email
+        if (u.UserStatus === 'CONFIRMED') {
+          hasConfirmedNative = true;
+        } else {
+          // UNCONFIRMED, FORCE_CHANGE_PASSWORD, etc. — chưa xác thực
+          hasUnconfirmedNative = true;
+        }
       }
     }
 
-    if (hasNative) {
-      // Native account tồn tại — ưu tiên native khi có cả hai
+    if (hasConfirmedNative) {
+      // Account đã xác thực → chặn đăng ký
       return res(200, { exists: true, provider: 'native' }, corsHeaders);
+    }
+
+    if (hasUnconfirmedNative) {
+      // Account tồn tại nhưng chưa xác thực email → cho phép resend OTP
+      return res(200, { exists: true, provider: 'native', unconfirmed: true }, corsHeaders);
     }
 
     return res(200, { exists: true, provider: 'google' }, corsHeaders);

@@ -4034,7 +4034,7 @@ const HRManagement = () => {
             || old.status !== app.status
             || old.changeRequestStatus !== app.changeRequestStatus
             || JSON.stringify(old.changeRequest) !== JSON.stringify(app.changeRequest)
-            || old.chatMessages?.length !== app.chatMessages?.length
+            || JSON.stringify(old.chatMessages) !== JSON.stringify(app.chatMessages)
             || old.confirmedAt !== app.confirmedAt
             || old.rating !== app.rating;
         });
@@ -4049,6 +4049,12 @@ const HRManagement = () => {
   };
 
   // Create chat conversations from accepted & completed staff
+  // Stable string of accepted applicationIds — used as dependency for lightweight chat poll
+  const acceptedAppIdsKey = useMemo(
+    () => realApplications.filter(a => a.status === 'accepted').map(a => a.applicationId).join(','),
+    [realApplications]
+  );
+
   const chatConversations = useMemo(() => {
     if (!realApplications || !Array.isArray(realApplications)) {
       return [];
@@ -4143,6 +4149,70 @@ const HRManagement = () => {
     return () => clearInterval(intervalId);
   }, [activeSection, allQuickJobs, hasPendingChange]);
 
+  // Lightweight chat-message poll: check for new messages every 3s for all accepted apps.
+  // This ensures employer sees new candidate messages without waiting for the heavy 10s full poll.
+  // Use a ref to hold latest realApplications so we don't reset the interval on every state change.
+  const realApplicationsRef = useRef(realApplications);
+  useEffect(() => {
+    realApplicationsRef.current = realApplications;
+  }, [realApplications]);
+
+  const activeChatIdRef = useRef(activeChatId);
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    if (activeSection !== 'hr') return;
+
+    const pollChatMessages = async () => {
+      const currentApps = realApplicationsRef.current;
+      const acceptedApps = currentApps.filter(a => a.status === 'accepted');
+      if (acceptedApps.length === 0) return;
+
+      try {
+        await Promise.all(
+          acceptedApps.map(async (app) => {
+            try {
+              const fresh = await applicationService.getApplicationChatMessages(app.applicationId);
+              if (!fresh || !Array.isArray(fresh.chatMessages)) return;
+
+              const freshMsgs = fresh.chatMessages;
+              const localCount = (app.chatMessages || []).length;
+
+              // Only update if DB has more messages than what we currently have
+              if (freshMsgs.length > localCount) {
+                console.log(`[Chat Poll] New messages for ${app.applicationId}: ${localCount} → ${freshMsgs.length}`);
+                localStorage.setItem(`chat_${app.applicationId}`, JSON.stringify(freshMsgs));
+
+                // Patch realApplications so chatConversations useMemo re-computes inbox cards
+                setRealApplications(prev =>
+                  prev.map(a =>
+                    a.applicationId === app.applicationId
+                      ? { ...a, chatMessages: freshMsgs }
+                      : a
+                  )
+                );
+
+                // If this chat is currently open, update messages immediately
+                if (activeChatIdRef.current === app.applicationId) {
+                  setCurrentMessages(prev =>
+                    freshMsgs.length > prev.length ? freshMsgs : prev
+                  );
+                }
+              }
+            } catch { /* silent per-app */ }
+          })
+        );
+      } catch { /* silent */ }
+    };
+
+    const chatPollId = setInterval(pollChatMessages, 3000);
+    return () => clearInterval(chatPollId);
+  // Only re-register when employer navigates to/from HR section
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
+
   // Sync DB chat messages to localStorage on realApplications update
   useEffect(() => {
     if (!realApplications || !Array.isArray(realApplications)) return;
@@ -4156,12 +4226,14 @@ const HRManagement = () => {
         }
       } else if (app.chatMessages && Array.isArray(app.chatMessages) && app.chatMessages.length > 0) {
         const savedMessagesStr = localStorage.getItem(`chat_${app.applicationId}`);
-        const dbStr = JSON.stringify(app.chatMessages);
-        if (savedMessagesStr !== dbStr) {
-          // DB has different content than local — DB is source of truth
-          console.log(`[Employer Sync] Syncing chat messages from DB for ${app.applicationId}`);
-          localStorage.setItem(`chat_${app.applicationId}`, dbStr);
-          // If this is the active chat, trigger a change immediately
+        let localMsgs = [];
+        try { localMsgs = JSON.parse(savedMessagesStr || '[]'); } catch (e) { /* ignore */ }
+
+        // Chỉ sync từ DB khi DB có NHIỀU TIN HƠN local — không overwrite local mới hơn (race condition)
+        if (app.chatMessages.length > localMsgs.length) {
+          console.log(`[Employer Sync] DB has newer messages for ${app.applicationId}, syncing...`);
+          localStorage.setItem(`chat_${app.applicationId}`, JSON.stringify(app.chatMessages));
+          // Chỉ cập nhật UI khi đây là chat đang active
           if (activeChatId === app.applicationId) {
             setCurrentMessages(app.chatMessages);
           }
@@ -4542,41 +4614,57 @@ const HRManagement = () => {
     }
   }, [activeChatId, chatConversations, language, user]);
 
-  // Sync active chat messages in real time for employer
+  // Sync active chat messages in real time for employer — poll DB directly
   useEffect(() => {
     if (!activeChatId) return;
 
-    const syncMessages = () => {
-      const savedMessages = localStorage.getItem(`chat_${activeChatId}`);
-      if (savedMessages) {
-        try {
-          const parsed = JSON.parse(savedMessages);
-          setCurrentMessages(prev => {
-            if (JSON.stringify(prev) !== JSON.stringify(parsed)) {
-              // Mark as read when new messages are received while the chat is open
-              const lastMsg = parsed[parsed.length - 1];
-              if (lastMsg) {
-                localStorage.setItem(`chat_read_employer_${activeChatId}`, String(lastMsg.id));
-              }
-              return parsed;
+    // Find the jobId for this conversation so we can call getJobApplications
+    const chatConv = chatConversations.find(c => c.id === activeChatId);
+    const jobId = chatConv?.jobId;
+
+    const syncMessagesFromDB = async () => {
+      try {
+        // Dùng lightweight endpoint — chỉ lấy chatMessages + status của 1 application
+        const fresh = await applicationService.getApplicationChatMessages(activeChatId);
+        if (!fresh) return;
+        const msgs = fresh.chatMessages;
+        if (!msgs || !Array.isArray(msgs)) return;
+        setCurrentMessages(prev => {
+          // Chỉ cập nhật nếu DB có nhiều tin hơn — không overwrite optimistic updates
+          if (msgs.length > prev.length) {
+            localStorage.setItem(`chat_${activeChatId}`, JSON.stringify(msgs));
+            const lastMsg = msgs[msgs.length - 1];
+            if (lastMsg) {
+              localStorage.setItem(`chat_read_employer_${activeChatId}`, String(lastMsg.id));
             }
-            return prev;
-          });
-        } catch (e) {
-          console.error(e);
-        }
-      } else {
-        setCurrentMessages([]);
+            return msgs;
+          }
+          return prev;
+        });
+      } catch (e) {
+        /* silent — fallback to existing state */
       }
     };
 
-    // Poll every 1 second
-    const interval = setInterval(syncMessages, 1000);
+    // Poll DB every 3 seconds (same as candidate side)
+    const interval = setInterval(syncMessagesFromDB, 3000);
+    // Also run immediately on open
+    syncMessagesFromDB();
 
-    // Listen for storage events (updates from other tabs)
+    // Listen for storage events (updates from other tabs/same browser)
     const handleStorageChange = (e) => {
       if (e.key === `chat_${activeChatId}`) {
-        syncMessages();
+        const savedMessages = localStorage.getItem(`chat_${activeChatId}`);
+        if (savedMessages) {
+          try {
+            const parsed = JSON.parse(savedMessages);
+            setCurrentMessages(prev => (JSON.stringify(prev) !== JSON.stringify(parsed) ? parsed : prev));
+          } catch { /* silent */ }
+        }
+      }
+      // Candidate sent a new message — pull from DB immediately instead of waiting for next poll
+      if (e.key === `chat_new_msg_${activeChatId}`) {
+        syncMessagesFromDB();
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -4585,7 +4673,7 @@ const HRManagement = () => {
       clearInterval(interval);
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [activeChatId]);
+  }, [activeChatId, chatConversations]);
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
@@ -4639,28 +4727,17 @@ const HRManagement = () => {
     localStorage.setItem(`chat_${activeChatId}`, JSON.stringify(updated));
     localStorage.setItem(`chat_read_employer_${activeChatId}`, String(newMessage.id));
 
+    // Broadcast ngay — candidate cùng browser nhận storage event và poll DB ngay
+    try {
+      localStorage.setItem(`chat_new_msg_${activeChatId}`, String(Date.now()));
+    } catch { /* silent */ }
+
     // Sync to DynamoDB
     applicationService.updateApplicationStatus(
       activeChatId,
       activeChat?.isCompleted ? 'completed' : 'accepted',
       { chatMessages: updated }
-    ).then(() => {
-      // Send notification to candidate (DISABLED)
-      /*
-      if (activeChat?.candidateId) {
-        const senderName = user?.companyName || user?.company || user?.name || 'Nhà tuyển dụng';
-        createChatMessageNotification({
-          recipientId: activeChat.candidateId,
-          recipientRole: 'candidate',
-          senderId: user?.userId || user?.id || 'employer',
-          senderName: senderName,
-          messageText: newMessage.text,
-          applicationId: activeChatId,
-          jobTitle: activeChat.position
-        }).catch(err => console.error('Failed to send candidate message notification:', err));
-      }
-      */
-    }).catch(err => console.error('Failed to sync employer message to DB:', err));
+    ).catch(err => console.error('Failed to sync employer message to DB:', err));
   };
 
   const handleDeleteMessage = (messageId) => {

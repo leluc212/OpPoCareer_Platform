@@ -835,6 +835,22 @@ const CandidateRegister = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.exists) {
+          if (data.unconfirmed) {
+            // Account tồn tại nhưng chưa xác thực email → resend OTP và chuyển sang trang xác thực
+            try {
+              await Auth.resendSignUpCode({ username: form.email.trim().toLowerCase() });
+            } catch (_) { /* bỏ qua lỗi resend, vẫn chuyển trang */ }
+            navigate('/verify-otp', {
+              state: {
+                email: form.email,
+                password: form.password,
+                role: 'candidate',
+                fromRegistration: true,
+                formData: { fullName: form.fullName, email: form.email, password: form.password, confirmPassword: form.confirmPassword }
+              }
+            });
+            return;
+          }
           setEmailCheckStatus(data.provider === 'google' ? 'google' : 'native');
           return; // dừng — không gọi signUp
         }

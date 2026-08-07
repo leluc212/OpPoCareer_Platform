@@ -1284,6 +1284,25 @@ const Navbar = ({ showSearch = true }) => {
         )).filter(Boolean);
         setCandidateChats(enrichedChats);
 
+        // Sync activeChatApp nếu có tin mới từ DB (employer gửi) — không overwrite nếu local mới hơn
+        setActiveChatApp(prev => {
+          if (!prev) return prev;
+          const fresh = enrichedChats.find(c => c.applicationId === prev.applicationId);
+          if (!fresh) return prev;
+          const freshMsgs = fresh.chatMessages || [];
+          const localMsgs = chatMessagesRef.current;
+          // Chỉ cập nhật khi DB có nhiều tin hơn local (employer gửi tin mới)
+          // VÀ không có pending write (tránh race condition)
+          if (freshMsgs.length > localMsgs.length && pendingSyncRef.current === 0) {
+            chatMessagesRef.current = freshMsgs;
+            setChatMessages(freshMsgs);
+            const lastMsg = freshMsgs[freshMsgs.length - 1];
+            if (lastMsg) localStorage.setItem(`chat_read_${prev.applicationId}`, String(lastMsg.id));
+            return { ...prev, chatMessages: freshMsgs };
+          }
+          return prev;
+        });
+
         // Tính unread từ DB data + local storage data
         let unreadTotal = 0;
         enrichedChats.forEach(app => {
@@ -1327,7 +1346,7 @@ const Navbar = ({ showSearch = true }) => {
       if (document.visibilityState === 'visible') {
         loadCandidateChats();
       }
-    }, 3000);
+    }, 15000); // 15s là đủ cho unread count — syncMessages đã handle realtime riêng
 
     const handleFocus = () => loadCandidateChats();
     window.addEventListener('focus', handleFocus);
@@ -1423,23 +1442,35 @@ const Navbar = ({ showSearch = true }) => {
 
   // Load chat messages when activeChatApp changes
   useEffect(() => {
-    if (activeChatApp) {
-      // If the chat is already completed, do NOT initialize greeting messages
-      if (activeChatApp.status === 'completed') {
-        setChatMessages([]);
-        return;
-      }
+    if (!activeChatApp) return;
 
-      // Ưu tiên dùng dữ liệu từ DB (chatMessages đã được load cùng với application)
-      const dbMessages = activeChatApp.chatMessages;
-      if (dbMessages && Array.isArray(dbMessages) && dbMessages.length > 0) {
-        setChatMessages(dbMessages);
+    // If the chat is already completed, do NOT initialize greeting messages
+    if (activeChatApp.status === 'completed') {
+      setChatMessages([]);
+      chatMessagesRef.current = [];
+      return;
+    }
+
+    // Ưu tiên dùng dữ liệu từ DB (chatMessages đã được load cùng với application)
+    const dbMessages = activeChatApp.chatMessages;
+    if (dbMessages && Array.isArray(dbMessages) && dbMessages.length > 0) {
+      // Chỉ set nếu current messages ít hơn DB — không bao giờ reset về ít hơn
+      setChatMessages(prev => {
+        if (prev.length >= dbMessages.length) return prev;
+        chatMessagesRef.current = dbMessages;
         const lastMsg = dbMessages[dbMessages.length - 1];
         if (lastMsg) {
           localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(lastMsg.id));
         }
-      } else {
-        // Chưa có tin nhắn nào → tạo lời chào mặc định rồi lưu lên DB
+        return dbMessages;
+      });
+      if (chatMessagesRef.current.length < dbMessages.length) {
+        chatMessagesRef.current = dbMessages;
+      }
+    } else {
+      // Chưa có tin nhắn nào → tạo lời chào mặc định rồi lưu lên DB
+      // Chỉ tạo greeting nếu chưa có gì cả
+      if (chatMessagesRef.current.length === 0) {
         const companyName = activeChatApp.employerName || activeChatApp.companyName || 'Nhà tuyển dụng';
         const greetingMessage = {
           id: Date.now(),
@@ -1451,54 +1482,72 @@ const Navbar = ({ showSearch = true }) => {
         };
         const initMsgs = [greetingMessage];
         setChatMessages(initMsgs);
+        chatMessagesRef.current = initMsgs;
         import('../services/applicationService').then(({ default: applicationService }) => {
-          applicationService.updateApplicationStatus(
+          applicationService.updateCandidateChatMessages(
             activeChatApp.applicationId,
-            activeChatApp.status,
-            { chatMessages: initMsgs }
+            initMsgs
           ).catch(err => console.error('Failed to init chat in DB:', err));
         });
       }
     }
-  }, [activeChatApp?.applicationId, language]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChatApp?.applicationId]); // Không dùng language — tránh reset messages khi language thay đổi
 
-  // Sync active chat messages in real time — poll DB trực tiếp
+  // Guard: số lượng messages đang chờ được sync lên DB — poll sẽ không overwrite trong lúc này
+  const pendingSyncRef = useRef(0);
+  // Ref luôn giữ latest chatMessages để tránh stale closure khi gửi tin
+  const chatMessagesRef = useRef([]);
+
+  // Sync chatMessagesRef với chatMessages state
+  useEffect(() => {
+    chatMessagesRef.current = chatMessages;
+  }, [chatMessages]);
+
+  // Sync active chat messages in real time — chỉ nhận tin từ employer qua localStorage broadcast
+  // KHÔNG poll DB để tránh stale data overwrite messages của candidate
   useEffect(() => {
     if (!activeChatApp) return;
 
-    const syncMessages = async () => {
+    const syncMessagesFromDB = async () => {
+      // Chỉ sync khi không có pending write
+      if (pendingSyncRef.current > 0) return;
       try {
         const { default: applicationService } = await import('../services/applicationService');
-        const apps = await applicationService.getMyCandidateApplications().catch(() => null);
-        if (!apps) return;
-        const fresh = apps.find(a => a.applicationId === activeChatApp.applicationId);
-        if (!fresh) return;
+        // Dùng lightweight endpoint — chỉ lấy chatMessages + status của 1 application
+        const fresh = await applicationService.getApplicationChatMessages(activeChatApp.applicationId);
+        if (!fresh || pendingSyncRef.current > 0) return;
         if (fresh.status !== 'accepted') {
           setActiveChatApp(null);
           return;
         }
         const msgs = fresh.chatMessages;
-        if (msgs && Array.isArray(msgs)) {
-          setChatMessages(prev => {
-            if (JSON.stringify(prev) !== JSON.stringify(msgs)) {
-              const lastMsg = msgs[msgs.length - 1];
-              if (lastMsg) {
-                localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(lastMsg.id));
-              }
-              return msgs;
-            }
-            return prev;
-          });
-        } else {
-          setChatMessages([]);
+        if (msgs && Array.isArray(msgs) && msgs.length > chatMessagesRef.current.length) {
+          chatMessagesRef.current = msgs;
+          setChatMessages(msgs);
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg) {
+            localStorage.setItem(`chat_read_${activeChatApp.applicationId}`, String(lastMsg.id));
+          }
         }
-      } catch (e) {
-        // silent
-      }
+      } catch (e) { /* silent */ }
     };
 
-    const interval = setInterval(syncMessages, 3000);
-    return () => clearInterval(interval);
+    // Chỉ pull từ DB khi employer broadcast signal
+    const handleStorageChange = (e) => {
+      if (e.key === `chat_new_msg_${activeChatApp.applicationId}`) {
+        syncMessagesFromDB();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Poll 3s khi chat đang mở để nhận tin nhắn từ employer gần như realtime
+    const interval = setInterval(syncMessagesFromDB, 3000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [activeChatApp?.applicationId]);
 
   // Scroll to bottom when messages update
@@ -1516,40 +1565,46 @@ const Navbar = ({ showSearch = true }) => {
     // Chat bị khóa sau khi worker bị thay thế — xem Việc 2 / Bug 5-6 follow-up
     if (!chatInput.trim() || !activeChatApp || activeChatApp.status === 'completed' || activeChatApp.status === 'ĐÃ_BỊ_THAY_THẾ') return;
 
+    const messageText = chatInput.trim();
     const newMessage = {
       id: Date.now(),
       sender: 'them', // Candidate is 'them' on the shared storage
-      text: chatInput.trim(),
+      text: messageText,
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
     };
 
-    const updated = [...chatMessages, newMessage];
+    // Dùng ref để luôn có latest messages (tránh stale closure)
+    const updated = [...chatMessagesRef.current, newMessage];
+    chatMessagesRef.current = updated;
     setChatMessages(updated);
     setChatInput('');
 
-    // Lưu thẳng lên DB, không qua localStorage
+    const appId = activeChatApp.applicationId;
+    const appStatus = activeChatApp.status;
+
+    // Tăng guard để poll không overwrite tin đang gửi
+    pendingSyncRef.current += 1;
+
+    // Broadcast ngay lập tức khi optimistic update — không đợi DB
+    // (employer cùng browser sẽ nhận storage event và poll DB ngay)
+    try {
+      localStorage.setItem(`chat_new_msg_${appId}`, String(Date.now()));
+    } catch { /* silent */ }
+
     import('../services/applicationService').then(({ default: applicationService }) => {
-      applicationService.updateApplicationStatus(
-        activeChatApp.applicationId,
-        activeChatApp.status,
-        { chatMessages: updated }
+      applicationService.updateCandidateChatMessages(
+        appId,
+        updated
       ).then(() => {
-        // Send notification to employer (DISABLED)
-        /*
-        if (activeChatApp?.employerId) {
-          const senderName = user?.name || user?.email || 'Ứng viên';
-          createChatMessageNotification({
-            recipientId: activeChatApp.employerId,
-            recipientRole: 'employer',
-            senderId: user?.userId || user?.id || 'candidate',
-            senderName: senderName,
-            messageText: newMessage.text,
-            applicationId: activeChatApp.applicationId,
-            jobTitle: activeChatApp.jobTitle
-          }).catch(err => console.error('Failed to send employer message notification:', err));
-        }
-        */
-      }).catch(err => console.error('Failed to sync candidate message to DB:', err));
+        // Guard về 0 sau khi DB write xong
+        pendingSyncRef.current = Math.max(0, pendingSyncRef.current - 1);
+      }).catch(err => {
+        // DB write thất bại → giảm guard và rollback
+        pendingSyncRef.current = Math.max(0, pendingSyncRef.current - 1);
+        chatMessagesRef.current = chatMessagesRef.current.filter(m => m.id !== newMessage.id);
+        setChatMessages(prev => prev.filter(m => m.id !== newMessage.id));
+        console.error('Failed to sync candidate message to DB:', err);
+      });
     });
   };
 
@@ -1846,10 +1901,14 @@ const Navbar = ({ showSearch = true }) => {
                           <ChatDropdownItem
                             key={chat.applicationId}
                             onClick={() => {
-                              setActiveChatApp(chat);
+                              // Merge chat object với chatMessages mới nhất từ ref (nếu cùng applicationId)
+                              const mergedChat = (activeChatApp?.applicationId === chat.applicationId && chatMessagesRef.current.length > (chat.chatMessages || []).length)
+                                ? { ...chat, chatMessages: chatMessagesRef.current }
+                                : chat;
+                              setActiveChatApp(mergedChat);
                               setShowChatDropdown(false);
                               // Mark as read immediately
-                              const msgs = chat.chatMessages || [];
+                              const msgs = mergedChat.chatMessages || [];
                               if (msgs.length > 0) {
                                 const lastMsg = msgs[msgs.length - 1];
                                 const lastReadId = localStorage.getItem(`chat_read_${chat.applicationId}`);

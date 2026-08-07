@@ -222,11 +222,16 @@ exports.handler = async (event) => {
       };
     }
     if (requestPath.includes('/profile/') && pathUserId && pathUserId !== userId && !isAdmin) {
-      return {
-        statusCode: 403,
-        headers: corsHeaders,
-        body: JSON.stringify({ success: false, message: 'Access denied' })
-      };
+      // GET /profile/{userId} là public read — candidate và bất kỳ ai đã auth đều đọc được
+      // (cần để hiển thị logo/tên công ty trên job listing)
+      // Chỉ chặn write operations (PUT, POST, DELETE) khi không phải chủ sở hữu hoặc admin
+      if (httpMethod !== 'GET') {
+        return {
+          statusCode: 403,
+          headers: corsHeaders,
+          body: JSON.stringify({ success: false, message: 'Access denied' })
+        };
+      }
     }
 
     // GET /admin/employers - List all employers (Admin only)

@@ -2,7 +2,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { getAuthHeaders, getIdToken } from './authHeaders.js';
 
 // HTTP API uses the $default stage, so the invoke URL must NOT include /prod.
-const API_BASE_URL = import.meta.env.VITE_APPLICATION_API_URL || 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com';
+const API_BASE_URL = import.meta.env.VITE_APPLICATION_API_URL || 'https://x1yrkadmaa.execute-api.ap-southeast-1.amazonaws.com/prod';
 const applicationUrl = (path = '') => {
   if (!import.meta.env.DEV) return `${API_BASE_URL}/applications${path}`;
   return `/api-applications${path}`;
@@ -96,39 +96,53 @@ export async function getMyCandidateApplications() {
     if (!userId) {
       return [];
     }
-    
-    // Try Vite proxy first in dev mode to avoid CORS
-    const urls = import.meta.env.DEV
-      ? [
-          applicationUrl(`/candidate/${userId}`),
-          `${API_BASE_URL}/applications/candidate/${userId}`
-        ]
-      : [`${API_BASE_URL}/applications/candidate/${userId}`];
-    
-    for (const url of urls) {
-      try {
-        // ✅ FIX: Always send Bearer token, even via Vite proxy
-        // Cognito authorizer needs the token to extract claims (user ID)
-        const headers = await getAuthHeaders();
-        const response = await fetch(url, { 
-          method: 'GET', 
-          headers,
-          mode: 'cors'  // ✅ Enable CORS mode
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('✅ Loaded candidate applications:', data);
-          return data.applications || [];
-        }
-        
-      } catch (fetchErr) {
-        console.warn(`⚠️ Failed to fetch applications from ${url}:`, fetchErr.message);
-        continue; // Try next URL
-      }
+
+    // Resolve auth headers once — avoids repeated token lookups and ensures
+    // a fresh token is available before we start the request loop.
+    let headers;
+    try {
+      headers = await getAuthHeaders();
+    } catch (authErr) {
+      console.warn('⚠️ Could not get auth headers for applications:', authErr.message);
+      return [];
     }
-    
-    // All URLs failed - return empty array for new users
+
+    // In dev mode use only the Vite proxy to avoid CORS issues.
+    // The proxy at /api-applications forwards to API Gateway and preserves
+    // the Authorization header. Never fall back to the direct API Gateway URL
+    // from the browser in dev — that causes a CORS-blocked 401.
+    const url = import.meta.env.DEV
+      ? applicationUrl(`/candidate/${userId}`)
+      : `${API_BASE_URL}/applications/candidate/${userId}`;
+
+    try {
+      let response = await fetch(url, { method: 'GET', headers, mode: 'cors' });
+
+      // On 401, try once more with a force-refreshed token — handles the case
+      // where the cached token was stale at the time of the first call.
+      if (response.status === 401) {
+        console.warn('⚠️ Applications 401 — forcing token refresh and retrying...');
+        try {
+          await fetchAuthSession({ forceRefresh: true });
+          const freshHeaders = await getAuthHeaders();
+          response = await fetch(url, { method: 'GET', headers: freshHeaders, mode: 'cors' });
+        } catch (refreshErr) {
+          console.warn('⚠️ Token refresh failed:', refreshErr.message);
+          return [];
+        }
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Loaded candidate applications:', data);
+        return data.applications || [];
+      }
+
+      console.warn(`⚠️ Applications endpoint returned ${response.status}`);
+    } catch (fetchErr) {
+      console.warn('⚠️ Failed to fetch applications:', fetchErr.message);
+    }
+
     console.log('ℹ️ No applications found - normal for new users');
     return [];
   } catch (error) {
@@ -147,29 +161,20 @@ export async function getCandidateApplications(candidateId) {
     if (!candidateId) return [];
     
     const headers = await getAuthHeaders();
-    const urls = import.meta.env.DEV
-      ? [
-          applicationUrl(`/candidate/${candidateId}`),
-          `${API_BASE_URL}/applications/candidate/${candidateId}`
-        ]
-      : [`${API_BASE_URL}/applications/candidate/${candidateId}`];
-      
-    for (const url of urls) {
-      try {
-        const response = await fetch(url, { 
-          method: 'GET', 
-          headers,
-          mode: 'cors'
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          return data.applications || [];
-        }
-      } catch (fetchErr) {
-        console.warn(`⚠️ Failed to fetch candidate applications from ${url}:`, fetchErr.message);
-        continue;
-      }
+    // In dev, only use the Vite proxy — avoids the direct API Gateway CORS 401.
+    const url = import.meta.env.DEV
+      ? applicationUrl(`/candidate/${candidateId}`)
+      : `${API_BASE_URL}/applications/candidate/${candidateId}`;
+
+    const response = await fetch(url, { 
+      method: 'GET', 
+      headers,
+      mode: 'cors'
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.applications || [];
     }
     return [];
   } catch (error) {
@@ -293,6 +298,58 @@ export async function updateApplicationStatus(applicationId, status, extraFields
 }
 
 /**
+ * Lấy chatMessages + status của 1 application — lightweight poll cho realtime chat.
+ * @param {string} applicationId
+ */
+export async function getApplicationChatMessages(applicationId) {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(applicationUrl(`/${applicationId}`), {
+      method: 'GET',
+      headers
+    });
+    if (!response.ok) return null;
+    return await response.json(); // { applicationId, status, chatMessages }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Candidate-only: update chatMessages for an accepted application.
+ * Dùng route PUT /applications/{id}/chat thay vì /status để tránh 403 (employer only).
+ * @param {string} applicationId
+ * @param {Array} chatMessages - Mảng tin nhắn mới nhất
+ */
+export async function updateCandidateChatMessages(applicationId, chatMessages) {
+  try {
+    console.log('💬 Updating candidate chat messages:', { applicationId, count: chatMessages.length });
+
+    const headers = await getAuthHeaders();
+
+    const response = await fetch(applicationUrl(`/${applicationId}/chat`), {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ chatMessages })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const err = new Error(error.error || 'Failed to update chat messages');
+      err.errorCode = error.errorCode || null;
+      throw err;
+    }
+
+    const data = await response.json();
+    console.log('✅ Chat messages updated:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error updating chat messages:', error);
+    throw error;
+  }
+}
+
+/**
  * Employer rejects the replacement worker and requests 85% refund
  * @param {string} applicationId - Application ID of the replaced worker
  * @returns {Promise<Object>} Refund response
@@ -378,6 +435,8 @@ const applicationService = {
   getCandidateApplications,
   getJobApplications,
   updateApplicationStatus,
+  updateCandidateChatMessages,
+  getApplicationChatMessages,
   rejectReplacementWorker,
   
   /**

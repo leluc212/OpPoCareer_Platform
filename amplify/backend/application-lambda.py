@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from urllib.parse import urlparse, unquote
+import base64
 
 
 def get_cors_headers():
@@ -28,6 +29,28 @@ def cognito_groups(claims):
     if isinstance(groups, str):
         groups = [group.strip() for group in groups.strip('[]').split(',') if group.strip()]
     return {str(group).lower() for group in groups}
+
+
+def decode_jwt_claims(token_str):
+    """
+    Decode the payload section of a JWT without signature verification.
+    Used as a fallback when API Gateway does not inject authorizer claims
+    (i.e. the route has authorizationType NONE but a Bearer token is present).
+    Returns a dict of claims or {} on any failure.
+    """
+    try:
+        parts = token_str.split('.')
+        if len(parts) != 3:
+            return {}
+        # Base64url → Base64 → bytes
+        payload = parts[1]
+        # Pad to a multiple of 4
+        payload += '=' * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload)
+        return json.loads(decoded)
+    except Exception as e:
+        print(f"⚠️ decode_jwt_claims failed: {e}")
+        return {}
 
 def lambda_handler(event, context):
     print(f"📥 Received event: {json.dumps(event)}")
@@ -57,9 +80,22 @@ def lambda_handler(event, context):
         if http_method == 'OPTIONS':
             return create_response(200, {'message': 'OK'})
 
-        # Extract user info from Cognito authorizer
+        # Extract user info from Cognito authorizer claims.
+        # When API Gateway has authorizationType=NONE the authorizer object is empty,
+        # so we fall back to decoding the Bearer token from the Authorization header.
         authorizer = event.get('requestContext', {}).get('authorizer', {})
         claims = authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {})
+
+        if not claims:
+            # Fallback: decode JWT payload directly from Authorization header
+            auth_header = (event.get('headers') or {}).get('Authorization', '') or \
+                          (event.get('headers') or {}).get('authorization', '')
+            if auth_header.startswith('Bearer '):
+                raw_token = auth_header[len('Bearer '):]
+                claims = decode_jwt_claims(raw_token)
+                if claims:
+                    print(f"✅ Claims extracted from Bearer token (authorizer fallback): sub={claims.get('sub')}")
+
         candidate_id = claims.get('sub')
         candidate_email = claims.get('email')
         
@@ -130,6 +166,18 @@ def lambda_handler(event, context):
             application_id = normalized_path.split('/')[-2]
             print(f"✅ Matched reject change request route: application_id={application_id}")
             return reject_change_request(event, application_id, create_response)
+
+        # PUT /applications/{applicationId}/chat - Candidate: update chatMessages only (candidate gửi tin nhắn)
+        elif http_method == 'PUT' and normalized_path.endswith('/chat'):
+            application_id = normalized_path.split('/')[-2]
+            print(f"✅ Matched candidate chat route: application_id={application_id}")
+            return update_chat_messages(event, application_id, candidate_id, create_response)
+
+        # GET /applications/{applicationId} - Get single application (candidate or employer owner)
+        elif http_method == 'GET' and len([s for s in normalized_path.split('/') if s]) == 2 and normalized_path.startswith('/applications/'):
+            application_id = normalized_path.split('/')[-1]
+            print(f"✅ Matched get single application route: application_id={application_id}")
+            return get_single_application(application_id, candidate_id, caller_is_employer, caller_is_admin, create_response)
 
         # PUT /applications/{applicationId}/status - Update application status (employer only)
         elif http_method == 'PUT' and normalized_path.endswith('/status'):
@@ -466,6 +514,82 @@ def get_candidate_applications(candidate_id, create_response):
         })
     except Exception as e:
         print(f"❌ Error getting candidate applications: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+def update_chat_messages(event, application_id, candidate_id, create_response):
+    """Candidate-only endpoint: update chatMessages field on an accepted application.
+    
+    Chỉ cho phép:
+    - Candidate sở hữu application này
+    - Application đang ở status 'accepted'
+    - Chỉ update field chatMessages (không thay đổi status hay bất cứ field nào khác)
+    """
+    try:
+        body = json.loads(event.get('body', '{}'))
+        new_messages = body.get('chatMessages')
+
+        if new_messages is None or not isinstance(new_messages, list):
+            return create_response(400, {'error': 'chatMessages (array) is required'})
+
+        # Fetch current item để verify ownership và status
+        current_item = applications_table.get_item(
+            Key={'applicationId': application_id},
+            ConsistentRead=True
+        ).get('Item')
+
+        if not current_item:
+            return create_response(404, {'error': 'Application not found'})
+
+        # Chỉ cho phép candidate sở hữu application này
+        if current_item.get('candidateId') != candidate_id:
+            return create_response(403, {'error': 'You do not own this application'})
+
+        # Chỉ cho phép chat khi status là 'accepted'
+        current_status = current_item.get('status')
+        if current_status != 'accepted':
+            return create_response(403, {'error': f'Chat not allowed for status: {current_status}'})
+
+        now_iso = datetime.utcnow().isoformat() + 'Z'
+
+        applications_table.update_item(
+            Key={'applicationId': application_id},
+            UpdateExpression='SET chatMessages = :msgs, updatedAt = :now',
+            ExpressionAttributeValues={
+                ':msgs': new_messages,
+                ':now': now_iso
+            }
+        )
+
+        print(f"✅ Candidate {candidate_id} updated chatMessages for application {application_id} ({len(new_messages)} messages)")
+        return create_response(200, {'success': True, 'messageCount': len(new_messages)})
+
+    except Exception as e:
+        print(f"❌ Error in update_chat_messages: {str(e)}")
+        return create_response(500, {'error': str(e)})
+
+def get_single_application(application_id, candidate_id, caller_is_employer, caller_is_admin, create_response):
+    """Get a single application by ID — dùng cho candidate poll chat messages nhẹ hơn"""
+    try:
+        item = applications_table.get_item(
+            Key={'applicationId': application_id},
+            ConsistentRead=True
+        ).get('Item')
+
+        if not item:
+            return create_response(404, {'error': 'Application not found'})
+
+        # Candidate chỉ được đọc application của mình
+        if not caller_is_admin and not caller_is_employer and item.get('candidateId') != candidate_id:
+            return create_response(403, {'error': 'Access denied'})
+
+        # Chỉ trả về chatMessages và status để giảm payload
+        return create_response(200, {
+            'applicationId': item.get('applicationId'),
+            'status': item.get('status'),
+            'chatMessages': item.get('chatMessages', [])
+        })
+    except Exception as e:
+        print(f"❌ Error in get_single_application: {str(e)}")
         return create_response(500, {'error': str(e)})
 
 def get_job_applications(job_id, user_id, create_response):

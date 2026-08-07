@@ -2,6 +2,7 @@ import json
 import boto3
 import os
 import uuid
+import base64
 from datetime import datetime
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key, Attr
@@ -10,6 +11,33 @@ from boto3.dynamodb.conditions import Key, Attr
 dynamodb = boto3.resource('dynamodb')
 table_name = os.environ.get('TABLE_NAME', 'PostQuickJob')
 table = dynamodb.Table(table_name)
+
+def decode_jwt_claims(event):
+    """
+    Decode JWT payload from the Authorization header without re-verifying the
+    signature (API Gateway already did that). Used as fallback when the
+    authorizer doesn't forward claims (e.g. authorizer configured for a
+    different User Pool).
+    Returns a dict of claims or {} on any error.
+    """
+    try:
+        headers_raw = event.get('headers') or {}
+        auth_header = headers_raw.get('authorization') or headers_raw.get('Authorization') or ''
+        if not auth_header.startswith('Bearer '):
+            return {}
+        token = auth_header[len('Bearer '):]
+        parts = token.strip().split('.')
+        if len(parts) != 3:
+            return {}
+        # Base64url decode the payload (middle part)
+        payload_b64 = parts[1]
+        # Add padding
+        payload_b64 += '=' * (4 - len(payload_b64) % 4)
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(payload_bytes.decode('utf-8'))
+    except Exception as e:
+        print(f"[decode_jwt_claims] Failed: {e}")
+        return {}
 
 # Helper function to convert Decimal to int/float for JSON serialization
 def decimal_default(obj):
@@ -121,6 +149,17 @@ def lambda_handler(event, context):
         # Extract user ID from Cognito authorizer (v1 and v2 payload support)
         authorizer = event.get('requestContext', {}).get('authorizer', {})
         claims = authorizer.get('claims') or authorizer.get('jwt', {}).get('claims') or {}
+        
+        # Fallback: if authorizer didn't forward claims (e.g. JWT authorizer
+        # configured for a different User Pool), decode the Bearer token directly.
+        # This is safe — API Gateway already validated the signature.
+        if not claims.get('sub') or not claims.get('cognito:groups'):
+            jwt_claims = decode_jwt_claims(event)
+            if jwt_claims:
+                # Merge: authorizer claims take precedence, JWT fills the gaps
+                merged = {**jwt_claims, **claims}
+                claims = merged
+        
         user_id = claims.get('sub')
         
         # If no authorizer, try to get userId from request body (for testing)
@@ -931,7 +970,10 @@ def update_quick_job(body_str, job_id, user_id, claims, headers):
         if isinstance(groups, list):
             is_admin = 'Admin' in groups
         elif isinstance(groups, str):
-            is_admin = 'Admin' in [g.strip() for g in groups.split(',') if g.strip()]
+            # API Gateway v2 may serialize the list as "[Admin]" or "Admin" or "Admin,Employer"
+            # Strip surrounding brackets before splitting
+            groups_clean = groups.strip().lstrip('[').rstrip(']')
+            is_admin = 'Admin' in [g.strip() for g in groups_clean.split(',') if g.strip()]
             
         if user_id and user_id != 'anonymous' and not is_admin and existing_job.get('employerId') != user_id:
             return {

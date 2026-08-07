@@ -63,9 +63,9 @@ export default defineConfig({
         }
       },
       '/api-lambda-applications': {
-        target: 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com',
+        target: 'https://x1yrkadmaa.execute-api.ap-southeast-1.amazonaws.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-lambda-applications/, ''),
+        rewrite: (path) => path.replace(/^\/api-lambda-applications/, '/prod'),
         secure: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
@@ -93,9 +93,9 @@ export default defineConfig({
         }
       },
       '/api-applications': {
-        target: 'https://1v4xboca50.execute-api.ap-southeast-1.amazonaws.com',
+        target: 'https://x1yrkadmaa.execute-api.ap-southeast-1.amazonaws.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api-applications/, '/applications'),
+        rewrite: (path) => path.replace(/^\/api-applications/, '/prod/applications'),
         secure: false,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {

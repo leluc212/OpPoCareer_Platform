@@ -9,8 +9,50 @@ const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API
 const DEV_PROXY_BASE = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_PROXY_BASE || '/api-packages';
 
 const normalizeNumber = (value) => {
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'N')) return normalizeNumber(value.N);
+    if (Object.prototype.hasOwnProperty.call(value, 'value')) return normalizeNumber(value.value);
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const unwrapApiPayload = (payload) => {
+  let result = payload;
+
+  // Support Lambda proxy responses returned directly by local/dev proxies.
+  if (result && typeof result.body === 'string') {
+    try {
+      result = JSON.parse(result.body);
+    } catch {
+      // Keep the original payload so the caller can surface a useful error.
+    }
+  }
+
+  return result?.data ?? result;
+};
+
+const normalizeWalletTransaction = (transaction) => {
+  if (!transaction || typeof transaction !== 'object') return null;
+  return {
+    ...transaction,
+    amount: normalizeNumber(transaction.amount),
+    paymentDetails: transaction.paymentDetails || {}
+  };
+};
+
+export const normalizeWalletResponse = (payload) => {
+  const wallet = unwrapApiPayload(payload) || {};
+  const transactions = Array.isArray(wallet.walletTransactions)
+    ? wallet.walletTransactions.map(normalizeWalletTransaction).filter(Boolean)
+    : [];
+
+  return {
+    ...wallet,
+    walletBalance: normalizeNumber(wallet.walletBalance),
+    walletCode: wallet.walletCode || '',
+    walletTransactions: transactions
+  };
 };
 
 const normalizePackageItem = (item) => {
@@ -104,7 +146,8 @@ export const getPackageCatalog = async () => {
     }
 
     const payload = await response.json();
-    const data = Array.isArray(payload) ? payload : payload?.data || [];
+    const unwrapped = unwrapApiPayload(payload);
+    const data = Array.isArray(unwrapped) ? unwrapped : [];
     return mergeWithDefaults(data);
   } catch (err) {
     // Network or CORS error — fall back to bundled defaults so the UI stays usable.
@@ -137,7 +180,7 @@ export const updatePackageCatalogItem = async (packageItem) => {
   }
 
   const payload = await response.json();
-  return payload?.data || payload;
+  return unwrapApiPayload(payload);
 };
 
 export const normalizePackageCatalogItem = (item) => normalizePackageItem(item);
@@ -158,7 +201,7 @@ export const getWallet = async (employerId) => {
   }
 
   const payload = await response.json();
-  return payload?.data || payload;
+  return normalizeWalletResponse(payload);
 };
 
 export const withdrawWallet = async (employerId, amount, bankName, accountNumber, accountName, companyName = '', companyLogo = '') => {

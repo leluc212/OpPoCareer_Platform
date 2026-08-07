@@ -1081,7 +1081,9 @@ const EmployerWallet = () => {
     }
   }, [employerId]);
   const [loading, setLoading] = useState(true);
-  const [showBalance, setShowBalance] = useState(false);
+  // Employers should see the confirmed wallet amount immediately after login
+  // and after a deposit. The eye button still allows them to hide it.
+  const [showBalance, setShowBalance] = useState(true);
   const [filterType, setFilterType] = useState('all');
   const [filterDate, setFilterDate] = useState('');
 
@@ -1133,7 +1135,7 @@ const EmployerWallet = () => {
     try {
       if (showLoadingSpinner) setLoading(true);
       const wallet = await getWallet(employerId);
-      setBalance(wallet.walletBalance || 0);
+      setBalance(Number(wallet.walletBalance) || 0);
       setWalletCode(wallet.walletCode || '');
       // Format transactions to have required attributes
       const txs = (wallet.walletTransactions || []).map((t, idx) => ({
@@ -1178,8 +1180,8 @@ const EmployerWallet = () => {
       intervalId = setInterval(async () => {
         try {
           const wallet = await getWallet(employerId);
-          const newBal = wallet.walletBalance || 0;
-          if (newBal > balance) {
+          const newBal = Number(wallet.walletBalance) || 0;
+          if (newBal > Number(balance)) {
             setBalance(newBal);
             const txs = (wallet.walletTransactions || []).map((t, idx) => ({
               id: t.transactionId || idx,
@@ -1268,7 +1270,7 @@ const EmployerWallet = () => {
         companyLogo
       );
 
-      setBalance(result.walletBalance || 0);
+      setBalance(Number(result.walletBalance) || 0);
       const txs = (result.walletTransactions || []).map((t, idx) => ({
         id: t.transactionId || idx,
         type: t.type,

@@ -5,6 +5,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
 import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
+import { getStoredEscrowDistribution } from '../../utils/escrow';
 import {
   ShieldCheck,
   Lock,
@@ -586,6 +587,7 @@ const AdminEscrow = () => {
             
             const completedApp = jobApps.find(app => app.status === 'completed');
             const pendingCandidateApp = jobApps.find(app => app.status === 'completed_pending_candidate');
+            const escrowReleased = Boolean(completedApp?.escrowReleasedAt);
             
             const employerConfirmed = !!completedApp || !!pendingCandidateApp;
             const candidateConfirmed = !!completedApp;
@@ -593,13 +595,14 @@ const AdminEscrow = () => {
             let status = 'held';
             if (job.status === 'deleted') {
               status = 'refunded';
-            } else if (completedApp) {
+            } else if (escrowReleased) {
               status = 'released';
             }
 
             const totalHours = Number(job.totalHours || 0);
             const hourlyRate = Number(job.hourlyRate || 0);
             const amount = Number(job.totalSalary) || (hourlyRate * totalHours) || 0;
+            const distribution = getStoredEscrowDistribution(amount, completedApp || {});
 
             return {
               jobId: jobId,
@@ -609,9 +612,11 @@ const AdminEscrow = () => {
               employerConfirmed,
               candidateConfirmed,
               createdAt: job.createdAt || new Date().toISOString(),
-              releasedAt: completedApp?.candidateConfirmedAt || completedApp?.updatedAt || null,
+              releasedAt: completedApp?.escrowReleasedAt || null,
               totalHours: totalHours,
-              hourlyRate: hourlyRate
+              hourlyRate,
+              candidateAmount: distribution.candidateAmount,
+              adminAmount: distribution.platformAmount
             };
           }).filter(ej => ej.amount > 0);
 
@@ -620,8 +625,8 @@ const AdminEscrow = () => {
           dbEscrowJobs.forEach((ej) => {
             if (ej.status === 'released') {
               const totalAmount = ej.amount;
-              const candidateAmount = Math.round(totalAmount * 0.85);
-              const adminAmount = totalAmount - candidateAmount;
+              const candidateAmount = ej.candidateAmount;
+              const adminAmount = ej.adminAmount;
               
               dbEscrowTx.push({
                 id: `db-tx-${ej.jobId}`,
@@ -908,7 +913,7 @@ const AdminEscrow = () => {
                     <div className="total">{formatCurrency(job.amount)}</div>
                     {job.status === 'released' && (
                       <div className="breakdown">
-                        <span className="admin-share">+{formatCurrency(job.amount - Math.round(job.amount * 0.85))} (15%)</span>
+                        <span className="admin-share">+{formatCurrency(job.adminAmount)} (15%)</span>
                       </div>
                     )}
                   </TxAmounts>
@@ -970,7 +975,7 @@ const AdminEscrow = () => {
                   </DetailBox>
                   <DetailBox bg="#F0FDF4" borderColor="#6EE7B7" valueColor="#059669">
                     <div className="detail-label"><DollarSign size={14} /> {language === 'vi' ? 'L\u01B0\u01A1ng \u1EE9ng vi\u00EAn nh\u1EADn' : 'Candidate Receives'}</div>
-                    <div className="detail-value">{formatCurrency(Math.round(selectedJob.amount * 0.85))}</div>
+                    <div className="detail-value">{formatCurrency(selectedJob.candidateAmount)}</div>
                   </DetailBox>
                 </DetailGrid>
 
@@ -1027,11 +1032,11 @@ const AdminEscrow = () => {
                   </FlowRow>
                   <FlowRow color="#059669">
                     <span className="flow-label"><Users /> {language === 'vi' ? '\u1EE8ng vi\u00EAn (85%)' : 'Candidate (85%)'}</span>
-                    <span className="flow-value">{formatCurrency(Math.round(selectedJob.amount * 0.85))}</span>
+                    <span className="flow-value">{formatCurrency(selectedJob.candidateAmount)}</span>
                   </FlowRow>
                   <FlowRow color="#7C3AED">
                     <span className="flow-label"><ShieldCheck /> {language === 'vi' ? 'N\u1EC1n t\u1EA3ng (15%)' : 'Platform (15%)'}</span>
-                    <span className="flow-value">{formatCurrency(selectedJob.amount - Math.round(selectedJob.amount * 0.85))}</span>
+                    <span className="flow-value">{formatCurrency(selectedJob.adminAmount)}</span>
                   </FlowRow>
                 </FlowDiagram>
               </ModalBody>

@@ -28,6 +28,7 @@ import quickJobService from '../../services/quickJobService';
 import applicationService from '../../services/applicationService';
 import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
+import { getStoredEscrowDistribution } from '../../utils/escrow';
 
 const WalletContainer = styled.div`
   max-width: 1400px;
@@ -777,13 +778,35 @@ const Wallet = () => {
 
       setCandidateProfile(profile);
 
-      // Calculate dynamic income transactions from completed applications in database
-      const incomeTransactions = apps
-        .filter(app => app.status === 'completed')
+      const walletIncomeTransactions = (profile?.walletTransactions || [])
+        .filter(tx => tx?.type === 'credit' && Number(tx.amount) > 0 && tx.paymentDetails?.sourceType === 'escrow_distribution')
+        .map(tx => ({
+          id: tx.transactionId,
+          type: 'income',
+          title: language === 'vi' ? 'Nhận tiền escrow' : 'Escrow payment',
+          description: tx.description || (language === 'vi' ? 'Thanh toán hoàn tất công việc' : 'Completed job payment'),
+          amount: Number(tx.amount),
+          date: tx.timestamp || new Date().toISOString()
+        }));
+      const recordedApplicationIds = new Set(
+        walletIncomeTransactions
+          .map(tx => profile?.walletTransactions?.find(raw => raw.transactionId === tx.id)?.paymentDetails?.sourceApplicationId)
+          .filter(Boolean)
+      );
+
+      // Keep the derived fallback for legacy applications that predate the
+      // escrow ledger. New applications are read from the wallet ledger above.
+      const legacyIncomeTransactions = apps
+        .filter(app => (
+          app.status === 'completed'
+          && !recordedApplicationIds.has(app.applicationId)
+          && !app.escrowPendingAt
+          && !app.escrowReleasePendingAt
+        ))
         .map(app => {
           const job = realJobs.find(j => String(j.idJob || j.id || j.jobID) === String(app.jobId));
           const totalAmount = job ? (Number(job.totalSalary) || (Number(job.hourlyRate || 0) * Number(job.totalHours || 0)) || 0) : 0;
-          const candidateAmount = Math.round(totalAmount * 0.85);
+          const { candidateAmount } = getStoredEscrowDistribution(totalAmount, app);
           const companyName = job?.companyName || job?.employerName || 'Nhà tuyển dụng';
           const jobTitle = job?.title || 'Công việc tuyển gấp';
 
@@ -797,6 +820,7 @@ const Wallet = () => {
           };
         })
         .filter(t => t.amount > 0);
+      const incomeTransactions = [...walletIncomeTransactions, ...legacyIncomeTransactions];
 
       // Get withdrawal transactions from database candidate profile
       // Status is authoritative from DB (profile.withdrawals[].status) — no localStorage sync needed

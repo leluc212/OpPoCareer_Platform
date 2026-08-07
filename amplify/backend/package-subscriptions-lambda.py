@@ -62,6 +62,26 @@ def get_claims(event):
     return authorizer.get('claims', {}) or authorizer.get('jwt', {}).get('claims', {}) or {}
 
 
+def get_sepay_webhook_token(event):
+    """Read the SePay token from either the legacy query string or its API-key header."""
+    query_params = event.get('queryStringParameters') or {}
+    token = query_params.get('token')
+    if token:
+        return str(token).strip()
+
+    raw_headers = event.get('headers') or {}
+    normalized_headers = {str(key).lower(): value for key, value in raw_headers.items()}
+    authorization = str(normalized_headers.get('authorization') or '').strip()
+    if authorization:
+        return re.sub(r'^\s*(?:apikey|bearer)\s+', '', authorization, flags=re.IGNORECASE).strip()
+
+    return str(
+        normalized_headers.get('x-api-key')
+        or normalized_headers.get('x-sepay-key')
+        or ''
+    ).strip()
+
+
 def group_set(claims):
     groups = claims.get('cognito:groups', []) or []
     if isinstance(groups, str):
@@ -239,14 +259,13 @@ def lambda_handler(event, context):
             return get_employer_wallet(employer_id, headers)
         
         elif http_method == 'POST' and path == '/wallet/transaction':
-            return handle_wallet_transaction(body, headers)
+            return handle_wallet_transaction(body, headers, caller_id, caller_is_admin)
             
         elif http_method == 'POST' and path == '/wallet/withdraw':
-            return withdraw_wallet(body, headers)
+            return withdraw_wallet(body, headers, caller_id, caller_is_admin)
             
         elif http_method == 'POST' and path == '/wallet/sepay-webhook':
-            query_params = event.get('queryStringParameters') or {}
-            token = query_params.get('token')
+            token = get_sepay_webhook_token(event)
             return handle_sepay_webhook(body, token, headers)
         
         else:
@@ -1363,13 +1382,14 @@ def get_or_create_wallet(employer_id):
         try:
             employer_profile_table.update_item(
                 Key={'userId': employer_id},
-                UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, walletCode = :code, updatedAt = :updatedAt",
+                UpdateExpression="SET walletBalance = if_not_exists(walletBalance, :bal), walletTransactions = if_not_exists(walletTransactions, :txs), walletCode = if_not_exists(walletCode, :code), updatedAt = :updatedAt",
                 ExpressionAttributeValues={
                     ':bal': profile['walletBalance'],
                     ':txs': profile['walletTransactions'],
                     ':code': profile['walletCode'],
                     ':updatedAt': get_vn_now().isoformat()
-                }
+                },
+                ReturnValues='ALL_NEW'
             )
         except Exception as e:
             print(f"Error updating profile with wallet fields: {str(e)}")
@@ -1421,11 +1441,17 @@ def get_employer_wallet(employer_id, headers):
             })
         }
 
-def withdraw_wallet(body_str, headers):
+def withdraw_wallet(body_str, headers, caller_id=None, caller_is_admin=False):
     try:
         body = json.loads(body_str) if isinstance(body_str, str) else body_str
         
         employer_id = body.get('employerId')
+        if not caller_is_admin and employer_id != caller_id:
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({'success': False, 'message': 'Cannot operate another employer wallet'})
+            }
         amount = Decimal(str(body.get('amount', 0)))
         bank_name = body.get('bankName')
         account_number = body.get('accountNumber')
@@ -1456,8 +1482,6 @@ def withdraw_wallet(body_str, headers):
                 })
             }
             
-        new_balance = balance - amount
-        
         now_dt = get_vn_now()
         txn_id = f"TXN-WITHDRAW-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
         
@@ -1475,21 +1499,6 @@ def withdraw_wallet(body_str, headers):
             }
         }
         
-        transactions = wallet_info.get('walletTransactions', [])
-        transactions.insert(0, transaction)
-        
-        # Deduct wallet balance
-        employer_profile_table.update_item(
-            Key={'userId': employer_id},
-            UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
-            ExpressionAttributeValues={
-                ':bal': new_balance,
-                ':txs': transactions,
-                ':updatedAt': now_dt.isoformat()
-            }
-        )
-        
-        # Create request record in database
         request_id = f"REQ-WITHDRAW-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
         withdrawal_item = {
             'requestId': request_id,
@@ -1505,7 +1514,38 @@ def withdraw_wallet(body_str, headers):
             'createdAt': now_dt.isoformat(),
             'updatedAt': now_dt.isoformat()
         }
-        withdrawal_requests_table.put_item(Item=withdrawal_item)
+        dynamodb_client = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION', 'ap-southeast-1'))
+        dynamodb_client.transact_write_items(
+            TransactItems=[
+                {
+                    'Update': {
+                        'TableName': employer_profile_table_name,
+                        'Key': {'userId': serializer.serialize(employer_id)},
+                        'UpdateExpression': 'SET walletBalance = walletBalance - :amount, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :updatedAt',
+                        'ConditionExpression': 'attribute_exists(userId) AND walletBalance >= :amount',
+                        'ExpressionAttributeValues': {
+                            ':amount': serializer.serialize(amount),
+                            ':transaction': serializer.serialize([transaction]),
+                            ':emptyTransactions': serializer.serialize([]),
+                            ':updatedAt': serializer.serialize(now_dt.isoformat())
+                        }
+                    }
+                },
+                {
+                    'Put': {
+                        'TableName': withdrawal_requests_table_name,
+                        'Item': {key: serializer.serialize(value) for key, value in withdrawal_item.items()},
+                        'ConditionExpression': 'attribute_not_exists(requestId)'
+                    }
+                }
+            ]
+        )
+        fresh_wallet = employer_profile_table.get_item(
+            Key={'userId': employer_id},
+            ConsistentRead=True
+        ).get('Item', {})
+        new_balance = fresh_wallet.get('walletBalance', Decimal('0'))
+        transactions = fresh_wallet.get('walletTransactions', [])
         
         # Send withdrawal notification to admin
         try:
@@ -1550,6 +1590,12 @@ def withdraw_wallet(body_str, headers):
         
     except Exception as e:
         print(f"Error in withdraw_wallet: {str(e)}")
+        if isinstance(e, ClientError) and e.response.get('Error', {}).get('Code') == 'TransactionCanceledException':
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'success': False, 'message': 'Số dư không đủ hoặc yêu cầu rút tiền đã được xử lý.'})
+            }
         return {
             'statusCode': 500,
             'headers': headers,
@@ -1559,12 +1605,18 @@ def withdraw_wallet(body_str, headers):
             })
         }
 
-def handle_wallet_transaction(body_str, headers):
+def handle_wallet_transaction(body_str, headers, caller_id=None, caller_is_admin=False):
     try:
         body = json.loads(body_str) if isinstance(body_str, str) else body_str
         body = float_to_decimal(body)
         
         employer_id = body.get('employerId')
+        if not caller_is_admin and employer_id != caller_id:
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({'success': False, 'message': 'Cannot operate another employer wallet'})
+            }
         amount = Decimal(str(body.get('amount', 0)))
         txn_type = body.get('type') # 'debit' or 'credit'
         description = body.get('description', 'Giao dịch ví')
@@ -1609,19 +1661,36 @@ def handle_wallet_transaction(body_str, headers):
             'paymentDetails': body.get('paymentDetails', {})
         }
         
-        transactions = wallet_info.get('walletTransactions', [])
-        transactions.insert(0, transaction)
-        
-        # Update wallet balance and transaction history in DB
-        employer_profile_table.update_item(
-            Key={'userId': employer_id},
-            UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
-            ExpressionAttributeValues={
-                ':bal': new_balance,
-                ':txs': transactions,
-                ':updatedAt': now_dt.isoformat()
-            }
+        if txn_type == 'debit':
+            balance_expression = 'walletBalance = walletBalance - :amount'
+            balance_condition = 'attribute_exists(userId) AND walletBalance >= :amount'
+        else:
+            balance_expression = 'walletBalance = walletBalance + :amount'
+            balance_condition = 'attribute_exists(userId)'
+
+        dynamodb_client = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION', 'ap-southeast-1'))
+        dynamodb_client.transact_write_items(
+            TransactItems=[{
+                'Update': {
+                    'TableName': employer_profile_table_name,
+                    'Key': {'userId': serializer.serialize(employer_id)},
+                    'UpdateExpression': f'SET {balance_expression}, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :updatedAt',
+                    'ConditionExpression': balance_condition,
+                    'ExpressionAttributeValues': {
+                        ':amount': serializer.serialize(amount),
+                        ':transaction': serializer.serialize([transaction]),
+                        ':emptyTransactions': serializer.serialize([]),
+                        ':updatedAt': serializer.serialize(now_dt.isoformat())
+                    }
+                }
+            }]
         )
+        fresh_wallet = employer_profile_table.get_item(
+            Key={'userId': employer_id},
+            ConsistentRead=True
+        ).get('Item', {})
+        new_balance = fresh_wallet.get('walletBalance', Decimal('0'))
+        transactions = fresh_wallet.get('walletTransactions', [])
         
         return {
             'statusCode': 200,
@@ -1638,6 +1707,12 @@ def handle_wallet_transaction(body_str, headers):
         
     except Exception as e:
         print(f"Error in handle_wallet_transaction: {str(e)}")
+        if isinstance(e, ClientError) and e.response.get('Error', {}).get('Code') == 'TransactionCanceledException':
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'success': False, 'message': 'Số dư không đủ hoặc giao dịch ví đã bị từ chối.'})
+            }
         return {
             'statusCode': 500,
             'headers': headers,
@@ -1853,7 +1928,11 @@ def extract_wallet_code(content):
 def handle_sepay_webhook(body_str, token, headers):
     try:
         # Check token
-        expected_token = 'oppo_secure_sepay_token_2026'
+        expected_token = (
+            os.environ.get('SEPAY_WEBHOOK_TOKEN')
+            or os.environ.get('SEPAY_WEBHOOK_SECRET')
+            or 'oppo_secure_sepay_token_2026'
+        )
         if token != expected_token:
             print(f"Unauthorized Webhook Access: Invalid token received: {token}")
             return {
@@ -1868,7 +1947,7 @@ def handle_sepay_webhook(body_str, token, headers):
         body = json.loads(body_str) if isinstance(body_str, str) else body_str
         print(f"SePay Webhook received payload: {json.dumps(body)}")
         
-        transfer_type = body.get('transferType', 'in')
+        transfer_type = str(body.get('transferType', 'in')).strip().lower()
         if transfer_type != 'in':
             print(f"Ignoring non-credit transaction type: {transfer_type}")
             return {
@@ -1877,7 +1956,7 @@ def handle_sepay_webhook(body_str, token, headers):
                 'body': json.dumps({'success': True, 'message': 'Ignored transferType out'})
             }
             
-        content = body.get('content', '')
+        content = str(body.get('content') or body.get('description') or '').strip()
         wallet_code = extract_wallet_code(content)
         
         if not wallet_code:
@@ -1893,10 +1972,14 @@ def handle_sepay_webhook(body_str, token, headers):
             
         # Find employer profile by wallet_code
         try:
-            response = employer_profile_table.scan(
-                FilterExpression=Attr('walletCode').eq(wallet_code)
-            )
-            items = response.get('Items', [])
+            items = []
+            scan_kwargs = {'FilterExpression': Attr('walletCode').eq(wallet_code)}
+            while True:
+                response = employer_profile_table.scan(**scan_kwargs)
+                items.extend(response.get('Items', []))
+                if not response.get('LastEvaluatedKey'):
+                    break
+                scan_kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
         except Exception as e:
             print(f"Error scanning for walletCode: {str(e)}")
             return {
@@ -1915,20 +1998,15 @@ def handle_sepay_webhook(body_str, token, headers):
             
         profile = items[0]
         employer_id = profile['userId']
-        transactions = profile.get('walletTransactions', [])
-        sepay_id = str(body.get('id', ''))
-        
-        # Deduplicate
-        for txn in transactions:
-            if txn.get('paymentDetails', {}).get('sepayId') == sepay_id:
-                print(f"Transaction with SePay ID {sepay_id} already processed.")
-                return {
-                    'statusCode': 200,
-                    'headers': headers,
-                    'body': json.dumps({'success': True, 'message': 'Already processed'})
-                }
+        sepay_id = str(body.get('id') or body.get('referenceCode') or '').strip()
+        if not sepay_id:
+            # SePay normally sends id. A deterministic fallback prevents a
+            # retry without id from crediting the same bank transfer twice.
+            sepay_id = hashlib.sha256(
+                json.dumps(body, sort_keys=True, default=str).encode('utf-8')
+            ).hexdigest()[:32]
                 
-        transfer_amount = Decimal(str(body.get('transferAmount', 0)))
+        transfer_amount = Decimal(str(body.get('transferAmount') or body.get('amount') or 0))
         if transfer_amount <= 0:
             print(f"Invalid transfer amount: {transfer_amount}")
             return {
@@ -1937,9 +2015,6 @@ def handle_sepay_webhook(body_str, token, headers):
                 'body': json.dumps({'success': False, 'message': 'Invalid transfer amount'})
             }
             
-        current_balance = profile.get('walletBalance', Decimal('0'))
-        new_balance = current_balance + transfer_amount
-        
         now_dt = get_vn_now()
         txn_id = f"TXN-DEPOSIT-{now_dt.strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
         
@@ -1951,6 +2026,7 @@ def handle_sepay_webhook(body_str, token, headers):
             'timestamp': now_dt.isoformat(),
             'status': 'completed',
             'paymentDetails': {
+                'sourceType': 'wallet_deposit',
                 'sepayId': sepay_id,
                 'gateway': body.get('gateway', ''),
                 'transactionDate': body.get('transactionDate', ''),
@@ -1959,23 +2035,56 @@ def handle_sepay_webhook(body_str, token, headers):
             }
         }
         
-        transactions.insert(0, new_txn)
-        
-        employer_profile_table.update_item(
+        dynamodb_client = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION', 'ap-southeast-1'))
+        try:
+            dynamodb_client.transact_write_items(
+                TransactItems=[{
+                    'Update': {
+                        'TableName': employer_profile_table_name,
+                        'Key': {'userId': serializer.serialize(employer_id)},
+                        # The condition and arithmetic update make webhook
+                        # retries/concurrent wallet operations idempotent.
+                        'UpdateExpression': 'SET walletBalance = if_not_exists(walletBalance, :zero) + :amount, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), walletDepositIds = list_append(:depositId, if_not_exists(walletDepositIds, :emptyDepositIds)), updatedAt = :updatedAt',
+                        'ConditionExpression': '(attribute_not_exists(walletDepositIds) OR NOT contains(walletDepositIds, :sepayId))',
+                        'ExpressionAttributeValues': {
+                            ':zero': serializer.serialize(Decimal('0')),
+                            ':amount': serializer.serialize(transfer_amount),
+                            ':transaction': serializer.serialize([new_txn]),
+                            ':emptyTransactions': serializer.serialize([]),
+                            ':depositId': serializer.serialize([sepay_id]),
+                            ':emptyDepositIds': serializer.serialize([]),
+                            ':sepayId': serializer.serialize(sepay_id),
+                            ':updatedAt': serializer.serialize(now_dt.isoformat())
+                        }
+                    }
+                }]
+            )
+        except dynamodb_client.exceptions.TransactionCanceledException as transaction_error:
+            reasons = transaction_error.response.get('CancellationReasons', [])
+            if reasons and reasons[0].get('Code') == 'ConditionalCheckFailed':
+                print(f"Transaction with SePay ID {sepay_id} already processed.")
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps({'success': True, 'message': 'Already processed'})
+                }
+            raise
+
+        fresh_profile = employer_profile_table.get_item(
             Key={'userId': employer_id},
-            UpdateExpression="SET walletBalance = :bal, walletTransactions = :txs, updatedAt = :updatedAt",
-            ExpressionAttributeValues={
-                ':bal': new_balance,
-                ':txs': transactions,
-                ':updatedAt': now_dt.isoformat()
-            }
-        )
-        
+            ConsistentRead=True
+        ).get('Item', {})
         print(f"Successfully credited {transfer_amount} to employer {employer_id}")
         return {
             'statusCode': 200,
             'headers': headers,
-            'body': json.dumps({'success': True})
+            'body': json.dumps({
+                'success': True,
+                'data': {
+                    'walletBalance': fresh_profile.get('walletBalance', Decimal('0')),
+                    'transactionId': txn_id
+                }
+            }, default=decimal_default)
         }
         
     except Exception as e:

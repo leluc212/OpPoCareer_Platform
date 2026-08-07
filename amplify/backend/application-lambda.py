@@ -2,9 +2,11 @@ import json
 import boto3
 import uuid
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from urllib.parse import urlparse, unquote
 import base64
+from boto3.dynamodb.types import TypeSerializer
+from botocore.exceptions import ClientError
 
 
 def get_cors_headers():
@@ -22,6 +24,127 @@ BUCKET_NAME = 'opporeview-cv-storage-prod-2026'
 applications_table = dynamodb.Table('StandardApplications')
 jobs_table = dynamodb.Table('PostStandardJob')
 quick_jobs_table = dynamodb.Table('PostQuickJob')
+serializer = TypeSerializer()
+
+
+def calculate_escrow_distribution(total_amount):
+    """Return the canonical whole-VND 85/15 escrow split."""
+    total = Decimal(str(total_amount or 0)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    candidate_amount = (total * Decimal('0.85')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    return total, candidate_amount, total - candidate_amount
+
+
+def release_escrow_for_application(application_item, now_iso):
+    """Release candidate/platform shares exactly once in one DynamoDB transaction."""
+    candidate_id = application_item.get('candidateId')
+    job_id = application_item.get('jobId')
+    application_id = application_item.get('applicationId')
+    if not candidate_id or not job_id or not application_id:
+        return {'released': False, 'reason': 'missing escrow identifiers'}
+
+    # Wallet escrow is funded by Quick Job creation. Standard-job
+    # applications must not create money from an unfunded balance.
+    job_item = quick_jobs_table.get_item(Key={'jobID': str(job_id)}).get('Item')
+    if not job_item:
+        return {'released': False, 'reason': 'not a wallet-funded quick job'}
+
+    total_salary = Decimal(str(job_item.get('totalSalary') or job_item.get('salary') or 0))
+    if total_salary <= 0:
+        hourly_rate = Decimal(str(job_item.get('hourlyRate') or 0))
+        total_hours = Decimal(str(job_item.get('totalHours') or 0))
+        total_salary = hourly_rate * total_hours
+
+    total, candidate_amount, platform_amount = calculate_escrow_distribution(total_salary)
+    if total <= 0 or candidate_amount <= 0:
+        return {'released': False, 'reason': 'job salary is zero'}
+
+    candidate_transaction = {
+        'transactionId': f"TXN-ESCROW-CANDIDATE-{uuid.uuid4().hex[:12].upper()}",
+        'type': 'credit',
+        'amount': candidate_amount,
+        'description': f'Nhận tiền escrow công việc {job_id}',
+        'timestamp': now_iso,
+        'status': 'completed',
+        'paymentDetails': {
+            'sourceType': 'escrow_distribution',
+            'sourceApplicationId': application_id,
+            'jobId': str(job_id),
+            'escrowTotalAmount': total,
+            'escrowCandidateAmount': candidate_amount,
+            'escrowPlatformAmount': platform_amount
+        }
+    }
+    platform_transaction = {
+        'transactionId': f"TXN-ESCROW-PLATFORM-{uuid.uuid4().hex[:12].upper()}",
+        'type': 'credit',
+        'amount': platform_amount,
+        'description': f'Phí nền tảng escrow công việc {job_id}',
+        'timestamp': now_iso,
+        'status': 'completed',
+        'paymentDetails': {
+            'sourceType': 'escrow_distribution',
+            'sourceApplicationId': application_id,
+            'jobId': str(job_id),
+            'escrowTotalAmount': total,
+            'escrowCandidateAmount': candidate_amount,
+            'escrowPlatformAmount': platform_amount
+        }
+    }
+
+    dynamodb.meta.client.transact_write_items(
+        TransactItems=[
+            {
+                'Update': {
+                    'TableName': 'CandidateProfiles',
+                    'Key': {'userId': serializer.serialize(candidate_id)},
+                    'UpdateExpression': 'SET walletBalance = if_not_exists(walletBalance, :zero) + :candidateAmount, walletTransactions = list_append(:candidateTransaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :now',
+                    'ExpressionAttributeValues': {
+                        ':zero': serializer.serialize(Decimal('0')),
+                        ':candidateAmount': serializer.serialize(candidate_amount),
+                        ':candidateTransaction': serializer.serialize([candidate_transaction]),
+                        ':emptyTransactions': serializer.serialize([]),
+                        ':now': serializer.serialize(now_iso)
+                    }
+                }
+            },
+            {
+                'Update': {
+                    'TableName': 'EmployerProfiles',
+                    'Key': {'userId': serializer.serialize('admin')},
+                    'UpdateExpression': 'SET walletBalance = if_not_exists(walletBalance, :zero) + :platformAmount, walletTransactions = list_append(:platformTransaction, if_not_exists(walletTransactions, :emptyTransactions)), walletType = :walletType, updatedAt = :now',
+                    'ExpressionAttributeValues': {
+                        ':zero': serializer.serialize(Decimal('0')),
+                        ':platformAmount': serializer.serialize(platform_amount),
+                        ':platformTransaction': serializer.serialize([platform_transaction]),
+                        ':emptyTransactions': serializer.serialize([]),
+                        ':walletType': serializer.serialize('platform_ledger'),
+                        ':now': serializer.serialize(now_iso)
+                    }
+                }
+            },
+            {
+                'Update': {
+                    'TableName': 'StandardApplications',
+                    'Key': {'applicationId': serializer.serialize(application_id)},
+                    'UpdateExpression': 'SET escrowReleasedAt = :now, escrowStatus = :released, escrowTotalAmount = :total, escrowCandidateAmount = :candidateAmount, escrowPlatformAmount = :platformAmount',
+                    'ConditionExpression': 'attribute_not_exists(escrowReleasedAt)',
+                    'ExpressionAttributeValues': {
+                        ':now': serializer.serialize(now_iso),
+                        ':released': serializer.serialize('released'),
+                        ':total': serializer.serialize(total),
+                        ':candidateAmount': serializer.serialize(candidate_amount),
+                        ':platformAmount': serializer.serialize(platform_amount)
+                    }
+                }
+            }
+        ]
+    )
+    return {
+        'released': True,
+        'totalAmount': total,
+        'candidateAmount': candidate_amount,
+        'platformAmount': platform_amount
+    }
 
 
 def cognito_groups(claims):
@@ -676,10 +799,64 @@ def reject_replacement_worker(event, application_id, user_id, create_response):
         except Exception as je:
             print(f"⚠️ Could not fetch job for replacement rejection: {je}")
             
-        refund_amount = (job_salary * Decimal('0.85')).to_integral_value()
+        _, refund_amount, _ = calculate_escrow_distribution(job_salary)
         
-        # 5. Refund 85% back to Employer's wallet balance
+        # 5. Refund 85% back to Employer's wallet balance, exactly once.
         if refund_amount > 0 and employer_id:
+            try:
+                txn_id = f"TXN-REF-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+                txn_record = {
+                    'transactionId': txn_id,
+                    'type': 'credit',
+                    'amount': refund_amount,
+                    'description': f"Hoàn trả 85% lương tin tuyển gấp ID {job_id} do từ chối ứng viên thay thế",
+                    'timestamp': now_iso,
+                    'status': 'completed',
+                    'paymentDetails': {
+                        'sourceType': 'escrow_refund',
+                        'sourceApplicationId': application_id,
+                        'jobId': str(job_id),
+                        'escrowRefundAmount': refund_amount
+                    }
+                }
+                dynamodb.meta.client.transact_write_items(
+                    TransactItems=[
+                        {
+                            'Update': {
+                                'TableName': 'EmployerProfiles',
+                                'Key': {'userId': serializer.serialize(employer_id)},
+                                'UpdateExpression': 'SET walletBalance = if_not_exists(walletBalance, :zero) + :refund, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :now',
+                                'ExpressionAttributeValues': {
+                                    ':zero': serializer.serialize(Decimal('0')),
+                                    ':refund': serializer.serialize(refund_amount),
+                                    ':transaction': serializer.serialize([txn_record]),
+                                    ':emptyTransactions': serializer.serialize([]),
+                                    ':now': serializer.serialize(now_iso)
+                                }
+                            }
+                        },
+                        {
+                            'Update': {
+                                'TableName': 'StandardApplications',
+                                'Key': {'applicationId': serializer.serialize(application_id)},
+                                'UpdateExpression': 'SET replacementRefundedAt = :now, replacementRefundAmount = :refund',
+                                'ConditionExpression': 'attribute_not_exists(replacementRefundedAt)',
+                                'ExpressionAttributeValues': {
+                                    ':now': serializer.serialize(now_iso),
+                                    ':refund': serializer.serialize(refund_amount)
+                                }
+                            }
+                        }
+                    ]
+                )
+                print(f"Refunded {refund_amount} VND back to employer {employer_id}")
+            except ClientError as refund_error:
+                if refund_error.response.get('Error', {}).get('Code') == 'TransactionCanceledException':
+                    print(f"Replacement refund already processed for {application_id}")
+                else:
+                    raise
+
+        if False and refund_amount > 0 and employer_id:
             employer_table = dynamodb.Table('EmployerProfiles')
             try:
                 emp_resp = employer_table.get_item(Key={'userId': employer_id})
@@ -719,7 +896,7 @@ def reject_replacement_worker(event, application_id, user_id, create_response):
         if qj:
             try:
                 quick_jobs_table.update_item(
-                    Key={'idJob': str(job_id)},
+                    Key={'jobID': str(job_id)},
                     UpdateExpression='SET #status = :refunded, updatedAt = :now REMOVE currentWorkerId',
                     ExpressionAttributeNames={'#status': 'status'},
                     ExpressionAttributeValues={':refunded': 'ĐÃ_HOÀN_TRẢ', ':now': now_iso}
@@ -809,6 +986,16 @@ def update_application_status(event, application_id, user_id, create_response):
                     value = Decimal(str(value))
                 expr_attr_values[f':{field}'] = value
 
+        # Mark the new escrow lifecycle so legacy applications (which were
+        # already credited at the pending stage) are not paid a second time.
+        if status_changed and new_status == 'completed_pending_candidate':
+            update_expr += ', escrowPendingAt = :escrowPendingAt, escrowStatus = :escrowStatus'
+            expr_attr_values[':escrowPendingAt'] = now_iso
+            expr_attr_values[':escrowStatus'] = 'held'
+        elif status_changed and new_status == 'completed':
+            update_expr += ', escrowReleasePendingAt = :escrowReleasePendingAt'
+            expr_attr_values[':escrowReleasePendingAt'] = now_iso
+
         # Support changeRequest under multiple keys (camelCase, snake_case, or inside extraFields)
         change_req_raw = None
         if 'changeRequest' in body:
@@ -897,7 +1084,7 @@ def update_application_status(event, application_id, user_id, create_response):
         # Status: completed_pending_candidate = employer has rated, waiting for candidate confirm
         # Guard: only credit if previous status was NOT already completed_pending_candidate
         try:
-            if status_changed and new_status == 'completed_pending_candidate' \
+            if False and status_changed and new_status == 'completed_pending_candidate' \
                     and previous_status not in ('completed_pending_candidate', 'completed'):
                 app_item = applications_table.get_item(
                     Key={'applicationId': application_id},
@@ -928,7 +1115,7 @@ def update_application_status(event, application_id, user_id, create_response):
                     except Exception as je:
                         print(f"⚠️ Could not fetch job for wallet credit: {je}")
 
-                    candidate_income = (job_salary * Decimal('0.85')).to_integral_value()
+                    _, candidate_income, _ = calculate_escrow_distribution(job_salary)
 
                     if candidate_income > 0:
                         candidate_table = dynamodb.Table('CandidateProfiles')
@@ -950,6 +1137,36 @@ def update_application_status(event, application_id, user_id, create_response):
                         print(f"⚠️ Job salary is 0 or not found for jobId={job_id_to_credit}, skipping credit")
         except Exception as credit_err:
             print(f"⚠️ Wallet credit step failed (non-fatal): {credit_err}")
+
+        # Release the escrow only when the candidate reaches the final
+        # completed state. The transaction writes candidate share, platform
+        # share and the application release marker together, so retries cannot
+        # pay either side twice.
+        try:
+            app_for_escrow = applications_table.get_item(
+                Key={'applicationId': application_id},
+                ConsistentRead=True
+            ).get('Item', {})
+            should_release_escrow = (
+                new_status == 'completed'
+                and (
+                    (status_changed and previous_status != 'completed_pending_candidate')
+                    or app_for_escrow.get('escrowPendingAt')
+                    or app_for_escrow.get('escrowReleasePendingAt')
+                )
+                and not app_for_escrow.get('escrowReleasedAt')
+            )
+            if should_release_escrow:
+                release_result = release_escrow_for_application(app_for_escrow, now_iso)
+                print(f"Escrow release result for {application_id}: {release_result}")
+        except ClientError as escrow_error:
+            error_code = escrow_error.response.get('Error', {}).get('Code')
+            if error_code == 'TransactionCanceledException':
+                print(f"Escrow release already completed or transaction was cancelled for {application_id}")
+            else:
+                print(f"Escrow release failed for {application_id}: {escrow_error}")
+        except Exception as escrow_error:
+            print(f"Escrow release failed for {application_id}: {escrow_error}")
 
         # Check if we are completing the job and save to a new table "CompletedJobs" if it exists
         try:
@@ -1426,9 +1643,63 @@ def approve_change_request(event, application_id, create_response):
                         hourly_rate = Decimal(str(qj.get('hourlyRate') or 0))
                         total_hours = Decimal(str(qj.get('totalHours') or 0))
                         job_salary = total_salary if total_salary > 0 else (hourly_rate * total_hours)
-                        refund_amount = (job_salary * Decimal('0.85')).to_integral_value()
+                        _, refund_amount, _ = calculate_escrow_distribution(job_salary)
 
                         if refund_amount > 0 and employer_id:
+                            try:
+                                txn_id = f"TXN-REF-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+                                txn_record = {
+                                    'transactionId': txn_id,
+                                    'type': 'credit',
+                                    'amount': refund_amount,
+                                    'description': f"Hoàn trả 85% lương tin tuyển gấp ID {job_id} do hủy/đổi nhân viên lần 2",
+                                    'timestamp': now_iso,
+                                    'status': 'completed',
+                                    'paymentDetails': {
+                                        'sourceType': 'escrow_refund',
+                                        'sourceApplicationId': application_id,
+                                        'jobId': str(job_id),
+                                        'escrowRefundAmount': refund_amount
+                                    }
+                                }
+                                dynamodb.meta.client.transact_write_items(
+                                    TransactItems=[
+                                        {
+                                            'Update': {
+                                                'TableName': 'EmployerProfiles',
+                                                'Key': {'userId': serializer.serialize(employer_id)},
+                                                'UpdateExpression': 'SET walletBalance = if_not_exists(walletBalance, :zero) + :refund, walletTransactions = list_append(:transaction, if_not_exists(walletTransactions, :emptyTransactions)), updatedAt = :now',
+                                                'ExpressionAttributeValues': {
+                                                    ':zero': serializer.serialize(Decimal('0')),
+                                                    ':refund': serializer.serialize(refund_amount),
+                                                    ':transaction': serializer.serialize([txn_record]),
+                                                    ':emptyTransactions': serializer.serialize([]),
+                                                    ':now': serializer.serialize(now_iso)
+                                                }
+                                            }
+                                        },
+                                        {
+                                            'Update': {
+                                                'TableName': 'StandardApplications',
+                                                'Key': {'applicationId': serializer.serialize(application_id)},
+                                                'UpdateExpression': 'SET replacementRefundedAt = :now, replacementRefundAmount = :refund',
+                                                'ConditionExpression': 'attribute_not_exists(replacementRefundedAt)',
+                                                'ExpressionAttributeValues': {
+                                                    ':now': serializer.serialize(now_iso),
+                                                    ':refund': serializer.serialize(refund_amount)
+                                                }
+                                            }
+                                        }
+                                    ]
+                                )
+                                print(f"Refunded {refund_amount} VND back to employer {employer_id} (second replacement cancellation)")
+                            except ClientError as refund_error:
+                                if refund_error.response.get('Error', {}).get('Code') == 'TransactionCanceledException':
+                                    print(f"Second replacement refund already processed for {application_id}")
+                                else:
+                                    raise
+
+                        if False and refund_amount > 0 and employer_id:
                             employer_table = dynamodb.Table('EmployerProfiles')
                             try:
                                 emp_resp = employer_table.get_item(Key={'userId': employer_id})
@@ -1466,7 +1737,7 @@ def approve_change_request(event, application_id, create_response):
 
                         # Cập nhật trạng thái job thành ĐÃ_HOÀN_TRẢ
                         quick_jobs_table.update_item(
-                            Key={'idJob': str(job_id)},
+                            Key={'jobID': str(job_id)},
                             UpdateExpression='SET #status = :refunded, updatedAt = :now REMOVE currentWorkerId',
                             ExpressionAttributeNames={'#status': 'status'},
                             ExpressionAttributeValues={':refunded': 'ĐÃ_HOÀN_TRẢ', ':now': now_iso}
@@ -1475,7 +1746,7 @@ def approve_change_request(event, application_id, create_response):
                     else:
                         # Hủy/đổi lần 1: Mở lại job — KHÔNG huỷ, chỉ đổi về active để nhận ứng viên mới
                         quick_jobs_table.update_item(
-                            Key={'idJob': str(job_id)},
+                            Key={'jobID': str(job_id)},
                             UpdateExpression='SET #status = :open, updatedAt = :now REMOVE currentWorkerId',
                             ExpressionAttributeNames={'#status': 'status'},
                             ExpressionAttributeValues={':open': 'active', ':now': now_iso}

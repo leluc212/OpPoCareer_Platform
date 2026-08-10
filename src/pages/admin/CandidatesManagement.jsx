@@ -28,7 +28,6 @@ import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
 import candidateProfileService from '../../services/candidateProfileService';
 import notificationService from '../../services/notificationService';
-import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import ExperienceManagement from './ExperienceManagement';
 import { getAllExperiences } from '../../services/experienceService';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -626,7 +625,6 @@ const StatusBadge = styled.span`
 
 const CandidatesManagement = () => {
   const { language } = useLanguage();
-  const notificationBadges = useAdminNotificationBadges();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -666,8 +664,17 @@ const CandidatesManagement = () => {
   const [pendingExpCount, setPendingExpCount] = useState(0);
   const [verifications, setVerifications] = useState([]);
   const [verifLoading, setVerifLoading] = useState(false);
+  const [verifError, setVerifError] = useState('');
+  const [verifActingId, setVerifActingId] = useState(null);
+  const [verifRejectState, setVerifRejectState] = useState({
+    isOpen: false,
+    candidateId: '',
+    reason: ''
+  });
   const [deletionRequests, setDeletionRequests] = useState([]);
   const [deletionLoading, setDeletionLoading] = useState(false);
+  const [deletionError, setDeletionError] = useState('');
+  const [dataError, setDataError] = useState('');
   const [confirmModalState, setConfirmModalState] = useState({
     isOpen: false,
     title: '',
@@ -696,6 +703,7 @@ const CandidatesManagement = () => {
   // ─── Load verification requests ────────────────────────────────────────────
   const loadVerifications = async () => {
     setVerifLoading(true);
+    setVerifError('');
     try {
       // Use the dedicated filtered endpoint instead of full table scan
       const data = await candidateProfileService.getPendingVerifications();
@@ -717,6 +725,10 @@ const CandidatesManagement = () => {
       setVerifications(fromServer);
     } catch (e) {
       console.error('Error loading verifications:', e);
+      setVerifications([]);
+      setVerifError(language === 'vi'
+        ? 'Không thể tải danh sách yêu cầu xác minh. Vui lòng thử lại.'
+        : 'Could not load verification requests. Please try again.');
     } finally {
       setVerifLoading(false);
     }
@@ -724,6 +736,7 @@ const CandidatesManagement = () => {
 
   const handleApproveVerif = async (candidateId) => {
     const candidate = verifications.find(v => v.id === candidateId);
+    setVerifActingId(candidateId);
     // Optimistic update trước
     setVerifications(prev => prev.map(v =>
       v.id === candidateId ? { ...v, verificationStatus: 'APPROVED' } : v
@@ -746,11 +759,14 @@ const CandidatesManagement = () => {
         v.id === candidateId ? { ...v, verificationStatus: 'SUBMITTED' } : v
       ));
       showAdminToast('error', language === 'vi' ? 'Lỗi khi duyệt' : 'Error approving');
+    } finally {
+      setVerifActingId(null);
     }
   };
 
   const handleDeactivateVerif = async (candidateId) => {
     const candidate = verifications.find(v => v.id === candidateId);
+    setVerifActingId(candidateId);
     // Optimistic update
     setVerifications(prev => prev.map(v =>
       v.id === candidateId ? { ...v, verificationStatus: 'REJECTED' } : v
@@ -773,14 +789,28 @@ const CandidatesManagement = () => {
         v.id === candidateId ? { ...v, verificationStatus: 'APPROVED' } : v
       ));
       showAdminToast('error', language === 'vi' ? 'Lỗi khi hủy kích hoạt' : 'Error deactivating');
+    } finally {
+      setVerifActingId(null);
     }
   };
 
-  const handleRejectVerif = async (candidateId) => {
+  const openVerificationReject = (candidateId) => {
+    setVerifRejectState({ isOpen: true, candidateId, reason: '' });
+  };
+
+  const handleRejectVerif = async (candidateId, reason) => {
     const candidate = verifications.find(v => v.id === candidateId);
+    const trimmedReason = reason?.trim() || '';
+    if (!trimmedReason) {
+      showAdminToast('error', language === 'vi' ? 'Vui lòng nhập lý do từ chối' : 'Please enter a rejection reason');
+      return;
+    }
+
+    setVerifActingId(candidateId);
+    setVerifRejectState({ isOpen: false, candidateId: '', reason: '' });
     setVerifications(prev => prev.filter(v => v.id !== candidateId));
     try {
-      await candidateProfileService.rejectVerification(candidateId, '');
+      await candidateProfileService.rejectVerification(candidateId, trimmedReason);
       // Gửi thông báo cho ứng viên
       try {
         await notificationService.createCandidateQuickJobVerifNotification(
@@ -793,8 +823,10 @@ const CandidatesManagement = () => {
       }
     } catch (e) {
       // Rollback nếu lỗi - load lại từ server
-      loadVerifications();
+      await loadVerifications();
       showAdminToast('error', language === 'vi' ? 'Lỗi khi từ chối' : 'Error rejecting');
+    } finally {
+      setVerifActingId(null);
     }
   };
   // ───────────────────────────────────────────────────────────────────────────
@@ -802,11 +834,16 @@ const CandidatesManagement = () => {
   // ─── Load deletion requests ───────────────────────────────────────────────
   const loadDeletionRequests = async () => {
     setDeletionLoading(true);
+    setDeletionError('');
     try {
       const data = await candidateProfileService.getPendingDeletionRequests();
       setDeletionRequests(data);
     } catch (e) {
       console.error('Error loading deletion requests:', e);
+      setDeletionRequests([]);
+      setDeletionError(language === 'vi'
+        ? 'Không thể tải yêu cầu xóa tài khoản. Vui lòng thử lại.'
+        : 'Could not load account deletion requests. Please try again.');
     } finally {
       setDeletionLoading(false);
     }
@@ -818,17 +855,16 @@ const CandidatesManagement = () => {
     try {
       await candidateProfileService.approveDeletionRequest(candidateId);
       try {
-        await notificationService.createNotification?.({
-          userId: candidateId,
-          type: 'account_deletion_approved',
-          title: language === 'vi' ? 'Yêu cầu xóa tài khoản đã được duyệt' : 'Account deletion request approved',
-          message: language === 'vi' ? 'Tài khoản của bạn đã được xóa theo yêu cầu.' : 'Your account has been deleted as requested.'
-        });
+        await notificationService.createCandidateAccountDeletionNotification(
+          candidateId,
+          candidate?.name || '',
+          'approved'
+        );
       } catch (notifyErr) {
         console.error('Failed to send deletion approved notification:', notifyErr);
       }
     } catch (e) {
-      setDeletionRequests(prev => [...prev, candidate]);
+      if (candidate) setDeletionRequests(prev => [candidate, ...prev]);
       showAdminToast('error', language === 'vi' ? 'Lỗi khi duyệt xóa tài khoản' : 'Error approving deletion request');
     }
   };
@@ -839,17 +875,16 @@ const CandidatesManagement = () => {
     try {
       await candidateProfileService.rejectDeletionRequest(candidateId);
       try {
-        await notificationService.createNotification?.({
-          userId: candidateId,
-          type: 'account_deletion_rejected',
-          title: language === 'vi' ? 'Yêu cầu xóa tài khoản bị từ chối' : 'Account deletion request rejected',
-          message: language === 'vi' ? 'Yêu cầu xóa tài khoản của bạn đã bị từ chối bởi admin.' : 'Your account deletion request was rejected by admin.'
-        });
+        await notificationService.createCandidateAccountDeletionNotification(
+          candidateId,
+          candidate?.name || '',
+          'rejected'
+        );
       } catch (notifyErr) {
         console.error('Failed to send deletion rejected notification:', notifyErr);
       }
     } catch (e) {
-      setDeletionRequests(prev => [...prev, candidate]);
+      if (candidate) setDeletionRequests(prev => [candidate, ...prev]);
       showAdminToast('error', language === 'vi' ? 'Lỗi khi từ chối yêu cầu xóa' : 'Error rejecting deletion request');
     }
   };
@@ -857,6 +892,7 @@ const CandidatesManagement = () => {
 
   const loadData = async () => {
     setLoading(true);
+    setDataError('');
     try {
       console.log('📡 Fetching raw data from DynamoDB for local processing...');
 
@@ -888,11 +924,18 @@ const CandidatesManagement = () => {
             createdAt: item.createdAt || item.updatedAt || null // Keep raw for processing, fallback to updatedAt
           }));
         setCandidates(transformedData);
+      } else {
+        setCandidates([]);
       }
 
       setJobs([...standardJobs, ...quickJobs]);
       setLastUpdated(new Date());
     } catch (error) {
+      setCandidates([]);
+      setJobs([]);
+      setDataError(language === 'vi'
+        ? 'Không thể tải dữ liệu ứng viên. Vui lòng thử lại.'
+        : 'Could not load candidate data. Please try again.');
       console.error('❌ Error loading data:', error);
     } finally {
       setLoading(false);
@@ -911,6 +954,14 @@ const CandidatesManagement = () => {
 
   useEffect(() => {
     loadData();
+    // The tab badge must reflect pending requests from the verification API,
+    // not an old unread notification that may already be resolved.
+    if (activeTab !== 'verifications') {
+      loadVerifications();
+    }
+    if (activeTab !== 'deletions') {
+      loadDeletionRequests();
+    }
     // Load pending experience count for badge
     getAllExperiences('PENDING').then(data => setPendingExpCount(data.length)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -960,16 +1011,56 @@ const CandidatesManagement = () => {
       return (a.id || '').localeCompare(b.id || '');
     });
 
+  const filteredVerifications = verifications
+    .filter(v => {
+      const query = searchTerm.toLowerCase();
+      return !query || v.name.toLowerCase().includes(query) || v.email.toLowerCase().includes(query);
+    })
+    .sort((a, b) => {
+      const dateA = a.verificationSubmittedAt ? new Date(a.verificationSubmittedAt).getTime() : 0;
+      const dateB = b.verificationSubmittedAt ? new Date(b.verificationSubmittedAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+  const filteredDeletionRequests = deletionRequests
+    .filter(d => {
+      const query = searchTerm.toLowerCase();
+      return !query || d.name.toLowerCase().includes(query) || d.email.toLowerCase().includes(query);
+    })
+    .sort((a, b) => {
+      const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+      const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
   const filteredWithdrawRequests = [];
   const currentWithdrawRequests = [];
 
-  // Pagination calculations
-  const totalPages = activeTab === 'deletions'
-    ? Math.ceil(deletionRequests.filter(d => !searchTerm || d.name.toLowerCase().includes(searchTerm.toLowerCase()) || d.email.toLowerCase().includes(searchTerm.toLowerCase())).length / itemsPerPage)
-    : Math.ceil(filteredCandidates.length / itemsPerPage);
+  // Pagination must use the dataset displayed by the active tab. Previously
+  // verification/deletion tabs used the candidate list count, which produced
+  // page buttons for records that were not present (for example, 0 results but
+  // still 4 pages).
+  const activeResults = activeTab === 'verifications'
+    ? filteredVerifications
+    : activeTab === 'deletions'
+      ? filteredDeletionRequests
+      : activeTab === 'withdrawals'
+        ? filteredWithdrawRequests
+        : filteredCandidates;
+  const totalResults = activeResults.length;
+  const pendingVerificationCount = verifications.filter(
+    verification => String(verification.verificationStatus || '').toUpperCase() === 'SUBMITTED'
+  ).length;
+  const totalPages = Math.max(1, Math.ceil(totalResults / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentCandidates = filteredCandidates.slice(startIndex, endIndex);
+  const currentVerifications = filteredVerifications.slice(startIndex, endIndex);
+  const currentDeletionRequests = filteredDeletionRequests.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   // Reset to page 1 when filter changes
   const handleSearchChange = (e) => {
@@ -1154,8 +1245,8 @@ const CandidatesManagement = () => {
           >
             <Zap size={18} style={{ marginRight: '8px' }} />
             {language === 'vi' ? 'Duyệt Tuyển Gấp' : 'Quick Job Approvals'}
-            {notificationBadges.candidateVerifications > 0 && (
-              <TabBadge>{notificationBadges.candidateVerifications}</TabBadge>
+            {pendingVerificationCount > 0 && (
+              <TabBadge>{pendingVerificationCount}</TabBadge>
             )}
           </Tab>
           <Tab
@@ -1437,7 +1528,7 @@ const CandidatesManagement = () => {
         )}
 
         {activeTab === 'experiences' ? (
-          <ExperienceManagement embedded />
+          <ExperienceManagement embedded onPendingCountChange={setPendingExpCount} />
         ) : (
         <TableWrapper>
           {activeTab === 'candidates' ? (
@@ -1454,7 +1545,22 @@ const CandidatesManagement = () => {
                 </tr>
               </thead>
               <tbody>
-                {currentCandidates.map((candidate, index) => (
+                {dataError ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                      {dataError}
+                      <button type="button" onClick={loadData} style={{ display: 'block', margin: '12px auto 0' }}>
+                        {language === 'vi' ? 'Thử lại' : 'Retry'}
+                      </button>
+                    </td>
+                  </tr>
+                ) : currentCandidates.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                      {language === 'vi' ? 'Không tìm thấy ứng viên nào' : 'No candidates found'}
+                    </td>
+                  </tr>
+                ) : currentCandidates.map((candidate, index) => (
                   <tr
                     key={candidate.id}
                     onClick={() => navigate(`/admin/candidates/${candidate.id}`)}
@@ -1691,18 +1797,18 @@ const CandidatesManagement = () => {
                   <tr><td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
                     {language === 'vi' ? 'Đang tải...' : 'Loading...'}
                   </td></tr>
-                ) : verifications.length === 0 ? (
+                ) : verifError ? (
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                    {verifError}
+                    <button type="button" onClick={loadVerifications} style={{ display: 'block', margin: '12px auto 0' }}>
+                      {language === 'vi' ? 'Thử lại' : 'Retry'}
+                    </button>
+                  </td></tr>
+                ) : filteredVerifications.length === 0 ? (
                   <tr><td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
                     {language === 'vi' ? 'Không có yêu cầu xác minh nào' : 'No verification requests found'}
                   </td></tr>
-                ) : verifications
-                    .filter(v => !searchTerm || v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.email.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .sort((a, b) => {
-                      const dateA = a.verificationSubmittedAt ? new Date(a.verificationSubmittedAt).getTime() : 0;
-                      const dateB = b.verificationSubmittedAt ? new Date(b.verificationSubmittedAt).getTime() : 0;
-                      return dateB - dateA;
-                    })
-                    .map((v, index) => {
+                ) : currentVerifications.map((v, index) => {
                       const colorScheme = getColorScheme(index);
                       const initials = getCandidateInitials(v.name);
                       return (
@@ -1760,18 +1866,18 @@ const CandidatesManagement = () => {
                       <ActionButtons>
                         {v.verificationStatus === 'SUBMITTED' && (
                           <>
-                            <ApproveButton onClick={() => handleApproveVerif(v.id)}>
+                            <ApproveButton disabled={verifActingId === v.id} onClick={() => handleApproveVerif(v.id)}>
                               <CheckCircle size={16} />
                               {language === 'vi' ? 'Duyệt' : 'Approve'}
                             </ApproveButton>
-                            <RejectButton onClick={() => handleRejectVerif(v.id)}>
+                            <RejectButton disabled={verifActingId === v.id} onClick={() => openVerificationReject(v.id)}>
                               <XCircle size={16} />
                               {language === 'vi' ? 'Từ chối' : 'Reject'}
                             </RejectButton>
                           </>
                         )}
                         {v.verificationStatus === 'APPROVED' && (
-                          <RejectButton onClick={() => handleDeactivateVerif(v.id)}>
+                          <RejectButton disabled={verifActingId === v.id} onClick={() => handleDeactivateVerif(v.id)}>
                             <XCircle size={16} />
                             {language === 'vi' ? 'Hủy kích hoạt' : 'Deactivate'}
                           </RejectButton>
@@ -1808,7 +1914,16 @@ const CandidatesManagement = () => {
                       {language === 'vi' ? 'Đang tải...' : 'Loading...'}
                     </td>
                   </tr>
-                ) : deletionRequests.length === 0 ? (
+                ) : deletionError ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                      {deletionError}
+                      <button type="button" onClick={loadDeletionRequests} style={{ display: 'block', margin: '12px auto 0' }}>
+                        {language === 'vi' ? 'Thử lại' : 'Retry'}
+                      </button>
+                    </td>
+                  </tr>
+                ) : filteredDeletionRequests.length === 0 ? (
                   <tr>
                     <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
@@ -1817,15 +1932,7 @@ const CandidatesManagement = () => {
                       </div>
                     </td>
                   </tr>
-                ) : deletionRequests
-                    .filter(d => !searchTerm || d.name.toLowerCase().includes(searchTerm.toLowerCase()) || d.email.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .sort((a, b) => {
-                      const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
-                      const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
-                      return dateB - dateA;
-                    })
-                    .slice(startIndex, endIndex)
-                    .map((d, index) => {
+                ) : currentDeletionRequests.map((d, index) => {
                       const colorScheme = getColorScheme(index);
                       const initials = getCandidateInitials(d.name);
                       return (
@@ -1895,8 +2002,8 @@ const CandidatesManagement = () => {
         <PaginationContainer>
           <PaginationInfo>
             {language === 'vi'
-              ? `Đang xem ${startIndex + 1}-${Math.min(endIndex, activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : activeTab === 'deletions' ? deletionRequests.length : filteredCandidates.length)} trên ${activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : activeTab === 'deletions' ? deletionRequests.length : filteredCandidates.length} kết quả`
-              : `Showing ${startIndex + 1}-${Math.min(endIndex, activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : activeTab === 'deletions' ? deletionRequests.length : filteredCandidates.length)} of ${activeTab === 'withdrawals' ? filteredWithdrawRequests.length : activeTab === 'verifications' ? verifications.length : activeTab === 'deletions' ? deletionRequests.length : filteredCandidates.length} results`
+              ? `Đang xem ${totalResults === 0 ? 0 : startIndex + 1}-${Math.min(endIndex, totalResults)} trên ${totalResults} kết quả`
+              : `Showing ${totalResults === 0 ? 0 : startIndex + 1}-${Math.min(endIndex, totalResults)} of ${totalResults} results`
             }
           </PaginationInfo>
 
@@ -1986,6 +2093,40 @@ const CandidatesManagement = () => {
         onConfirm={confirmModalState.onConfirm}
         onCancel={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))}
       />
+
+      <ConfirmModal
+        isOpen={verifRejectState.isOpen}
+        title={language === 'vi' ? 'Từ chối xác minh ứng viên' : 'Reject candidate verification'}
+        message={language === 'vi'
+          ? 'Vui lòng nhập lý do để ứng viên biết cần bổ sung hoặc điều chỉnh thông tin nào.'
+          : 'Enter a reason so the candidate knows what needs to be corrected.'}
+        confirmText={language === 'vi' ? 'Xác nhận từ chối' : 'Confirm rejection'}
+        cancelText={language === 'vi' ? 'Hủy' : 'Cancel'}
+        type="danger"
+        isLoading={verifActingId === verifRejectState.candidateId}
+        onConfirm={() => handleRejectVerif(verifRejectState.candidateId, verifRejectState.reason)}
+        onCancel={() => setVerifRejectState({ isOpen: false, candidateId: '', reason: '' })}
+      >
+        <textarea
+          value={verifRejectState.reason}
+          onChange={event => setVerifRejectState(prev => ({ ...prev, reason: event.target.value }))}
+          placeholder={language === 'vi' ? 'Nhập lý do từ chối (bắt buộc)...' : 'Enter rejection reason (required)...'}
+          rows={4}
+          autoFocus
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            minHeight: 96,
+            marginBottom: 24,
+            padding: '11px 12px',
+            border: '1px solid #cbd5e1',
+            borderRadius: 10,
+            resize: 'vertical',
+            font: 'inherit',
+            color: '#1e293b'
+          }}
+        />
+      </ConfirmModal>
     </DashboardLayout>
   );
 };

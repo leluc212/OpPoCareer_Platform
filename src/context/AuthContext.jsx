@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { getCurrentUser, fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 
@@ -54,6 +54,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const deletedAccountRedirecting = useRef(false);
 
   const login = (userData) => {
     console.log('🔐 Login called with:', userData);
@@ -662,6 +663,51 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Auto deactivate candidate availability status on new tab/browser session
+  useEffect(() => {
+    if (user?.role !== 'candidate' || !user?.userId) return undefined;
+
+    let active = true;
+    const enforceDeletedAccount = async () => {
+      try {
+        const { default: candidateProfileService } = await import('../services/candidateProfileService');
+        const profile = await candidateProfileService.getMyProfile();
+        if (!active || !profile?.isDeleted || deletedAccountRedirecting.current) return;
+
+        deletedAccountRedirecting.current = true;
+        localStorage.removeItem('user');
+        sessionStorage.clear();
+        setUser(null);
+        setIsAuthenticated(false);
+        try {
+          await signOut();
+        } catch (_) {
+          // The local auth state is already cleared; redirect even if Cognito
+          // cannot be reached during account deactivation.
+        }
+        const base = import.meta.env.BASE_URL || '/';
+        window.location.replace(`${base}login?accountDeleted=1`);
+      } catch (error) {
+        if (!active || !error?.accountDeleted || deletedAccountRedirecting.current) return;
+
+        deletedAccountRedirecting.current = true;
+        localStorage.removeItem('user');
+        sessionStorage.clear();
+        setUser(null);
+        setIsAuthenticated(false);
+        try { await signOut(); } catch (_) {}
+        const base = import.meta.env.BASE_URL || '/';
+        window.location.replace(`${base}login?accountDeleted=1`);
+      }
+    };
+
+    enforceDeletedAccount();
+    return () => {
+      active = false;
+    };
+  }, [user?.role, user?.userId]);
+
+  // Stop a candidate whose account was approved for deletion from continuing
+  // to use an already-issued Cognito session.
   useEffect(() => {
     if (user?.role === 'candidate' && user?.userId) {
       const isNewSession = !sessionStorage.getItem('session_initialized');

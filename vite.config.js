@@ -140,6 +140,20 @@ export default defineConfig({
         }
       },
       // eKYC Mock Server (local dev) — đổi target thành API Gateway khi deploy AWS
+      // Candidate experience API. Proxying in DEV avoids the deployed API's
+      // missing CORS headers for authenticated browser requests.
+      '/api-experience': {
+        target: 'https://eifv256cee.execute-api.ap-southeast-1.amazonaws.com/prod',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-experience/, ''),
+        secure: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const auth = req.headers['authorization'] || req.headers['Authorization'];
+            if (auth) proxyReq.setHeader('Authorization', auth);
+          });
+        }
+      },
       '/api-ekyc': {
         target: 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod',
         changeOrigin: true,

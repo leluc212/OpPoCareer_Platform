@@ -1,6 +1,7 @@
 import json
 import boto3
 import base64
+import os
 from decimal import Decimal
 from datetime import datetime
 
@@ -9,6 +10,8 @@ table = dynamodb.Table('CandidateProfiles')
 applications_table = dynamodb.Table('StandardApplications')
 s3_client = boto3.client('s3', region_name='ap-southeast-1')
 S3_BUCKET = 'opporeview-cv-storage-prod-2026'
+cognito_client = boto3.client('cognito-idp', region_name='ap-southeast-1')
+COGNITO_USER_POOL_ID = os.environ.get('COGNITO_USER_POOL_ID', 'ap-southeast-1_LUa2Zfjtv')
 
 
 def get_cors_headers():
@@ -35,6 +38,55 @@ def response(status_code, body):
         'headers': get_cors_headers(),
         'body': json.dumps(body, cls=DecimalEncoder)
     }
+
+
+def account_deleted_response():
+    return response(410, {
+        'success': False,
+        'code': 'ACCOUNT_DELETED',
+        'accountDeleted': True,
+        'message': 'Account has been deleted and is no longer available.'
+    })
+
+
+def disable_cognito_user(user_id, profile):
+    """Disable the Cognito account after an admin-approved soft deletion.
+
+    The profile flag and API guard remain the source of truth for existing
+    sessions. Disabling Cognito additionally prevents a deleted candidate from
+    starting a new session. Failure is logged but does not roll back the
+    durable DynamoDB deletion marker.
+    """
+    try:
+        username = None
+        users = cognito_client.list_users(
+            UserPoolId=COGNITO_USER_POOL_ID,
+            Filter=f'sub = "{user_id}"',
+            Limit=1
+        ).get('Users', [])
+        if users:
+            username = users[0].get('Username')
+
+        if not username:
+            username = (
+                profile.get('cognitoUsername')
+                or profile.get('username')
+                or profile.get('email')
+            )
+
+        if not username:
+            print(f'⚠️ Could not resolve Cognito username for deleted candidate {user_id}')
+            return False
+
+        cognito_client.admin_disable_user(
+            UserPoolId=COGNITO_USER_POOL_ID,
+            Username=username
+        )
+        print(f'✅ Cognito user disabled for deleted candidate {user_id}')
+        return True
+    except Exception as error:
+        print(f'⚠️ Could not disable Cognito user for deleted candidate {user_id}: {error}')
+        return False
 
 
 def float_to_decimal(obj):
@@ -129,6 +181,9 @@ def lambda_handler(event, context):
                     return response(403, {'success': False, 'message': 'Cannot submit verification for another user'})
             except (TypeError, ValueError):
                 pass
+            profile = table.get_item(Key={'userId': caller_id}).get('Item') or {}
+            if profile.get('isDeleted') is True and not caller_is_admin:
+                return account_deleted_response()
             return handle_verification_routes(event, http_method, path, path_params)
 
         if '/admin/candidate-verifications' in path:
@@ -273,6 +328,8 @@ def lambda_handler(event, context):
             item = result.get('Item')
             if not item:
                 return response(404, {'success': False, 'message': 'Profile not found'})
+            if item.get('isDeleted') is True and user_id == caller_id and not caller_is_admin:
+                return account_deleted_response()
             return response(200, {'success': True, 'data': item})
  
         elif http_method == 'POST':
@@ -297,6 +354,8 @@ def lambda_handler(event, context):
                 print(f"Warning: Could not check existing profile: {check_err}")
 
             if existing:
+                if existing.get('isDeleted') is True and not caller_is_admin:
+                    return account_deleted_response()
                 # Profile exists! Use update_item to merge new data WITHOUT losing existing fields
                 # Only update fields that are non-empty in the incoming body
                 print(f"⚠️ POST /profile called but profile already exists for {user_id}. Merging data safely.")
@@ -365,6 +424,9 @@ def lambda_handler(event, context):
             except Exception as get_err:
                 print(f"Error fetching previous profile: {get_err}")
                 prev_profile = {}
+
+            if prev_profile.get('isDeleted') is True and not caller_is_admin:
+                return account_deleted_response()
 
             # PUT /profile/{userId} - Update profile
             body = float_to_decimal(json.loads(event.get('body') or '{}'))
@@ -438,6 +500,9 @@ def lambda_handler(event, context):
                 ReturnValues='ALL_NEW'
             )
             updated_profile = result.get('Attributes', {})
+
+            if body.get('isDeleted') is True and caller_is_admin:
+                disable_cognito_user(user_id, prev_profile or updated_profile)
 
             # Check if search status is active and should trigger recommendations
             # DEACTIVATED: Toggle-based recommendations removed per request.

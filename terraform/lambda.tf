@@ -232,6 +232,7 @@ resource "aws_lambda_function" "candidate_profile" {
     variables = {
       TABLE_NAME      = aws_dynamodb_table.candidate_profiles.name
       FEEDBACKS_TABLE = aws_dynamodb_table.feedbacks.name
+      COGNITO_USER_POOL_ID = aws_cognito_user_pool.user_pool.id
     }
   }
 }

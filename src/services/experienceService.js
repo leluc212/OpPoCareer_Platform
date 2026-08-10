@@ -8,8 +8,15 @@
 
 import { getAuthHeaders } from './authHeaders';
 
-const BASE = import.meta.env.VITE_EXPERIENCE_API_URL
-  || 'https://6fgpp0z6k3.execute-api.ap-southeast-1.amazonaws.com/prod';
+const DIRECT_BASE = (
+  import.meta.env.VITE_EXPERIENCE_API_URL
+  || 'https://eifv256cee.execute-api.ap-southeast-1.amazonaws.com/prod'
+).replace(/\/$/, '');
+
+// The deployed API is missing CORS headers on some authenticated responses.
+// Keep production on the direct URL (where API CORS must be configured), but
+// use the same-origin Vite proxy during local development.
+const BASE = import.meta.env.DEV ? '/api-experience' : DIRECT_BASE;
 
 async function request(path, options = {}) {
   const headers = await getAuthHeaders();
@@ -28,7 +35,10 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    throw new Error(data?.message || `HTTP ${res.status}`);
+    const error = new Error(data?.message || `HTTP ${res.status}`);
+    error.status = res.status;
+    error.code = data?.code;
+    throw error;
   }
   return data;
 }

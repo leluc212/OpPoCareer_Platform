@@ -75,7 +75,8 @@ resource "aws_iam_role_policy" "lambda_custom_services" {
           "cognito-idp:AdminGetUser",
           "cognito-idp:ListUsers",
           "cognito-idp:AdminCreateUser",
-          "cognito-idp:AdminUpdateUserAttributes"
+          "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:AdminDisableUser"
         ]
         Resource = "*"
       }

@@ -194,7 +194,8 @@ const ConfirmModal = ({
   onConfirm, 
   onCancel, 
   type = 'warning', 
-  isLoading = false 
+  isLoading = false,
+  children
 }) => {
   const { language } = useLanguage();
 
@@ -241,6 +242,7 @@ const ConfirmModal = ({
           
           <Title>{title}</Title>
           <Message>{message}</Message>
+          {children}
           
           <ButtonGroup>
             <ModalButton 

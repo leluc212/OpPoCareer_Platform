@@ -22,6 +22,18 @@ variable "admin_email" {
   description = "Default admin email for system notifications."
 }
 
+variable "cognito_email_from" {
+  type        = string
+  default     = "noreply@oppocareer.com"
+  description = "Verified SES sender address used by Cognito for OTP and account emails."
+}
+
+variable "cognito_email_reply_to" {
+  type        = string
+  default     = "tuyendung.oppo@oppocareer.com"
+  description = "Reply-To address used by Cognito account emails."
+}
+
 variable "vietqr_bank_id" {
   type        = string
   default     = "MB"

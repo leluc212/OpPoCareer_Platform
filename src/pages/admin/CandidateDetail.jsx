@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useLanguage } from '../../context/LanguageContext';
 import candidateProfileService from '../../services/candidateProfileService';
+import notificationService from '../../services/notificationService';
 import { 
   ArrowLeft,
   Phone,
@@ -416,6 +417,17 @@ const CandidateDetail = () => {
     try {
       await candidateProfileService.approveVerification(candidate.id, verifNote);
       setCandidate(prev => ({ ...prev, verificationStatus: 'APPROVED', verificationApprovedAt: new Date().toISOString() }));
+      try {
+        await notificationService.createCandidateQuickJobVerifNotification(
+          candidate.id,
+          candidate.name,
+          'approved'
+        );
+      } catch (notificationError) {
+        // The verification decision is already persisted; a notification API
+        // failure must not make the admin retry and accidentally duplicate it.
+        console.error('Failed to notify candidate about approved verification:', notificationError);
+      }
       alert(vi ? '✅ Đã phê duyệt xác minh ứng viên.' : '✅ Candidate verification approved.');
     } catch (e) {
       alert(vi ? 'Lỗi khi duyệt. Vui lòng thử lại.' : 'Error approving. Please try again.');
@@ -431,8 +443,18 @@ const CandidateDetail = () => {
     }
     setVerifLoading(true);
     try {
-      await candidateProfileService.rejectVerification(candidate.id, verifNote);
-      setCandidate(prev => ({ ...prev, verificationStatus: 'REJECTED', verificationRejectedAt: new Date().toISOString(), verificationNote: verifNote }));
+      const reason = verifNote.trim();
+      await candidateProfileService.rejectVerification(candidate.id, reason);
+      setCandidate(prev => ({ ...prev, verificationStatus: 'REJECTED', verificationRejectedAt: new Date().toISOString(), verificationNote: reason }));
+      try {
+        await notificationService.createCandidateQuickJobVerifNotification(
+          candidate.id,
+          candidate.name,
+          'rejected'
+        );
+      } catch (notificationError) {
+        console.error('Failed to notify candidate about rejected verification:', notificationError);
+      }
       alert(vi ? '❌ Đã từ chối yêu cầu xác minh.' : '❌ Verification request rejected.');
     } catch (e) {
       alert(vi ? 'Lỗi khi từ chối. Vui lòng thử lại.' : 'Error rejecting. Please try again.');

@@ -7,12 +7,12 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 // API Gateway's missing CORS headers (authenticated GET/PUT/POST otherwise fail the
 // browser preflight). In production, use the direct API Gateway URL — the API Gateway
 // CORS must be enabled there for this to work.
-const API_BASE_URL = import.meta.env.DEV
-  ? '/api-profile'
-  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod');
-const CANDIDATE_LIST_API_URL = import.meta.env.DEV
-  ? '/api'
-  : (import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod');
+const DIRECT_API_BASE_URL = (
+  import.meta.env.VITE_CANDIDATE_API_URL
+  || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod'
+).replace(/\/$/, '');
+const API_BASE_URL = import.meta.env.DEV ? '/api-profile' : DIRECT_API_BASE_URL;
+const CANDIDATE_LIST_API_URL = import.meta.env.DEV ? '/api' : DIRECT_API_BASE_URL;
 
 /**
  * Get authentication token from Amplify
@@ -95,6 +95,7 @@ class CandidateProfileService {
     console.log('🔗 API URL:', API_BASE_URL);
     this.myProfilePromise = null;
     this.createProfilePromise = null;
+    this.allCandidatesPromise = null;
   }
 
   /**
@@ -140,13 +141,20 @@ class CandidateProfileService {
       // Handle 404 as a special case
       if (response.status === 404) {
         const errorData = await response.json().catch(() => ({ message: 'Not found' }));
-        throw new Error(errorData.message || `404 Not Found: ${baseUrl}${endpoint}`);
+        const error = new Error(errorData.message || `404 Not Found: ${baseUrl}${endpoint}`);
+        error.status = 404;
+        error.accountDeleted = errorData.accountDeleted === true;
+        throw error;
       }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: 'Request failed' }));
         console.error(`❌ API Error ${response.status}:`, error);
-        throw new Error(error.message || `HTTP ${response.status}`);
+        const requestError = new Error(error.message || `HTTP ${response.status}`);
+        requestError.status = response.status;
+        requestError.code = error.code;
+        requestError.accountDeleted = error.accountDeleted === true;
+        throw requestError;
       }
 
       return response.json();
@@ -519,19 +527,21 @@ class CandidateProfileService {
    */
   async fetchResiliently({ path, defaultUrl, serviceName = 'Service' }) {
     // Endpoints in priority: Proxy -> Direct AWS
-    const endpoints = [
-      { url: path, label: 'Vite Proxy' },
-      { url: defaultUrl, label: 'Direct AWS', isDirect: true }
-    ];
+    const endpoints = [path, defaultUrl]
+      .filter((url, index, all) => typeof url === 'string' && url && all.indexOf(url) === index)
+      .map((url, index) => ({
+        url,
+        label: index === 0 && import.meta.env.DEV ? 'Vite Proxy' : 'Direct AWS'
+      }));
 
     const errors = [];
     let iamDetected = false;
+    const token = await getAuthToken();
 
     for (const endpoint of endpoints) {
       // Step 1: Try with Cognito Auth
       try {
         console.log(`🔍 [${serviceName}] Attempting fetch: ${endpoint.url} (Auth: true)`);
-        const token = await getAuthToken();
         const headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -548,6 +558,7 @@ class CandidateProfileService {
         }
 
         const errorBody = await response.text();
+        errors.push({ label: endpoint.label, status: response.status, body: errorBody.substring(0, 120) });
         console.warn(`⚠️ [${serviceName}] ${endpoint.label} failed with ${response.status}: ${errorBody.substring(0, 50)}...`);
 
         // Detection: "Invalid key=value pair" means IAM is blocking the Cognito token
@@ -560,7 +571,12 @@ class CandidateProfileService {
         errors.push({ label: endpoint.label, error: err.message });
       }
 
-      // Step 2: Try without headers (for public or IAM-optional gateways)
+      // A candidate list is protected by the JWT authorizer. Retrying every
+      // 401/404 without auth only creates duplicate requests and noisy console
+      // errors. Keep this fallback only for the legacy IAM-authorizer response.
+      if (!iamDetected) continue;
+
+      // Step 2: Try without headers for legacy IAM-optional gateways
       try {
         console.log(`🔍 [${serviceName}] Attempting fetch: ${endpoint.url} (Auth: false)`);
         const response = await fetch(endpoint.url, {
@@ -580,21 +596,39 @@ class CandidateProfileService {
     }
 
     console.error(`❌ [${serviceName}] All fetch paths exhausted for ${path}`);
-    const fallback = [];
-    fallback._isBlockedByIam = iamDetected;
-    fallback._errorCount = errors.length;
-    return fallback;
+    const status = errors.find(error => error.status)?.status;
+    const error = new Error(
+      `${serviceName} request failed${status ? ` (HTTP ${status})` : ''}. Please try again.`
+    );
+    error.details = errors;
+    error.isBlockedByIam = iamDetected;
+    throw error;
   }
 
   /**
    * Get all candidates via Vite proxy (Lambda Function URL)
    */
   async getAllCandidates() {
-    return this.fetchResiliently({
-      path: '/api-lambda-candidates/candidates',
-      defaultUrl: `${import.meta.env.VITE_CANDIDATE_API_URL || 'https://mrag7hkw11.execute-api.ap-southeast-1.amazonaws.com/prod'}/candidates`,
+    // Several admin widgets mount together and ask for the same list. Reuse
+    // an in-flight request so one page load does not generate duplicate calls.
+    if (this.allCandidatesPromise) return this.allCandidatesPromise;
+
+    const directUrl = `${DIRECT_API_BASE_URL}/candidates`;
+    // The proxy path exists only in local Vite development. In production,
+    // calling /api-lambda-candidates on the website domain returns 404.
+    const listUrl = import.meta.env.DEV
+      ? '/api-lambda-candidates/candidates'
+      : directUrl;
+
+    this.allCandidatesPromise = this.fetchResiliently({
+      path: listUrl,
+      defaultUrl: directUrl,
       serviceName: 'CandidateService'
+    }).finally(() => {
+      this.allCandidatesPromise = null;
     });
+
+    return this.allCandidatesPromise;
   }
 
   // ─── Verification APIs ────────────────────────────────────────────────────
@@ -624,13 +658,8 @@ class CandidateProfileService {
    * Admin: get all candidates with SUBMITTED or REJECTED verificationStatus
    */
   async getPendingVerifications() {
-    try {
-      const result = await this.makeRequest('/admin/candidate-verifications');
-      return result.success ? result.data : [];
-    } catch (error) {
-      console.error('Error fetching pending verifications:', error);
-      return [];
-    }
+    const result = await this.makeRequest('/admin/candidate-verifications');
+    return result.success && Array.isArray(result.data) ? result.data : [];
   }
 
   /**
@@ -697,24 +726,19 @@ class CandidateProfileService {
    * Admin: get all candidates with pending deletion requests
    */
   async getPendingDeletionRequests() {
-    try {
-      const candidates = await this.getAllCandidates();
-      return (candidates || []).filter(c => {
-        const dr = c.deletionRequest;
-        return dr && dr.status === 'pending';
-      }).map(c => ({
-        id: c.userId || c.id,
-        name: c.fullName || (c.email ? c.email.split('@')[0] : 'Unknown'),
-        email: c.email || '',
-        phone: c.phone || c.phoneNumber || '',
-        avatar: c.avatar || c.profileImage || null,
-        requestedAt: c.deletionRequest?.requestedAt || '',
-        deletionRequest: c.deletionRequest
-      }));
-    } catch (error) {
-      console.error('Error fetching deletion requests:', error);
-      return [];
-    }
+    const candidates = await this.getAllCandidates();
+    return (candidates || []).filter(c => {
+      const dr = c.deletionRequest;
+      return dr && dr.status === 'pending';
+    }).map(c => ({
+      id: c.userId || c.id,
+      name: c.fullName || (c.email ? c.email.split('@')[0] : 'Unknown'),
+      email: c.email || '',
+      phone: c.phone || c.phoneNumber || '',
+      avatar: c.avatar || c.profileImage || null,
+      requestedAt: c.deletionRequest?.requestedAt || '',
+      deletionRequest: c.deletionRequest
+    }));
   }
 
   /**
@@ -730,6 +754,7 @@ class CandidateProfileService {
             approvedAt: new Date().toISOString()
           },
           isDeleted: true,
+          isActive: false,
           deletedAt: new Date().toISOString()
         })
       });

@@ -272,13 +272,14 @@ function statusIconEl(s) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const ExperienceManagement = ({ embedded = false }) => {
+const ExperienceManagement = ({ embedded = false, onPendingCountChange }) => {
   const { language } = useLanguage();
   const toast = useToast();
   const vi = language === 'vi';
 
   const [items, setItems]             = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState('');
   const [search, setSearch]           = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selected, setSelected]       = useState(null);   // item in modal
@@ -293,15 +294,23 @@ const ExperienceManagement = ({ embedded = false }) => {
 
   // Polling every 30 s
   const loadData = useCallback(async () => {
+    setError('');
     try {
       const data = await getAllExperiences(statusFilter === 'all' ? 'all' : statusFilter.toUpperCase());
       setItems(data);
+      // Only derive the parent badge from an unfiltered response. When the
+      // admin switches to Approved/Rejected, those filtered rows must not
+      // incorrectly reset the number of pending rows to zero.
+      if (statusFilter === 'all') {
+        onPendingCountChange?.(data.filter(item => item.status === 'PENDING').length);
+      }
     } catch (err) {
       console.error(err);
+      setError(err.message || (vi ? 'Không thể tải dữ liệu.' : 'Could not load data.'));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, onPendingCountChange, vi]);
 
   useEffect(() => {
     setLoading(true);
@@ -334,6 +343,7 @@ const ExperienceManagement = ({ embedded = false }) => {
     try {
       await approveExperience(experienceId);
       toast.success(vi ? 'Đã duyệt kinh nghiệm!' : 'Experience approved!');
+      onPendingCountChange?.(prev => Math.max(0, prev - 1));
       setSelected(null);
       await loadData();
     } catch (err) {
@@ -352,6 +362,7 @@ const ExperienceManagement = ({ embedded = false }) => {
     try {
       await rejectExperience(experienceId, rejectReason.trim());
       toast.success(vi ? 'Đã từ chối!' : 'Rejected!');
+      onPendingCountChange?.(prev => Math.max(0, prev - 1));
       setSelected(null);
       setRejectReason('');
       setRejectMode(false);
@@ -421,6 +432,19 @@ const ExperienceManagement = ({ embedded = false }) => {
       <TableWrap>
         {loading ? (
           <EmptyState><div className="icon">⏳</div><h3>{vi ? 'Đang tải...' : 'Loading...'}</h3></EmptyState>
+        ) : error ? (
+          <EmptyState>
+            <div className="icon"><AlertCircle /></div>
+            <h3>{vi ? 'Không thể tải dữ liệu' : 'Could not load data'}</h3>
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => { setLoading(true); loadData(); }}
+              style={{ marginTop: 12, padding: '9px 16px', border: '1px solid #bfdbfe', borderRadius: 8, background: '#eff6ff', color: '#1e40af', fontWeight: 700, cursor: 'pointer' }}
+            >
+              {vi ? 'Thử lại' : 'Retry'}
+            </button>
+          </EmptyState>
         ) : filtered.length === 0 ? (
           <EmptyState>
             <div className="icon">📋</div>

@@ -1743,6 +1743,44 @@ export const createCandidateChangeRequestReceivedNotification = async (payload) 
   return await saveNotification(notification);
 };
 
+/**
+ * Notify a candidate about the result of an account deletion request.
+ * Keep this as a dedicated helper so the admin flow cannot silently skip the
+ * notification when a generic method is unavailable.
+ */
+export const createCandidateAccountDeletionNotification = async (candidateId, candidateName, status) => {
+  if (!candidateId) throw new Error('candidateId is required');
+  if (!['approved', 'rejected'].includes(status)) {
+    throw new Error('status must be approved or rejected');
+  }
+
+  const approved = status === 'approved';
+  const safeName = candidateName || 'Ứng viên';
+  const notification = {
+    type: approved ? 'account_deletion_approved' : 'account_deletion_rejected',
+    title: approved ? 'Yêu cầu xóa tài khoản đã được duyệt' : 'Yêu cầu xóa tài khoản bị từ chối',
+    titleEn: approved ? 'Account deletion request approved' : 'Account deletion request rejected',
+    message: approved
+      ? `Yêu cầu xóa tài khoản của ${safeName} đã được Admin xử lý. Tài khoản đã được vô hiệu hóa.`
+      : `Yêu cầu xóa tài khoản của ${safeName} đã bị Admin từ chối. Bạn có thể tiếp tục sử dụng tài khoản.`,
+    messageEn: approved
+      ? 'Your account deletion request was approved. Your account has been deactivated.'
+      : 'Your account deletion request was rejected. You can continue using your account.',
+    recipientId: candidateId,
+    recipientRole: 'candidate',
+    senderId: 'admin',
+    senderName: 'Admin Ốp Pờ',
+    data: { candidateId, candidateName: safeName, status },
+    icon: approved ? 'check-circle' : 'x-circle',
+    color: approved ? '#10b981' : '#ef4444',
+    actionUrl: approved ? '/login' : '/candidate/settings',
+    actionText: approved ? 'Đăng nhập lại' : 'Xem cài đặt tài khoản',
+    actionTextEn: approved ? 'Sign in again' : 'View account settings'
+  };
+
+  return await saveNotification(notification);
+};
+
 export default {
   getAllNotifications,
   getNotifications,
@@ -1766,6 +1804,7 @@ export default {
   createQuickJobActivationDeactivatedNotification,
   createCandidateVerificationRequestNotification,
   createCandidateQuickJobVerifNotification,
+  createCandidateAccountDeletionNotification,
   createCandidateWithdrawalRequestNotification,
   createCandidateWithdrawalStatusNotification,
   createCandidateAiScreeningPassedNotification,

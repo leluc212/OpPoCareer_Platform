@@ -389,7 +389,18 @@ const Sidebar = ({ role, onHoverChange }) => {
           
           // Badge employer = unread notifications liên quan đến employer (bấm vào xem → hết badge)
           const employersCount = unreadNotifs.filter(n => n.actionUrl === '/admin/employers').length;
-          const candidatesCount = unreadNotifs.filter(n => (n.actionUrl === '/admin/candidates' || n.actionUrl === '/admin/candidates?tab=experiences' || n.actionUrl === '/admin/experiences') && n.type !== 'candidate_withdrawal_request').length;
+          // A verification notification can remain unread after the request was
+          // approved/rejected. Reconcile it with current candidate data so this
+          // badge represents actionable work instead of stale notifications.
+          const unreadVerificationNotificationCount = unreadNotifs
+            .filter(n => n.type === 'candidate_verification_request').length;
+          const pendingVerificationCount = (Array.isArray(candidatesRaw) ? candidatesRaw : [])
+            .filter(candidate => String(candidate.verificationStatus || '').toUpperCase() === 'SUBMITTED')
+            .length;
+          const candidatesCount = Math.max(
+            0,
+            notificationBadgeCounts.candidates - unreadVerificationNotificationCount
+          ) + pendingVerificationCount;
 
           // Calculate pending standard and quick jobs (neither approved nor rejected)
           const standardList = Array.isArray(standardJobsRaw) ? standardJobsRaw : (standardJobsRaw?.data || []);
@@ -427,7 +438,7 @@ const Sidebar = ({ role, onHoverChange }) => {
           if (active) {
             setAdminBadges({
               employers: notificationBadgeCounts.employers,
-              candidates: notificationBadgeCounts.candidates,
+              candidates: candidatesCount,
               posts: pendingStandardCount + pendingQuickCount,
               packages: notificationBadgeCounts.packages,
               wallet: notificationBadgeCounts.wallet,

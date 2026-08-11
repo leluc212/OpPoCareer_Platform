@@ -690,6 +690,36 @@ const Reports = () => {
     fetchAllData();
   }, [language]);
 
+  // Keep both purchase-history and package-status tabs synchronized with the
+  // same PackageSubscriptions records while the Admin page is open.
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshSubscriptions = async () => {
+      try {
+        const subscriptions = await adminReportService.getAllSubscriptions();
+        if (isMounted) {
+          setReportData(prev => ({ ...prev, subscriptions }));
+        }
+      } catch (err) {
+        console.error('Error refreshing report subscriptions:', err);
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshSubscriptions();
+    };
+
+    const refreshInterval = window.setInterval(refreshSubscriptions, 15000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
+
   // Handler xuất Excel (chưa implement thư viện)
   const handleExportExcel = () => {
     alert(

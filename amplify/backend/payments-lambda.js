@@ -138,8 +138,14 @@ exports.handler = async (/** @type {{ httpMethod: any; requestContext: { http: {
       return await getPayment(paymentId);
     }
 
-    // POST /payment/webhook — SePay webhook
-    if (method === 'POST' && (path === '/payment/webhook' || path === '/payments/webhook')) {
+    // POST webhook routes — SePay webhook & aliases
+    if (method === 'POST' && (
+      path.endsWith('/payment/webhook') ||
+      path.endsWith('/payments/webhook') ||
+      path.endsWith('/wallet/sepay-webhook') ||
+      path.endsWith('/sepay-webhook') ||
+      path.endsWith('/webhook')
+    )) {
       // @ts-ignore
       return await handleWebhook(event);
     }
@@ -247,7 +253,10 @@ async function getPayment(paymentId) {
  * @returns {string|null}
  */
 function extractWalletCode(content) {
-  const match = String(content || '').match(/OPPOWALLET[\s:_-]*(OP[A-Z0-9]{4})/i);
+  const str = String(content || '');
+  const match = str.match(/OPPO\s*WALLET[\s:_\-.]*(OP[A-Z0-9]{4})/i)
+    || str.match(/(?:^|[^A-Z0-9])(OP[A-Z0-9]{4})(?:$|[^A-Z0-9])/i)
+    || str.match(/(OP[A-Z0-9]{4})/i);
   return match ? match[1].toUpperCase() : null;
 }
 
@@ -475,20 +484,46 @@ async function activatePackage(payment) {
 
   const subscriptionId = `SUB-${paymentId}`;
 
+  let employerProfile = {};
+  try {
+    const profileResponse = await db.send(new GetCommand({
+      TableName: EMPLOYERS_TABLE,
+      Key: { userId },
+      ProjectionExpression: 'companyName, businessName, email, contactEmail',
+    }));
+    employerProfile = profileResponse.Item || {};
+  } catch (err) {
+    console.warn('⚠️ Could not load employer profile for subscription history:', err.message);
+  }
+
+  const companyName = employerProfile.companyName
+    || employerProfile.businessName
+    || 'Employer';
+  const purchaseDate = now.slice(0, 10);
+
   // Write to UserPackages table
   try {
     await db.send(new PutCommand({
       TableName: USER_PACKAGES_TABLE,
       Item: {
         subscriptionId,
+        employerId: userId,
         userId,
         packageId,
         packageName: packageName || '',
+        companyName,
+        duration: duration || '',
+        price: Number(amount) || 0,
         amount,
         paymentId,
         status: 'active',
+        approvalStatus: 'approved',
+        purchaseDate,
+        purchaseDateTime: now,
         activatedAt: now,
         expiryDate,
+        expiryDateTime: expiryDate,
+        paymentMethod: 'bank_transfer',
         createdAt: now,
         updatedAt: now,
       },

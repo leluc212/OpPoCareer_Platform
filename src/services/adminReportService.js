@@ -62,12 +62,17 @@ class AdminReportService {
   async getAllSubscriptions() {
     try {
       const response = await fetch(`${SUBSCRIPTIONS_API_URL}/subscriptions`, {
-        headers: await getOptionalAuthHeaders()
+        headers: {
+          ...(await getOptionalAuthHeaders()),
+          'Cache-Control': 'no-cache'
+        },
+        cache: 'no-store'
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      return await response.json();
+      const payload = await response.json();
+      return Array.isArray(payload) ? payload : (payload?.data || []);
     } catch (error) {
       console.error('❌ AdminReportService: Error fetching subscriptions:', error);
       return [];

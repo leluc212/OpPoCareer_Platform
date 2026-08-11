@@ -932,6 +932,8 @@ const Reports = () => {
     s.packageName?.includes('Gấp') || s.packageName?.includes('Urgent')
   );
 
+  const allSubscriptions = reportData.subscriptions || [];
+
   return (
     <DashboardLayout role="admin" key={language}>
       <PageContainer>
@@ -1412,7 +1414,7 @@ const Reports = () => {
             <ServiceTable>
               <ServiceTableHeader>
                 <Briefcase size={24} />
-                {language === 'vi' ? 'Lịch sử mua gói - Công việc Tiêu chuẩn' : 'Purchase History - Standard Jobs'}
+                {language === 'vi' ? 'Lịch sử mua gói' : 'Purchase History'}
               </ServiceTableHeader>
               <ServiceTableContent>
                 <ServiceTableGrid>
@@ -1429,7 +1431,7 @@ const Reports = () => {
                     </TableHeaderRow>
                   </thead>
                   <tbody>
-                    {standardSubscriptions.length > 0 ? standardSubscriptions.map((purchase, index) => (
+                    {allSubscriptions.length > 0 ? allSubscriptions.map((purchase, index) => (
                       <TableRow key={purchase.subscriptionId || index}>
                         <TableCell $align="center" style={{ fontWeight: 600, color: '#6b7280' }}>
                           {index + 1}
@@ -1481,77 +1483,6 @@ const Reports = () => {
               </ServiceTableContent>
             </ServiceTable>
 
-            <ServiceTable>
-              <ServiceTableHeader>
-                <Zap size={24} />
-                {language === 'vi' ? 'Lịch sử mua gói - Công việc Tuyển gấp' : 'Purchase History - Urgent Jobs'}
-              </ServiceTableHeader>
-              <ServiceTableContent>
-                <ServiceTableGrid>
-                  <thead>
-                    <TableHeaderRow>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'STT' : 'No.'}</TableHeaderCell>
-                      <TableHeaderCell>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</TableHeaderCell>
-                      <TableHeaderCell>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Giá' : 'Price'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Đơn vị' : 'Unit'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày mua' : 'Purchase Date'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Thao tác' : 'Actions'}</TableHeaderCell>
-                    </TableHeaderRow>
-                  </thead>
-                  <tbody>
-                    {urgentSubscriptions.length > 0 ? urgentSubscriptions.map((purchase, index) => (
-                      <TableRow key={purchase.subscriptionId || index}>
-                        <TableCell $align="center" style={{ fontWeight: 600, color: '#6b7280' }}>
-                          {index + 1}
-                        </TableCell>
-                        <TableCell style={{ fontWeight: 600 }}>{purchase.companyName || purchase.employer || 'Unknown'}</TableCell>
-                        <TableCell>{purchase.packageName}</TableCell>
-                        <TableCell $align="center" style={{ fontWeight: 700, color: '#f59e0b' }}>
-                          {(parseFloat(purchase.price) || 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell $align="center" style={{ color: '#6b7280', fontSize: '13px' }}>VNĐ</TableCell>
-                        <TableCell $align="center">
-                          {purchase.purchaseDate || (purchase.purchaseDateTime ? parseDateTime(purchase.purchaseDateTime).toLocaleDateString('vi-VN') : (purchase.createdAt ? parseDateTime(purchase.createdAt).toLocaleDateString('vi-VN') : 'N/A'))}
-                        </TableCell>
-                        <TableCell $align="center">
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                            {purchase.status === 'pending' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</span>}
-                            {purchase.status === 'active' && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đang kích hoạt' : 'Active'}</span>}
-                            {(purchase.status === 'expired' || purchase.status === 'expiring') && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
-                          </div>
-                        </TableCell>
-                        <TableCell $align="center">
-                          <button
-                            type="button"
-                            onClick={() => requestDeleteSubscription(purchase)}
-                            aria-label={language === 'vi' ? 'Xóa lịch sử mua gói' : 'Delete purchase history'}
-                            title={language === 'vi' ? 'Xóa lịch sử mua gói' : 'Delete purchase history'}
-                            style={{
-                              width: '34px',
-                              height: '34px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              border: 'none',
-                              borderRadius: '8px',
-                              background: '#fee2e2',
-                              color: '#dc2626',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    )) : (
-                      <tr><td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
-                    )}
-                  </tbody>
-                </ServiceTableGrid>
-              </ServiceTableContent>
-            </ServiceTable>
           </>
         )}
 

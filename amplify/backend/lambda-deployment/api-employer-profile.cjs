@@ -5,10 +5,71 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = re
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 const { CognitoIdentityProviderClient, AdminGetUserCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { DynamoDB } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
 
 const s3Client = new S3Client({ region: 'ap-southeast-1' });
 const sesClient = new SESClient({ region: 'ap-southeast-1' });
 const cognitoClient = new CognitoIdentityProviderClient({ region: 'ap-southeast-1' });
+const cascadeDdb = DynamoDBDocument.from(new DynamoDB({ region: 'ap-southeast-1' }));
+
+const sleep = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+/**
+ * Permanently remove all records owned by an employer from a table.
+ * Tables use different primary-key names, so the key name is explicit.
+ */
+const deleteEmployerRecords = async (tableName, keyName, employerId) => {
+  let lastEvaluatedKey;
+  let deletedCount = 0;
+
+  do {
+    const scanParams = {
+      TableName: tableName,
+      FilterExpression: '#employerId = :employerId',
+      ProjectionExpression: '#recordKey, #employerId',
+      ExpressionAttributeNames: {
+        '#recordKey': keyName,
+        '#employerId': 'employerId'
+      },
+      ExpressionAttributeValues: {
+        ':employerId': employerId
+      }
+    };
+
+    if (lastEvaluatedKey) scanParams.ExclusiveStartKey = lastEvaluatedKey;
+
+    const result = await cascadeDdb.scan(scanParams);
+    const keys = (result.Items || [])
+      .map(item => item[keyName])
+      .filter(Boolean)
+      .map(value => ({ [keyName]: value }));
+
+    for (let index = 0; index < keys.length; index += 25) {
+      let requests = keys.slice(index, index + 25).map(Key => ({ DeleteRequest: { Key } }));
+      let attempts = 0;
+
+      while (requests.length > 0 && attempts < 5) {
+        const response = await cascadeDdb.batchWrite({
+          RequestItems: { [tableName]: requests }
+        });
+        requests = response.UnprocessedItems?.[tableName] || [];
+        attempts += 1;
+        if (requests.length > 0) await sleep(50 * attempts);
+      }
+
+      if (requests.length > 0) {
+        throw new Error(`Could not delete all records from ${tableName}`);
+      }
+
+      deletedCount += Math.min(25, keys.length - index);
+    }
+
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return deletedCount;
+};
 
 /**
  * Fetch registered email from Cognito
@@ -246,16 +307,12 @@ exports.handler = async (event) => {
 
     // DELETE /admin/employers/{userId} - permanently delete the profile (Admin only)
     if (httpMethod === 'DELETE' && pathUserId && event.path?.includes('/admin/employers/')) {
-      const { DynamoDB } = require('@aws-sdk/client-dynamodb');
-      const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
-      const ddb = DynamoDBDocument.from(new DynamoDB({ region: 'ap-southeast-1' }));
-      const result = await ddb.delete({
+      const profile = await cascadeDdb.get({
         TableName: 'EmployerProfiles',
-        Key: { userId: pathUserId },
-        ReturnValues: 'ALL_OLD'
+        Key: { userId: pathUserId }
       });
 
-      if (!result.Attributes) {
+      if (!profile.Item) {
         return {
           statusCode: 404,
           headers: corsHeaders,
@@ -263,10 +320,39 @@ exports.handler = async (event) => {
         };
       }
 
+      const deletedSubscriptions = await deleteEmployerRecords(
+        'PackageSubscriptions',
+        'subscriptionId',
+        pathUserId
+      );
+      const deletedStandardJobs = await deleteEmployerRecords(
+        'PostStandardJob',
+        'idJob',
+        pathUserId
+      );
+      const deletedQuickJobs = await deleteEmployerRecords(
+        'PostQuickJob',
+        'jobID',
+        pathUserId
+      );
+
+      await cascadeDdb.delete({
+        TableName: 'EmployerProfiles',
+        Key: { userId: pathUserId }
+      });
+
       return {
         statusCode: 200,
         headers: corsHeaders,
-        body: JSON.stringify({ success: true, message: 'Employer profile permanently deleted' })
+        body: JSON.stringify({
+          success: true,
+          message: 'Employer profile and related records permanently deleted',
+          deleted: {
+            subscriptions: deletedSubscriptions,
+            standardJobs: deletedStandardJobs,
+            quickJobs: deletedQuickJobs
+          }
+        })
       };
     }
 

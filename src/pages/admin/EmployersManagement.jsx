@@ -1745,8 +1745,8 @@ const EmployersManagement = () => {
   const openDeleteEmployerConfirm = (employer) => {
     setEmpConfirm({
       message: language === 'vi'
-        ? `Bạn có chắc muốn xóa vĩnh viễn nhà tuyển dụng ${employer.companyName} khỏi cơ sở dữ liệu không? Hành động này không thể hoàn tác.`
-        : `Are you sure you want to permanently delete ${employer.companyName} from the database? This action cannot be undone.`,
+        ? `Bạn có chắc muốn xóa vĩnh viễn nhà tuyển dụng ${employer.companyName} không? Hồ sơ, toàn bộ gói đã mua và các bài đăng liên quan sẽ bị xóa khỏi cơ sở dữ liệu. Hành động này không thể hoàn tác.`
+        : `Are you sure you want to permanently delete ${employer.companyName}? The profile, all purchased packages, and related job posts will be permanently removed from the database. This action cannot be undone.`,
       onConfirm: () => handleDeleteEmployer(employer.id)
     });
   };

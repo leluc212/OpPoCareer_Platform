@@ -45,6 +45,26 @@ const parseDateTime = (str) => {
   return new Date(str);
 };
 
+const formatSubscriptionDateTime = (dateTime, dateOnly) => {
+  const rawValue = dateTime || dateOnly;
+  if (!rawValue) return '—';
+
+  const parsed = parseDateTime(rawValue);
+  if (Number.isNaN(parsed.getTime())) return rawValue;
+
+  const formatted = parsed.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  return dateTime ? formatted : formatted.split(',')[0] + ' (chưa có giờ)';
+};
+
 const PageContainer = styled.div`
   animation: fadeIn 0.5s ease-in;
   
@@ -923,15 +943,6 @@ const Reports = () => {
     );
   }
 
-  // Filter subscriptions for history and status tabs
-  const standardSubscriptions = reportData.subscriptions.filter(s => 
-    !s.packageName?.includes('Gấp') && !s.packageName?.includes('Urgent')
-  );
-  
-  const urgentSubscriptions = reportData.subscriptions.filter(s => 
-    s.packageName?.includes('Gấp') || s.packageName?.includes('Urgent')
-  );
-
   const allSubscriptions = reportData.subscriptions || [];
 
   return (
@@ -956,13 +967,6 @@ const Reports = () => {
           >
             <Package size={18} style={{ display: 'inline', marginRight: '8px' }} />
             {language === 'vi' ? 'Lịch sử mua gói' : 'Purchase History'}
-          </Tab>
-          <Tab 
-            $active={activeTab === 'status'}
-            onClick={() => setActiveTab('status')}
-          >
-            <Award size={18} style={{ display: 'inline', marginRight: '8px' }} />
-            {language === 'vi' ? 'Trạng thái các gói' : 'Package Status'}
           </Tab>
           <Tab 
             $active={activeTab === 'feedback'}
@@ -1425,7 +1429,8 @@ const Reports = () => {
                       <TableHeaderCell>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Giá' : 'Price'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đơn vị' : 'Unit'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày mua' : 'Purchase Date'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Mua lúc' : 'Purchased At'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Hết hạn lúc' : 'Expires At'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Thao tác' : 'Actions'}</TableHeaderCell>
                     </TableHeaderRow>
@@ -1443,7 +1448,10 @@ const Reports = () => {
                         </TableCell>
                         <TableCell $align="center" style={{ color: '#6b7280', fontSize: '13px' }}>VNĐ</TableCell>
                         <TableCell $align="center">
-                          {purchase.purchaseDate || (purchase.purchaseDateTime ? parseDateTime(purchase.purchaseDateTime).toLocaleDateString('vi-VN') : (purchase.createdAt ? parseDateTime(purchase.createdAt).toLocaleDateString('vi-VN') : 'N/A'))}
+                          {formatSubscriptionDateTime(purchase.purchaseDateTime, purchase.purchaseDate || purchase.createdAt)}
+                        </TableCell>
+                        <TableCell $align="center">
+                          {formatSubscriptionDateTime(purchase.expiryDateTime, purchase.expiryDate)}
                         </TableCell>
                         <TableCell $align="center">
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
@@ -1476,103 +1484,13 @@ const Reports = () => {
                         </TableCell>
                       </TableRow>
                     )) : (
-                      <tr><td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
+                      <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
                     )}
                   </tbody>
                 </ServiceTableGrid>
               </ServiceTableContent>
             </ServiceTable>
 
-          </>
-        )}
-
-        {activeTab === 'status' && (
-          <>
-            <ServiceTable>
-              <ServiceTableHeader>
-                <Briefcase size={24} />
-                {language === 'vi' ? 'Trạng thái các gói - Công việc Tiêu chuẩn' : 'Package Status - Standard Jobs'}
-              </ServiceTableHeader>
-              <ServiceTableContent>
-                <ServiceTableGrid>
-                  <thead>
-                    <TableHeaderRow>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'STT' : 'No.'}</TableHeaderCell>
-                      <TableHeaderCell>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</TableHeaderCell>
-                      <TableHeaderCell>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày kết thúc' : 'End Date'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
-                    </TableHeaderRow>
-                  </thead>
-                  <tbody>
-                    {standardSubscriptions.length > 0 ? standardSubscriptions.map((pkg, index) => (
-                      <TableRow key={pkg.subscriptionId || index}>
-                        <TableCell $align="center" style={{ fontWeight: 600, color: '#6b7280' }}>
-                          {index + 1}
-                        </TableCell>
-                        <TableCell style={{ fontWeight: 600 }}>{pkg.companyName || pkg.employer || 'Unknown'}</TableCell>
-                        <TableCell>{pkg.packageName}</TableCell>
-                        <TableCell $align="center">{pkg.purchaseDate || (pkg.purchaseDateTime ? parseDateTime(pkg.purchaseDateTime).toLocaleDateString('vi-VN') : (pkg.createdAt ? parseDateTime(pkg.createdAt).toLocaleDateString('vi-VN') : 'N/A'))}</TableCell>
-                        <TableCell $align="center">{pkg.expiryDate || (pkg.expiryDateTime ? parseDateTime(pkg.expiryDateTime).toLocaleDateString('vi-VN') : (pkg.updatedAt ? new Date(parseDateTime(pkg.updatedAt).getTime() + (7 * 24 * 60 * 60 * 1000)).toLocaleDateString('vi-VN') : 'N/A'))}</TableCell>
-                        <TableCell $align="center">
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                            {pkg.status === 'pending' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</span>}
-                            {pkg.status === 'active' && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đang kích hoạt' : 'Active'}</span>}
-                            {(pkg.status === 'expired' || pkg.status === 'expiring') && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )) : (
-                      <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
-                    )}
-                  </tbody>
-                </ServiceTableGrid>
-              </ServiceTableContent>
-            </ServiceTable>
-
-            <ServiceTable>
-              <ServiceTableHeader>
-                <Zap size={24} />
-                {language === 'vi' ? 'Trạng thái các gói - Công việc Tuyển gấp' : 'Package Status - Urgent Jobs'}
-              </ServiceTableHeader>
-              <ServiceTableContent>
-                <ServiceTableGrid>
-                  <thead>
-                    <TableHeaderRow>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'STT' : 'No.'}</TableHeaderCell>
-                      <TableHeaderCell>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</TableHeaderCell>
-                      <TableHeaderCell>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày bắt đầu' : 'Start Date'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày kết thúc' : 'End Date'}</TableHeaderCell>
-                      <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
-                    </TableHeaderRow>
-                  </thead>
-                  <tbody>
-                    {urgentSubscriptions.length > 0 ? urgentSubscriptions.map((pkg, index) => (
-                      <TableRow key={pkg.subscriptionId || index}>
-                        <TableCell $align="center" style={{ fontWeight: 600, color: '#6b7280' }}>
-                          {index + 1}
-                        </TableCell>
-                        <TableCell style={{ fontWeight: 600 }}>{pkg.companyName || pkg.employer || 'Unknown'}</TableCell>
-                        <TableCell>{pkg.packageName}</TableCell>
-                        <TableCell $align="center">{pkg.purchaseDate || (pkg.purchaseDateTime ? parseDateTime(pkg.purchaseDateTime).toLocaleDateString('vi-VN') : 'N/A')}</TableCell>
-                        <TableCell $align="center">{pkg.expiryDate || (pkg.expiryDateTime ? parseDateTime(pkg.expiryDateTime).toLocaleDateString('vi-VN') : 'N/A')}</TableCell>
-                        <TableCell $align="center">
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                            {pkg.status === 'pending' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</span>}
-                            {pkg.status === 'active' && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đang kích hoạt' : 'Active'}</span>}
-                            {(pkg.status === 'expired' || pkg.status === 'expiring') && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )) : (
-                      <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
-                    )}
-                  </tbody>
-                </ServiceTableGrid>
-              </ServiceTableContent>
-            </ServiceTable>
           </>
         )}
 

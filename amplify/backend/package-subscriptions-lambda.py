@@ -1038,7 +1038,14 @@ def create_wallet_subscription(body_str, headers, caller_id=None, caller_is_admi
         ]
 
         try:
-            dynamodb.meta.client.transact_write_items(TransactItems=transaction_items)
+            # Use the low-level DynamoDB client explicitly. The resource's
+            # meta client can re-marshal already serialized AttributeValues,
+            # turning transaction lists into maps and breaking list_append.
+            dynamodb_client = boto3.client(
+                'dynamodb',
+                region_name=os.environ.get('AWS_REGION', 'ap-southeast-1')
+            )
+            dynamodb_client.transact_write_items(TransactItems=transaction_items)
         except ClientError as transaction_error:
             error_code = transaction_error.response.get('Error', {}).get('Code')
             if error_code == 'TransactionCanceledException':

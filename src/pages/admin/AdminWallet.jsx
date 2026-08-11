@@ -1944,6 +1944,22 @@ const AdminWallet = () => {
 
   useEffect(() => {
     loadWalletData();
+
+    // Wallet and package purchases can be created in another tab/session.
+    // Keep the Admin view synchronized without requiring a manual reload.
+    const refreshWhenVisible = () => {
+      if (!document.hidden) loadWalletData();
+    };
+    const refreshTimer = window.setInterval(refreshWhenVisible, 15000);
+
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [language]);
 
   const stats = [

@@ -193,10 +193,7 @@ export const getWallet = async (employerId) => {
 
   const url = `${base.replace(/\/$/, '')}/wallet/${encodeURIComponent(employerId)}`;
   const response = await fetch(url, {
-    headers: {
-      ...(await getAuthHeaders()),
-      'Cache-Control': 'no-cache'
-    },
+    headers: await getAuthHeaders(),
     cache: 'no-store'
   });
   if (!response.ok) {

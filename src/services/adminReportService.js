@@ -62,10 +62,7 @@ class AdminReportService {
   async getAllSubscriptions() {
     try {
       const response = await fetch(`${SUBSCRIPTIONS_API_URL}/subscriptions`, {
-        headers: {
-          ...(await getOptionalAuthHeaders()),
-          'Cache-Control': 'no-cache'
-        },
+        headers: await getOptionalAuthHeaders(),
         cache: 'no-store'
       });
       if (!response.ok) {

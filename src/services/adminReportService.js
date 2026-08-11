@@ -75,6 +75,38 @@ class AdminReportService {
   }
 
   /**
+   * Permanently delete one subscription purchase (Admin only).
+   * The package status view is derived from the same subscription record,
+   * so removing it here also removes its status entry.
+   */
+  async deleteSubscription(subscriptionId) {
+    if (!subscriptionId) {
+      throw new Error('Subscription ID is required');
+    }
+
+    const response = await fetch(
+      `${SUBSCRIPTIONS_API_URL}/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      {
+        method: 'DELETE',
+        headers: await getOptionalAuthHeaders()
+      }
+    );
+
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message || `HTTP ${response.status}`);
+    }
+
+    return payload || { success: true };
+  }
+
+  /**
    * Process and calculate statistics from raw data with trends
    */
   calculateStats(data) {
@@ -330,28 +362,131 @@ class AdminReportService {
   }
 
   /**
-   * Get top employers by total revenue spend
+   * Build a stable employer identity from database IDs/emails and resolve
+   * the display name from EmployerProfiles whenever possible.
    */
-  getTopEmployersByRevenue(subscriptions) {
-    const revenueMap = {};
-    const pkgCountMap = {};
+  resolveEmployerIdentity(record, employers = [], fallbackFields = []) {
+    const normalize = value => String(value ?? '').trim().toLowerCase();
+    const employerProfiles = Array.isArray(employers) ? employers : [];
+    const byId = new Map();
+    const byEmail = new Map();
 
-    subscriptions.forEach(s => {
-      if (s.status === 'pending') return;
+    employerProfiles.forEach(profile => {
+      const profileId = profile.userId || profile.id || profile.employerId;
+      const profileEmail = profile.email || profile.employerEmail;
+      const profileName = [
+        profile.companyName,
+        profile.businessName,
+        profile.employerName,
+        profile.name
+      ].find(value => String(value ?? '').trim());
 
-      const company = s.companyName || 'Unknown Company';
-      revenueMap[company] = (revenueMap[company] || 0) + (parseFloat(s.price) || 0);
-      pkgCountMap[company] = (pkgCountMap[company] || 0) + 1;
+      const normalizedProfile = {
+        key: profileId ? `id:${normalize(profileId)}` : profileEmail ? `email:${normalize(profileEmail)}` : null,
+        name: profileName || profileEmail || profileId || 'Unknown Company'
+      };
+
+      [profileId, profile.employerId, profile.id].filter(Boolean).forEach(id => {
+        byId.set(normalize(id), normalizedProfile);
+      });
+      if (profileEmail) byEmail.set(normalize(profileEmail), normalizedProfile);
     });
 
-    return Object.entries(revenueMap)
-      .map(([name, revenue]) => ({
-        name,
-        revenue: (revenue / 1000000).toFixed(1) + 'M',
-        rawRevenue: revenue,
-        packages: pkgCountMap[name]
+    const recordId = record?.employerId || record?.employerID || record?.userId;
+    const recordEmail = record?.employerEmail || record?.email;
+    const matchedProfile = (recordId && byId.get(normalize(recordId)))
+      || (recordEmail && byEmail.get(normalize(recordEmail)));
+    const fallbackName = fallbackFields
+      .map(field => record?.[field])
+      .find(value => String(value ?? '').trim());
+
+    if (matchedProfile) return matchedProfile;
+
+    const fallbackKey = recordId
+      ? `id:${normalize(recordId)}`
+      : recordEmail
+        ? `email:${normalize(recordEmail)}`
+        : `name:${normalize(fallbackName || 'unknown-company')}`;
+
+    return {
+      key: fallbackKey,
+      name: fallbackName || recordEmail || recordId || 'Unknown Company'
+    };
+  }
+
+  /**
+   * Get employers who purchased the most completed package transactions.
+   * Counts and revenue are calculated from PackageSubscriptions records.
+   */
+  getTopEmployersByRevenue(subscriptions, employers = []) {
+    const groups = new Map();
+    const validSubscriptions = Array.isArray(subscriptions) ? subscriptions : [];
+    const isCompletedPurchase = subscription => {
+      const status = String(subscription?.status || '').toLowerCase();
+      const approvalStatus = String(subscription?.approvalStatus || '').toLowerCase();
+      return status !== 'pending'
+        && status !== 'rejected'
+        && status !== 'cancelled'
+        && status !== 'canceled'
+        && approvalStatus !== 'rejected';
+    };
+
+    validSubscriptions.filter(isCompletedPurchase).forEach(subscription => {
+      const identity = this.resolveEmployerIdentity(
+        subscription,
+        employers,
+        ['companyName', 'employerName', 'employer', 'company']
+      );
+      const current = groups.get(identity.key) || {
+        name: identity.name,
+        packages: 0,
+        rawRevenue: 0
+      };
+
+      current.packages += 1;
+      current.rawRevenue += Number.parseFloat(subscription.price) || 0;
+      groups.set(identity.key, current);
+    });
+
+    const formatVnd = amount => `${new Intl.NumberFormat('vi-VN').format(amount)} VNĐ`;
+
+    return Array.from(groups.values())
+      .map(group => ({
+        ...group,
+        revenue: formatVnd(group.rawRevenue)
       }))
-      .sort((a, b) => b.rawRevenue - a.rawRevenue)
+      .sort((a, b) => b.packages - a.packages || b.rawRevenue - a.rawRevenue)
+      .slice(0, 5);
+  }
+
+  /**
+   * Get employers with the most job posts from both job-post tables.
+   */
+  getTopEmployersByPosts(standardJobs = [], quickJobs = [], employers = []) {
+    const groups = new Map();
+    const jobs = [
+      ...(Array.isArray(standardJobs) ? standardJobs : []),
+      ...(Array.isArray(quickJobs) ? quickJobs : [])
+    ];
+
+    jobs.forEach(job => {
+      const identity = this.resolveEmployerIdentity(
+        job,
+        employers,
+        ['companyName', 'employerName', 'company', 'employer']
+      );
+      const current = groups.get(identity.key) || {
+        name: identity.name,
+        posts: 0
+      };
+
+      current.posts += 1;
+      groups.set(identity.key, current);
+    });
+
+    return Array.from(groups.values())
+      .filter(group => group.name !== 'Unknown Company')
+      .sort((a, b) => b.posts - a.posts || a.name.localeCompare(b.name))
       .slice(0, 5);
   }
 

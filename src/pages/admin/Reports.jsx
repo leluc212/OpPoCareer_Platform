@@ -6,6 +6,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import adminReportService from '../../services/adminReportService';
 import feedbackService from '../../services/feedbackService';
 import { motion } from 'framer-motion';
+import ConfirmModal from '../../components/ConfirmModal';
 import { 
   BarChart3,
   TrendingUp,
@@ -613,6 +614,9 @@ const Reports = () => {
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [subscriptionDetailModal, setSubscriptionDetailModal] = useState(null); // { packageName, status, statusLabel }
+  const [subscriptionDeleteTarget, setSubscriptionDeleteTarget] = useState(null);
+  const [subscriptionDeleteLoading, setSubscriptionDeleteLoading] = useState(false);
+  const [subscriptionDeleteError, setSubscriptionDeleteError] = useState('');
 
   const loadFeedbacks = async () => {
     try {
@@ -714,6 +718,39 @@ const Reports = () => {
     }
   };
 
+  const requestDeleteSubscription = (subscription) => {
+    setSubscriptionDeleteError('');
+    setSubscriptionDeleteTarget(subscription);
+  };
+
+  const handleDeleteSubscription = async () => {
+    const subscriptionId = subscriptionDeleteTarget?.subscriptionId;
+    if (!subscriptionId) return;
+
+    try {
+      setSubscriptionDeleteLoading(true);
+      setSubscriptionDeleteError('');
+      await adminReportService.deleteSubscription(subscriptionId);
+
+      setReportData(prev => ({
+        ...prev,
+        subscriptions: (prev.subscriptions || []).filter(
+          subscription => subscription.subscriptionId !== subscriptionId
+        )
+      }));
+      setSubscriptionDeleteTarget(null);
+    } catch (error) {
+      console.error('Error deleting subscription purchase:', error);
+      setSubscriptionDeleteError(
+        language === 'vi'
+          ? 'Không thể xóa lịch sử mua gói. Vui lòng thử lại.'
+          : 'Could not delete this purchase history. Please try again.'
+      );
+    } finally {
+      setSubscriptionDeleteLoading(false);
+    }
+  };
+
   // Process data for statistics
   const statsSummary = useMemo(() => adminReportService.calculateStats(reportData), [reportData]);
 
@@ -800,39 +837,16 @@ const Reports = () => {
   
   // Top employers processing - REVENUE BASED
   const topEmployersByRevenue = useMemo(() => 
-    adminReportService.getTopEmployersByRevenue(reportData.subscriptions), 
-  [reportData.subscriptions]);
+    adminReportService.getTopEmployersByRevenue(reportData.subscriptions, reportData.employers),
+  [reportData.subscriptions, reportData.employers]);
 
-  const topEmployersByPosts = useMemo(() => {
-    const counts = {};
-    const formattedStandard = Array.isArray(reportData.standardJobs) ? reportData.standardJobs : [];
-    const formattedQuick = Array.isArray(reportData.quickJobs) ? reportData.quickJobs : [];
-    const employersList = Array.isArray(reportData.employers) ? reportData.employers : [];
-
-    [...formattedStandard, ...formattedQuick].forEach(job => {
-      let company = job.companyName || job.company;
-      
-      // If company name is missing, try to find it from the employer profile list
-      if (!company || company === 'Unknown Company') {
-        const profile = employersList.find(e => 
-          (job.employerId && e.userId === job.employerId) || 
-          (job.employerEmail && e.email === job.employerEmail)
-        );
-        if (profile) {
-          company = profile.companyName || profile.businessName;
-        }
-      }
-      
-      const finalName = company || 'Unknown Company';
-      counts[finalName] = (counts[finalName] || 0) + 1;
-    });
-
-    return Object.entries(counts)
-      .map(([name, posts]) => ({ name, posts }))
-      .sort((a, b) => b.posts - a.posts)
-      .filter(item => item.name !== 'Unknown Company') // Optional: Filter out if still unknown
-      .slice(0, 5);
-  }, [reportData.standardJobs, reportData.quickJobs, reportData.employers]);
+  const topEmployersByPosts = useMemo(() =>
+    adminReportService.getTopEmployersByPosts(
+      reportData.standardJobs,
+      reportData.quickJobs,
+      reportData.employers
+    ),
+  [reportData.standardJobs, reportData.quickJobs, reportData.employers]);
 
   const districts = useMemo(() => adminReportService.getDynamicDistricts(reportData), [reportData]);
 
@@ -1381,6 +1395,7 @@ const Reports = () => {
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đơn vị' : 'Unit'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày mua' : 'Purchase Date'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Thao tác' : 'Actions'}</TableHeaderCell>
                     </TableHeaderRow>
                   </thead>
                   <tbody>
@@ -1405,9 +1420,31 @@ const Reports = () => {
                             {(purchase.status === 'expired' || purchase.status === 'expiring') && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
                           </div>
                         </TableCell>
+                        <TableCell $align="center">
+                          <button
+                            type="button"
+                            onClick={() => requestDeleteSubscription(purchase)}
+                            aria-label={language === 'vi' ? 'Xóa lịch sử mua gói' : 'Delete purchase history'}
+                            title={language === 'vi' ? 'Xóa lịch sử mua gói' : 'Delete purchase history'}
+                            style={{
+                              width: '34px',
+                              height: '34px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: 'none',
+                              borderRadius: '8px',
+                              background: '#fee2e2',
+                              color: '#dc2626',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </TableCell>
                       </TableRow>
                     )) : (
-                      <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
+                      <tr><td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
                     )}
                   </tbody>
                 </ServiceTableGrid>
@@ -1430,6 +1467,7 @@ const Reports = () => {
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Đơn vị' : 'Unit'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Ngày mua' : 'Purchase Date'}</TableHeaderCell>
                       <TableHeaderCell $align="center">{language === 'vi' ? 'Trạng thái' : 'Status'}</TableHeaderCell>
+                      <TableHeaderCell $align="center">{language === 'vi' ? 'Thao tác' : 'Actions'}</TableHeaderCell>
                     </TableHeaderRow>
                   </thead>
                   <tbody>
@@ -1454,9 +1492,31 @@ const Reports = () => {
                             {(purchase.status === 'expired' || purchase.status === 'expiring') && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
                           </div>
                         </TableCell>
+                        <TableCell $align="center">
+                          <button
+                            type="button"
+                            onClick={() => requestDeleteSubscription(purchase)}
+                            aria-label={language === 'vi' ? 'Xóa lịch sử mua gói' : 'Delete purchase history'}
+                            title={language === 'vi' ? 'Xóa lịch sử mua gói' : 'Delete purchase history'}
+                            style={{
+                              width: '34px',
+                              height: '34px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: 'none',
+                              borderRadius: '8px',
+                              background: '#fee2e2',
+                              color: '#dc2626',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </TableCell>
                       </TableRow>
                     )) : (
-                      <tr><td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
+                      <tr><td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
                     )}
                   </tbody>
                 </ServiceTableGrid>
@@ -1897,6 +1957,28 @@ const Reports = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={Boolean(subscriptionDeleteTarget)}
+        type="danger"
+        title={language === 'vi' ? 'Xóa lịch sử mua gói?' : 'Delete purchase history?'}
+        message={subscriptionDeleteTarget
+          ? (language === 'vi'
+            ? `Bản ghi mua gói của ${subscriptionDeleteTarget.companyName || subscriptionDeleteTarget.employer || 'nhà tuyển dụng này'} sẽ bị xóa vĩnh viễn. Trạng thái gói liên quan cũng sẽ được xóa.`
+            : `The purchase record for ${subscriptionDeleteTarget.companyName || subscriptionDeleteTarget.employer || 'this employer'} will be permanently deleted. Its related package status will also be removed.`)
+          : ''}
+        confirmText={language === 'vi' ? 'Xóa' : 'Delete'}
+        cancelText={language === 'vi' ? 'Hủy' : 'Cancel'}
+        onConfirm={handleDeleteSubscription}
+        onCancel={() => !subscriptionDeleteLoading && setSubscriptionDeleteTarget(null)}
+        isLoading={subscriptionDeleteLoading}
+      >
+        {subscriptionDeleteError && (
+          <div style={{ color: '#dc2626', fontSize: '13px', textAlign: 'center', marginBottom: '16px' }}>
+            {subscriptionDeleteError}
+          </div>
+        )}
+      </ConfirmModal>
 
       {/* Subscription Status Detail Modal */}
       {subscriptionDetailModal && (

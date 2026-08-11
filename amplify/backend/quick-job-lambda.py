@@ -112,6 +112,8 @@ def lambda_handler(event, context):
         path = event.get('path', '')
         path_parameters = event.get('pathParameters') or {}
         body = event.get('body', '{}')
+
+    query_params = event.get('queryStringParameters') or {}
     
     print(f"DEBUG: http_method={http_method}, path={path}")
 
@@ -239,7 +241,13 @@ def lambda_handler(event, context):
             elif http_method == 'PUT':
                 return update_quick_job(body, job_id, user_id, claims, headers)
             elif http_method == 'DELETE':
-                return delete_quick_job(job_id, user_id, headers)
+                return delete_quick_job(
+                    job_id,
+                    user_id,
+                    headers,
+                    claims,
+                    str(query_params.get('hardDelete', '')).lower() == 'true'
+                )
             else:
                 # Trả về 405 nếu method không được hỗ trợ cho idJob
                 return {
@@ -1074,9 +1082,47 @@ def update_quick_job(body_str, job_id, user_id, claims, headers):
             })
         }
 
-def delete_quick_job(job_id, user_id, headers):
+def delete_quick_job(job_id, user_id, headers, claims=None, hard_delete=False):
     """Delete quick job (soft delete)"""
     try:
+        groups = (claims or {}).get('cognito:groups') or (claims or {}).get('groups') or ''
+        if isinstance(groups, list):
+            is_admin = any(str(group).lower() == 'admin' for group in groups)
+        else:
+            is_admin = any(
+                str(group).strip().lower() == 'admin'
+                for group in str(groups).strip('[]').split(',')
+                if str(group).strip()
+            )
+
+        if hard_delete and not is_admin:
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Admin role required for permanent deletion'
+                })
+            }
+
+        if hard_delete:
+            deleted = table.delete_item(Key={'jobID': job_id}, ReturnValues='ALL_OLD')
+            if not deleted.get('Attributes'):
+                return {
+                    'statusCode': 404,
+                    'headers': headers,
+                    'body': json.dumps({'success': False, 'message': 'Quick job not found'})
+                }
+            print(f"✅ Quick job permanently deleted: {job_id}")
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': True,
+                    'message': 'Quick job permanently deleted'
+                })
+            }
+
         table.update_item(
             Key={'jobID': job_id},
             UpdateExpression='SET #status = :status, updatedAt = :updatedAt',

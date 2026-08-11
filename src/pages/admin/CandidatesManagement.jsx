@@ -22,7 +22,8 @@ import {
   Eye,
   Mail,
   Phone,
-  UserX
+  UserX,
+  Trash2
 } from 'lucide-react';
 import jobPostService from '../../services/jobPostService';
 import quickJobService from '../../services/quickJobService';
@@ -666,6 +667,7 @@ const CandidatesManagement = () => {
   const [verifLoading, setVerifLoading] = useState(false);
   const [verifError, setVerifError] = useState('');
   const [verifActingId, setVerifActingId] = useState(null);
+  const [deletingCandidateId, setDeletingCandidateId] = useState(null);
   const [verifRejectState, setVerifRejectState] = useState({
     isOpen: false,
     candidateId: '',
@@ -889,6 +891,26 @@ const CandidatesManagement = () => {
     }
   };
   // ─────────────────────────────────────────────────────────────────────────
+
+  const handleDeleteCandidate = async (candidateId) => {
+    setDeletingCandidateId(candidateId);
+    setConfirmModalState(prev => ({ ...prev, isLoading: true }));
+    try {
+      await candidateProfileService.adminDeleteCandidate(candidateId);
+      setCandidates(prev => prev.filter(candidate => candidate.id !== candidateId));
+      showAdminToast('success', language === 'vi'
+        ? 'Đã xóa ứng viên khỏi cơ sở dữ liệu.'
+        : 'Candidate deleted from the database.');
+    } catch (error) {
+      console.error('Error deleting candidate:', error);
+      showAdminToast('error', language === 'vi'
+        ? `Không thể xóa ứng viên: ${error.message}`
+        : `Could not delete candidate: ${error.message}`);
+    } finally {
+      setDeletingCandidateId(null);
+      setConfirmModalState(prev => ({ ...prev, isOpen: false, isLoading: false }));
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -1697,6 +1719,43 @@ const CandidatesManagement = () => {
                              {language === 'vi' ? 'Hủy duyệt' : 'Cancel Verify'}
                            </button>
                          )}
+                         <button
+                           type="button"
+                           title={language === 'vi' ? 'Xóa ứng viên' : 'Delete candidate'}
+                           disabled={deletingCandidateId === candidate.id}
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setConfirmModalState({
+                               isOpen: true,
+                               isLoading: false,
+                               title: language === 'vi' ? 'Xóa ứng viên' : 'Delete candidate',
+                               message: language === 'vi'
+                                 ? `Bạn có chắc muốn xóa vĩnh viễn ứng viên ${candidate.name} khỏi cơ sở dữ liệu không? Hành động này không thể hoàn tác.`
+                                 : `Are you sure you want to permanently delete ${candidate.name} from the database? This action cannot be undone.`,
+                               type: 'danger',
+                               confirmText: language === 'vi' ? 'Xóa vĩnh viễn' : 'Delete permanently',
+                               cancelText: language === 'vi' ? 'Hủy' : 'Cancel',
+                               onConfirm: () => handleDeleteCandidate(candidate.id)
+                             });
+                           }}
+                           style={{
+                             background: '#fee2e2',
+                             color: '#dc2626',
+                             border: '1px solid #fecaca',
+                             padding: '6px 10px',
+                             borderRadius: '6px',
+                             fontSize: '12.5px',
+                             fontWeight: '600',
+                             cursor: deletingCandidateId === candidate.id ? 'not-allowed' : 'pointer',
+                             display: 'flex',
+                             alignItems: 'center',
+                             gap: '4px',
+                             opacity: deletingCandidateId === candidate.id ? 0.6 : 1
+                           }}
+                         >
+                           <Trash2 size={13} />
+                           {language === 'vi' ? 'Xóa' : 'Delete'}
+                         </button>
                        </div>
                      </td>
                   </tr>
@@ -2090,6 +2149,7 @@ const CandidatesManagement = () => {
         confirmText={confirmModalState.confirmText}
         cancelText={confirmModalState.cancelText}
         type={confirmModalState.type}
+        isLoading={confirmModalState.isLoading}
         onConfirm={confirmModalState.onConfirm}
         onCancel={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))}
       />

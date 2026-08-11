@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import DashboardLayout from '../../components/DashboardLayout';
 import TableFilter from '../../components/TableFilter';
 import Modal from '../../components/Modal';
+import ConfirmModal from '../../components/ConfirmModal';
 import UrgentRecommendationsModal from '../../components/UrgentRecommendationsModal';
 import { useLanguage } from '../../context/LanguageContext';
 import jobPostService from '../../services/jobPostService';
@@ -36,7 +37,8 @@ import {
   AlertCircle,
   X,
   ArrowRight,
-  MapPin
+  MapPin,
+  Trash2
 } from 'lucide-react';
 import {
   ChartCard,
@@ -1055,6 +1057,9 @@ const PostsManagement = () => {
   const [confirmJob, setConfirmJob] = useState(null);
   const [confirmAction, setConfirmAction] = useState('');
   const [confirmMessage, setConfirmMessage] = useState('');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteJob, setDeleteJob] = useState(null);
+  const [deleteProcessingId, setDeleteProcessingId] = useState(null);
 
   const requestModerationAction = (job, action) => {
     console.log('🔔 requestModerationAction called', { job, action });
@@ -1133,6 +1138,47 @@ const PostsManagement = () => {
       await refreshPosts();
     } catch (error) {
       setLoadError(error?.message || 'Failed to update post status');
+    }
+  };
+
+  const requestDeletePost = (job) => {
+    setDeleteJob(job);
+    setDeleteModalOpen(true);
+  };
+
+  const performDeletePost = async () => {
+    if (!deleteJob || deleteProcessingId) return;
+
+    const job = deleteJob;
+    const jobId = job.id || job.jobID || job.idJob || job.jobId;
+    if (!jobId) return;
+
+    setDeleteProcessingId(jobId);
+    try {
+      if (job.jobSource === 'urgent') {
+        await quickJobService.adminDeleteQuickJob(jobId);
+        setUrgentJobs(prev => prev.filter(item => item.id !== jobId));
+      } else {
+        await jobPostService.adminDeleteJobPost(jobId);
+        setStandardJobs(prev => prev.filter(item => item.id !== jobId));
+      }
+
+      if (selectedJob && selectedJob.id === jobId) {
+        setSelectedJob(null);
+        setShowDetailModal(false);
+      }
+      setDeleteModalOpen(false);
+      setDeleteJob(null);
+      showCRToast('success', language === 'vi'
+        ? 'Đã xóa bài đăng khỏi cơ sở dữ liệu.'
+        : 'Post deleted from the database.');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      showCRToast('error', language === 'vi'
+        ? `Không thể xóa bài đăng: ${error.message}`
+        : `Could not delete post: ${error.message}`);
+    } finally {
+      setDeleteProcessingId(null);
     }
   };
 
@@ -1706,6 +1752,15 @@ const PostsManagement = () => {
                         >
                           <Ban size={16} />
                         </IconButton>
+                        <IconButton
+                          type="button"
+                          $variant="danger"
+                          title={language === 'vi' ? 'Xóa bài đăng' : 'Delete post'}
+                          onClick={() => requestDeletePost(job)}
+                          disabled={deleteProcessingId === job.id}
+                        >
+                          <Trash2 size={16} />
+                        </IconButton>
                       </ActionButtons>
                     </div>
                   </td>
@@ -2031,6 +2086,25 @@ const PostsManagement = () => {
             </div>
           </div>
         </Modal>
+
+        <ConfirmModal
+          isOpen={deleteModalOpen}
+          title={language === 'vi' ? 'Xóa bài đăng' : 'Delete post'}
+          message={language === 'vi'
+            ? `Bạn có chắc muốn xóa vĩnh viễn bài đăng "${deleteJob?.title || ''}" khỏi cơ sở dữ liệu không? Hành động này không thể hoàn tác.`
+            : `Are you sure you want to permanently delete "${deleteJob?.title || ''}" from the database? This action cannot be undone.`}
+          confirmText={language === 'vi' ? 'Xóa vĩnh viễn' : 'Delete permanently'}
+          cancelText={language === 'vi' ? 'Hủy' : 'Cancel'}
+          type="danger"
+          isLoading={Boolean(deleteProcessingId)}
+          onConfirm={performDeletePost}
+          onCancel={() => {
+            if (!deleteProcessingId) {
+              setDeleteModalOpen(false);
+              setDeleteJob(null);
+            }
+          }}
+        />
 
 
 

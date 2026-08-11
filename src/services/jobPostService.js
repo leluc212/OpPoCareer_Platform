@@ -273,6 +273,23 @@ class JobPostService {
   }
 
   /**
+   * Admin: permanently remove a standard job post from DynamoDB.
+   */
+  async adminDeleteJobPost(jobId) {
+    try {
+      const result = await this.makeRequest(`/jobs/${encodeURIComponent(jobId)}?hardDelete=true`, {
+        method: 'DELETE'
+      });
+
+      if (result.success) return result;
+      throw new Error(result.message || 'Failed to delete job post');
+    } catch (error) {
+      console.error('❌ Error permanently deleting standard job post:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update job status (active, paused, closed)
    */
   async updateJobStatus(jobId, status) {

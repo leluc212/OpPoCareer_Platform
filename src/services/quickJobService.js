@@ -352,6 +352,23 @@ class QuickJobService {
   }
 
   /**
+   * Admin: permanently remove an urgent job post from DynamoDB.
+   */
+  async adminDeleteQuickJob(jobId) {
+    try {
+      const result = await this.makeRequest(`/quick-jobs/${encodeURIComponent(jobId)}?hardDelete=true`, {
+        method: 'DELETE'
+      });
+
+      if (result.success) return result;
+      throw new Error(result.message || 'Failed to delete quick job');
+    } catch (error) {
+      console.error('❌ Error permanently deleting urgent job post:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update job status
    */
   async updateJobStatus(jobId, status) {

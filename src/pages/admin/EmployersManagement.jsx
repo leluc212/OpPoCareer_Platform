@@ -1725,6 +1725,32 @@ const EmployersManagement = () => {
     }
   };
 
+  const handleDeleteEmployer = async (employerId) => {
+    try {
+      await adminEmployerService.deleteEmployer(employerId);
+      setEmployers(prev => prev.filter(employer => employer.id !== employerId));
+      setEmpConfirm(null);
+      showEmpToast('success', language === 'vi'
+        ? 'Đã xóa nhà tuyển dụng khỏi cơ sở dữ liệu.'
+        : 'Employer deleted from the database.');
+    } catch (error) {
+      console.error('Error deleting employer:', error);
+      setEmpConfirm(null);
+      showEmpToast('error', language === 'vi'
+        ? `Không thể xóa nhà tuyển dụng: ${error.message}`
+        : `Could not delete employer: ${error.message}`);
+    }
+  };
+
+  const openDeleteEmployerConfirm = (employer) => {
+    setEmpConfirm({
+      message: language === 'vi'
+        ? `Bạn có chắc muốn xóa vĩnh viễn nhà tuyển dụng ${employer.companyName} khỏi cơ sở dữ liệu không? Hành động này không thể hoàn tác.`
+        : `Are you sure you want to permanently delete ${employer.companyName} from the database? This action cannot be undone.`,
+      onConfirm: () => handleDeleteEmployer(employer.id)
+    });
+  };
+
   const handleUpdateQuickJobStatus = async (employerId, status) => {
     try {
       console.log(`⚡ Admin updating quick job status for ${employerId} to ${status}`);
@@ -2886,6 +2912,12 @@ const EmployersManagement = () => {
                                   {language === 'vi' ? 'Hủy xác minh' : 'Unverify'}
                                 </RejectButton>
                               )}
+                              <DeleteButton
+                                title={language === 'vi' ? 'Xóa nhà tuyển dụng' : 'Delete employer'}
+                                onClick={() => openDeleteEmployerConfirm(employer)}
+                              >
+                                <Trash2 size={16} />
+                              </DeleteButton>
                             </ActionButtons>
                           </td>
                         </tr>
@@ -3007,6 +3039,12 @@ const EmployersManagement = () => {
                               >
                                 <FileText size={16} />
                               </IconButton>
+                              <DeleteButton
+                                title={language === 'vi' ? 'Xóa nhà tuyển dụng' : 'Delete employer'}
+                                onClick={() => openDeleteEmployerConfirm(employer)}
+                              >
+                                <Trash2 size={16} />
+                              </DeleteButton>
                             </ActionButtons>
                           </td>
                         </tr>

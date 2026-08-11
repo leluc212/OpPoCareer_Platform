@@ -86,6 +86,27 @@ class AdminEmployerService {
   }
 
   /**
+   * Admin: permanently remove an employer profile from DynamoDB.
+   */
+  async deleteEmployer(userId) {
+    try {
+      const result = await this.makeRequest(`/admin/employers/${encodeURIComponent(userId)}`, {
+        method: 'DELETE'
+      });
+
+      if (result.success) {
+        console.log(`✅ Employer profile ${userId} permanently deleted from DynamoDB`);
+        return result;
+      }
+
+      throw new Error(result.message || 'Failed to delete employer profile');
+    } catch (error) {
+      console.error(`Error permanently deleting employer ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Approve employer profile (Admin only)
    * Also sets isVerified = true so the employer can post jobs and view CVs.
    */

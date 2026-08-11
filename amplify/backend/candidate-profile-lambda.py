@@ -163,6 +163,7 @@ def lambda_handler(event, context):
     path = event.get('path') or event.get('rawPath', '')
     path_params = event.get('pathParameters') or {}
     user_id = path_params.get('userId') or path_params.get('proxy', '').split('/')[-1]
+    query_params = event.get('queryStringParameters') or {}
 
     # Get userId from path manually if not in pathParameters
     if not user_id and '/profile/' in path:
@@ -524,6 +525,21 @@ def lambda_handler(event, context):
             return response(200, {'success': True, 'data': updated_profile})
  
         elif http_method == 'DELETE' and user_id:
+            # Admin-only hard delete used by the Admin candidate management page.
+            # Keep the existing DELETE /profile/{userId} soft-delete behavior for
+            # normal users and existing callers.
+            if caller_is_admin and str(query_params.get('hardDelete', '')).lower() == 'true':
+                deleted = table.delete_item(
+                    Key={'userId': user_id},
+                    ReturnValues='ALL_OLD'
+                )
+                if not deleted.get('Attributes'):
+                    return response(404, {'success': False, 'message': 'Candidate profile not found'})
+                return response(200, {
+                    'success': True,
+                    'message': 'Candidate profile permanently deleted'
+                })
+
             if user_id != caller_id and not caller_is_admin:
                 return response(403, {'success': False, 'message': 'Cannot delete another user profile'})
             # DELETE /profile/{userId} - Soft delete

@@ -430,6 +430,29 @@ class CandidateProfileService {
   }
 
   /**
+   * Admin: permanently remove a candidate profile from DynamoDB.
+   * The backend only honors hardDelete for an authenticated Admin.
+   */
+  async adminDeleteCandidate(candidateId) {
+    try {
+      const result = await this.makeRequest(
+        `/profile/${encodeURIComponent(candidateId)}?hardDelete=true`,
+        { method: 'DELETE' }
+      );
+
+      if (result.success) {
+        console.log(`✅ Candidate profile ${candidateId} permanently deleted from DynamoDB`);
+        return result;
+      }
+
+      throw new Error(result.message || 'Failed to delete candidate profile');
+    } catch (error) {
+      console.error(`Error permanently deleting candidate ${candidateId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Delete current user's profile (soft delete)
    */
   async deleteProfile() {

@@ -71,6 +71,7 @@ def lambda_handler(event, context):
     http_method = event.get('httpMethod')
     path = event.get('path', '')
     path_parameters = event.get('pathParameters') or {}
+    query_params = event.get('queryStringParameters') or {}
     
     # --- 2. PREFLIGHT OPTIONS HANDLER ---
     if http_method == 'OPTIONS':
@@ -374,7 +375,13 @@ def lambda_handler(event, context):
             elif http_method == 'PUT':
                 return update_job_post(event, jid, user_id, headers)
             elif http_method == 'DELETE':
-                return delete_job_post(jid, user_id, headers)
+                return delete_job_post(
+                    jid,
+                    user_id,
+                    headers,
+                    claims,
+                    str(query_params.get('hardDelete', '')).lower() == 'true'
+                )
             else:
                 return {
                     'statusCode': 405,
@@ -733,7 +740,7 @@ def update_job_post(event, job_id, user_id, headers):
             })
         }
 
-def delete_job_post(job_id, user_id, headers):
+def delete_job_post(job_id, user_id, headers, claims=None, hard_delete=False):
     """Delete job post (soft delete) and mark associated applications as job_deleted"""
     try:
         # First, get the existing job to verify ownership
@@ -750,6 +757,26 @@ def delete_job_post(job_id, user_id, headers):
             }
         
         existing_job = response['Item']
+
+        groups = (claims or {}).get('cognito:groups') or (claims or {}).get('groups') or ''
+        if isinstance(groups, list):
+            is_admin = any(str(group).lower() == 'admin' for group in groups)
+        else:
+            is_admin = any(
+                str(group).strip().lower() == 'admin'
+                for group in str(groups).strip('[]').split(',')
+                if str(group).strip()
+            )
+
+        if hard_delete and not is_admin:
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Admin role required for permanent deletion'
+                })
+            }
         
         # Verify ownership - allow if:
         # 1. user_id is None or 'anonymous' (backward compatibility)
@@ -759,7 +786,7 @@ def delete_job_post(job_id, user_id, headers):
         
         print(f"🔍 Ownership check: user_id={user_id}, job_employer_id={job_employer_id}")
         
-        if user_id and user_id != 'anonymous':
+        if user_id and user_id != 'anonymous' and not is_admin:
             if job_employer_id and job_employer_id != user_id:
                 print(f"❌ Ownership check failed: user {user_id} cannot delete job owned by {job_employer_id}")
                 return {
@@ -813,14 +840,20 @@ def delete_job_post(job_id, user_id, headers):
             # Non-fatal: job is still deleted even if application updates fail
             print(f"⚠️ Error updating applications for deleted job {job_id}: {str(app_err)}")
         
-        print(f"✅ Job post deleted: {job_id}")
+        if hard_delete:
+            table.delete_item(Key={'idJob': job_id})
+            print(f"✅ Job post permanently deleted: {job_id}")
+            delete_message = 'Job post permanently deleted'
+        else:
+            print(f"✅ Job post deleted: {job_id}")
+            delete_message = 'Job post deleted successfully'
         
         return {
             'statusCode': 200,
             'headers': headers,
             'body': json.dumps({
                 'success': True,
-                'message': 'Job post deleted successfully'
+                'message': delete_message
             })
         }
     

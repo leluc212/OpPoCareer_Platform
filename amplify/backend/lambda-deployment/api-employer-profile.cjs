@@ -244,6 +244,32 @@ exports.handler = async (event) => {
       };
     }
 
+    // DELETE /admin/employers/{userId} - permanently delete the profile (Admin only)
+    if (httpMethod === 'DELETE' && pathUserId && event.path?.includes('/admin/employers/')) {
+      const { DynamoDB } = require('@aws-sdk/client-dynamodb');
+      const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
+      const ddb = DynamoDBDocument.from(new DynamoDB({ region: 'ap-southeast-1' }));
+      const result = await ddb.delete({
+        TableName: 'EmployerProfiles',
+        Key: { userId: pathUserId },
+        ReturnValues: 'ALL_OLD'
+      });
+
+      if (!result.Attributes) {
+        return {
+          statusCode: 404,
+          headers: corsHeaders,
+          body: JSON.stringify({ success: false, message: 'Employer profile not found' })
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({ success: true, message: 'Employer profile permanently deleted' })
+      };
+    }
+
     // POST /admin/employers/{userId}/approve
     if (httpMethod === 'POST' && pathUserId && event.path?.endsWith('/approve')) {
       const body = JSON.parse(event.body || '{}');

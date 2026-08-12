@@ -1754,6 +1754,26 @@ const AiBadge = styled.span`
   }
 `;
 
+const HotSearchBadge = styled.span`
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  svg {
+    width: 11px;
+    height: 11px;
+  }
+`;
+
 const JobCardHeader = styled.div`
   display: flex;
   gap: 8px;
@@ -3890,16 +3910,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         if (!response.ok) return;
         const data = await response.json();
         const now = Date.now();
+        const isActiveApprovedSubscription = (sub, packageName) => {
+          const expiry = sub.expiryDateTime ? new Date(sub.expiryDateTime).getTime() : null;
+          return sub.packageName === packageName &&
+            String(sub.status || '').toLowerCase() === 'active' &&
+            String(sub.approvalStatus || '').toLowerCase() === 'approved' &&
+            (!expiry || expiry > now);
+        };
 
         // Hot Search
         const activeHotSearchEmployerIds = new Set(
           data
-            .filter(sub =>
-              sub.packageName === 'Hot Search' &&
-              sub.status === 'active' &&
-              sub.approvalStatus === 'approved'
-            )
-            .map(sub => sub.employerId)
+            .filter(sub => isActiveApprovedSubscription(sub, 'Hot Search'))
+            .map(sub => String(sub.employerId))
         );
         setHotSearchEmployerIds(activeHotSearchEmployerIds);
         console.log('✅ Active Hot Search Employer IDs:', Array.from(activeHotSearchEmployerIds));
@@ -3907,18 +3930,13 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
         // Top Spotlight — sắp xếp theo purchaseDateTime mới nhất lên trước
         const activeTopSpotlightEmployerIds = new Set(
           data
-            .filter(sub =>
-              sub.packageName === 'Top Spotlight' &&
-              sub.status === 'active' &&
-              sub.approvalStatus === 'approved' &&
-              (!sub.expiryDateTime || new Date(sub.expiryDateTime).getTime() > now)
-            )
+            .filter(sub => isActiveApprovedSubscription(sub, 'Top Spotlight'))
             .sort((a, b) => {
               const ta = a.purchaseDateTime ? new Date(a.purchaseDateTime).getTime() : 0;
               const tb = b.purchaseDateTime ? new Date(b.purchaseDateTime).getTime() : 0;
               return tb - ta;
             })
-            .map(sub => sub.employerId)
+            .map(sub => String(sub.employerId))
         );
         setTopSpotlightEmployerIds(activeTopSpotlightEmployerIds);
         console.log('✅ Active Top Spotlight Employer IDs:', Array.from(activeTopSpotlightEmployerIds));
@@ -5345,17 +5363,19 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     // Sorting
     result = [...result].sort((a, b) => {
       // When sorting by newest, time always wins — ignore boost/hotSearch order
+      // Hot Search is a paid placement and must stay above regular jobs,
+      // including when the user selects the newest sort option.
+      const aHotSearchPriority = hotSearchEmployerIds.has(String(a.employerId));
+      const bHotSearchPriority = hotSearchEmployerIds.has(String(b.employerId));
+      if (aHotSearchPriority && !bHotSearchPriority) return -1;
+      if (!aHotSearchPriority && bHotSearchPriority) return 1;
+
       if (sortBy === 'newest') {
         if (a.postedDate && b.postedDate) {
           return new Date(b.postedDate) - new Date(a.postedDate);
         }
         return parseTimeToHours(a.postedAt) - parseTimeToHours(b.postedAt);
       }
-
-      const aHotSearch = hotSearchEmployerIds.has(a.employerId);
-      const bHotSearch = hotSearchEmployerIds.has(b.employerId);
-      if (aHotSearch && !bHotSearch) return -1;
-      if (!aHotSearch && bHotSearch) return 1;
 
       const aBoost = a.quickBoost || a.isQuickBoosted;
       const bBoost = b.quickBoost || b.isQuickBoosted;
@@ -5393,7 +5413,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
     const seenLabels = new Set();
     
     allJobs.forEach(job => {
-      const isHot = hotSearchEmployerIds.has(job.employerId);
+      const isHot = hotSearchEmployerIds.has(String(job.employerId));
       
       // Check company name
       const companyName = job.company || '';
@@ -5987,7 +6007,7 @@ Yêu cầu: ${job.requirements || "Có kinh nghiệm tương đương."}
                         showDistance={jobCategory === 'shift' && showNearbyJobs}
                         language={language}
                         isHighlighted={highlightedJobId === job.id}
-                        isHotSearch={hotSearchEmployerIds.has(job.employerId)}
+                        isHotSearch={hotSearchEmployerIds.has(String(job.employerId))}
                       />
                     );
 
@@ -7667,6 +7687,12 @@ const JobCardComponent = ({ job, saved, onSave, onClick, onApply, delay = 0, sho
           <CompanyName>
             <Building2 />
             <DynamicTranslate text={job.company} showIndicator={false} />
+            {isHotSearch && (
+              <HotSearchBadge title={language === 'vi' ? 'Nhà tuyển dụng đang dùng gói Hot Search' : 'Employer is using Hot Search'}>
+                <Sparkles />
+                {language === 'vi' ? 'Ưu tiên tìm kiếm' : 'Hot Search'}
+              </HotSearchBadge>
+            )}
           </CompanyName>
           <JobMeta>
             <MetaItem style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>

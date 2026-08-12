@@ -1241,6 +1241,7 @@ const PublicJobListing = () => {
                   key={job.idJob || job.jobID || i}
                   $isDark={isDarkMode}
                   $quickBoosted={job.quickBoost}
+                  $isHotSearch={hotSearchEmployerIds.has(String(job.employerId))}
                   style={{ animationDelay: `${Math.min(i * 0.04, 0.3)}s` }}
                   onClick={() => job._type === 'standard'
                     ? navigate(`/jobs/${job.idJob}`)
@@ -1276,6 +1277,18 @@ const PublicJobListing = () => {
                       )}
                     </JobTitle>
                     <Company $isDark={isDarkMode} $isUrgent={job._type === 'urgent' || job.quickBoost}>{job.companyName || job.employerName || 'Công ty'}</Company>
+                    {hotSearchEmployerIds.has(String(job.employerId)) && (
+                      <div style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '3px',
+                        padding: '2px 7px', borderRadius: '9999px',
+                        background: '#eff6ff', color: '#1d4ed8',
+                        border: '1px solid #93c5fd', fontSize: '10px', fontWeight: 800,
+                        width: 'fit-content', marginBottom: '4px'
+                      }}>
+                        <Sparkles size={10} />
+                        {language === 'vi' ? 'Ưu tiên tìm kiếm' : 'Hot Search'}
+                      </div>
+                    )}
                     <Tags>
                       {(job._type === 'urgent' || job.quickBoost) && (
                         <UrgentTag><Zap size={10} style={{ display: 'inline' }} /> {language === 'vi' ? 'Tuyển gấp' : 'Urgent'}</UrgentTag>

@@ -3,7 +3,7 @@ import boto3
 import os
 import uuid
 import base64
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from boto3.dynamodb.conditions import Key, Attr
 
@@ -47,33 +47,71 @@ def decimal_default(obj):
         return list(obj)
     raise TypeError
 
+VN_TZ = timezone(timedelta(hours=7))
+
+
+def _subscription_expiry(item):
+    raw_expiry = item.get('expiryDateTime')
+    if raw_expiry:
+        try:
+            expiry = datetime.fromisoformat(str(raw_expiry).replace('Z', '+00:00'))
+            return (expiry if expiry.tzinfo else expiry.replace(tzinfo=VN_TZ)).astimezone(timezone.utc)
+        except ValueError:
+            return None
+
+    raw_date = item.get('expiryDate')
+    if raw_date:
+        try:
+            return (datetime.strptime(str(raw_date), '%Y-%m-%d')
+                    .replace(tzinfo=VN_TZ) + timedelta(days=1)).astimezone(timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _is_active_quick_boost(item, now=None):
+    if str(item.get('packageName') or '').strip().lower() != 'quick boost':
+        return False
+    if str(item.get('status') or '').strip().lower() != 'active':
+        return False
+    if str(item.get('approvalStatus') or '').strip().lower() != 'approved':
+        return False
+    expiry = _subscription_expiry(item)
+    return expiry is None or expiry > (now or datetime.now(timezone.utc))
+
+
 def get_quick_boost_employers():
-    """
-    Fetch all employer IDs that have an active Quick Boost subscription
-    """
+    """Return employer IDs with an approved, currently unexpired Quick Boost."""
     try:
         subscriptions_table = dynamodb.Table('PackageSubscriptions')
-        employers = set()
+        items = []
         try:
-            response = subscriptions_table.query(
-                IndexName='StatusIndex',
-                KeyConditionExpression=Key('status').eq('active')
-            )
-            items = response.get('Items', [])
+            query_args = {
+                'IndexName': 'StatusIndex',
+                'KeyConditionExpression': Key('status').eq('active')
+            }
+            while True:
+                response = subscriptions_table.query(**query_args)
+                items.extend(response.get('Items', []))
+                if not response.get('LastEvaluatedKey'):
+                    break
+                query_args['ExclusiveStartKey'] = response['LastEvaluatedKey']
         except Exception as query_err:
             print(f"Warning: Failed to query StatusIndex on PackageSubscriptions: {query_err}")
-            # Fallback to scan if GSI is not available
-            response = subscriptions_table.scan(
-                FilterExpression=Attr('status').eq('active')
-            )
-            items = response.get('Items', [])
-            
-        for item in items:
-            if item.get('packageName') == 'Quick Boost':
-                emp_id = item.get('employerId')
-                if emp_id:
-                    employers.add(emp_id)
-        return employers
+            scan_args = {'FilterExpression': Attr('status').eq('active')}
+            while True:
+                response = subscriptions_table.scan(**scan_args)
+                items.extend(response.get('Items', []))
+                if not response.get('LastEvaluatedKey'):
+                    break
+                scan_args['ExclusiveStartKey'] = response['LastEvaluatedKey']
+
+        now = datetime.now(timezone.utc)
+        return {
+            str(item.get('employerId'))
+            for item in items
+            if item.get('employerId') and _is_active_quick_boost(item, now)
+        }
     except Exception as e:
         print(f"Error fetching Quick Boost subscriptions: {e}")
         return set()
@@ -765,7 +803,7 @@ def get_all_quick_jobs(headers):
         items = [i for i in response.get('Items', []) if i.get('status') != 'deleted']
         boosted_employers = get_quick_boost_employers()
         for item in items:
-            item['quickBoost'] = item.get('employerId') in boosted_employers
+            item['quickBoost'] = str(item.get('employerId')) in boosted_employers
         print(f"✅ Found {len(items)} total quick jobs (Scan)")
         return {
             'statusCode': 200,
@@ -889,7 +927,7 @@ def get_active_quick_jobs(headers):
                 if work_date < now_date_str or (work_date == now_date_str and end_time <= now_time_str):
                     expired_ids.append(item['jobID'])
                     continue
-            item['quickBoost'] = item.get('employerId') in boosted_employers
+            item['quickBoost'] = str(item.get('employerId')) in boosted_employers
             active_items.append(item)
         
         # Auto-close expired jobs in DB
@@ -944,7 +982,7 @@ def get_quick_job(job_id, headers):
         
         item = response['Item']
         boosted_employers = get_quick_boost_employers()
-        item['quickBoost'] = item.get('employerId') in boosted_employers
+        item['quickBoost'] = str(item.get('employerId')) in boosted_employers
         print(f"✅ Quick job found: {job_id}")
         
         return {

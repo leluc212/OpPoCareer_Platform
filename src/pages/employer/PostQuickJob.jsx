@@ -1022,18 +1022,26 @@ const PostQuickJob = () => {
     fetchBalance();
   }, [employerId]);
 
+  const depositBaselineBalanceRef = useRef(realBalance);
+
+  useEffect(() => {
+    if (showDepositModal && depositStep === 2) {
+      depositBaselineBalanceRef.current = Number(realBalance) || 0;
+    }
+  }, [showDepositModal, depositStep]);
+
   // Polling for deposits while deposit modal is open in step 2
   useEffect(() => {
     let intervalId;
-    if (showDepositModal && depositStep === 2 && employerId) {
-      intervalId = setInterval(async () => {
+    if (showDepositModal && depositStep === 2 && employerId && employerId !== 'mock_employer_id') {
+      const poll = async () => {
         try {
           const wallet = await getWallet(employerId);
           const newBal = Number(wallet.walletBalance) || 0;
-          if (newBal > Number(realBalance)) {
+          if (newBal > depositBaselineBalanceRef.current) {
             setRealBalance(newBal);
             setDepositSuccess(true);
-            clearInterval(intervalId);
+            if (intervalId) clearInterval(intervalId);
 
             setTimeout(() => {
               setShowDepositModal(false);
@@ -1044,20 +1052,35 @@ const PostQuickJob = () => {
         } catch (err) {
           console.error('Error polling wallet balance:', err);
         }
-      }, 5000);
+      };
+
+      poll();
+      intervalId = setInterval(poll, 4000);
     }
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [showDepositModal, depositStep, employerId, realBalance]);
+  }, [showDepositModal, depositStep, employerId]);
 
   const handleDepositAmountInput = (e) => {
     const raw = e.target.value.replace(/\D/g, '');
     setDepositRawAmount(raw);
   };
 
-  const handleConfirmDeposit = () => {
+  const handleConfirmDeposit = async () => {
     if (parsedDepositAmount <= 0) return;
+    if (!walletCode && employerId && employerId !== 'mock_employer_id') {
+      setDepositLoading(true);
+      try {
+        const wallet = await getWallet(employerId);
+        if (wallet?.walletCode) setWalletCode(wallet.walletCode);
+        if (wallet?.walletBalance !== undefined) setRealBalance(Number(wallet.walletBalance) || 0);
+      } catch (e) {
+        console.error('Error loading wallet code:', e);
+      } finally {
+        setDepositLoading(false);
+      }
+    }
     setDepositStep(2);
   };
 
@@ -2526,9 +2549,22 @@ const PostQuickJob = () => {
                 {language === 'vi' ? 'Đóng' : 'Close'}
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   setShowModal(false);
-                  setDepositRawAmount(String(paymentInfo?.missingAmount || ''));
+                  const missingAmt = paymentInfo?.missingAmount || '';
+                  setDepositRawAmount(String(missingAmt));
+                  if (!walletCode && employerId && employerId !== 'mock_employer_id') {
+                    setDepositLoading(true);
+                    try {
+                      const wallet = await getWallet(employerId);
+                      if (wallet?.walletCode) setWalletCode(wallet.walletCode);
+                      if (wallet?.walletBalance !== undefined) setRealBalance(Number(wallet.walletBalance) || 0);
+                    } catch (e) {
+                      console.error('Error loading wallet code:', e);
+                    } finally {
+                      setDepositLoading(false);
+                    }
+                  }
                   setDepositStep(2); // Go directly to step 2 (show QR code for the missing amount)
                   setShowDepositModal(true);
                 }}

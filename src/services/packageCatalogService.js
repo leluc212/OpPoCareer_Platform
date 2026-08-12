@@ -313,3 +313,25 @@ export const createWalletTransaction = async (employerId, amount, type, descript
   return payload?.data || payload;
 };
 
+export const getEmployerSubscriptions = async (employerId) => {
+  const base = API_ENDPOINT || (import.meta.env.DEV ? DEV_PROXY_BASE : null);
+  if (!base || !employerId) return [];
+
+  const url = `${base.replace(/\/$/, '')}/subscriptions/employer/${encodeURIComponent(employerId)}`;
+  try {
+    const response = await fetch(url, {
+      headers: await getAuthHeaders()
+    });
+    if (!response.ok) {
+      return [];
+    }
+    const payload = await response.json();
+    const list = payload?.data || (Array.isArray(payload) ? payload : []);
+    return list.sort((a, b) => new Date(b.purchaseDateTime || b.purchaseDate || b.createdAt || 0) - new Date(a.purchaseDateTime || a.purchaseDate || a.createdAt || 0));
+  } catch (err) {
+    console.error('Failed to fetch employer subscriptions:', err);
+    return [];
+  }
+};
+
+

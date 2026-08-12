@@ -65,6 +65,27 @@ const formatSubscriptionDateTime = (dateTime, dateOnly) => {
   return dateTime ? formatted : formatted.split(',')[0] + ' (chưa có giờ)';
 };
 
+const getEffectiveSubscriptionStatus = (subscription) => {
+  const storedStatus = String(subscription?.status || '').toLowerCase();
+  const approvalStatus = String(subscription?.approvalStatus || '').toLowerCase();
+
+  if (storedStatus === 'pending' || approvalStatus === 'pending') return 'pending';
+  if (storedStatus === 'rejected' || approvalStatus === 'rejected') return 'rejected';
+
+  const expiryValue = subscription?.expiryDateTime || subscription?.expiryDate;
+  if (expiryValue) {
+    const expiry = subscription?.expiryDateTime
+      ? parseDateTime(subscription.expiryDateTime)
+      : new Date(String(subscription.expiryDate) + 'T23:59:59');
+
+    if (!Number.isNaN(expiry.getTime())) {
+      return new Date() < expiry ? 'active' : 'expired';
+    }
+  }
+
+  return storedStatus || 'pending';
+};
+
 const PageContainer = styled.div`
   animation: fadeIn 0.5s ease-in;
   
@@ -749,9 +770,16 @@ const Reports = () => {
     );
   };
 
+  // Use expiryDateTime as the source of truth so stale persisted status values
+  // cannot make a future-expiring package appear expired.
+  const currentSubscriptions = (reportData.subscriptions || []).map(subscription => ({
+    ...subscription,
+    status: getEffectiveSubscriptionStatus(subscription)
+  }));
+
   // Get subscriptions filtered by package name and status
   const getSubscriptionsByStatus = (packageName, status) => {
-    const subs = reportData.subscriptions || [];
+    const subs = currentSubscriptions;
     return subs.filter(s => {
       const matchPkg = s.packageName === packageName;
       if (status === 'pending') return matchPkg && s.status === 'pending';
@@ -802,7 +830,14 @@ const Reports = () => {
   };
 
   // Process data for statistics
-  const statsSummary = useMemo(() => adminReportService.calculateStats(reportData), [reportData]);
+  const reportDataWithCurrentStatuses = {
+    ...reportData,
+    subscriptions: currentSubscriptions
+  };
+  const statsSummary = useMemo(
+    () => adminReportService.calculateStats(reportDataWithCurrentStatuses),
+    [reportData, currentSubscriptions]
+  );
 
   // Stats display configuration with dynamic trends
   const stats = [
@@ -844,7 +879,7 @@ const Reports = () => {
   const [revenueView, setRevenueView] = useState('month'); // 'day' | 'week' | 'month'
 
   const revenueData = useMemo(() => {
-    const subs = reportData.subscriptions || [];
+    const subs = currentSubscriptions;
     const now = new Date();
 
     if (revenueView === 'day') {
@@ -887,7 +922,7 @@ const Reports = () => {
   
   // Top employers processing - REVENUE BASED
   const topEmployersByRevenue = useMemo(() => 
-    adminReportService.getTopEmployersByRevenue(reportData.subscriptions, reportData.employers),
+    adminReportService.getTopEmployersByRevenue(currentSubscriptions, reportData.employers),
   [reportData.subscriptions, reportData.employers]);
 
   const topEmployersByPosts = useMemo(() =>
@@ -902,7 +937,7 @@ const Reports = () => {
 
   // Data for tables - DYNAMIC FROM SUBSCRIPTIONS
   const packageStats = useMemo(() => 
-    adminReportService.calculatePackageStats(reportData.subscriptions), 
+    adminReportService.calculatePackageStats(currentSubscriptions),
   [reportData.subscriptions]);
 
   const standardServices = useMemo(() => 
@@ -943,7 +978,7 @@ const Reports = () => {
     );
   }
 
-  const allSubscriptions = reportData.subscriptions || [];
+  const allSubscriptions = currentSubscriptions;
 
   return (
     <DashboardLayout role="admin" key={language}>
@@ -1436,7 +1471,9 @@ const Reports = () => {
                     </TableHeaderRow>
                   </thead>
                   <tbody>
-                    {allSubscriptions.length > 0 ? allSubscriptions.map((purchase, index) => (
+                    {allSubscriptions.length > 0 ? allSubscriptions.map((purchase, index) => {
+                      const effectiveStatus = getEffectiveSubscriptionStatus(purchase);
+                      return (
                       <TableRow key={purchase.subscriptionId || index}>
                         <TableCell $align="center" style={{ fontWeight: 600, color: '#6b7280' }}>
                           {index + 1}
@@ -1455,9 +1492,10 @@ const Reports = () => {
                         </TableCell>
                         <TableCell $align="center">
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                            {purchase.status === 'pending' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</span>}
-                            {purchase.status === 'active' && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đang kích hoạt' : 'Active'}</span>}
-                            {(purchase.status === 'expired' || purchase.status === 'expiring') && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
+                            {effectiveStatus === 'pending' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Chưa kích hoạt' : 'Inactive'}</span>}
+                            {effectiveStatus === 'active' && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Đang hoạt động' : 'Active'}</span>}
+                            {effectiveStatus === 'expired' && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Hết thời hạn' : 'Expired'}</span>}
+                            {effectiveStatus === 'rejected' && <span style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 10px', fontSize: '12px', fontWeight: 600 }}>{language === 'vi' ? 'Từ chối' : 'Rejected'}</span>}
                           </div>
                         </TableCell>
                         <TableCell $align="center">
@@ -1483,7 +1521,8 @@ const Reports = () => {
                           </button>
                         </TableCell>
                       </TableRow>
-                    )) : (
+                      );
+                    }) : (
                       <tr><td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '15px' }}>{language === 'vi' ? 'chưa có' : 'no data available'}</td></tr>
                     )}
                   </tbody>

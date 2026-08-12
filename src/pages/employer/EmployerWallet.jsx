@@ -7,7 +7,7 @@ import { Button, Input } from '../../components/FormElements';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import employerProfileService from '../../services/employerProfileService';
-import { getWallet, withdrawWallet } from '../../services/packageCatalogService';
+import { getWallet, getWithdrawalRequests, withdrawWallet } from '../../services/packageCatalogService';
 import { createWithdrawalRequestNotification } from '../../services/notificationService';
 import {
   Wallet as WalletIcon,
@@ -212,7 +212,7 @@ const ActionButton = styled(motion.button)`
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 32px;
   
@@ -983,10 +983,10 @@ const QRContainer = styled.div`
 `;
 
 const QRCodeImage = styled.img`
-  width: 220px;
-  height: 220px;
-  border-radius: 16px;
-  border: 4px solid #f1f5f9;
+  width: 175px;
+  height: 175px;
+  border-radius: 14px;
+  border: 3px solid #f1f5f9;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 `;
 
@@ -1059,6 +1059,7 @@ const EmployerWallet = () => {
   const [balance, setBalance] = useState(0);
   const [walletCode, setWalletCode] = useState('');
   const [transactions, setTransactions] = useState([]);
+  const [withdrawalRequests, setWithdrawalRequests] = useState([]);
   const [companyName, setCompanyName] = useState('N/A');
   const [companyLogo, setCompanyLogo] = useState('');
   const [redirectBackUrl, setRedirectBackUrl] = useState(null);
@@ -1147,6 +1148,16 @@ const EmployerWallet = () => {
         paymentDetails: t.paymentDetails || {}
       }));
       setTransactions(txs);
+
+      try {
+        const requests = await getWithdrawalRequests();
+        setWithdrawalRequests(Array.isArray(requests) ? requests : []);
+      } catch (withdrawalErr) {
+        // Keep the wallet usable if the optional withdrawal-history endpoint
+        // has not been deployed yet or is temporarily unavailable.
+        console.warn('Could not load withdrawal approval history:', withdrawalErr);
+        setWithdrawalRequests([]);
+      }
     } catch (err) {
       console.error('Error fetching wallet data:', err);
     } finally {
@@ -1173,15 +1184,23 @@ const EmployerWallet = () => {
     }
   }, [location.state, walletCode, navigate, location.pathname]);
 
+  const baselineBalanceRef = useRef(balance);
+
+  useEffect(() => {
+    if (showDepositModal && depositStep === 2) {
+      baselineBalanceRef.current = Number(balance) || 0;
+    }
+  }, [showDepositModal, depositStep]);
+
   // Polling for deposits while deposit modal is open in step 2
   useEffect(() => {
     let intervalId;
-    if (showDepositModal && depositStep === 2 && employerId) {
-      intervalId = setInterval(async () => {
+    if (showDepositModal && depositStep === 2 && employerId && employerId !== 'mock_employer_id') {
+      const poll = async () => {
         try {
           const wallet = await getWallet(employerId);
           const newBal = Number(wallet.walletBalance) || 0;
-          if (newBal > Number(balance)) {
+          if (newBal > baselineBalanceRef.current) {
             setBalance(newBal);
             const txs = (wallet.walletTransactions || []).map((t, idx) => ({
               id: t.transactionId || idx,
@@ -1193,7 +1212,7 @@ const EmployerWallet = () => {
             }));
             setTransactions(txs);
             setDepositSuccess(true);
-            clearInterval(intervalId);
+            if (intervalId) clearInterval(intervalId);
 
             setTimeout(() => {
               setShowDepositModal(false);
@@ -1207,12 +1226,15 @@ const EmployerWallet = () => {
         } catch (err) {
           console.error('Error polling wallet balance:', err);
         }
-      }, 5000);
+      };
+
+      poll();
+      intervalId = setInterval(poll, 4000);
     }
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [showDepositModal, depositStep, employerId, balance, redirectBackUrl, navigate]);
+  }, [showDepositModal, depositStep, employerId, redirectBackUrl, navigate]);
 
   const receipts = [
     { id: 1, title: language === 'vi' ? 'Hóa đơn #2026021401' : 'Invoice #2026021401', date: '14/02/2026', amount: '2,500,000 VND' },
@@ -1325,8 +1347,20 @@ const EmployerWallet = () => {
     setTimeout(() => depositInputRef.current?.focus(), 120);
   };
 
-  const handleConfirmDeposit = () => {
+  const handleConfirmDeposit = async () => {
     if (parsedDepositAmount <= 0) return;
+    if (!walletCode && employerId && employerId !== 'mock_employer_id') {
+      setDepositLoading(true);
+      try {
+        const wallet = await getWallet(employerId);
+        if (wallet?.walletCode) setWalletCode(wallet.walletCode);
+        if (wallet?.walletBalance !== undefined) setBalance(Number(wallet.walletBalance) || 0);
+      } catch (err) {
+        console.error('Error fetching wallet code for deposit:', err);
+      } finally {
+        setDepositLoading(false);
+      }
+    }
     setDepositStep(2);
   };
 
@@ -1392,9 +1426,25 @@ const EmployerWallet = () => {
     .filter(t => t.type === 'income' || t.type === 'credit')
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-  const totalExpense = transactions
-    .filter(t => t.type === 'expense' || t.type === 'debit')
+  const isInCurrentMonth = (value) => {
+    if (!value) return false;
+    const date = new Date(value);
+    const now = new Date();
+    return !Number.isNaN(date.getTime()) &&
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth();
+  };
+
+  const totalSpentThisMonth = transactions
+    .filter(t => (t.type === 'expense' || t.type === 'debit') && isInCurrentMonth(t.date))
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+  const totalWithdrawnThisMonth = withdrawalRequests
+    .filter(request =>
+      String(request.status || '').toLowerCase() === 'approved' &&
+      isInCurrentMonth(request.approvedAt || request.updatedAt || request.createdAt)
+    )
+    .reduce((sum, request) => sum + Math.abs(Number(request.amount || 0)), 0);
 
   // Filter transactions based on filter type and date
   const filteredTransactions = transactions.filter(t => {
@@ -1505,8 +1555,26 @@ const EmployerWallet = () => {
                 <TrendingDown />
               </div>
               <div className="stat-info">
-                <div className="stat-label">{language === 'vi' ? 'Đã Rút Trong Tháng' : 'Total Expenses'}</div>
-                <div className="stat-value">{formatCurrency(totalExpense)}</div>
+                <div className="stat-label">{language === 'vi' ? '\u0110\u00e3 chi trong th\u00e1ng' : 'Spent This Month'}</div>
+                <div className="stat-value">{formatCurrency(totalSpentThisMonth)}</div>
+              </div>
+            </div>
+          </StatCard>
+
+          <StatCard
+            $color="warning"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
+            whileHover={{ scale: 1.02 }}
+          >
+            <div className="stat-left">
+              <div className="icon">
+                <Banknote />
+              </div>
+              <div className="stat-info">
+                <div className="stat-label">{language === 'vi' ? '\u0110\u00e3 r\u00fat trong th\u00e1ng' : 'Withdrawn This Month'}</div>
+                <div className="stat-value">{formatCurrency(totalWithdrawnThisMonth)}</div>
               </div>
             </div>
           </StatCard>
@@ -1515,7 +1583,7 @@ const EmployerWallet = () => {
             $color="primary"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.3 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
             whileHover={{ scale: 1.02 }}
           >
             <div className="stat-left">
@@ -1634,7 +1702,18 @@ const EmployerWallet = () => {
                       <div className="date">
                         <Calendar />
                         {transaction.date
-                          ? new Date(transaction.date).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')
+                          ? new Date(transaction.date).toLocaleString(
+                              language === 'vi' ? 'vi-VN' : 'en-US',
+                              {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                              }
+                            )
                           : ''}
                       </div>
                     </div>
@@ -1950,6 +2029,19 @@ const EmployerWallet = () => {
                           {language === 'vi' ? 'Đang chờ giao dịch chuyển khoản...' : 'Waiting for transfer transaction...'}
                         </PollingStatus>
                         <PaymentDetailsTable>
+                          <DetailRow style={{ background: '#EFF6FF', margin: '-8px -8px 4px', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #BFDBFE' }}>
+                            <span className="label" style={{ color: '#1e40af', fontWeight: '700' }}>{language === 'vi' ? 'Nội dung CK' : 'Transfer Note'}</span>
+                            <span className="value" style={{ color: '#1e40af', fontWeight: '800', fontSize: '14.5px' }}>
+                              {`OPPOWALLET ${walletCode}`}
+                              <CopyButton onClick={() => handleCopyText(`OPPOWALLET ${walletCode}`, 'content')}>
+                                {copiedText === 'content' ? <><Check size={11} /> {language === 'vi' ? 'Đã chép' : 'Copied'}</> : <><Copy size={11} /> {language === 'vi' ? 'Sao chép' : 'Copy'}</>}
+                              </CopyButton>
+                            </span>
+                          </DetailRow>
+                          <DetailRow>
+                            <span className="label">{language === 'vi' ? 'Số tiền' : 'Amount'}</span>
+                            <span className="value" style={{ color: '#10b981', fontSize: '15px', fontWeight: '800' }}>{formatCurrency(parsedDepositAmount)}</span>
+                          </DetailRow>
                           <DetailRow>
                             <span className="label">{language === 'vi' ? 'Ngân hàng' : 'Bank'}</span>
                             <span className="value">MBBank</span>
@@ -1966,19 +2058,6 @@ const EmployerWallet = () => {
                           <DetailRow>
                             <span className="label">{language === 'vi' ? 'Tên thụ hưởng' : 'Account Name'}</span>
                             <span className="value">NGUYEN THI THUY DUNG</span>
-                          </DetailRow>
-                          <DetailRow>
-                            <span className="label">{language === 'vi' ? 'Số tiền' : 'Amount'}</span>
-                            <span className="value" style={{ color: '#10b981', fontSize: '15px' }}>{formatCurrency(parsedDepositAmount)}</span>
-                          </DetailRow>
-                          <DetailRow>
-                            <span className="label">{language === 'vi' ? 'Nội dung chuyển' : 'Content'}</span>
-                            <span className="value" style={{ color: '#1e40af' }}>
-                              {`OPPOWALLET ${walletCode}`}
-                              <CopyButton onClick={() => handleCopyText(`OPPOWALLET ${walletCode}`, 'content')}>
-                                {copiedText === 'content' ? <><Check size={11} /> {language === 'vi' ? 'Đã chép' : 'Copied'}</> : <><Copy size={11} /> {language === 'vi' ? 'Sao chép' : 'Copy'}</>}
-                              </CopyButton>
-                            </span>
                           </DetailRow>
                         </PaymentDetailsTable>
                       </QRContainer>

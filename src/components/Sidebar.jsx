@@ -349,9 +349,13 @@ const Sidebar = ({ role, onHoverChange }) => {
   const [unreadChatCount, setUnreadChatCount] = useState(Sidebar._cachedCounts?.unreadChatCount || 0);
   const [standardPendingCount, setStandardPendingCount] = useState(Sidebar._cachedCounts?.standardPendingCount || 0);
   const [quickPendingCount, setQuickPendingCount] = useState(Sidebar._cachedCounts?.quickPendingCount || 0);
-  const [adminBadges, setAdminBadges] = useState(Sidebar._cachedCounts?.adminBadges || {
-    employers: 0, candidates: 0, posts: 0, packages: 0, wallet: 0, notifications: 0, reports: 0, changeRequests: 0
-  });
+  const [adminBadges, setAdminBadges] = useState(() => ({
+    ...(Sidebar._cachedCounts?.adminBadges || {
+      employers: 0, candidates: 0, posts: 0, packages: 0, wallet: 0, notifications: 0, reports: 0, changeRequests: 0
+    }),
+    // Do not render a stale wallet badge while the current request list loads.
+    wallet: 0
+  }));
 
   // Sync counts to static cache so next mount has instant values
   useEffect(() => {
@@ -441,7 +445,9 @@ const Sidebar = ({ role, onHoverChange }) => {
               candidates: candidatesCount,
               posts: pendingStandardCount + pendingQuickCount,
               packages: notificationBadgeCounts.packages,
-              wallet: notificationBadgeCounts.wallet,
+              // The wallet badge must reflect actionable withdrawal requests,
+              // not stale unread notification records.
+              wallet: walletCount,
               notifications: totalUnreadCount,
               reports: notificationBadgeCounts.reports || reportsCount,
               changeRequests: notificationBadgeCounts.changeRequests

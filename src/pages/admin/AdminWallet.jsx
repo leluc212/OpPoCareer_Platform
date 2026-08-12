@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,7 +18,6 @@ import {
 } from '../../services/notificationService';
 import UnderDevelopmentModal from '../../components/UnderDevelopmentModal';
 import { useToast } from '../../hooks/useToast';
-import { useAdminNotificationBadges } from '../../hooks/useAdminNotificationBadges';
 import Toast from '../../components/Toast';
 import {
   Wallet as WalletIcon,
@@ -1377,7 +1376,7 @@ const AdminWallet = () => {
   const { language } = useLanguage();
   const toast = useToast();
   const location = useLocation();
-  const notificationBadges = useAdminNotificationBadges();
+  const walletRefreshInFlightRef = useRef(false);
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'escrow' | 'withdrawals'
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -1402,6 +1401,21 @@ const AdminWallet = () => {
   const [withdrawStatusFilter, setWithdrawStatusFilter] = useState('all');
   const [withdrawWeekFilter, setWithdrawWeekFilter] = useState(false);
   const [withdrawCurrentPage, setWithdrawCurrentPage] = useState(1);
+
+  const isPendingWithdrawal = (request) => {
+    const status = String(request?.status || '').trim().toLowerCase();
+    return !status || status === 'pending';
+  };
+
+  const pendingEmployerWithdrawalCount = useMemo(
+    () => withdrawRequests.filter(isPendingWithdrawal).length,
+    [withdrawRequests]
+  );
+  const pendingCandidateWithdrawalCount = useMemo(
+    () => candidateWithdrawRequests.filter(isPendingWithdrawal).length,
+    [candidateWithdrawRequests]
+  );
+  const pendingWithdrawalCount = pendingEmployerWithdrawalCount + pendingCandidateWithdrawalCount;
 
   useEffect(() => {
     setWithdrawCurrentPage(1);
@@ -1431,10 +1445,13 @@ const AdminWallet = () => {
     return new Intl.NumberFormat('vi-VN').format(amount) + ' VND';
   };
 
-  const loadWalletData = async () => {
+  const loadWalletData = async ({ showLoading = false } = {}) => {
+    if (walletRefreshInFlightRef.current) return;
+
+    walletRefreshInFlightRef.current = true;
+    if (showLoading) setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      
       const [subscriptions, realJobs, apps, withdrawalRequests, candidateData, platformWallet] = await Promise.all([
         adminReportService.getAllSubscriptions().catch(() => []),
         quickJobService.getAllQuickJobs().catch(() => []),
@@ -1684,7 +1701,8 @@ const AdminWallet = () => {
     } catch (err) {
       console.error('Error loading admin wallet data:', err);
     } finally {
-      setIsLoading(false);
+      walletRefreshInFlightRef.current = false;
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -1943,7 +1961,7 @@ const AdminWallet = () => {
   };
 
   useEffect(() => {
-    loadWalletData();
+    loadWalletData({ showLoading: true });
 
     // Wallet and package purchases can be created in another tab/session.
     // Keep the Admin view synchronized without requiring a manual reload.
@@ -2314,7 +2332,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                 onClick={() => setActiveTab('withdrawals')}
               >
                 {language === 'vi' ? 'Yêu cầu rút tiền' : 'Withdrawal Requests'}
-                {notificationBadges.wallet > 0 && <TabBadge>{notificationBadges.wallet}</TabBadge>}
+                {pendingWithdrawalCount > 0 && <TabBadge>{pendingWithdrawalCount}</TabBadge>}
               </TabButton>
             </TabNavigation>
 
@@ -2743,7 +2761,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                     }}
                   >
                     {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
-                    {notificationBadges.walletEmployer > 0 && <TabBadge>{notificationBadges.walletEmployer}</TabBadge>}
+                    {pendingEmployerWithdrawalCount > 0 && <TabBadge>{pendingEmployerWithdrawalCount}</TabBadge>}
                   </button>
                   <button
                     onClick={() => { setWithdrawTypeTab('candidate'); setWithdrawSearch(''); }}
@@ -2761,7 +2779,7 @@ ${language === 'vi' ? 'Cảm ơn bạn đã sử dụng dịch vụ của chúng
                     }}
                   >
                     {language === 'vi' ? 'Ứng viên' : 'Candidate'}
-                    {notificationBadges.walletCandidate > 0 && <TabBadge>{notificationBadges.walletCandidate}</TabBadge>}
+                    {pendingCandidateWithdrawalCount > 0 && <TabBadge>{pendingCandidateWithdrawalCount}</TabBadge>}
                   </button>
                 </div>
 

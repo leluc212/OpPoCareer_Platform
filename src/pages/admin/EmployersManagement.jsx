@@ -156,13 +156,15 @@ const TableWrapper = styled.div`
   background: ${props => props.theme.colors.bgLight};
   border-radius: ${props => props.theme.borderRadius.lg};
   border: 1px solid ${props => props.theme.colors.border};
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: ${props => props.theme.shadows.sm};
+  width: 100%;
 `;
 
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
+  min-width: 960px;
   
   th {
     text-align: left;
@@ -174,12 +176,23 @@ const Table = styled.table`
     border-bottom: 2px solid ${props => props.theme.colors.border};
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+
+    &:last-child {
+      text-align: center;
+      min-width: 140px;
+    }
   }
   
   td {
     padding: 16px;
     border-bottom: 1px solid ${props => props.theme.colors.border};
     font-size: 14px;
+
+    &:last-child {
+      text-align: center;
+      min-width: 140px;
+    }
   }
   
   tbody tr:last-child td {
@@ -286,6 +299,10 @@ const VerifiedBadge = styled.span`
 const ActionButtons = styled.div`
   display: flex;
   gap: 8px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 `;
 
 const IconButton = styled.button`
@@ -798,7 +815,7 @@ const EmployersManagement = () => {
     setGranting(true);
     try {
       const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
-      
+
       const targetEmp = employers.find(e => e.id === selectedEmployerId);
       const companyName = targetEmp?.companyName || 'Nhà tuyển dụng';
 
@@ -901,13 +918,13 @@ const EmployersManagement = () => {
       const response = await fetch(`${API_ENDPOINT}/subscriptions`, {
         headers: await getAuthHeaders()
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch subscriptions');
       }
-      
+
       const data = await response.json();
-      
+
       const transformedData = data.map(item => ({
         id: item.subscriptionId,
         employer: item.companyName,
@@ -921,7 +938,7 @@ const EmployersManagement = () => {
         duration: item.duration,
         approvalStatus: item.approvalStatus
       }));
-      
+
       setPurchases(transformedData);
       setPurchasesError(null);
     } catch (err) {
@@ -962,15 +979,15 @@ const EmployersManagement = () => {
       const matchesTab = packageTab === 'pending'
         ? (purchase.approvalStatus === 'pending' || purchase.status === 'pending')
         : (purchase.status === 'active' || purchase.status === 'expiring' || purchase.status === 'expired' || purchase.status === 'locked');
-      
+
       const matchesSearch = purchaseSearchTerm === '' ||
         purchase.employer.toLowerCase().includes(purchaseSearchTerm.toLowerCase()) ||
         purchase.package.toLowerCase().includes(purchaseSearchTerm.toLowerCase());
-      
+
       const matchesFilters = purchaseFilters.length === 0 ||
         purchaseFilters.includes(purchase.package) ||
         purchaseFilters.includes(purchase.status);
-      
+
       return matchesTab && matchesSearch && matchesFilters;
     });
 
@@ -998,10 +1015,10 @@ const EmployersManagement = () => {
     return [...list].sort((a, b) => {
       const aExpired = a.status === 'expired';
       const bExpired = b.status === 'expired';
-      
+
       if (!aExpired && bExpired) return -1;
       if (aExpired && !bExpired) return 1;
-      
+
       const aTime = parseDate(a.purchaseDateTime || a.purchaseDate);
       const bTime = parseDate(b.purchaseDateTime || b.purchaseDate);
       return bTime - aTime;
@@ -1029,9 +1046,9 @@ const EmployersManagement = () => {
   const handleApprovePurchase = async (purchaseId) => {
     try {
       console.log('🔄 Approving purchase:', purchaseId);
-      
+
       const API_ENDPOINT = import.meta.env.VITE_PACKAGE_SUBSCRIPTIONS_API || 'https://u7lp3ox2e5.execute-api.ap-southeast-1.amazonaws.com';
-      
+
       const responseSub = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
         headers: await getAuthHeaders()
       });
@@ -1039,16 +1056,16 @@ const EmployersManagement = () => {
         throw new Error('Failed to fetch subscription details');
       }
       const subscriptionData = await responseSub.json();
-      
-      let employerId = subscriptionData.employerId 
+
+      let employerId = subscriptionData.employerId
         || subscriptionData.data?.employerId
         || subscriptionData.userId
         || subscriptionData.data?.userId;
-      
+
       if (!employerId) {
         throw new Error('Cannot find employerId in subscription data');
       }
-      
+
       const response = await fetch(`${API_ENDPOINT}/subscriptions/${purchaseId}`, {
         method: 'PUT',
         headers: {
@@ -1060,18 +1077,18 @@ const EmployersManagement = () => {
           approvalStatus: 'approved'
         })
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to approve subscription');
       }
-      
+
       const updatedSubscription = await response.json();
       const purchase = purchases.find(p => p.id === purchaseId);
-      
+
       if (!purchase) {
         throw new Error('Purchase not found in local state');
       }
-      
+
       const finalExpiryDate = updatedSubscription.expiryDate || updatedSubscription.data?.expiryDate;
       const finalExpiryDateTime = updatedSubscription.expiryDateTime || updatedSubscription.data?.expiryDateTime;
 
@@ -1086,7 +1103,7 @@ const EmployersManagement = () => {
       } catch (notifyErr) {
         console.error('❌ Error sending notification:', notifyErr);
       }
-      
+
       setApprovedPurchaseInfo({
         employer: purchase.employer,
         package: purchase.package,
@@ -1095,21 +1112,21 @@ const EmployersManagement = () => {
         expiryDateTime: finalExpiryDateTime
       });
       setShowPurchaseSuccessModal(true);
-      
-      setPurchases(prev => prev.map(p => 
-        p.id === purchaseId 
+
+      setPurchases(prev => prev.map(p =>
+        p.id === purchaseId
           ? {
-              ...p,
-              status: updatedSubscription.status || updatedSubscription.data?.status || 'active',
-              approvalStatus: updatedSubscription.approvalStatus || updatedSubscription.data?.approvalStatus || 'approved',
-              purchaseDate: updatedSubscription.purchaseDate || updatedSubscription.data?.purchaseDate || p.purchaseDate,
-              purchaseDateTime: updatedSubscription.purchaseDateTime || updatedSubscription.data?.purchaseDateTime || p.purchaseDateTime,
-              expiryDate: finalExpiryDate || p.expiryDate,
-              expiryDateTime: finalExpiryDateTime || p.expiryDateTime
-            }
+            ...p,
+            status: updatedSubscription.status || updatedSubscription.data?.status || 'active',
+            approvalStatus: updatedSubscription.approvalStatus || updatedSubscription.data?.approvalStatus || 'approved',
+            purchaseDate: updatedSubscription.purchaseDate || updatedSubscription.data?.purchaseDate || p.purchaseDate,
+            purchaseDateTime: updatedSubscription.purchaseDateTime || updatedSubscription.data?.purchaseDateTime || p.purchaseDateTime,
+            expiryDate: finalExpiryDate || p.expiryDate,
+            expiryDateTime: finalExpiryDateTime || p.expiryDateTime
+          }
           : p
       ));
-      
+
     } catch (error) {
       console.error('❌ Error approving subscription:', error);
       showEmpToast('error', 'Có lỗi xảy ra: ' + error.message);
@@ -1137,9 +1154,9 @@ const EmployersManagement = () => {
       setPurchases(prev => prev.map(p =>
         p.id === purchaseId
           ? {
-              ...p,
-              status: updatedSubscription.status || updatedSubscription.data?.status || 'locked'
-            }
+            ...p,
+            status: updatedSubscription.status || updatedSubscription.data?.status || 'locked'
+          }
           : p
       ));
     } catch (error) {
@@ -1169,9 +1186,9 @@ const EmployersManagement = () => {
       setPurchases(prev => prev.map(p =>
         p.id === purchaseId
           ? {
-              ...p,
-              status: updatedSubscription.status || updatedSubscription.data?.status || 'active'
-            }
+            ...p,
+            status: updatedSubscription.status || updatedSubscription.data?.status || 'active'
+          }
           : p
       ));
     } catch (error) {
@@ -1867,13 +1884,13 @@ const EmployersManagement = () => {
 
       return matchesTab && matchesSearch && matchesFilters;
     })
-    // Mới nhất lên đầu theo createdAt, tiebreaker theo id để thứ tự ổn định
-    .sort((a, b) => {
-      const ta = a.createdAt || '';
-      const tb = b.createdAt || '';
-      if (tb !== ta) return tb.localeCompare(ta);
-      return (a.id || '').localeCompare(b.id || '');
-    });
+      // Mới nhất lên đầu theo createdAt, tiebreaker theo id để thứ tự ổn định
+      .sort((a, b) => {
+        const ta = a.createdAt || '';
+        const tb = b.createdAt || '';
+        if (tb !== ta) return tb.localeCompare(ta);
+        return (a.id || '').localeCompare(b.id || '');
+      });
   }, [employers, searchTerm, filters, activeTab]);
 
   const filteredChangeRequests = useMemo(() => {
@@ -2136,7 +2153,7 @@ const EmployersManagement = () => {
                       {language === 'vi' ? 'Cấp Gói Dịch Vụ Cho Nhà Tuyển Dụng' : 'Grant Service Package to Employer'}
                     </h2>
                   </div>
-                  
+
                   {loadingPackages ? (
                     <div style={{ padding: '20px 0', textAlign: 'center', color: '#64748B' }}>
                       {language === 'vi' ? 'Đang tải thông tin gói...' : 'Loading packages...'}
@@ -2369,7 +2386,7 @@ const EmployersManagement = () => {
                       >
                         {language === 'vi' ? 'Trước' : 'Previous'}
                       </PageButton>
-                      
+
                       {[...Array(purchaseTotalPages)].map((_, index) => {
                         const pageNumber = index + 1;
                         if (
@@ -2394,7 +2411,7 @@ const EmployersManagement = () => {
                         }
                         return null;
                       })}
-                      
+
                       <PageButton
                         onClick={() => setPurchaseCurrentPage(prev => Math.min(purchaseTotalPages, prev + 1))}
                         disabled={purchaseCurrentPage === purchaseTotalPages}
@@ -2408,339 +2425,339 @@ const EmployersManagement = () => {
             ) : (
               <TableWrapper>
                 {activeTab === 'quick_jobs' ? (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
-                      <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
-                      <th>{language === 'vi' ? 'Ngành' : 'Industry'}</th>
-                      <th>{language === 'vi' ? 'Quy mô' : 'Size'}</th>
-                      <th>{language === 'vi' ? 'Trạng thái tuyển gấp' : 'Urgent Status'}</th>
-                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentEmployers.map((employer, index) => {
-                      const colorScheme = getColorScheme(index);
-                      const initials = getCompanyInitials(employer.companyName);
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
+                        <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
+                        <th>{language === 'vi' ? 'Ngành' : 'Industry'}</th>
+                        <th>{language === 'vi' ? 'Quy mô' : 'Size'}</th>
+                        <th>{language === 'vi' ? 'Trạng thái tuyển gấp' : 'Urgent Status'}</th>
+                        <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentEmployers.map((employer, index) => {
+                        const colorScheme = getColorScheme(index);
+                        const initials = getCompanyInitials(employer.companyName);
 
-                      return (
-                        <tr key={employer.id}>
-                          <td>
-                            <CompanyInfo>
-                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
-                                {employer.companyLogo ? (
-                                  <img src={employer.companyLogo} alt={employer.companyName} />
-                                ) : (
-                                  initials
-                                )}
-                              </CompanyLogo>
-                              <CompanyDetails>
-                                <CompanyName>{employer.companyName}</CompanyName>
-                                <CompanyMeta>
-                                  <Building2 size={12} />
-                                  ID: {employer.id}
-                                </CompanyMeta>
-                              </CompanyDetails>
-                            </CompanyInfo>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
-                                <Mail size={12} />
-                                {employer.email}
-                              </div>
-                              {employer.phone !== 'N/A' && (
+                        return (
+                          <tr key={employer.id}>
+                            <td>
+                              <CompanyInfo>
+                                <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                  {employer.companyLogo ? (
+                                    <img src={employer.companyLogo} alt={employer.companyName} />
+                                  ) : (
+                                    initials
+                                  )}
+                                </CompanyLogo>
+                                <CompanyDetails>
+                                  <CompanyName>{employer.companyName}</CompanyName>
+                                  <CompanyMeta>
+                                    <Building2 size={12} />
+                                    ID: {employer.id}
+                                  </CompanyMeta>
+                                </CompanyDetails>
+                              </CompanyInfo>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
-                                  <Phone size={12} />
-                                  {employer.phone}
+                                  <Mail size={12} />
+                                  {employer.email}
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <span style={{ fontWeight: 600 }}>{employer.industry}</span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Users size={14} />
-                              {employer.companySize}
-                            </div>
-                          </td>
-                          <td>
-                            <StatusBadge $status={employer.quickJobStatus === 'approved' ? 'approved' : employer.quickJobStatus === 'pending' ? 'pending' : 'rejected'}>
-                              {employer.quickJobStatus === 'approved' && <CheckCircle size={12} />}
-                              {employer.quickJobStatus === 'pending' && <Clock size={12} />}
-                              {employer.quickJobStatus === 'rejected' && <XCircle size={12} />}
-                              {employer.quickJobStatus === 'approved' && (language === 'vi' ? 'Đã kích hoạt' : 'Activated')}
-                              {employer.quickJobStatus === 'pending' && (language === 'vi' ? 'Chờ duyệt' : 'Pending')}
-                              {employer.quickJobStatus === 'rejected' && (language === 'vi' ? 'Bị từ chối' : 'Rejected')}
-                            </StatusBadge>
-                          </td>
-                          <td>
-                            <ActionButtons>
-                              {employer.quickJobStatus === 'pending' && (
-                                <>
+                                {employer.phone !== 'N/A' && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                                    <Phone size={12} />
+                                    {employer.phone}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 600 }}>{employer.industry}</span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Users size={14} />
+                                {employer.companySize}
+                              </div>
+                            </td>
+                            <td>
+                              <StatusBadge $status={employer.quickJobStatus === 'approved' ? 'approved' : employer.quickJobStatus === 'pending' ? 'pending' : 'rejected'}>
+                                {employer.quickJobStatus === 'approved' && <CheckCircle size={12} />}
+                                {employer.quickJobStatus === 'pending' && <Clock size={12} />}
+                                {employer.quickJobStatus === 'rejected' && <XCircle size={12} />}
+                                {employer.quickJobStatus === 'approved' && (language === 'vi' ? 'Đã kích hoạt' : 'Activated')}
+                                {employer.quickJobStatus === 'pending' && (language === 'vi' ? 'Chờ duyệt' : 'Pending')}
+                                {employer.quickJobStatus === 'rejected' && (language === 'vi' ? 'Bị từ chối' : 'Rejected')}
+                              </StatusBadge>
+                            </td>
+                            <td>
+                              <ActionButtons>
+                                {employer.quickJobStatus === 'pending' && (
+                                  <>
+                                    <ApproveButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'approved')}>
+                                      <CheckCircle size={16} />
+                                      {language === 'vi' ? 'Duyệt kích hoạt' : 'Approve'}
+                                    </ApproveButton>
+                                    <RejectButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'rejected')}>
+                                      <XCircle size={16} />
+                                      {language === 'vi' ? 'Từ chối' : 'Reject'}
+                                    </RejectButton>
+                                  </>
+                                )}
+                                {employer.quickJobStatus === 'approved' && (
+                                  <RejectButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'not_requested')}>
+                                    <XCircle size={16} />
+                                    {language === 'vi' ? 'Hủy kích hoạt' : 'Deactivate'}
+                                  </RejectButton>
+                                )}
+                                {employer.quickJobStatus === 'rejected' && (
                                   <ApproveButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'approved')}>
                                     <CheckCircle size={16} />
-                                    {language === 'vi' ? 'Duyệt kích hoạt' : 'Approve'}
+                                    {language === 'vi' ? 'Kích hoạt' : 'Activate'}
                                   </ApproveButton>
-                                  <RejectButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'rejected')}>
-                                    <XCircle size={16} />
-                                    {language === 'vi' ? 'Từ chối' : 'Reject'}
-                                  </RejectButton>
-                                </>
-                              )}
-                              {employer.quickJobStatus === 'approved' && (
-                                <RejectButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'not_requested')}>
-                                  <XCircle size={16} />
-                                  {language === 'vi' ? 'Hủy kích hoạt' : 'Deactivate'}
-                                </RejectButton>
-                              )}
-                              {employer.quickJobStatus === 'rejected' && (
-                                <ApproveButton onClick={() => handleUpdateQuickJobStatus(employer.id, 'approved')}>
-                                  <CheckCircle size={16} />
-                                  {language === 'vi' ? 'Kích hoạt' : 'Activate'}
-                                </ApproveButton>
-                              )}
-                              <IconButton
-                                title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
-                                onClick={() => navigate(`/admin/employers/${employer.id}`)}
-                              >
-                                <Eye size={16} />
-                              </IconButton>
-                            </ActionButtons>
+                                )}
+                                <IconButton
+                                  title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                                  onClick={() => navigate(`/admin/employers/${employer.id}`)}
+                                >
+                                  <Eye size={16} />
+                                </IconButton>
+                              </ActionButtons>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {currentEmployers.length === 0 && (
+                        <tr>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                            {language === 'vi' ? 'Không tìm thấy yêu cầu tuyển gấp nào' : 'No urgent job activation requests found'}
                           </td>
                         </tr>
-                      );
-                    })}
-                    {currentEmployers.length === 0 && (
+                      )}
+                    </tbody>
+                  </Table>
+                ) : activeTab === 'change_requests' ? (
+                  <Table>
+                    <thead>
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
-                          {language === 'vi' ? 'Không tìm thấy yêu cầu tuyển gấp nào' : 'No urgent job activation requests found'}
-                        </td>
+                        <th>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</th>
+                        <th>{language === 'vi' ? 'Nhân viên ứng tuyển' : 'Candidate'}</th>
+                        <th>{language === 'vi' ? 'Ứng viên thay thế' : 'Replacement Candidate'}</th>
+                        <th>{language === 'vi' ? 'Thời gian nhận việc' : 'Accepted Time'}</th>
+                        <th>{language === 'vi' ? 'Loại thay đổi' : 'Change Type'}</th>
+                        <th>{language === 'vi' ? 'Ngày gửi' : 'Requested At'}</th>
+                        <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                        <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </Table>
-              ) : activeTab === 'change_requests' ? (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</th>
-                      <th>{language === 'vi' ? 'Nhân viên ứng tuyển' : 'Candidate'}</th>
-                      <th>{language === 'vi' ? 'Ứng viên thay thế' : 'Replacement Candidate'}</th>
-                      <th>{language === 'vi' ? 'Thời gian nhận việc' : 'Accepted Time'}</th>
-                      <th>{language === 'vi' ? 'Loại thay đổi' : 'Change Type'}</th>
-                      <th>{language === 'vi' ? 'Ngày gửi' : 'Requested At'}</th>
-                      <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
-                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentChangeRequests.map((req, index) => {
-                      const colorScheme = getColorScheme(index);
-                      const initials = getCompanyInitials(req.employerName || req.companyName);
-                      const cr = req.changeRequest || {};
+                    </thead>
+                    <tbody>
+                      {currentChangeRequests.map((req, index) => {
+                        const colorScheme = getColorScheme(index);
+                        const initials = getCompanyInitials(req.employerName || req.companyName);
+                        const cr = req.changeRequest || {};
 
-                      return (
-                        <tr key={req.applicationId}>
-                          <td>
-                            <CompanyInfo>
-                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
-                                {req.companyLogo ? (
-                                  <img src={req.companyLogo} alt={req.employerName} />
-                                ) : (
-                                  initials
-                                )}
-                              </CompanyLogo>
-                              <CompanyDetails>
-                                <CompanyName>🏢 {req.employerName || req.companyName || '(Không xác định)'}</CompanyName>
-                                <CompanyMeta>
-                                  <Building2 size={12} />
-                                  ID: {req.employerId}
-                                </CompanyMeta>
-                              </CompanyDetails>
-                            </CompanyInfo>
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>👤 {req.workerName || req.candidateName || '(Không xác định)'}</div>
-                            <div style={{ fontSize: '12px', color: '#64748B' }}>Job ID: {req.jobId}</div>
-                          </td>
-                          <td>
-                            {req.replacementCandidateName ? (
-                              req.replacementCandidateName !== '---' ? (
-                                <div>
-                                  <div style={{ fontWeight: 600, color: '#10B981' }}>
-                                    👤 {req.replacementCandidateName}
-                                  </div>
-                                  {req.replacementCandidateId && (
-                                    <div style={{ fontSize: '11px', color: '#64748B' }}>
-                                      ID: {req.replacementCandidateId.substring(0, 8)}...
-                                    </div>
+                        return (
+                          <tr key={req.applicationId}>
+                            <td>
+                              <CompanyInfo>
+                                <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                                  {req.companyLogo ? (
+                                    <img src={req.companyLogo} alt={req.employerName} />
+                                  ) : (
+                                    initials
                                   )}
+                                </CompanyLogo>
+                                <CompanyDetails>
+                                  <CompanyName>🏢 {req.employerName || req.companyName || '(Không xác định)'}</CompanyName>
+                                  <CompanyMeta>
+                                    <Building2 size={12} />
+                                    ID: {req.employerId}
+                                  </CompanyMeta>
+                                </CompanyDetails>
+                              </CompanyInfo>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>👤 {req.workerName || req.candidateName || '(Không xác định)'}</div>
+                              <div style={{ fontSize: '12px', color: '#64748B' }}>Job ID: {req.jobId}</div>
+                            </td>
+                            <td>
+                              {req.replacementCandidateName ? (
+                                req.replacementCandidateName !== '---' ? (
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: '#10B981' }}>
+                                      👤 {req.replacementCandidateName}
+                                    </div>
+                                    {req.replacementCandidateId && (
+                                      <div style={{ fontSize: '11px', color: '#64748B' }}>
+                                        ID: {req.replacementCandidateId.substring(0, 8)}...
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#94A3B8' }}>---</span>
+                                )
+                              ) : (
+                                <span style={{ color: '#94A3B8' }}>---</span>
+                              )}
+                            </td>
+                            <td>
+                              {req.replacementCandidateAcceptedAt ? (
+                                <div style={{ fontSize: '13px', fontWeight: 500, color: '#334155' }}>
+                                  📅 {new Date(req.replacementCandidateAcceptedAt).toLocaleString('vi-VN')}
                                 </div>
                               ) : (
                                 <span style={{ color: '#94A3B8' }}>---</span>
-                              )
-                            ) : (
-                              <span style={{ color: '#94A3B8' }}>---</span>
-                            )}
-                          </td>
-                          <td>
-                            {req.replacementCandidateAcceptedAt ? (
-                              <div style={{ fontSize: '13px', fontWeight: 500, color: '#334155' }}>
-                                📅 {new Date(req.replacementCandidateAcceptedAt).toLocaleString('vi-VN')}
-                              </div>
-                            ) : (
-                              <span style={{ color: '#94A3B8' }}>---</span>
-                            )}
-                          </td>
-                          <td>
-                            {(() => {
-                              // Map raw type → tiếng Việt — đồng nhất với AdminDashboard
-                              const typeViMap = {
-                                cancel_shift: 'Huỷ ca làm',
-                                staff_replacement: 'Thay thế nhân viên',
-                                change_worker: 'Thay đổi nhân viên',
-                              };
-                              const typeLabel =
-                                typeViMap[cr.type] ||
-                                cr.typeLabel ||
-                                cr.type ||
-                                '(Không xác định)';
-                              // reasonLabel: ưu tiên reasonType (record mới) → typeLabel (record cũ dùng typeLabel làm lý do)
-                              const reasonLabel = cr.reasonType || (cr.type ? '' : cr.typeLabel) || '';
-                              const detailLabel = cr.reasonDetail || cr.reason || '';
-                              const isUrgent = cr.urgency === 'urgent';
-                              return (
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: isUrgent ? '#EF4444' : '#F97316' }}>
-                                    {(cr.type === 'staff_replacement' || cr.type === 'change_worker') ? <User size={14} /> : <Clock size={14} />}
-                                    {typeLabel}
-                                  </div>
-                                  {reasonLabel && (
-                                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <span>↳</span> {reasonLabel}
-                                    </div>
-                                  )}
-                                  {detailLabel && (
-                                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', fontStyle: 'italic' }}>
-                                      💬 "{detailLabel}"
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-                          <td>
-                            {/* Ưu tiên cr.requestedAt; fallback req.updatedAt — đồng nhất với AdminDashboard */}
-                            <div style={{ fontSize: '13px' }}>
-                              {cr.requestedAt || (req.updatedAt ? new Date(req.updatedAt).toLocaleString('vi-VN') : 'N/A')}
-                            </div>
-                          </td>
-                          <td>
-                            {(() => {
-                              // Normalize: backend trả cả 'APPROVED' lẫn 'approved'
-                              const crStatus = String(req.changeRequestStatus || '').toLowerCase();
-                              return (
-                                <StatusBadge $status={
-                                  crStatus === 'approved' ? 'approved' :
-                                  crStatus === 'rejected' ? 'rejected' : 'pending'
-                                }>
-                                  {crStatus === 'approved' && <CheckCircle size={12} />}
-                                  {crStatus === 'rejected' && <XCircle size={12} />}
-                                  {crStatus !== 'approved' && crStatus !== 'rejected' && <Clock size={12} />}
-                                  {crStatus === 'approved' && (language === 'vi' ? 'Đã duyệt' : 'Approved')}
-                                  {crStatus === 'rejected' && (language === 'vi' ? 'Từ chối' : 'Rejected')}
-                                  {crStatus !== 'approved' && crStatus !== 'rejected' && (language === 'vi' ? 'Chờ duyệt' : 'Pending')}
-                                </StatusBadge>
-                              );
-                            })()}
-                          </td>
-                          <td>
-                            <ActionButtons>
-                              <IconButton
-                                title={language === 'vi' ? 'Xem nội dung' : 'View content'}
-                                onClick={() => setSelectedChangeRequest(req)}
-                              >
-                                <Eye size={16} />
-                              </IconButton>
+                              )}
+                            </td>
+                            <td>
                               {(() => {
-                                const crStatus = String(req.changeRequestStatus || '').toLowerCase();
-                                const appStatus = String(req.status || '');
-                                const isAlreadyProcessed =
-                                  crStatus === 'approved' ||
-                                  crStatus === 'rejected' ||
-                                  appStatus === 'ĐÃ_BỊ_THAY_THẾ';
-                                if (isAlreadyProcessed) return null;
+                                // Map raw type → tiếng Việt — đồng nhất với AdminDashboard
+                                const typeViMap = {
+                                  cancel_shift: 'Huỷ ca làm',
+                                  staff_replacement: 'Thay thế nhân viên',
+                                  change_worker: 'Thay đổi nhân viên',
+                                };
+                                const typeLabel =
+                                  typeViMap[cr.type] ||
+                                  cr.typeLabel ||
+                                  cr.type ||
+                                  '(Không xác định)';
+                                // reasonLabel: ưu tiên reasonType (record mới) → typeLabel (record cũ dùng typeLabel làm lý do)
+                                const reasonLabel = cr.reasonType || (cr.type ? '' : cr.typeLabel) || '';
+                                const detailLabel = cr.reasonDetail || cr.reason || '';
+                                const isUrgent = cr.urgency === 'urgent';
                                 return (
-                                  <>
-                                    <ApproveButton
-                                      title={language === 'vi' ? 'Duyệt' : 'Approve'}
-                                      onClick={() => handleApproveChange(req.applicationId)}
-                                    >
-                                      <CheckCircle size={16} />
-                                    </ApproveButton>
-                                    <RejectButton
-                                      title={language === 'vi' ? 'Từ chối' : 'Reject'}
-                                      onClick={() => handleRejectChange(req.applicationId)}
-                                    >
-                                      <XCircle size={16} />
-                                    </RejectButton>
-                                  </>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: isUrgent ? '#EF4444' : '#F97316' }}>
+                                      {(cr.type === 'staff_replacement' || cr.type === 'change_worker') ? <User size={14} /> : <Clock size={14} />}
+                                      {typeLabel}
+                                    </div>
+                                    {reasonLabel && (
+                                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>↳</span> {reasonLabel}
+                                      </div>
+                                    )}
+                                    {detailLabel && (
+                                      <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px', fontStyle: 'italic' }}>
+                                        💬 "{detailLabel}"
+                                      </div>
+                                    )}
+                                  </div>
                                 );
                               })()}
-                              <DeleteButton
-                                title={language === 'vi' ? 'Xóa' : 'Delete'}
-                                onClick={() => handleDeleteChangeRequest(req.applicationId)}
-                              >
-                                <Trash2 size={16} />
-                              </DeleteButton>
-                            </ActionButtons>
+                            </td>
+                            <td>
+                              {/* Ưu tiên cr.requestedAt; fallback req.updatedAt — đồng nhất với AdminDashboard */}
+                              <div style={{ fontSize: '13px' }}>
+                                {cr.requestedAt || (req.updatedAt ? new Date(req.updatedAt).toLocaleString('vi-VN') : 'N/A')}
+                              </div>
+                            </td>
+                            <td>
+                              {(() => {
+                                // Normalize: backend trả cả 'APPROVED' lẫn 'approved'
+                                const crStatus = String(req.changeRequestStatus || '').toLowerCase();
+                                return (
+                                  <StatusBadge $status={
+                                    crStatus === 'approved' ? 'approved' :
+                                      crStatus === 'rejected' ? 'rejected' : 'pending'
+                                  }>
+                                    {crStatus === 'approved' && <CheckCircle size={12} />}
+                                    {crStatus === 'rejected' && <XCircle size={12} />}
+                                    {crStatus !== 'approved' && crStatus !== 'rejected' && <Clock size={12} />}
+                                    {crStatus === 'approved' && (language === 'vi' ? 'Đã duyệt' : 'Approved')}
+                                    {crStatus === 'rejected' && (language === 'vi' ? 'Từ chối' : 'Rejected')}
+                                    {crStatus !== 'approved' && crStatus !== 'rejected' && (language === 'vi' ? 'Chờ duyệt' : 'Pending')}
+                                  </StatusBadge>
+                                );
+                              })()}
+                            </td>
+                            <td>
+                              <ActionButtons>
+                                <IconButton
+                                  title={language === 'vi' ? 'Xem nội dung' : 'View content'}
+                                  onClick={() => setSelectedChangeRequest(req)}
+                                >
+                                  <Eye size={16} />
+                                </IconButton>
+                                {(() => {
+                                  const crStatus = String(req.changeRequestStatus || '').toLowerCase();
+                                  const appStatus = String(req.status || '');
+                                  const isAlreadyProcessed =
+                                    crStatus === 'approved' ||
+                                    crStatus === 'rejected' ||
+                                    appStatus === 'ĐÃ_BỊ_THAY_THẾ';
+                                  if (isAlreadyProcessed) return null;
+                                  return (
+                                    <>
+                                      <ApproveButton
+                                        title={language === 'vi' ? 'Duyệt' : 'Approve'}
+                                        onClick={() => handleApproveChange(req.applicationId)}
+                                      >
+                                        <CheckCircle size={16} />
+                                      </ApproveButton>
+                                      <RejectButton
+                                        title={language === 'vi' ? 'Từ chối' : 'Reject'}
+                                        onClick={() => handleRejectChange(req.applicationId)}
+                                      >
+                                        <XCircle size={16} />
+                                      </RejectButton>
+                                    </>
+                                  );
+                                })()}
+                                <DeleteButton
+                                  title={language === 'vi' ? 'Xóa' : 'Delete'}
+                                  onClick={() => handleDeleteChangeRequest(req.applicationId)}
+                                >
+                                  <Trash2 size={16} />
+                                </DeleteButton>
+                              </ActionButtons>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {currentChangeRequests.length === 0 && (
+                        <tr>
+                          <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                            {language === 'vi' ? 'Không tìm thấy yêu cầu thay đổi nào' : 'No change requests found'}
                           </td>
                         </tr>
-                      );
-                    })}
-                    {currentChangeRequests.length === 0 && (
+                      )}
+                    </tbody>
+                  </Table>
+                ) : activeTab === 'profile_changes' ? (
+                  <Table>
+                    <thead>
                       <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
-                          {language === 'vi' ? 'Không tìm thấy yêu cầu thay đổi nào' : 'No change requests found'}
-                        </td>
+                        <th>{language === 'vi' ? 'Công Ty' : 'Company'}</th>
+                        <th>{language === 'vi' ? 'Ngày Gửi' : 'Submitted At'}</th>
+                        <th>{language === 'vi' ? 'Thay đổi' : 'Changes'}</th>
+                        <th>{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
+                        <th>{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </Table>
-              ) : activeTab === 'profile_changes' ? (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>{language === 'vi' ? 'Công Ty' : 'Company'}</th>
-                      <th>{language === 'vi' ? 'Ngày Gửi' : 'Submitted At'}</th>
-                      <th>{language === 'vi' ? 'Thay đổi' : 'Changes'}</th>
-                      <th>{language === 'vi' ? 'Trạng Thái' : 'Status'}</th>
-                      <th>{language === 'vi' ? 'Hành Động' : 'Actions'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {profileChangeRequests
-                      .filter(r => r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW')
-                      .sort((a, b) => {
-                        const dateA = a.pendingProfileChanges?.submittedAt ? new Date(a.pendingProfileChanges.submittedAt).getTime() : 0;
-                        const dateB = b.pendingProfileChanges?.submittedAt ? new Date(b.pendingProfileChanges.submittedAt).getTime() : 0;
-                        if (dateB !== dateA) return dateB - dateA;
-                        return (a.userId || '').localeCompare(b.userId || '');
-                      })
-                      .map((employer, index) => {
-                        const colorScheme = getColorScheme(index);
-                        const initials = getCompanyInitials(employer.companyName);
-                        const changes = employer.pendingProfileChanges?.changes || {};
-                        const submittedAt = employer.pendingProfileChanges?.submittedAt || '';
-                        const changedFieldsCount = Object.keys(changes).length;
-                        const hasNewLogo = !!changes.companyLogo;
-                        const hasNewBanner = !!changes.companyBanner;
+                    </thead>
+                    <tbody>
+                      {profileChangeRequests
+                        .filter(r => r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW')
+                        .sort((a, b) => {
+                          const dateA = a.pendingProfileChanges?.submittedAt ? new Date(a.pendingProfileChanges.submittedAt).getTime() : 0;
+                          const dateB = b.pendingProfileChanges?.submittedAt ? new Date(b.pendingProfileChanges.submittedAt).getTime() : 0;
+                          if (dateB !== dateA) return dateB - dateA;
+                          return (a.userId || '').localeCompare(b.userId || '');
+                        })
+                        .map((employer, index) => {
+                          const colorScheme = getColorScheme(index);
+                          const initials = getCompanyInitials(employer.companyName);
+                          const changes = employer.pendingProfileChanges?.changes || {};
+                          const submittedAt = employer.pendingProfileChanges?.submittedAt || '';
+                          const changedFieldsCount = Object.keys(changes).length;
+                          const hasNewLogo = !!changes.companyLogo;
+                          const hasNewBanner = !!changes.companyBanner;
 
-                        return (
+                          return (
                           <tr key={employer.userId}>
                             <td>
                               <CompanyInfo>
@@ -2767,7 +2784,7 @@ const EmployersManagement = () => {
                               </div>
                             </td>
                             <td>
-                              <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 {hasNewLogo && (
                                   <span style={{ background: '#EFF6FF', color: '#1d4ed8', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                                     Logo
@@ -2821,7 +2838,7 @@ const EmployersManagement = () => {
                               </ActionButtons>
                             </td>
                           </tr>
-                        );
+                    );
                       })}
                     {profileChangeRequests.filter(r => r.pendingProfileChanges && r.pendingProfileChanges.status === 'PENDING_REVIEW').length === 0 && (
                       <tr>
@@ -2834,1175 +2851,1191 @@ const EmployersManagement = () => {
                     )}
                   </tbody>
                 </Table>
-              ) : activeTab === 'verifications' ? (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
-                      <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
-                      <th>{language === 'vi' ? 'Ngày gửi' : 'Submitted At'}</th>
-                      <th>{language === 'vi' ? 'Trạng thái xác thực' : 'Verification Status'}</th>
-                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+            ) : activeTab === 'verifications' ? (
+            <Table>
+              <thead>
+                <tr>
+                  <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
+                  <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
+                  <th>{language === 'vi' ? 'Ngày gửi' : 'Submitted At'}</th>
+                  <th>{language === 'vi' ? 'Trạng thái xác thực' : 'Verification Status'}</th>
+                  <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentEmployers.map((employer, index) => {
+                  const colorScheme = getColorScheme(index);
+                  const initials = getCompanyInitials(employer.companyName);
+                  return (
+                    <tr key={employer.id}>
+                      <td>
+                        <CompanyInfo>
+                          <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                            {employer.companyLogo ? (
+                              <img src={employer.companyLogo} alt={employer.companyName} />
+                            ) : initials}
+                          </CompanyLogo>
+                          <CompanyDetails>
+                            <CompanyName>{employer.companyName}</CompanyName>
+                            <CompanyMeta><Building2 size={12} />ID: {employer.id}</CompanyMeta>
+                          </CompanyDetails>
+                        </CompanyInfo>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '13px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                            <Mail size={12} />{employer.email}
+                          </div>
+                          {employer.phone !== 'N/A' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                              <Phone size={12} />{employer.phone}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Calendar size={12} />
+                          {employer.verificationSubmittedAt
+                            ? new Date(employer.verificationSubmittedAt).toLocaleDateString('vi-VN')
+                            : 'N/A'}
+                        </div>
+                      </td>
+                      <td>
+                        <VerifiedBadge $verified={employer.isVerified}>
+                          {employer.isVerified ? <CheckCircle size={12} /> : <Clock size={12} />}
+                          {employer.isVerified
+                            ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
+                            : (language === 'vi' ? 'Chờ xác minh' : 'Pending')}
+                        </VerifiedBadge>
+                      </td>
+                      <td>
+                        <ActionButtons>
+                          <IconButton
+                            title={language === 'vi' ? 'Xem hồ sơ xác thực' : 'View verification docs'}
+                            onClick={() => handleViewVerification(employer)}
+                          >
+                            <Eye size={16} />
+                          </IconButton>
+                          {!employer.isVerified && (
+                            <ApproveButton onClick={() => handleAdminVerify(employer.id, true)}>
+                              <CheckCircle size={16} />
+                              {language === 'vi' ? 'Xác minh' : 'Verify'}
+                            </ApproveButton>
+                          )}
+                          {employer.isVerified && (
+                            <RejectButton onClick={() => handleAdminVerify(employer.id, false)}>
+                              <XCircle size={16} />
+                              {language === 'vi' ? 'Hủy xác minh' : 'Unverify'}
+                            </RejectButton>
+                          )}
+                        </ActionButtons>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {currentEmployers.map((employer, index) => {
-                      const colorScheme = getColorScheme(index);
-                      const initials = getCompanyInitials(employer.companyName);
-                      return (
-                        <tr key={employer.id}>
-                          <td>
-                            <CompanyInfo>
-                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
-                                {employer.companyLogo ? (
-                                  <img src={employer.companyLogo} alt={employer.companyName} />
-                                ) : initials}
-                              </CompanyLogo>
-                              <CompanyDetails>
-                                <CompanyName>{employer.companyName}</CompanyName>
-                                <CompanyMeta><Building2 size={12} />ID: {employer.id}</CompanyMeta>
-                              </CompanyDetails>
-                            </CompanyInfo>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '13px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                                <Mail size={12} />{employer.email}
-                              </div>
-                              {employer.phone !== 'N/A' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
-                                  <Phone size={12} />{employer.phone}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={12} />
-                              {employer.verificationSubmittedAt
-                                ? new Date(employer.verificationSubmittedAt).toLocaleDateString('vi-VN')
-                                : 'N/A'}
-                            </div>
-                          </td>
-                          <td>
-                            <VerifiedBadge $verified={employer.isVerified}>
-                              {employer.isVerified ? <CheckCircle size={12} /> : <Clock size={12} />}
-                              {employer.isVerified
-                                ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
-                                : (language === 'vi' ? 'Chờ xác minh' : 'Pending')}
-                            </VerifiedBadge>
-                          </td>
-                          <td>
-                            <ActionButtons>
-                              <IconButton
-                                title={language === 'vi' ? 'Xem hồ sơ xác thực' : 'View verification docs'}
-                                onClick={() => handleViewVerification(employer)}
-                              >
-                                <Eye size={16} />
-                              </IconButton>
-                              {!employer.isVerified && (
-                                <ApproveButton onClick={() => handleAdminVerify(employer.id, true)}>
-                                  <CheckCircle size={16} />
-                                  {language === 'vi' ? 'Xác minh' : 'Verify'}
-                                </ApproveButton>
-                              )}
-                              {employer.isVerified && (
-                                <RejectButton onClick={() => handleAdminVerify(employer.id, false)}>
-                                  <XCircle size={16} />
-                                  {language === 'vi' ? 'Hủy xác minh' : 'Unverify'}
-                                </RejectButton>
-                              )}
-                              <DeleteButton
-                                title={language === 'vi' ? 'Xóa nhà tuyển dụng' : 'Delete employer'}
-                                onClick={() => openDeleteEmployerConfirm(employer)}
-                              >
-                                <Trash2 size={16} />
-                              </DeleteButton>
-                            </ActionButtons>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {currentEmployers.length === 0 && (
-                      <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
-                          {language === 'vi' ? 'Không có hồ sơ xác thực nào' : 'No verification submissions found'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
-              ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
-                      <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
-                      <th>{language === 'vi' ? 'Ngành' : 'Industry'}</th>
-                      <th>{language === 'vi' ? 'Quy mô' : 'Size'}</th>
-                      <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
-                      <th>{language === 'vi' ? 'Xác minh' : 'Verified'}</th>
-                      <th>{language === 'vi' ? 'Ngày tham gia' : 'Joined'}</th>
-                      <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentEmployers.map((employer, index) => {
-                      const colorScheme = getColorScheme(index);
-                      const initials = getCompanyInitials(employer.companyName);
-
-                      return (
-                        <tr key={employer.id}>
-                          <td>
-                            <CompanyInfo>
-                              <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
-                                {employer.companyLogo ? (
-                                  <img src={employer.companyLogo} alt={employer.companyName} />
-                                ) : (
-                                  initials
-                                )}
-                              </CompanyLogo>
-                              <CompanyDetails>
-                                <CompanyName>{employer.companyName}</CompanyName>
-                                <CompanyMeta>
-                                  <Building2 size={12} />
-                                  {employer.foundedYear !== 'N/A' ? `Thành lập ${employer.foundedYear}` : 'Chưa cập nhật'}
-                                </CompanyMeta>
-                              </CompanyDetails>
-                            </CompanyInfo>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '13px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                                <Mail size={12} />
-                                {employer.email}
-                              </div>
-                              {employer.phone !== 'N/A' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
-                                  <Phone size={12} />
-                                  {employer.phone}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <span style={{ fontWeight: 600 }}>{employer.industry}</span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Users size={14} />
-                              {employer.companySize}
-                            </div>
-                          </td>
-                          <td>
-                            {activeTab === 'pending' ? (
-                              <ApproveButton onClick={() => handleApprove(employer.id)}>
-                                <CheckCircle size={16} />
-                                {language === 'vi' ? 'Duyệt' : 'Approve'}
-                              </ApproveButton>
-                            ) : (
-                              <StatusBadge $status={employer.approvalStatus}>
-                                {employer.approvalStatus === 'approved' && <CheckCircle size={12} />}
-                                {employer.approvalStatus === 'pending' && <Clock size={12} />}
-                                {employer.approvalStatus === 'rejected' && <XCircle size={12} />}
-                                {getStatusText(employer.approvalStatus)}
-                              </StatusBadge>
-                            )}
-                          </td>
-                          <td>
-                            <VerifiedBadge $verified={employer.isVerified}>
-                              {employer.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                              {employer.isVerified
-                                ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
-                                : (language === 'vi' ? 'Chưa xác minh' : 'Not Verified')
-                              }
-                            </VerifiedBadge>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={12} />
-                              {employer.createdAt ? new Date(employer.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
-                            </div>
-                          </td>
-                          <td>
-                            <ActionButtons>
-                              <IconButton
-                                title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
-                                onClick={() => navigate(`/admin/employers/${employer.id}`)}
-                              >
-                                <Eye size={16} />
-                              </IconButton>
-                              <IconButton
-                                title={language === 'vi' ? 'Xem hồ sơ xác thực' : 'View verification docs'}
-                                onClick={() => handleViewVerification(employer)}
-                                style={{ color: '#2563EB' }}
-                              >
-                                <FileText size={16} />
-                              </IconButton>
-                              <DeleteButton
-                                title={language === 'vi' ? 'Xóa nhà tuyển dụng' : 'Delete employer'}
-                                onClick={() => openDeleteEmployerConfirm(employer)}
-                              >
-                                <Trash2 size={16} />
-                              </DeleteButton>
-                            </ActionButtons>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              )}
-            </TableWrapper>
-            )}
-
-            {activeTab !== 'grant_package' && (
-              <PaginationContainer>
-              <PaginationInfo>
-                {activeTab === 'withdrawals' ? (
-                  language === 'vi'
-                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} trong tổng số ${filteredWithdrawRequests.length} yêu cầu rút tiền`
-                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} of ${filteredWithdrawRequests.length} withdrawal requests`
-                ) : activeTab === 'quick_jobs' ? (
-                  language === 'vi'
-                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} yêu cầu tuyển gấp`
-                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} urgent job requests`
-                ) : activeTab === 'change_requests' ? (
-                  language === 'vi'
-                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredChangeRequests.length)} trong tổng số ${filteredChangeRequests.length} yêu cầu thay đổi`
-                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredChangeRequests.length)} of ${filteredChangeRequests.length} change requests`
-                ) : (
-                  language === 'vi'
-                    ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} nhà tuyển dụng`
-                    : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} employers`
-                )}
-              </PaginationInfo>
-              <PaginationButtons>
-                <PageButton
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  {language === 'vi' ? 'Trước' : 'Previous'}
-                </PageButton>
-
-                {[...Array(totalPages)].map((_, index) => {
-                  const pageNumber = index + 1;
-
-                  if (
-                    pageNumber === 1 ||
-                    pageNumber === totalPages ||
-                    (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
-                  ) {
-                    return (
-                      <PageButton
-                        key={pageNumber}
-                        $active={currentPage === pageNumber}
-                        onClick={() => setCurrentPage(pageNumber)}
-                      >
-                        {pageNumber}
-                      </PageButton>
-                    );
-                  } else if (
-                    pageNumber === currentPage - 2 ||
-                    pageNumber === currentPage + 2
-                  ) {
-                    return <PageEllipsis key={pageNumber}>...</PageEllipsis>;
-                  }
-                  return null;
+                  );
                 })}
+                {currentEmployers.length === 0 && (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#64748B' }}>
+                      {language === 'vi' ? 'Không có hồ sơ xác thực nào' : 'No verification submissions found'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+            ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <th>{language === 'vi' ? 'Công ty' : 'Company'}</th>
+                  <th>{language === 'vi' ? 'Liên hệ' : 'Contact'}</th>
+                  <th>{language === 'vi' ? 'Ngành' : 'Industry'}</th>
+                  <th>{language === 'vi' ? 'Quy mô' : 'Size'}</th>
+                  <th>{language === 'vi' ? 'Trạng thái' : 'Status'}</th>
+                  <th>{language === 'vi' ? 'Xác minh' : 'Verified'}</th>
+                  <th>{language === 'vi' ? 'Ngày tham gia' : 'Joined'}</th>
+                  <th>{language === 'vi' ? 'Thao tác' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentEmployers.map((employer, index) => {
+                  const colorScheme = getColorScheme(index);
+                  const initials = getCompanyInitials(employer.companyName);
 
-                <PageButton
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  {language === 'vi' ? 'Sau' : 'Next'}
-                </PageButton>
-              </PaginationButtons>
-            </PaginationContainer>
-            )}
-          </>
-        )}
-      </PageContainer>
-
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <ModalOverlay onClick={() => setShowSuccessModal(false)}>
-          <ModalContent onClick={(e) => e.stopPropagation()}>
-            <ModalIcon>
-              <CheckCircle />
-            </ModalIcon>
-            <ModalTitle>
-              {language === 'vi' ? 'Duyệt thành công!' : 'Approved Successfully!'}
-            </ModalTitle>
-            <ModalMessage>
-              {language === 'vi'
-                ? 'Nhà tuyển dụng đã được duyệt thành công. Họ có thể bắt đầu sử dụng các tính năng của hệ thống.'
-                : 'The employer has been approved successfully. They can now start using the system features.'
-              }
-            </ModalMessage>
-            <ModalButton onClick={() => setShowSuccessModal(false)}>
-              {language === 'vi' ? 'Đóng' : 'Close'}
-            </ModalButton>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* Grant Success Modal */}
-      {showGrantSuccessModal && grantedPackageDetails && (
-        <ModalOverlay onClick={() => setShowGrantSuccessModal(false)}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
-            <ModalIcon>
-              <CheckCircle />
-            </ModalIcon>
-            <ModalTitle style={{ marginBottom: '8px' }}>
-              {language === 'vi' ? 'Cấp Gói Thành Công!' : 'Package Granted Successfully!'}
-            </ModalTitle>
-            <ModalMessage style={{ marginBottom: '16px' }}>
-              {language === 'vi' 
-                ? 'Gói dịch vụ đã được kích hoạt thành công cho doanh nghiệp.' 
-                : 'The service package has been successfully activated for the employer.'}
-            </ModalMessage>
-            
-            <div style={{ display: 'grid', gap: '12px', margin: '20px 0', padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1.5px solid #E2E8F0', fontSize: '14px', textAlign: 'left' }}>
-              <div>
-                <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Nhà tuyển dụng:' : 'Employer:'}</span>
-                <span style={{ float: 'right', fontWeight: 700, color: '#1E293B' }}>{grantedPackageDetails.companyName}</span>
-              </div>
-              <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
-                <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Gói dịch vụ:' : 'Package:'}</span>
-                <span style={{ float: 'right', fontWeight: 700, color: '#3B82F6' }}>{grantedPackageDetails.packageName}</span>
-              </div>
-              <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
-                <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Thời hạn:' : 'Duration:'}</span>
-                <span style={{ float: 'right', fontWeight: 700, color: '#10B981' }}>{grantedPackageDetails.duration}</span>
-              </div>
-              {grantedPackageDetails.expiryDate && (
-                <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
-                  <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Hạn sử dụng:' : 'Expiration:'}</span>
-                  <span style={{ float: 'right', fontWeight: 700, color: '#EF4444' }}>{grantedPackageDetails.expiryDate}</span>
-                </div>
+                  return (
+                    <tr key={employer.id}>
+                      <td>
+                        <CompanyInfo>
+                          <CompanyLogo $bgColor={colorScheme.bg} $color={colorScheme.color}>
+                            {employer.companyLogo ? (
+                              <img src={employer.companyLogo} alt={employer.companyName} />
+                            ) : (
+                              initials
+                            )}
+                          </CompanyLogo>
+                          <CompanyDetails>
+                            <CompanyName>{employer.companyName}</CompanyName>
+                            <CompanyMeta>
+                              <Building2 size={12} />
+                              {employer.foundedYear !== 'N/A' ? `Thành lập ${employer.foundedYear}` : 'Chưa cập nhật'}
+                            </CompanyMeta>
+                          </CompanyDetails>
+                        </CompanyInfo>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '13px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                            <Mail size={12} />
+                            {employer.email}
+                          </div>
+                          {employer.phone !== 'N/A' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
+                              <Phone size={12} />
+                              {employer.phone}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600 }}>{employer.industry}</span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Users size={14} />
+                          {employer.companySize}
+                        </div>
+                      </td>
+                      <td>
+                        {activeTab === 'pending' ? (
+                          <ApproveButton onClick={() => handleApprove(employer.id)}>
+                            <CheckCircle size={16} />
+                            {language === 'vi' ? 'Duyệt' : 'Approve'}
+                          </ApproveButton>
+                        ) : (
+                          <StatusBadge $status={employer.approvalStatus}>
+                            {employer.approvalStatus === 'approved' && <CheckCircle size={12} />}
+                            {employer.approvalStatus === 'pending' && <Clock size={12} />}
+                            {employer.approvalStatus === 'rejected' && <XCircle size={12} />}
+                            {getStatusText(employer.approvalStatus)}
+                          </StatusBadge>
+                        )}
+                      </td>
+                      <td>
+                        <VerifiedBadge $verified={employer.isVerified}>
+                          {employer.isVerified ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                          {employer.isVerified
+                            ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
+                            : (language === 'vi' ? 'Chưa xác minh' : 'Not Verified')
+                          }
+                        </VerifiedBadge>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Calendar size={12} />
+                          {employer.createdAt ? new Date(employer.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
+                        </div>
+                      </td>
+                      <td>
+                        <ActionButtons>
+                          <IconButton
+                            title={language === 'vi' ? 'Xem chi tiết' : 'View details'}
+                            onClick={() => navigate(`/admin/employers/${employer.id}`)}
+                          >
+                            <Eye size={16} />
+                          </IconButton>
+                          <IconButton
+                            title={language === 'vi' ? 'Xem hồ sơ xác thực' : 'View verification docs'}
+                            onClick={() => handleViewVerification(employer)}
+                            style={{ color: '#2563EB' }}
+                          >
+                            <FileText size={16} />
+                          </IconButton>
+                          <DeleteButton
+                            title={language === 'vi' ? 'Xóa nhà tuyển dụng' : 'Delete employer'}
+                            onClick={() => openDeleteEmployerConfirm(employer)}
+                          >
+                            <Trash2 size={16} />
+                          </DeleteButton>
+                        </ActionButtons>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
               )}
+          </TableWrapper>
+            )}
+
+        {activeTab !== 'grant_package' && (
+          <PaginationContainer>
+            <PaginationInfo>
+              {activeTab === 'withdrawals' ? (
+                language === 'vi'
+                  ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} trong tổng số ${filteredWithdrawRequests.length} yêu cầu rút tiền`
+                  : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredWithdrawRequests.length)} of ${filteredWithdrawRequests.length} withdrawal requests`
+              ) : activeTab === 'quick_jobs' ? (
+                language === 'vi'
+                  ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} yêu cầu tuyển gấp`
+                  : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} urgent job requests`
+              ) : activeTab === 'change_requests' ? (
+                language === 'vi'
+                  ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredChangeRequests.length)} trong tổng số ${filteredChangeRequests.length} yêu cầu thay đổi`
+                  : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredChangeRequests.length)} of ${filteredChangeRequests.length} change requests`
+              ) : (
+                language === 'vi'
+                  ? `Hiển thị ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} trong tổng số ${filteredEmployers.length} nhà tuyển dụng`
+                  : `Showing ${startIndex + 1}-${Math.min(endIndex, filteredEmployers.length)} of ${filteredEmployers.length} employers`
+              )}
+            </PaginationInfo>
+            <PaginationButtons>
+              <PageButton
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                {language === 'vi' ? 'Trước' : 'Previous'}
+              </PageButton>
+
+              {[...Array(totalPages)].map((_, index) => {
+                const pageNumber = index + 1;
+
+                if (
+                  pageNumber === 1 ||
+                  pageNumber === totalPages ||
+                  (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+                ) {
+                  return (
+                    <PageButton
+                      key={pageNumber}
+                      $active={currentPage === pageNumber}
+                      onClick={() => setCurrentPage(pageNumber)}
+                    >
+                      {pageNumber}
+                    </PageButton>
+                  );
+                } else if (
+                  pageNumber === currentPage - 2 ||
+                  pageNumber === currentPage + 2
+                ) {
+                  return <PageEllipsis key={pageNumber}>...</PageEllipsis>;
+                }
+                return null;
+              })}
+
+              <PageButton
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                {language === 'vi' ? 'Sau' : 'Next'}
+              </PageButton>
+            </PaginationButtons>
+          </PaginationContainer>
+        )}
+      </>
+        )}
+    </PageContainer>
+
+      {/* Success Modal */ }
+  {
+    showSuccessModal && (
+      <ModalOverlay onClick={() => setShowSuccessModal(false)}>
+        <ModalContent onClick={(e) => e.stopPropagation()}>
+          <ModalIcon>
+            <CheckCircle />
+          </ModalIcon>
+          <ModalTitle>
+            {language === 'vi' ? 'Duyệt thành công!' : 'Approved Successfully!'}
+          </ModalTitle>
+          <ModalMessage>
+            {language === 'vi'
+              ? 'Nhà tuyển dụng đã được duyệt thành công. Họ có thể bắt đầu sử dụng các tính năng của hệ thống.'
+              : 'The employer has been approved successfully. They can now start using the system features.'
+            }
+          </ModalMessage>
+          <ModalButton onClick={() => setShowSuccessModal(false)}>
+            {language === 'vi' ? 'Đóng' : 'Close'}
+          </ModalButton>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
+
+  {/* Grant Success Modal */ }
+  {
+    showGrantSuccessModal && grantedPackageDetails && (
+      <ModalOverlay onClick={() => setShowGrantSuccessModal(false)}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+          <ModalIcon>
+            <CheckCircle />
+          </ModalIcon>
+          <ModalTitle style={{ marginBottom: '8px' }}>
+            {language === 'vi' ? 'Cấp Gói Thành Công!' : 'Package Granted Successfully!'}
+          </ModalTitle>
+          <ModalMessage style={{ marginBottom: '16px' }}>
+            {language === 'vi'
+              ? 'Gói dịch vụ đã được kích hoạt thành công cho doanh nghiệp.'
+              : 'The service package has been successfully activated for the employer.'}
+          </ModalMessage>
+
+          <div style={{ display: 'grid', gap: '12px', margin: '20px 0', padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1.5px solid #E2E8F0', fontSize: '14px', textAlign: 'left' }}>
+            <div>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Nhà tuyển dụng:' : 'Employer:'}</span>
+              <span style={{ float: 'right', fontWeight: 700, color: '#1E293B' }}>{grantedPackageDetails.companyName}</span>
             </div>
+            <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Gói dịch vụ:' : 'Package:'}</span>
+              <span style={{ float: 'right', fontWeight: 700, color: '#3B82F6' }}>{grantedPackageDetails.packageName}</span>
+            </div>
+            <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
+              <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Thời hạn:' : 'Duration:'}</span>
+              <span style={{ float: 'right', fontWeight: 700, color: '#10B981' }}>{grantedPackageDetails.duration}</span>
+            </div>
+            {grantedPackageDetails.expiryDate && (
+              <div style={{ borderTop: '1px dashed #E2E8F0', paddingTop: '8px' }}>
+                <span style={{ color: '#64748B', fontWeight: 500 }}>{language === 'vi' ? 'Hạn sử dụng:' : 'Expiration:'}</span>
+                <span style={{ float: 'right', fontWeight: 700, color: '#EF4444' }}>{grantedPackageDetails.expiryDate}</span>
+              </div>
+            )}
+          </div>
 
-            <ModalButton onClick={() => {
-              setShowGrantSuccessModal(false);
-              const isTopSpotlight = grantedPackageDetails.packageName?.toLowerCase()?.includes('top spotlight');
-              if (isTopSpotlight) {
-                navigate(`/admin/banners?type=top-spotlight&employer=${encodeURIComponent(grantedPackageDetails.companyName)}`);
-              }
-            }}>
-              {grantedPackageDetails.packageName?.toLowerCase()?.includes('top spotlight')
-                ? (language === 'vi' ? 'Đi tới Quản lý Banner' : 'Go to Banner Management')
-                : (language === 'vi' ? 'Xác nhận' : 'Confirm')}
-            </ModalButton>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+          <ModalButton onClick={() => {
+            setShowGrantSuccessModal(false);
+            const isTopSpotlight = grantedPackageDetails.packageName?.toLowerCase()?.includes('top spotlight');
+            if (isTopSpotlight) {
+              navigate(`/admin/banners?type=top-spotlight&employer=${encodeURIComponent(grantedPackageDetails.companyName)}`);
+            }
+          }}>
+            {grantedPackageDetails.packageName?.toLowerCase()?.includes('top spotlight')
+              ? (language === 'vi' ? 'Đi tới Quản lý Banner' : 'Go to Banner Management')
+              : (language === 'vi' ? 'Xác nhận' : 'Confirm')}
+          </ModalButton>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
 
-      {/* Grant Error Modal */}
-      {grantErrorModalMsg && (
-        <ModalOverlay onClick={() => setGrantErrorModalMsg('')}>
-          <ModalContent onClick={(e) => e.stopPropagation()}>
-            <ModalIcon style={{ background: '#fee2e2' }}>
-              <XCircle style={{ color: '#dc2626' }} />
-            </ModalIcon>
-            <ModalTitle>
-              {language === 'vi' ? 'Cấp gói thất bại!' : 'Failed to Grant Package!'}
+  {/* Grant Error Modal */ }
+  {
+    grantErrorModalMsg && (
+      <ModalOverlay onClick={() => setGrantErrorModalMsg('')}>
+        <ModalContent onClick={(e) => e.stopPropagation()}>
+          <ModalIcon style={{ background: '#fee2e2' }}>
+            <XCircle style={{ color: '#dc2626' }} />
+          </ModalIcon>
+          <ModalTitle>
+            {language === 'vi' ? 'Cấp gói thất bại!' : 'Failed to Grant Package!'}
+          </ModalTitle>
+          <ModalMessage style={{ color: '#dc2626', fontWeight: 500 }}>
+            {grantErrorModalMsg}
+          </ModalMessage>
+          <ModalButton style={{ background: '#ef4444' }} onClick={() => setGrantErrorModalMsg('')}>
+            {language === 'vi' ? 'Đóng' : 'Close'}
+          </ModalButton>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
+
+  {/* Change Request Detail Modal */ }
+  {
+    selectedChangeRequest && (<ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
+      <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
+            <AlertCircle style={{ color: '#F97316' }} />
+          </div>
+          <div>
+            <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+              {language === 'vi' ? 'Chi Tiết Yêu Cầu Thay Đổi' : 'Change Request Details'}
             </ModalTitle>
-            <ModalMessage style={{ color: '#dc2626', fontWeight: 500 }}>
-              {grantErrorModalMsg}
-            </ModalMessage>
-            <ModalButton style={{ background: '#ef4444' }} onClick={() => setGrantErrorModalMsg('')}>
-              {language === 'vi' ? 'Đóng' : 'Close'}
-            </ModalButton>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+            <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+              {selectedChangeRequest.changeRequest?.requestedAt}
+            </div>
+          </div>
+        </div>
 
-      {/* Change Request Detail Modal */}
-      {selectedChangeRequest && (<ModalOverlay onClick={() => setSelectedChangeRequest(null)}>
-        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FFEDD5' }}>
-              <AlertCircle style={{ color: '#F97316' }} />
+        <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.employerName || selectedChangeRequest.companyName || '(Không xác định)'}</div>
             </div>
             <div>
-              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
-                {language === 'vi' ? 'Chi Tiết Yêu Cầu Thay Đổi' : 'Change Request Details'}
-              </ModalTitle>
-              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                {selectedChangeRequest.changeRequest?.requestedAt}
+              <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                {language === 'vi' ? 'Worker cũ (đang làm)' : 'Current Worker (working)'}
               </div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#EF4444' }}>{selectedChangeRequest.workerName || selectedChangeRequest.candidateName || '(Không xác định)'}</div>
             </div>
-          </div>
-
-          <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            {/* Loại thay đổi */}
+            {(selectedChangeRequest.changeRequest?.type || selectedChangeRequest.changeRequest?.typeLabel) && (
               <div>
                 <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                  {language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest.employerName || selectedChangeRequest.companyName || '(Không xác định)'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                  {language === 'vi' ? 'Worker cũ (đang làm)' : 'Current Worker (working)'}
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#EF4444' }}>{selectedChangeRequest.workerName || selectedChangeRequest.candidateName || '(Không xác định)'}</div>
-              </div>
-              {/* Loại thay đổi */}
-              {(selectedChangeRequest.changeRequest?.type || selectedChangeRequest.changeRequest?.typeLabel) && (
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Loại thay đổi' : 'Change Type'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
-                    {(() => {
-                      const typeViMap = { cancel_shift: 'Huỷ ca làm', staff_replacement: 'Thay thế nhân viên', change_worker: 'Thay đổi nhân viên' };
-                      const cr = selectedChangeRequest.changeRequest;
-                      return typeViMap[cr.type] || cr.typeLabel || cr.type || '(Không xác định)';
-                    })()}
-                  </div>
-                </div>
-              )}
-              {selectedChangeRequest.changeRequest?.newWorkerName && (
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Worker mới (đề xuất)' : 'New Worker (proposed)'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#10B981' }}>{selectedChangeRequest.changeRequest.newWorkerName}</div>
-                </div>
-              )}
-              {selectedChangeRequest._jobStartTime && (
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Giờ bắt đầu ca' : 'Shift Start Time'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700 }}>
-                    {selectedChangeRequest._jobStartTime} – {selectedChangeRequest._jobEndTime || '--:--'}
-                  </div>
-                </div>
-              )}
-              {selectedChangeRequest._jobTitle && (
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Vị trí / Địa điểm' : 'Role / Location'}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest._jobTitle}</div>
-                  {selectedChangeRequest._jobLocation && (
-                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{selectedChangeRequest._jobLocation}</div>
-                  )}
-                </div>
-              )}
-              <div>
-                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-                  {language === 'vi' ? 'Gửi lúc' : 'Submitted At'}
+                  {language === 'vi' ? 'Loại thay đổi' : 'Change Type'}
                 </div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
-                  {selectedChangeRequest.changeRequest?.requestedAt || '--'}
+                  {(() => {
+                    const typeViMap = { cancel_shift: 'Huỷ ca làm', staff_replacement: 'Thay thế nhân viên', change_worker: 'Thay đổi nhân viên' };
+                    const cr = selectedChangeRequest.changeRequest;
+                    return typeViMap[cr.type] || cr.typeLabel || cr.type || '(Không xác định)';
+                  })()}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <FileText size={14} />
-              {language === 'vi' ? 'Lý do:' : 'Reason:'}
-            </div>
-            {(selectedChangeRequest.changeRequest?.reasonType || selectedChangeRequest.changeRequest?.typeLabel) && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#FFF7ED', border: '1px solid #FFEDD5', borderRadius: '8px', padding: '5px 10px', fontSize: '12.5px', fontWeight: 700, color: '#C2410C', marginBottom: '8px' }}>
-                <AlertCircle size={13} />
-                {selectedChangeRequest.changeRequest.reasonType || selectedChangeRequest.changeRequest.typeLabel}
               </div>
             )}
-            <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B', whiteSpace: 'pre-wrap' }}>
-              {/* Bug 1 fix: field thực tế là reasonDetail, fallback về reason để tương thích bản cũ */}
-              {selectedChangeRequest.changeRequest?.reasonDetail || selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
+            {selectedChangeRequest.changeRequest?.newWorkerName && (
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Worker mới (đề xuất)' : 'New Worker (proposed)'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#10B981' }}>{selectedChangeRequest.changeRequest.newWorkerName}</div>
+              </div>
+            )}
+            {selectedChangeRequest._jobStartTime && (
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Giờ bắt đầu ca' : 'Shift Start Time'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700 }}>
+                  {selectedChangeRequest._jobStartTime} – {selectedChangeRequest._jobEndTime || '--:--'}
+                </div>
+              </div>
+            )}
+            {selectedChangeRequest._jobTitle && (
+              <div>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Vị trí / Địa điểm' : 'Role / Location'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 700 }}>{selectedChangeRequest._jobTitle}</div>
+                {selectedChangeRequest._jobLocation && (
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{selectedChangeRequest._jobLocation}</div>
+                )}
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                {language === 'vi' ? 'Gửi lúc' : 'Submitted At'}
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#F97316' }}>
+                {selectedChangeRequest.changeRequest?.requestedAt || '--'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <FileText size={14} />
+            {language === 'vi' ? 'Lý do:' : 'Reason:'}
+          </div>
+          {(selectedChangeRequest.changeRequest?.reasonType || selectedChangeRequest.changeRequest?.typeLabel) && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#FFF7ED', border: '1px solid #FFEDD5', borderRadius: '8px', padding: '5px 10px', fontSize: '12.5px', fontWeight: 700, color: '#C2410C', marginBottom: '8px' }}>
+              <AlertCircle size={13} />
+              {selectedChangeRequest.changeRequest.reasonType || selectedChangeRequest.changeRequest.typeLabel}
+            </div>
+          )}
+          <div style={{ background: '#FAFAFA', border: '1.5px solid #F1F5F9', borderRadius: '12px', padding: '16px', fontSize: '14px', lineHeight: '1.6', color: '#1E293B', whiteSpace: 'pre-wrap' }}>
+            {/* Bug 1 fix: field thực tế là reasonDetail, fallback về reason để tương thích bản cũ */}
+            {selectedChangeRequest.changeRequest?.reasonDetail || selectedChangeRequest.changeRequest?.reason || (language === 'vi' ? 'Không có nội dung lý do' : 'No detailed reason provided')}
+          </div>
+        </div>
+
+        {/* Cảnh báo cho admin */}
+        <div style={{ background: '#FFF7ED', border: '1.5px solid #FFEDD5', borderRadius: '12px', padding: '14px 16px', marginBottom: '20px', fontSize: '13px', color: '#92400E', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+          <AlertCircle size={16} color="#F97316" style={{ flexShrink: 0, marginTop: '1px' }} />
+          <span>
+            {language === 'vi'
+              ? <>Nếu <strong>Duyệt</strong>: worker cũ kết thúc ca ngay lập tức, tiền công tính đến lúc này. Worker mới bắt đầu ca ngay.</>
+              : <>If <strong>Approve</strong>: current worker shift ends immediately, wage calculated up to this point. New worker starts shift immediately.</>}
+          </span>
+        </div>
+
+        {(() => {
+          const crStatus = String(selectedChangeRequest.changeRequestStatus || '').toUpperCase();
+          const isPending = selectedChangeRequest.status === 'pending_change';
+          const isApproved = crStatus === 'APPROVED' || selectedChangeRequest.status === 'ĐÃ_BỊ_THAY_THẾ';
+          const isRejected = crStatus === 'REJECTED';
+
+          if (isPending && !isApproved && !isRejected) {
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <ModalButton
+                  onClick={() => handleRejectChange(selectedChangeRequest.applicationId)}
+                  style={{ background: '#ef4444' }}
+                  disabled={isProcessingChange}
+                >
+                  {isProcessingChange ? '...' : (language === 'vi' ? 'Từ chối' : 'Reject')}
+                </ModalButton>
+                <ModalButton
+                  onClick={() => handleApproveChange(selectedChangeRequest.applicationId)}
+                  disabled={isProcessingChange}
+                >
+                  {isProcessingChange
+                    ? (language === 'vi' ? 'Đang xử lý...' : 'Processing...')
+                    : (language === 'vi' ? 'Duyệt' : 'Approve')}
+                </ModalButton>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{
+              padding: '12px 16px', borderRadius: '10px', fontSize: '13.5px', fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: isApproved ? '#ECFDF5' : '#FEF2F2',
+              color: isApproved ? '#065F46' : '#991B1B',
+              border: `1.5px solid ${isApproved ? '#A7F3D0' : '#FECACA'}`
+            }}>
+              {isApproved ? '✅' : '❌'}
+              {isApproved
+                ? (language === 'vi' ? 'Yêu cầu này đã được duyệt' : 'This request has been approved')
+                : (language === 'vi' ? 'Yêu cầu này đã bị từ chối' : 'This request has been rejected')}
+            </div>
+          );
+        })()}
+
+        <button
+          onClick={() => setSelectedChangeRequest(null)}
+          style={{ width: '100%', marginTop: '12px', background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+        >
+          {language === 'vi' ? 'Đóng' : 'Close'}
+        </button>
+      </ModalContent>
+    </ModalOverlay>
+    )
+  }
+
+  {/* Profile Change Comparison Modal */ }
+  {
+    selectedProfileChange && (
+      <ModalOverlay onClick={() => setSelectedProfileChange(null)}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #BFDBFE', flexShrink: 0 }}>
+              <Edit style={{ color: '#2563EB' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                {language === 'vi' ? 'Chi Tiết Yêu Cầu Chỉnh Sửa Hồ Sơ' : 'Profile Change Request Details'}
+              </ModalTitle>
+              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                {selectedProfileChange.companyName} • {new Date(selectedProfileChange.pendingProfileChanges?.submittedAt || '').toLocaleString('vi-VN')}
+              </div>
             </div>
           </div>
 
-          {/* Cảnh báo cho admin */}
-          <div style={{ background: '#FFF7ED', border: '1.5px solid #FFEDD5', borderRadius: '12px', padding: '14px 16px', marginBottom: '20px', fontSize: '13px', color: '#92400E', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <AlertCircle size={16} color="#F97316" style={{ flexShrink: 0, marginTop: '1px' }} />
-            <span>
-              {language === 'vi'
-                ? <>Nếu <strong>Duyệt</strong>: worker cũ kết thúc ca ngay lập tức, tiền công tính đến lúc này. Worker mới bắt đầu ca ngay.</>
-                : <>If <strong>Approve</strong>: current worker shift ends immediately, wage calculated up to this point. New worker starts shift immediately.</>}
-            </span>
-          </div>
-
+          {/* So sánh ảnh logo / banner nếu có */}
           {(() => {
-            const crStatus = String(selectedChangeRequest.changeRequestStatus || '').toUpperCase();
-            const isPending = selectedChangeRequest.status === 'pending_change';
-            const isApproved = crStatus === 'APPROVED' || selectedChangeRequest.status === 'ĐÃ_BỊ_THAY_THẾ';
-            const isRejected = crStatus === 'REJECTED';
-
-            if (isPending && !isApproved && !isRejected) {
-              return (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <ModalButton
-                    onClick={() => handleRejectChange(selectedChangeRequest.applicationId)}
-                    style={{ background: '#ef4444' }}
-                    disabled={isProcessingChange}
-                  >
-                    {isProcessingChange ? '...' : (language === 'vi' ? 'Từ chối' : 'Reject')}
-                  </ModalButton>
-                  <ModalButton
-                    onClick={() => handleApproveChange(selectedChangeRequest.applicationId)}
-                    disabled={isProcessingChange}
-                  >
-                    {isProcessingChange
-                      ? (language === 'vi' ? 'Đang xử lý...' : 'Processing...')
-                      : (language === 'vi' ? 'Duyệt' : 'Approve')}
-                  </ModalButton>
-                </div>
-              );
-            }
-
+            const changes = selectedProfileChange.pendingProfileChanges?.changes || {};
+            const imageFields = [
+              { key: 'companyLogo', label: 'Logo' },
+              { key: 'companyBanner', label: 'Banner' },
+            ];
+            const imageChanges = imageFields.filter(f => changes[f.key]);
+            if (imageChanges.length === 0) return null;
             return (
-              <div style={{
-                padding: '12px 16px', borderRadius: '10px', fontSize: '13.5px', fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: '8px',
-                background: isApproved ? '#ECFDF5' : '#FEF2F2',
-                color: isApproved ? '#065F46' : '#991B1B',
-                border: `1.5px solid ${isApproved ? '#A7F3D0' : '#FECACA'}`
-              }}>
-                {isApproved ? '✅' : '❌'}
-                {isApproved
-                  ? (language === 'vi' ? 'Yêu cầu này đã được duyệt' : 'This request has been approved')
-                  : (language === 'vi' ? 'Yêu cầu này đã bị từ chối' : 'This request has been rejected')}
+              <div style={{ marginBottom: '20px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                {imageChanges.map(({ key, label }) => (
+                  <div key={key} style={{ flex: 1, minWidth: '240px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#334155', marginBottom: '8px' }}>{label}</div>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px', fontWeight: 600 }}>{language === 'vi' ? 'Hiện tại' : 'Current'}</div>
+                        {selectedProfileChange[key] ? (
+                          <img src={selectedProfileChange[key]} alt={`current-${label}`} style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #FCA5A5' }} />
+                        ) : (
+                          <div style={{ height: '80px', background: '#FEE2E2', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#DC2626' }}>{language === 'vi' ? 'Chưa có' : 'None'}</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingTop: '28px', color: '#64748B', fontWeight: 700, fontSize: '18px' }}>→</div>
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px', fontWeight: 600 }}>{language === 'vi' ? 'Mới' : 'New'}</div>
+                        <img src={changes[key]} alt={`new-${label}`} style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #86EFAC' }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             );
           })()}
 
-          <button
-            onClick={() => setSelectedChangeRequest(null)}
-            style={{ width: '100%', marginTop: '12px', background: 'none', border: 'none', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            {language === 'vi' ? 'Đóng' : 'Close'}
-          </button>
+          {/* So sánh các trường text */}
+          {(() => {
+            const changes = selectedProfileChange.pendingProfileChanges?.changes || {};
+            const fieldLabels = {
+              companyName: language === 'vi' ? 'Tên công ty' : 'Company Name',
+              phone: language === 'vi' ? 'Số điện thoại' : 'Phone',
+              address: language === 'vi' ? 'Địa chỉ' : 'Address',
+              website: 'Website',
+              industry: language === 'vi' ? 'Ngành nghề' : 'Industry',
+              companySize: language === 'vi' ? 'Quy mô' : 'Company Size',
+              foundedYear: language === 'vi' ? 'Năm thành lập' : 'Founded Year',
+              taxCode: language === 'vi' ? 'Mã số thuế' : 'Tax Code',
+              businessLicense: language === 'vi' ? 'Giấy phép KD' : 'Business License',
+              description: language === 'vi' ? 'Mô tả' : 'Description',
+              companyVideo: 'Video',
+              companyImages: language === 'vi' ? 'Hình ảnh công ty' : 'Company Images',
+            };
+            const skipKeys = new Set(['companyLogo', 'companyBanner']);
+            const textChanges = Object.keys(changes)
+              .filter(k => !skipKeys.has(k))
+              .filter(k => JSON.stringify(selectedProfileChange[k]) !== JSON.stringify(changes[k]));
+
+            if (textChanges.length === 0) return null;
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: '#334155', marginBottom: '4px' }}>
+                  {language === 'vi' ? 'Thay đổi thông tin' : 'Field Changes'}
+                </div>
+                {textChanges.map(key => {
+                  const oldVal = selectedProfileChange[key];
+                  const newVal = changes[key];
+                  const label = fieldLabels[key] || key;
+                  return (
+                    <div key={key} style={{ padding: '12px', background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
+                      <strong style={{ display: 'block', marginBottom: '6px', color: '#334155', fontSize: '13px' }}>{label}</strong>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, padding: '8px', background: '#FEE2E2', borderRadius: '6px', fontSize: '13px', wordBreak: 'break-word' }}>
+                          <strong>{language === 'vi' ? 'Cũ: ' : 'Old: '}</strong>
+                          {oldVal != null ? String(Array.isArray(oldVal) ? oldVal.join(', ') : oldVal) : <em style={{ color: '#DC2626' }}>{language === 'vi' ? 'Trống' : 'Empty'}</em>}
+                        </div>
+                        <span style={{ color: '#64748B', paddingTop: '6px', fontWeight: 700 }}>→</span>
+                        <div style={{ flex: 1, padding: '8px', background: '#DCFCE7', borderRadius: '6px', fontSize: '13px', wordBreak: 'break-word' }}>
+                          <strong>{language === 'vi' ? 'Mới: ' : 'New: '}</strong>
+                          {newVal != null ? String(Array.isArray(newVal) ? newVal.join(', ') : newVal) : <em style={{ color: '#15803d' }}>{language === 'vi' ? 'Trống' : 'Empty'}</em>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '24px' }}>
+            <ModalButton
+              onClick={() => handleApproveProfileChange(selectedProfileChange)}
+              disabled={isProcessingProfileChange}
+              style={{ background: '#16A34A' }}
+            >
+              <CheckCircle size={15} style={{ marginRight: '6px' }} />
+              {isProcessingProfileChange ? '...' : (language === 'vi' ? 'Duyệt' : 'Approve')}
+            </ModalButton>
+            <ModalButton
+              onClick={() => {
+                setRejectTargetUserId(selectedProfileChange.userId);
+                setRejectTargetCompanyName(selectedProfileChange.companyName);
+                setShowRejectReasonModal(true);
+                setSelectedProfileChange(null);
+              }}
+              disabled={isProcessingProfileChange}
+              style={{ background: '#DC2626' }}
+            >
+              <XCircle size={15} style={{ marginRight: '6px' }} />
+              {language === 'vi' ? 'Từ chối' : 'Reject'}
+            </ModalButton>
+            <button
+              onClick={() => setSelectedProfileChange(null)}
+              style={{ padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              {language === 'vi' ? 'Đóng' : 'Close'}
+            </button>
+          </div>
         </ModalContent>
       </ModalOverlay>
-      )}
+    )
+  }
 
-      {/* Profile Change Comparison Modal */}
-      {selectedProfileChange && (
-        <ModalOverlay onClick={() => setSelectedProfileChange(null)}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #BFDBFE', flexShrink: 0 }}>
-                <Edit style={{ color: '#2563EB' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
-                  {language === 'vi' ? 'Chi Tiết Yêu Cầu Chỉnh Sửa Hồ Sơ' : 'Profile Change Request Details'}
-                </ModalTitle>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                  {selectedProfileChange.companyName} • {new Date(selectedProfileChange.pendingProfileChanges?.submittedAt || '').toLocaleString('vi-VN')}
-                </div>
-              </div>
+  {/* Reject Profile Change Reason Modal */ }
+  {
+    showRejectReasonModal && (
+      <ModalOverlay onClick={() => { setShowRejectReasonModal(false); setRejectReasonInput(''); }}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FCA5A5', flexShrink: 0 }}>
+              <XCircle style={{ color: '#DC2626' }} size={20} />
             </div>
-
-            {/* So sánh ảnh logo / banner nếu có */}
-            {(() => {
-              const changes = selectedProfileChange.pendingProfileChanges?.changes || {};
-              const imageFields = [
-                { key: 'companyLogo', label: 'Logo' },
-                { key: 'companyBanner', label: 'Banner' },
-              ];
-              const imageChanges = imageFields.filter(f => changes[f.key]);
-              if (imageChanges.length === 0) return null;
-              return (
-                <div style={{ marginBottom: '20px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                  {imageChanges.map(({ key, label }) => (
-                    <div key={key} style={{ flex: 1, minWidth: '240px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#334155', marginBottom: '8px' }}>{label}</div>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                          <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px', fontWeight: 600 }}>{language === 'vi' ? 'Hiện tại' : 'Current'}</div>
-                          {selectedProfileChange[key] ? (
-                            <img src={selectedProfileChange[key]} alt={`current-${label}`} style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #FCA5A5' }} />
-                          ) : (
-                            <div style={{ height: '80px', background: '#FEE2E2', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#DC2626' }}>{language === 'vi' ? 'Chưa có' : 'None'}</div>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', paddingTop: '28px', color: '#64748B', fontWeight: 700, fontSize: '18px' }}>→</div>
-                        <div style={{ flex: 1, textAlign: 'center' }}>
-                          <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '4px', fontWeight: 600 }}>{language === 'vi' ? 'Mới' : 'New'}</div>
-                          <img src={changes[key]} alt={`new-${label}`} style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #86EFAC' }} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {/* So sánh các trường text */}
-            {(() => {
-              const changes = selectedProfileChange.pendingProfileChanges?.changes || {};
-              const fieldLabels = {
-                companyName: language === 'vi' ? 'Tên công ty' : 'Company Name',
-                phone: language === 'vi' ? 'Số điện thoại' : 'Phone',
-                address: language === 'vi' ? 'Địa chỉ' : 'Address',
-                website: 'Website',
-                industry: language === 'vi' ? 'Ngành nghề' : 'Industry',
-                companySize: language === 'vi' ? 'Quy mô' : 'Company Size',
-                foundedYear: language === 'vi' ? 'Năm thành lập' : 'Founded Year',
-                taxCode: language === 'vi' ? 'Mã số thuế' : 'Tax Code',
-                businessLicense: language === 'vi' ? 'Giấy phép KD' : 'Business License',
-                description: language === 'vi' ? 'Mô tả' : 'Description',
-                companyVideo: 'Video',
-                companyImages: language === 'vi' ? 'Hình ảnh công ty' : 'Company Images',
-              };
-              const skipKeys = new Set(['companyLogo', 'companyBanner']);
-              const textChanges = Object.keys(changes)
-                .filter(k => !skipKeys.has(k))
-                .filter(k => JSON.stringify(selectedProfileChange[k]) !== JSON.stringify(changes[k]));
-
-              if (textChanges.length === 0) return null;
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#334155', marginBottom: '4px' }}>
-                    {language === 'vi' ? 'Thay đổi thông tin' : 'Field Changes'}
-                  </div>
-                  {textChanges.map(key => {
-                    const oldVal = selectedProfileChange[key];
-                    const newVal = changes[key];
-                    const label = fieldLabels[key] || key;
-                    return (
-                      <div key={key} style={{ padding: '12px', background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                        <strong style={{ display: 'block', marginBottom: '6px', color: '#334155', fontSize: '13px' }}>{label}</strong>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1, padding: '8px', background: '#FEE2E2', borderRadius: '6px', fontSize: '13px', wordBreak: 'break-word' }}>
-                            <strong>{language === 'vi' ? 'Cũ: ' : 'Old: '}</strong>
-                            {oldVal != null ? String(Array.isArray(oldVal) ? oldVal.join(', ') : oldVal) : <em style={{ color: '#DC2626' }}>{language === 'vi' ? 'Trống' : 'Empty'}</em>}
-                          </div>
-                          <span style={{ color: '#64748B', paddingTop: '6px', fontWeight: 700 }}>→</span>
-                          <div style={{ flex: 1, padding: '8px', background: '#DCFCE7', borderRadius: '6px', fontSize: '13px', wordBreak: 'break-word' }}>
-                            <strong>{language === 'vi' ? 'Mới: ' : 'New: '}</strong>
-                            {newVal != null ? String(Array.isArray(newVal) ? newVal.join(', ') : newVal) : <em style={{ color: '#15803d' }}>{language === 'vi' ? 'Trống' : 'Empty'}</em>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '24px' }}>
-              <ModalButton
-                onClick={() => handleApproveProfileChange(selectedProfileChange)}
-                disabled={isProcessingProfileChange}
-                style={{ background: '#16A34A' }}
-              >
-                <CheckCircle size={15} style={{ marginRight: '6px' }} />
-                {isProcessingProfileChange ? '...' : (language === 'vi' ? 'Duyệt' : 'Approve')}
-              </ModalButton>
-              <ModalButton
-                onClick={() => {
-                  setRejectTargetUserId(selectedProfileChange.userId);
-                  setRejectTargetCompanyName(selectedProfileChange.companyName);
-                  setShowRejectReasonModal(true);
-                  setSelectedProfileChange(null);
-                }}
-                disabled={isProcessingProfileChange}
-                style={{ background: '#DC2626' }}
-              >
-                <XCircle size={15} style={{ marginRight: '6px' }} />
-                {language === 'vi' ? 'Từ chối' : 'Reject'}
-              </ModalButton>
-              <button
-                onClick={() => setSelectedProfileChange(null)}
-                style={{ padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {language === 'vi' ? 'Đóng' : 'Close'}
-              </button>
-            </div>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* Reject Profile Change Reason Modal */}
-      {showRejectReasonModal && (
-        <ModalOverlay onClick={() => { setShowRejectReasonModal(false); setRejectReasonInput(''); }}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FCA5A5', flexShrink: 0 }}>
-                <XCircle style={{ color: '#DC2626' }} size={20} />
-              </div>
-              <div>
-                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '18px' }}>
-                  {language === 'vi' ? 'Lý Do Từ Chối' : 'Rejection Reason'}
-                </ModalTitle>
-                <div style={{ fontSize: '12px', color: '#64748B' }}>{rejectTargetCompanyName}</div>
-              </div>
-            </div>
-            <p style={{ marginBottom: '12px', color: '#64748B', fontSize: '14px' }}>
-              {language === 'vi'
-                ? 'Vui lòng nhập lý do từ chối yêu cầu chỉnh sửa hồ sơ:'
-                : 'Please enter the reason for rejecting this profile change request:'}
-            </p>
-            <textarea
-              value={rejectReasonInput}
-              onChange={(e) => setRejectReasonInput(e.target.value)}
-              placeholder={language === 'vi' ? 'Nhập lý do từ chối...' : 'Enter rejection reason...'}
-              rows={4}
-              style={{ width: '100%', padding: '10px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '16px' }}>
-              <ModalButton
-                onClick={() => {
-                  const employer = profileChangeRequests.find(r => r.userId === rejectTargetUserId);
-                  if (employer) handleRejectProfileChange(employer, rejectReasonInput);
-                }}
-                disabled={isProcessingProfileChange || !rejectReasonInput.trim()}
-                style={{ background: '#DC2626' }}
-              >
-                {isProcessingProfileChange ? '...' : (language === 'vi' ? 'Từ Chối' : 'Reject')}
-              </ModalButton>
-              <button
-                onClick={() => { setShowRejectReasonModal(false); setRejectReasonInput(''); }}
-                style={{ padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {language === 'vi' ? 'Hủy' : 'Cancel'}
-              </button>
-            </div>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* Verification Detail Modal */}
-      {selectedVerification && (
-        <ModalOverlay onClick={() => setSelectedVerification(null)}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '680px', maxHeight: '85vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #BFDBFE', flexShrink: 0 }}>
-                <FileText style={{ color: '#2563EB' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
-                  {language === 'vi' ? 'Hồ Sơ Xác Thực Doanh Nghiệp' : 'Business Verification Docs'}
-                </ModalTitle>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                  {selectedVerification.employer.companyName}
-                  {selectedVerification.submittedAt && ` • ${new Date(selectedVerification.submittedAt).toLocaleDateString('vi-VN')}`}
-                </div>
-              </div>
-              <VerifiedBadge $verified={selectedVerification.employer.isVerified}>
-                {selectedVerification.employer.isVerified ? <CheckCircle size={12} /> : <Clock size={12} />}
-                {selectedVerification.employer.isVerified
-                  ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
-                  : (language === 'vi' ? 'Chờ xác minh' : 'Pending')}
-              </VerifiedBadge>
-            </div>
-
-            {loadingVerification && (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>
-                {language === 'vi' ? 'Đang tải hồ sơ...' : 'Loading documents...'}
-              </div>
-            )}
-
-            {!loadingVerification && !selectedVerification.verificationData && (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '14px' }}>
-                {language === 'vi' ? 'Nhà tuyển dụng chưa gửi hồ sơ xác thực.' : 'No verification submission found.'}
-              </div>
-            )}
-
-            {!loadingVerification && selectedVerification.verificationData && (() => {
-              const vd = selectedVerification.verificationData;
-              const s1 = vd.step1 || {};
-              const s2 = vd.step2 || {};
-              const s3 = vd.step3 || {};
-              const s4 = vd.step4 || {};
-              const sectionStyle = { background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '16px' };
-              const labelStyle = { fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' };
-              const valueStyle = { fontSize: '14px', fontWeight: 600, color: '#1E293B' };
-              const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' };
-
-              return (
-                <>
-                  {/* Step 1: Giấy phép kinh doanh */}
-                  <div style={sectionStyle}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <FileText size={14} />
-                      {language === 'vi' ? 'Bước 1: Giấy phép kinh doanh' : 'Step 1: Business License'}
-                    </div>
-                    <div style={gridStyle}>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Số giấy phép' : 'License Number'}</div>
-                        <div style={valueStyle}>{s1.licenseNumber || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Cơ quan cấp' : 'Issuing Authority'}</div>
-                        <div style={valueStyle}>{s1.issuingAuthority || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Ngày cấp' : 'Issue Date'}</div>
-                        <div style={valueStyle}>{s1.issueDate || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Ngày hết hạn' : 'Expiry Date'}</div>
-                        <div style={valueStyle}>{s1.expiryDate || 'N/A'}</div>
-                      </div>
-                    </div>
-                    {s1.businessLicense?.data && (
-                      <div style={{ marginTop: '12px' }}>
-                        <div style={labelStyle}>{language === 'vi' ? 'File giấy phép' : 'License File'}</div>
-                        {s1.businessLicense.type === 'application/pdf' ? (
-                          <a
-                            href={s1.businessLicense.data}
-                            download={s1.businessLicense.name || 'business-license.pdf'}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', padding: '8px 14px', background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', color: '#2563EB', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}
-                          >
-                            <FileText size={14} /> {s1.businessLicense.name || 'business-license.pdf'}
-                          </a>
-                        ) : (
-                          <img src={s1.businessLicense.data} alt="Business License" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0' }} />
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Step 2: Thông tin doanh nghiệp */}
-                  <div style={sectionStyle}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#7C3AED', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Building2 size={14} />
-                      {language === 'vi' ? 'Bước 2: Thông tin doanh nghiệp' : 'Step 2: Company Information'}
-                    </div>
-                    <div style={gridStyle}>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Tên công ty (VI)' : 'Company Name (VI)'}</div>
-                        <div style={valueStyle}>{s2.companyName || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Tên công ty (EN)' : 'Company Name (EN)'}</div>
-                        <div style={valueStyle}>{s2.companyNameEn || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Mã số thuế' : 'Tax Code'}</div>
-                        <div style={valueStyle}>{s2.taxCode || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Năm thành lập' : 'Founded Year'}</div>
-                        <div style={valueStyle}>{s2.foundedYear || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Ngành' : 'Industry'}</div>
-                        <div style={valueStyle}>{s2.industry || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Quy mô' : 'Company Size'}</div>
-                        <div style={valueStyle}>{s2.companySize || 'N/A'}</div>
-                      </div>
-                      {s2.website && (
-                        <div>
-                          <div style={labelStyle}>Website</div>
-                          <div style={valueStyle}><a href={s2.website} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{s2.website}</a></div>
-                        </div>
-                      )}
-                      {s2.fanpage && (
-                        <div>
-                          <div style={labelStyle}>Fanpage</div>
-                          <div style={valueStyle}><a href={s2.fanpage} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{s2.fanpage}</a></div>
-                        </div>
-                      )}
-                    </div>
-                    {s2.description && (
-                      <div style={{ marginTop: '12px' }}>
-                        <div style={labelStyle}>{language === 'vi' ? 'Mô tả' : 'Description'}</div>
-                        <div style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', marginTop: '4px' }}>{s2.description}</div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Step 3: Người đại diện */}
-                  <div style={sectionStyle}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#059669', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <User size={14} />
-                      {language === 'vi' ? 'Bước 3: Người đại diện' : 'Step 3: Representative'}
-                    </div>
-                    <div style={gridStyle}>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Họ và tên' : 'Full Name'}</div>
-                        <div style={valueStyle}>{s3.representativeName || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Chức vụ' : 'Position'}</div>
-                        <div style={valueStyle}>{s3.position || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Số CMND/CCCD' : 'ID Number'}</div>
-                        <div style={valueStyle}>{s3.idNumber || 'N/A'}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
-                      {s3.idFrontImage?.data && (
-                        <div>
-                          <div style={labelStyle}>{language === 'vi' ? 'CMND mặt trước' : 'ID Front'}</div>
-                          <img src={s3.idFrontImage.data} alt="ID Front" style={{ maxWidth: '200px', maxHeight: '130px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0', objectFit: 'cover' }} />
-                        </div>
-                      )}
-                      {s3.idBackImage?.data && (
-                        <div>
-                          <div style={labelStyle}>{language === 'vi' ? 'CMND mặt sau' : 'ID Back'}</div>
-                          <img src={s3.idBackImage.data} alt="ID Back" style={{ maxWidth: '200px', maxHeight: '130px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0', objectFit: 'cover' }} />
-                        </div>
-                      )}
-                    </div>
-                    {s3.authorizationLetter?.data && (
-                      <div style={{ marginTop: '12px' }}>
-                        <div style={labelStyle}>{language === 'vi' ? 'Giấy uỷ quyền' : 'Authorization Letter'}</div>
-                        <a
-                          href={s3.authorizationLetter.data}
-                          download={s3.authorizationLetter.name || 'authorization.pdf'}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', padding: '8px 14px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', color: '#059669', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}
-                        >
-                          <FileText size={14} /> {s3.authorizationLetter.name || 'authorization.pdf'}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Step 4: Thông tin liên hệ */}
-                  <div style={sectionStyle}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#EA580C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Phone size={14} />
-                      {language === 'vi' ? 'Bước 4: Thông tin liên hệ' : 'Step 4: Contact Information'}
-                    </div>
-                    <div style={gridStyle}>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Địa chỉ' : 'Address'}</div>
-                        <div style={valueStyle}>{[s4.address, s4.ward, s4.district, s4.city].filter(Boolean).join(', ') || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
-                        <div style={valueStyle}>{s4.phone || 'N/A'}</div>
-                      </div>
-                      <div>
-                        <div style={labelStyle}>Email</div>
-                        <div style={valueStyle}>{(s4.emails || []).filter(Boolean).join(', ') || 'N/A'}</div>
-                      </div>
-                      {s4.emergencyContact && (
-                        <div>
-                          <div style={labelStyle}>{language === 'vi' ? 'Liên hệ khẩn cấp' : 'Emergency Contact'}</div>
-                          <div style={valueStyle}>{s4.emergencyContact} {s4.emergencyPhone ? `• ${s4.emergencyPhone}` : ''}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-
-            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-              {!selectedVerification.employer.isVerified && selectedVerification.verificationData && (
-                <ModalButton
-                  onClick={() => handleAdminVerify(selectedVerification.employer.id, true)}
-                  disabled={isProcessingVerification}
-                  style={{ flex: 1 }}
-                >
-                  {isProcessingVerification ? '...' : (language === 'vi' ? '✓ Xác minh doanh nghiệp' : '✓ Verify Business')}
-                </ModalButton>
-              )}
-              {selectedVerification.employer.isVerified && (
-                <ModalButton
-                  onClick={() => handleAdminVerify(selectedVerification.employer.id, false)}
-                  disabled={isProcessingVerification}
-                  style={{ flex: 1, background: '#ef4444' }}
-                >
-                  {isProcessingVerification ? '...' : (language === 'vi' ? 'Hủy xác minh' : 'Unverify')}
-                </ModalButton>
-              )}
-              <button
-                onClick={() => setSelectedVerification(null)}
-                style={{ flex: 1, padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {language === 'vi' ? 'Đóng' : 'Close'}
-              </button>
-            </div>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* Purchase Approval Success Modal */}
-      {showPurchaseSuccessModal && approvedPurchaseInfo && (
-        <ModalOverlay onClick={() => setShowPurchaseSuccessModal(false)}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #A7F3D0' }}>
-                <CheckCircle style={{ color: '#10B981' }} />
-              </div>
-              <div>
-                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
-                  {language === 'vi' ? 'Duyệt Gói Thành Công!' : 'Package Approved Successfully!'}
-                </ModalTitle>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                  {language === 'vi' ? 'Đã kích hoạt gói dịch vụ cho doanh nghiệp' : 'Service package activated successfully'}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '24px', display: 'grid', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</span>
-                <strong style={{ color: '#1E293B' }}>{approvedPurchaseInfo.employer}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</span>
-                <strong style={{ color: '#1E293B' }}>{approvedPurchaseInfo.package}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Thời hạn' : 'Duration'}</span>
-                <strong style={{ color: '#1E293B' }}>{approvedPurchaseInfo.duration}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Hết hạn' : 'Expiry'}</span>
-                <strong style={{ color: '#1E293B' }}>{formatDateTime(approvedPurchaseInfo.expiryDateTime || approvedPurchaseInfo.expiryDate)}</strong>
-              </div>
-            </div>
-
-            <ModalButton onClick={() => {
-              setShowPurchaseSuccessModal(false);
-              const isTopSpotlight = approvedPurchaseInfo.package?.toLowerCase()?.includes('top spotlight');
-              if (isTopSpotlight) {
-                navigate(`/admin/banners?type=top-spotlight&employer=${encodeURIComponent(approvedPurchaseInfo.employer)}`);
-              }
-            }}>
-              {approvedPurchaseInfo.package?.toLowerCase()?.includes('top spotlight')
-                ? (language === 'vi' ? 'Đi tới Quản lý Banner' : 'Go to Banner Management')
-                : (language === 'vi' ? 'Hoàn tất' : 'Done')}
-            </ModalButton>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* Purchase Lock Confirm Modal */}
-      {showPurchaseLockConfirm && purchaseLockTarget && (
-        <ModalOverlay onClick={() => setShowPurchaseLockConfirm(false)}>
-          <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FCA5A5' }}>
-                <Lock style={{ color: '#EF4444' }} />
-              </div>
-              <div>
-                <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
-                  {language === 'vi' ? 'Xác Nhận Khóa Dịch Vụ?' : 'Confirm Lock Service?'}
-                </ModalTitle>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                  {language === 'vi' ? 'Gói dịch vụ sẽ chuyển sang trạng thái bị khóa' : 'Package subscription will be locked'}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '24px', display: 'grid', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</span>
-                <strong style={{ color: '#1E293B' }}>{purchaseLockTarget.employer}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</span>
-                <strong style={{ color: '#1E293B' }}>{purchaseLockTarget.package}</strong>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => setShowPurchaseLockConfirm(false)}
-                style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white', cursor: 'pointer', fontWeight: 600 }}
-              >
-                {language === 'vi' ? 'Hủy' : 'Cancel'}
-              </button>
-              <button
-                onClick={async () => {
-                  await handleLockPurchase(purchaseLockTarget.id);
-                  setShowPurchaseLockConfirm(false);
-                }}
-                style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', background: '#EF4444', color: 'white', cursor: 'pointer', fontWeight: 600 }}
-              >
-                {language === 'vi' ? 'Khóa dịch vụ' : 'Lock service'}
-              </button>
-            </div>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* ── Toast thông báo thay thế alert() ─────────────────────────────── */}
-      {empToast && (
-        <div style={{
-          position: 'fixed', top: '24px', right: '24px', zIndex: 110000,
-          padding: '14px 20px', borderRadius: '12px', maxWidth: '420px',
-          background: empToast.type === 'success'
-            ? 'linear-gradient(135deg, #10B981, #059669)'
-            : empToast.type === 'warning'
-              ? 'linear-gradient(135deg, #F59E0B, #D97706)'
-              : 'linear-gradient(135deg, #EF4444, #DC2626)',
-          color: 'white', fontWeight: '600', fontSize: '14px',
-          display: 'flex', alignItems: 'center', gap: '10px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-          animation: 'slideInRight 0.25s ease',
-        }}>
-          <style>{`@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}`}</style>
-          {empToast.type === 'success'
-            ? <CheckCircle size={18} style={{ flexShrink: 0 }} />
-            : empToast.type === 'warning'
-              ? <AlertCircle size={18} style={{ flexShrink: 0 }} />
-              : <XCircle size={18} style={{ flexShrink: 0 }} />
-          }
-          <span style={{ flex: 1 }}>{empToast.message}</span>
-          <button
-            onClick={() => setEmpToast(null)}
-            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.8, fontSize: '18px', lineHeight: 1, padding: '0 2px' }}
-          >×</button>
-        </div>
-      )}
-
-      {/* ── Confirm modal thay thế window.confirm() ───────────────────────── */}
-      {empConfirm && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9998,
-          background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }} onClick={() => setEmpConfirm(null)}>
-          <div style={{
-            background: 'white', borderRadius: '16px', padding: '28px 32px',
-            maxWidth: '420px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '24px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <AlertCircle size={20} color="#D97706" />
-              </div>
-              <p style={{ fontSize: '15px', color: '#1E293B', fontWeight: '500', lineHeight: '1.6', margin: 0 }}>
-                {empConfirm.message}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setEmpConfirm(null)}
-                style={{ padding: '10px 20px', borderRadius: '10px', border: '1.5px solid #E2E8F0', background: 'white', color: '#64748B', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}
-              >
-                {language === 'vi' ? 'Hủy' : 'Cancel'}
-              </button>
-              <button
-                onClick={empConfirm.onConfirm}
-                style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: '#EF4444', color: 'white', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}
-              >
-                {language === 'vi' ? 'Xác nhận' : 'Confirm'}
-              </button>
+            <div>
+              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '18px' }}>
+                {language === 'vi' ? 'Lý Do Từ Chối' : 'Rejection Reason'}
+              </ModalTitle>
+              <div style={{ fontSize: '12px', color: '#64748B' }}>{rejectTargetCompanyName}</div>
             </div>
           </div>
-        </div>
-      )}
+          <p style={{ marginBottom: '12px', color: '#64748B', fontSize: '14px' }}>
+            {language === 'vi'
+              ? 'Vui lòng nhập lý do từ chối yêu cầu chỉnh sửa hồ sơ:'
+              : 'Please enter the reason for rejecting this profile change request:'}
+          </p>
+          <textarea
+            value={rejectReasonInput}
+            onChange={(e) => setRejectReasonInput(e.target.value)}
+            placeholder={language === 'vi' ? 'Nhập lý do từ chối...' : 'Enter rejection reason...'}
+            rows={4}
+            style={{ width: '100%', padding: '10px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '16px' }}>
+            <ModalButton
+              onClick={() => {
+                const employer = profileChangeRequests.find(r => r.userId === rejectTargetUserId);
+                if (employer) handleRejectProfileChange(employer, rejectReasonInput);
+              }}
+              disabled={isProcessingProfileChange || !rejectReasonInput.trim()}
+              style={{ background: '#DC2626' }}
+            >
+              {isProcessingProfileChange ? '...' : (language === 'vi' ? 'Từ Chối' : 'Reject')}
+            </ModalButton>
+            <button
+              onClick={() => { setShowRejectReasonModal(false); setRejectReasonInput(''); }}
+              style={{ padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              {language === 'vi' ? 'Hủy' : 'Cancel'}
+            </button>
+          </div>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
 
-      {/* AI Urgent recommendations modal */}
-      <UrgentRecommendationsModal
-        isOpen={showRecsModal}
-        onClose={() => setShowRecsModal(false)}
-        recommendations={activeRecommendations}
-        jobTitle={recJobTitle}
-      />
-    </DashboardLayout>
+  {/* Verification Detail Modal */ }
+  {
+    selectedVerification && (
+      <ModalOverlay onClick={() => setSelectedVerification(null)}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '680px', maxHeight: '85vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #BFDBFE', flexShrink: 0 }}>
+              <FileText style={{ color: '#2563EB' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                {language === 'vi' ? 'Hồ Sơ Xác Thực Doanh Nghiệp' : 'Business Verification Docs'}
+              </ModalTitle>
+              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                {selectedVerification.employer.companyName}
+                {selectedVerification.submittedAt && ` • ${new Date(selectedVerification.submittedAt).toLocaleDateString('vi-VN')}`}
+              </div>
+            </div>
+            <VerifiedBadge $verified={selectedVerification.employer.isVerified}>
+              {selectedVerification.employer.isVerified ? <CheckCircle size={12} /> : <Clock size={12} />}
+              {selectedVerification.employer.isVerified
+                ? (language === 'vi' ? 'Đã xác minh' : 'Verified')
+                : (language === 'vi' ? 'Chờ xác minh' : 'Pending')}
+            </VerifiedBadge>
+          </div>
+
+          {loadingVerification && (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>
+              {language === 'vi' ? 'Đang tải hồ sơ...' : 'Loading documents...'}
+            </div>
+          )}
+
+          {!loadingVerification && !selectedVerification.verificationData && (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '14px' }}>
+              {language === 'vi' ? 'Nhà tuyển dụng chưa gửi hồ sơ xác thực.' : 'No verification submission found.'}
+            </div>
+          )}
+
+          {!loadingVerification && selectedVerification.verificationData && (() => {
+            const vd = selectedVerification.verificationData;
+            const s1 = vd.step1 || {};
+            const s2 = vd.step2 || {};
+            const s3 = vd.step3 || {};
+            const s4 = vd.step4 || {};
+            const sectionStyle = { background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '16px' };
+            const labelStyle = { fontSize: '11px', color: '#64748B', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' };
+            const valueStyle = { fontSize: '14px', fontWeight: 600, color: '#1E293B' };
+            const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' };
+
+            return (
+              <>
+                {/* Step 1: Giấy phép kinh doanh */}
+                <div style={sectionStyle}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#2563EB', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileText size={14} />
+                    {language === 'vi' ? 'Bước 1: Giấy phép kinh doanh' : 'Step 1: Business License'}
+                  </div>
+                  <div style={gridStyle}>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Số giấy phép' : 'License Number'}</div>
+                      <div style={valueStyle}>{s1.licenseNumber || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Cơ quan cấp' : 'Issuing Authority'}</div>
+                      <div style={valueStyle}>{s1.issuingAuthority || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Ngày cấp' : 'Issue Date'}</div>
+                      <div style={valueStyle}>{s1.issueDate || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Ngày hết hạn' : 'Expiry Date'}</div>
+                      <div style={valueStyle}>{s1.expiryDate || 'N/A'}</div>
+                    </div>
+                  </div>
+                  {s1.businessLicense?.data && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={labelStyle}>{language === 'vi' ? 'File giấy phép' : 'License File'}</div>
+                      {s1.businessLicense.type === 'application/pdf' ? (
+                        <a
+                          href={s1.businessLicense.data}
+                          download={s1.businessLicense.name || 'business-license.pdf'}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', padding: '8px 14px', background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '8px', color: '#2563EB', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}
+                        >
+                          <FileText size={14} /> {s1.businessLicense.name || 'business-license.pdf'}
+                        </a>
+                      ) : (
+                        <img src={s1.businessLicense.data} alt="Business License" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0' }} />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 2: Thông tin doanh nghiệp */}
+                <div style={sectionStyle}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#7C3AED', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Building2 size={14} />
+                    {language === 'vi' ? 'Bước 2: Thông tin doanh nghiệp' : 'Step 2: Company Information'}
+                  </div>
+                  <div style={gridStyle}>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Tên công ty (VI)' : 'Company Name (VI)'}</div>
+                      <div style={valueStyle}>{s2.companyName || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Tên công ty (EN)' : 'Company Name (EN)'}</div>
+                      <div style={valueStyle}>{s2.companyNameEn || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Mã số thuế' : 'Tax Code'}</div>
+                      <div style={valueStyle}>{s2.taxCode || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Năm thành lập' : 'Founded Year'}</div>
+                      <div style={valueStyle}>{s2.foundedYear || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Ngành' : 'Industry'}</div>
+                      <div style={valueStyle}>{s2.industry || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Quy mô' : 'Company Size'}</div>
+                      <div style={valueStyle}>{s2.companySize || 'N/A'}</div>
+                    </div>
+                    {s2.website && (
+                      <div>
+                        <div style={labelStyle}>Website</div>
+                        <div style={valueStyle}><a href={s2.website} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{s2.website}</a></div>
+                      </div>
+                    )}
+                    {s2.fanpage && (
+                      <div>
+                        <div style={labelStyle}>Fanpage</div>
+                        <div style={valueStyle}><a href={s2.fanpage} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{s2.fanpage}</a></div>
+                      </div>
+                    )}
+                  </div>
+                  {s2.description && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={labelStyle}>{language === 'vi' ? 'Mô tả' : 'Description'}</div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', marginTop: '4px' }}>{s2.description}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 3: Người đại diện */}
+                <div style={sectionStyle}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#059669', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <User size={14} />
+                    {language === 'vi' ? 'Bước 3: Người đại diện' : 'Step 3: Representative'}
+                  </div>
+                  <div style={gridStyle}>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Họ và tên' : 'Full Name'}</div>
+                      <div style={valueStyle}>{s3.representativeName || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Chức vụ' : 'Position'}</div>
+                      <div style={valueStyle}>{s3.position || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Số CMND/CCCD' : 'ID Number'}</div>
+                      <div style={valueStyle}>{s3.idNumber || 'N/A'}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                    {s3.idFrontImage?.data && (
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'CMND mặt trước' : 'ID Front'}</div>
+                        <img src={s3.idFrontImage.data} alt="ID Front" style={{ maxWidth: '200px', maxHeight: '130px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0', objectFit: 'cover' }} />
+                      </div>
+                    )}
+                    {s3.idBackImage?.data && (
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'CMND mặt sau' : 'ID Back'}</div>
+                        <img src={s3.idBackImage.data} alt="ID Back" style={{ maxWidth: '200px', maxHeight: '130px', borderRadius: '8px', marginTop: '6px', border: '1px solid #E2E8F0', objectFit: 'cover' }} />
+                      </div>
+                    )}
+                  </div>
+                  {s3.authorizationLetter?.data && (
+                    <div style={{ marginTop: '12px' }}>
+                      <div style={labelStyle}>{language === 'vi' ? 'Giấy uỷ quyền' : 'Authorization Letter'}</div>
+                      <a
+                        href={s3.authorizationLetter.data}
+                        download={s3.authorizationLetter.name || 'authorization.pdf'}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', padding: '8px 14px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '8px', color: '#059669', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}
+                      >
+                        <FileText size={14} /> {s3.authorizationLetter.name || 'authorization.pdf'}
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 4: Thông tin liên hệ */}
+                <div style={sectionStyle}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#EA580C', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Phone size={14} />
+                    {language === 'vi' ? 'Bước 4: Thông tin liên hệ' : 'Step 4: Contact Information'}
+                  </div>
+                  <div style={gridStyle}>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Địa chỉ' : 'Address'}</div>
+                      <div style={valueStyle}>{[s4.address, s4.ward, s4.district, s4.city].filter(Boolean).join(', ') || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>{language === 'vi' ? 'Điện thoại' : 'Phone'}</div>
+                      <div style={valueStyle}>{s4.phone || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>Email</div>
+                      <div style={valueStyle}>{(s4.emails || []).filter(Boolean).join(', ') || 'N/A'}</div>
+                    </div>
+                    {s4.emergencyContact && (
+                      <div>
+                        <div style={labelStyle}>{language === 'vi' ? 'Liên hệ khẩn cấp' : 'Emergency Contact'}</div>
+                        <div style={valueStyle}>{s4.emergencyContact} {s4.emergencyPhone ? `• ${s4.emergencyPhone}` : ''}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            {!selectedVerification.employer.isVerified && selectedVerification.verificationData && (
+              <ModalButton
+                onClick={() => handleAdminVerify(selectedVerification.employer.id, true)}
+                disabled={isProcessingVerification}
+                style={{ flex: 1 }}
+              >
+                {isProcessingVerification ? '...' : (language === 'vi' ? '✓ Xác minh doanh nghiệp' : '✓ Verify Business')}
+              </ModalButton>
+            )}
+            {selectedVerification.employer.isVerified && (
+              <ModalButton
+                onClick={() => handleAdminVerify(selectedVerification.employer.id, false)}
+                disabled={isProcessingVerification}
+                style={{ flex: 1, background: '#ef4444' }}
+              >
+                {isProcessingVerification ? '...' : (language === 'vi' ? 'Hủy xác minh' : 'Unverify')}
+              </ModalButton>
+            )}
+            <button
+              onClick={() => setSelectedVerification(null)}
+              style={{ flex: 1, padding: '12px', background: 'none', border: '1.5px solid #E2E8F0', borderRadius: '8px', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              {language === 'vi' ? 'Đóng' : 'Close'}
+            </button>
+          </div>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
+
+  {/* Purchase Approval Success Modal */ }
+  {
+    showPurchaseSuccessModal && approvedPurchaseInfo && (
+      <ModalOverlay onClick={() => setShowPurchaseSuccessModal(false)}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #A7F3D0' }}>
+              <CheckCircle style={{ color: '#10B981' }} />
+            </div>
+            <div>
+              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                {language === 'vi' ? 'Duyệt Gói Thành Công!' : 'Package Approved Successfully!'}
+              </ModalTitle>
+              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                {language === 'vi' ? 'Đã kích hoạt gói dịch vụ cho doanh nghiệp' : 'Service package activated successfully'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '24px', display: 'grid', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</span>
+              <strong style={{ color: '#1E293B' }}>{approvedPurchaseInfo.employer}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</span>
+              <strong style={{ color: '#1E293B' }}>{approvedPurchaseInfo.package}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Thời hạn' : 'Duration'}</span>
+              <strong style={{ color: '#1E293B' }}>{approvedPurchaseInfo.duration}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Hết hạn' : 'Expiry'}</span>
+              <strong style={{ color: '#1E293B' }}>{formatDateTime(approvedPurchaseInfo.expiryDateTime || approvedPurchaseInfo.expiryDate)}</strong>
+            </div>
+          </div>
+
+          <ModalButton onClick={() => {
+            setShowPurchaseSuccessModal(false);
+            const isTopSpotlight = approvedPurchaseInfo.package?.toLowerCase()?.includes('top spotlight');
+            if (isTopSpotlight) {
+              navigate(`/admin/banners?type=top-spotlight&employer=${encodeURIComponent(approvedPurchaseInfo.employer)}`);
+            }
+          }}>
+            {approvedPurchaseInfo.package?.toLowerCase()?.includes('top spotlight')
+              ? (language === 'vi' ? 'Đi tới Quản lý Banner' : 'Go to Banner Management')
+              : (language === 'vi' ? 'Hoàn tất' : 'Done')}
+          </ModalButton>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
+
+  {/* Purchase Lock Confirm Modal */ }
+  {
+    showPurchaseLockConfirm && purchaseLockTarget && (
+      <ModalOverlay onClick={() => setShowPurchaseLockConfirm(false)}>
+        <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #FCA5A5' }}>
+              <Lock style={{ color: '#EF4444' }} />
+            </div>
+            <div>
+              <ModalTitle style={{ textAlign: 'left', margin: 0, fontSize: '20px' }}>
+                {language === 'vi' ? 'Xác Nhận Khóa Dịch Vụ?' : 'Confirm Lock Service?'}
+              </ModalTitle>
+              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                {language === 'vi' ? 'Gói dịch vụ sẽ chuyển sang trạng thái bị khóa' : 'Package subscription will be locked'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', border: '1.5px solid #E2E8F0', marginBottom: '24px', display: 'grid', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Nhà tuyển dụng' : 'Employer'}</span>
+              <strong style={{ color: '#1E293B' }}>{purchaseLockTarget.employer}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#64748B' }}>{language === 'vi' ? 'Gói dịch vụ' : 'Package'}</span>
+              <strong style={{ color: '#1E293B' }}>{purchaseLockTarget.package}</strong>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowPurchaseLockConfirm(false)}
+              style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #CBD5E1', background: 'white', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {language === 'vi' ? 'Hủy' : 'Cancel'}
+            </button>
+            <button
+              onClick={async () => {
+                await handleLockPurchase(purchaseLockTarget.id);
+                setShowPurchaseLockConfirm(false);
+              }}
+              style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', background: '#EF4444', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {language === 'vi' ? 'Khóa dịch vụ' : 'Lock service'}
+            </button>
+          </div>
+        </ModalContent>
+      </ModalOverlay>
+    )
+  }
+
+  {/* ── Toast thông báo thay thế alert() ─────────────────────────────── */ }
+  {
+    empToast && (
+      <div style={{
+        position: 'fixed', top: '24px', right: '24px', zIndex: 110000,
+        padding: '14px 20px', borderRadius: '12px', maxWidth: '420px',
+        background: empToast.type === 'success'
+          ? 'linear-gradient(135deg, #10B981, #059669)'
+          : empToast.type === 'warning'
+            ? 'linear-gradient(135deg, #F59E0B, #D97706)'
+            : 'linear-gradient(135deg, #EF4444, #DC2626)',
+        color: 'white', fontWeight: '600', fontSize: '14px',
+        display: 'flex', alignItems: 'center', gap: '10px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+        animation: 'slideInRight 0.25s ease',
+      }}>
+        <style>{`@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}`}</style>
+        {empToast.type === 'success'
+          ? <CheckCircle size={18} style={{ flexShrink: 0 }} />
+          : empToast.type === 'warning'
+            ? <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            : <XCircle size={18} style={{ flexShrink: 0 }} />
+        }
+        <span style={{ flex: 1 }}>{empToast.message}</span>
+        <button
+          onClick={() => setEmpToast(null)}
+          style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.8, fontSize: '18px', lineHeight: 1, padding: '0 2px' }}
+        >×</button>
+      </div>
+    )
+  }
+
+  {/* ── Confirm modal thay thế window.confirm() ───────────────────────── */ }
+  {
+    empConfirm && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9998,
+        background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }} onClick={() => setEmpConfirm(null)}>
+        <div style={{
+          background: 'white', borderRadius: '16px', padding: '28px 32px',
+          maxWidth: '420px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '24px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <AlertCircle size={20} color="#D97706" />
+            </div>
+            <p style={{ fontSize: '15px', color: '#1E293B', fontWeight: '500', lineHeight: '1.6', margin: 0 }}>
+              {empConfirm.message}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setEmpConfirm(null)}
+              style={{ padding: '10px 20px', borderRadius: '10px', border: '1.5px solid #E2E8F0', background: 'white', color: '#64748B', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}
+            >
+              {language === 'vi' ? 'Hủy' : 'Cancel'}
+            </button>
+            <button
+              onClick={empConfirm.onConfirm}
+              style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: '#EF4444', color: 'white', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}
+            >
+              {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  {/* AI Urgent recommendations modal */ }
+  <UrgentRecommendationsModal
+    isOpen={showRecsModal}
+    onClose={() => setShowRecsModal(false)}
+    recommendations={activeRecommendations}
+    jobTitle={recJobTitle}
+  />
+    </DashboardLayout >
   );
 };
 

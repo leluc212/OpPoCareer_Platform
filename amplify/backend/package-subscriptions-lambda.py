@@ -107,15 +107,17 @@ def get_public_subscriptions(headers):
         scan = table.scan(ExclusiveStartKey=scan['LastEvaluatedKey'])
         items.extend(scan.get('Items', []))
 
-    public_items = [
-        {
-            key: item.get(key)
+    now_dt = get_vn_now()
+    public_items = []
+    for item in items:
+        effective_status = get_effective_subscription_status(item, now_dt)
+        if effective_status != 'active' or item.get('approvalStatus') != 'approved':
+            continue
+        public_items.append({
+            key: (effective_status if key == 'status' else item.get(key))
             for key in ('subscriptionId', 'employerId', 'packageName', 'status', 'approvalStatus', 'expiryDateTime', 'purchaseDateTime')
-            if item.get(key) is not None
-        }
-        for item in items
-        if item.get('status') == 'active' and item.get('approvalStatus') == 'approved'
-    ]
+            if item.get(key) is not None or key == 'status'
+        })
     return {
         'statusCode': 200,
         'headers': headers,
@@ -208,7 +210,7 @@ def lambda_handler(event, context):
         subscription = table.get_item(Key={'subscriptionId': requested_subscription_id}).get('Item') if requested_subscription_id else None
         if not subscription or subscription.get('employerId') != caller_id:
             return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Cannot access another employer subscription'})}
-    if path == '/wallet/withdrawals' and not caller_is_admin:
+    if path == '/wallet/withdrawals' and http_method != 'GET' and not caller_is_admin:
         return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
     if '/wallet/withdrawals/' in path and not caller_is_admin:
         return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'success': False, 'message': 'Admin role required'})}
@@ -256,7 +258,7 @@ def lambda_handler(event, context):
             return delete_subscription(subscription_id, headers)
 
         elif http_method == 'GET' and path == '/wallet/withdrawals':
-            return get_all_withdrawals(headers)
+            return get_all_withdrawals(headers, caller_id, caller_is_admin)
 
         elif http_method == 'PUT' and '/wallet/withdrawals/' in path:
             request_id = path_parameters.get('requestId')
@@ -591,6 +593,27 @@ def parse_expiry_datetime(item):
         return base_date.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=VN_TZ)
     except ValueError:
         return None
+
+def get_effective_subscription_status(subscription, now_dt=None):
+    """Resolve status from approval state and the timezone-aware expiry time."""
+    stored_status = str(subscription.get('status') or '').lower()
+    approval_status = str(subscription.get('approvalStatus') or '').lower()
+
+    if stored_status == 'pending' or approval_status == 'pending':
+        return 'pending'
+    if stored_status == 'rejected' or approval_status == 'rejected':
+        return 'rejected'
+
+    expiry_dt = parse_expiry_datetime(subscription)
+    if expiry_dt:
+        now_dt = now_dt or get_vn_now()
+        if expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=VN_TZ)
+        else:
+            expiry_dt = expiry_dt.astimezone(VN_TZ)
+        return 'active' if expiry_dt > now_dt else 'expired'
+
+    return stored_status or 'pending'
 
 def create_notification(notification):
     notifications_table.put_item(Item=notification)
@@ -1742,10 +1765,16 @@ def handle_wallet_transaction(body_str, headers, caller_id=None, caller_is_admin
             })
         }
 
-def get_all_withdrawals(headers):
+def get_all_withdrawals(headers, caller_id=None, caller_is_admin=False):
     try:
         response = withdrawal_requests_table.scan()
         items = response.get('Items', [])
+
+        # Admins can review all requests; employers can only read their own
+        # requests so the wallet summary can count approved withdrawals
+        # without exposing other employers' banking data.
+        if not caller_is_admin:
+            items = [item for item in items if item.get('employerId') == caller_id]
         
         # Sort items by createdAt descending
         items.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
@@ -1850,16 +1879,29 @@ def update_withdrawal_status(request_id, body_str, headers):
                 }
             )
             
-        # Update status in WithdrawalRequests table
-        withdrawal_requests_table.update_item(
-            Key={'requestId': request_id},
-            UpdateExpression="SET #st = :status, updatedAt = :updatedAt",
-            ExpressionAttributeNames={'#st': 'status'},
-            ExpressionAttributeValues={
-                ':status': new_status,
-                ':updatedAt': now_dt.isoformat()
-            }
-        )
+        # Update status in WithdrawalRequests table. Keep the approval time
+        # separately so monthly employer statistics count only approved funds.
+        if new_status == 'approved':
+            withdrawal_requests_table.update_item(
+                Key={'requestId': request_id},
+                UpdateExpression="SET #st = :status, updatedAt = :updatedAt, approvedAt = :approvedAt",
+                ExpressionAttributeNames={'#st': 'status'},
+                ExpressionAttributeValues={
+                    ':status': new_status,
+                    ':updatedAt': now_dt.isoformat(),
+                    ':approvedAt': now_dt.isoformat()
+                }
+            )
+        else:
+            withdrawal_requests_table.update_item(
+                Key={'requestId': request_id},
+                UpdateExpression="SET #st = :status, updatedAt = :updatedAt",
+                ExpressionAttributeNames={'#st': 'status'},
+                ExpressionAttributeValues={
+                    ':status': new_status,
+                    ':updatedAt': now_dt.isoformat()
+                }
+            )
         
         # Send status email to employer
         try:
@@ -2216,7 +2258,13 @@ def get_all_subscriptions(headers):
             response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
             items.extend(response.get('Items', []))
 
-        # Both Admin tabs read the same persisted subscription records.
+        # Resolve status from the timezone-aware expiry datetime on every read.
+        # This prevents stale persisted values from showing a future package as expired.
+        now_dt = get_vn_now()
+        for item in items:
+            item['status'] = get_effective_subscription_status(item, now_dt)
+
+        # The Admin history reads the same subscription records as package status.
         items.sort(
             key=lambda item: item.get('purchaseDateTime') or item.get('createdAt') or '',
             reverse=True

@@ -380,6 +380,63 @@ const HeaderButton = styled(motion.button)`
   }
 `;
 
+const ProfilePrimaryAction = styled(motion.button)`
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 11px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1e40af;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #eff6ff;
+    box-shadow: 0 9px 24px rgba(15, 23, 42, 0.24);
+    transform: translateY(-1px);
+  }
+
+  > svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .action-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .action-title {
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .action-subtitle {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.1;
+  }
+
+  @media (max-width: 768px) {
+    padding: 10px 15px;
+    margin-bottom: 12px;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    justify-content: center;
+  }
+`;
+
 const ProgressSection = styled.div`
   margin-top: 24px;
   
@@ -1773,17 +1830,6 @@ const CandidateProfile = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="header-actions">
-            <HeaderButton
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={isEditing ? handleCancel : () => setIsEditing(true)}
-            >
-              <Edit2 />
-              {isEditing ? (language === 'vi' ? 'Hủy' : 'Cancel') : (language === 'vi' ? 'Chỉnh Sửa' : 'Edit')}
-            </HeaderButton>
-          </div>
-
           <div className="header-content">
             <AvatarWrapper>
               <Avatar>
@@ -1829,6 +1875,21 @@ const CandidateProfile = () => {
                   </span>
                 )}
               </h1>
+              <ProfilePrimaryAction
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={isEditing ? handleCancel : () => setIsEditing(true)}
+              >
+                <Edit2 />
+                <span className="action-copy">
+                  <span className="action-title">
+                    {isEditing ? (language === 'vi' ? 'Hủy chỉnh sửa' : 'Cancel editing') : (language === 'vi' ? 'Chỉnh sửa hồ sơ' : 'Edit profile')}
+                  </span>
+                  <span className="action-subtitle">
+                    {isEditing ? (language === 'vi' ? 'Quay lại chế độ xem' : 'Return to profile view') : (language === 'vi' ? 'Cập nhật hồ sơ' : 'Update your profile')}
+                  </span>
+                </span>
+              </ProfilePrimaryAction>
               <div className="title">{formData.title || (language === 'vi' ? 'Chưa cập nhật vị trí' : 'Position not updated')}</div>
               
               <div className="info-row">
